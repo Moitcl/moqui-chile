@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.0.xsd">
+
+    <service verb="check" noun="Rut">
+        <!-- to be called by EECA on mantle.party.PartyIdentification -->
+        <in-parameters>
+            <parameter name="entityValue" type="Map"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="entityValue" type="Map"/>
+        </out-parameters>
+        <actions>
+            <if condition="! ['PtidUniqueNationalId', 'PtidNationalTaxId'].contains(entityValue.partyIdTypeEnumId)">
+                <return/>
+            </if>
+            <set field="idValue" from="entityValue.idValue?.replaceAll('\\.', '').toLowerCase()"/>
+            <set field="length" from="idValue.length()"/>
+            <if condition="length &lt; 2">
+                <return error="true" message="Error validating RUT '${idValue}': length &lt; 2"/>
+            </if>
+            <script>
+                (rut, givenDv) = idValue.tokenize('-')
+                if (givenDv == null) {
+                    rut = idValue.substring(0, length-1)
+                    ec.logger.info("rut: ${rut}")
+                    givenDv = idValue.substring(length-1)
+                    ec.logger.info("givenDv: ${givenDv}")
+                }
+            </script>
+            <service-call name="moqui-chile.GeneralServices.calculate#DigitoVerificador" in-map="[rut:rut]"
+                          out-map="context"/>
+            <if condition="givenDv != dv">
+                <return error="true" message="RUT incorrecto: ${idValue}"/>
+            </if>
+            <set field="entityValue.idValue" from="new String(rut) + '-' + dv"/>
+        </actions>
+    </service>
+
+    <service verb="calculate" noun="DigitoVerificador">
+        <in-parameters><parameter name="rut" type="Integer" required="true"/></in-parameters>
+        <out-parameters><parameter name="dv"/></out-parameters>
+        <actions>
+            <script>
+                int m = 0, s = 1, irut = rut;
+                for (; irut != 0; irut /= 10) {
+                    s = (s + irut % 10 * (9 - m++ % 6)) % 11;
+                }
+                dv = (char) (s != 0 ? s + 47 : 75);
+            </script>
+        </actions>
+    </service>
+</services>

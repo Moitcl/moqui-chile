@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.0.xsd">
+
+    <service verb="get" noun="GeoMunicipalitiesForDropDown">
+        <in-parameters>
+            <parameter name="countryGeoId"/>
+            <parameter name="stateProvinceGeoId"/>
+            <parameter name="geoAssocTypeEnumId" default-value="GAT_REGIONS"/>
+            <parameter name="geoTypeEnumId"/>
+        </in-parameters>
+        <out-parameters><parameter name="resultList" type="List"><parameter name="result" type="Map"/></parameter></out-parameters>
+        <actions>
+            <set field="resultList" from="[]"/>
+            <set field="searchMap" from="[:]"/>
+            <if condition="countryGeoId">
+                <script>searchMap += [countryGeoId: countryGeoId]</script>
+            </if>
+            <!-- We select municipality first, stateProvince (Región) gets defined based on that.
+            <if condition="stateProvinceGeoId">
+                <script>searchMap += [paGeoId: stateProvinceGeoId]</script>
+            </if>
+            -->
+            <entity-find entity-name="moqui-chile.CountryAndMunicipalities" list="geoList">
+                <econdition-object field="searchMap"/>
+                <order-by field-name="municipalityGeoName"/>
+            </entity-find>
+            <script>for (def geo in geoList) resultList.add([geoId:geo.municipalityGeoId, label:"${geo.municipalityGeoName}"])</script>
+        </actions>
+    </service>
+
+    <service verb="get" noun="GeoRegionsForDropDown">
+        <in-parameters>
+            <parameter name="countryGeoId"/>
+            <parameter name="municipalityGeoId"/>
+        </in-parameters>
+        <out-parameters><parameter name="resultList" type="List"/></out-parameters>
+        <actions>
+            <if condition="municipalityGeoId &amp;&amp; countryGeoId == 'CHL'">
+                <then>
+                    <set field="resultList" from="[]"/>
+                    <entity-find entity-name="moqui-chile.CountryAndMunicipalities" list="cam">
+                        <econdition field-name="municipalityGeoId" from="municipalityGeoId"/>
+                    </entity-find>
+                    <if condition="cam">
+                        <entity-find-one entity-name="moqui.basic.Geo" value-field="region"
+                                         auto-field-map="[geoId:cam.first.raToGeoId]"/>
+                    </if>
+                    <if condition="region">
+                        resultList.add([geoId:region.geoId, label:"${region.geoName}"])
+                    </if>
+                </then>
+                <else-if condition="countryGeoId != 'CHL'">
+                    <!-- For Chile, not setting list by country, only by municipality. -->
+                    <log message="Calling original"/>
+                    <service-call name="org.moqui.impl.BasicServices.get#GeoRegionsForDropDown"
+                                  in-map="[geoId:countryGeoId]" out-map="context"/>
+                </else-if>
+            </if>
+        </actions>
+    </service>
+</services>
