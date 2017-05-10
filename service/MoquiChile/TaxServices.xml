@@ -16,7 +16,30 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="calculate" noun="SalesTaxChile">
         <implements service="mantle.other.TaxServices.calculate#SalesTax"/>
-        <actions></actions>
+        <actions>
+            <set field="taxResults" from="[]"/>
+            <set field="taxRate" from="0.19"/>
+            <set field="baseMap" from="[taxRate:taxRate, taxAuthorityId:'CL_SII', taxName:'IVA', alreadyIncluded:'Y']"/>
+            <iterate list="items" entry="item">
+                <log message="analyzing ${item}"/>
+                <if condition="item.taxCode == null">
+                    <log level="warn" message="segunda"/>
+                    <return error="true" message="Error: no taxCode for taxable item ${itemId}"/>
+                </if>
+                <if condition="item.taxCode == 'TCChlIva'">
+                    <then>
+                        <script><![CDATA[
+                            itemAmount = item.quantity * item.unitAmount
+                            taxAmount = itemAmount / (1+taxRate) * taxRate
+                            taxResults += baseMap + [itemId:item.itemId, taxAmount:taxAmount]
+                        ]]></script>
+                    </then>
+                    <else>
+                        <return error="true" message="Unsupported taxCode: ${item.taxCode}"/>
+                    </else>
+                </if>
+            </iterate>
+        </actions>
     </service>
 
 </services>
