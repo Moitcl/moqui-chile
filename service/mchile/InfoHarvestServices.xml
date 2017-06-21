@@ -72,6 +72,56 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <script><![CDATA[
 
+                year = 2017
+                siiUrl = 'http://www.sii.cl/pagina/valores/uf/uf' + year + '.htm'
+                siiHtml = new URL(siiUrl).text
+                siiHtml = org.moqui.util.StringUtilities.toStringCleanBom(siiHtml.bytes)
+                siiHtml = siiHtml.replaceFirst('<!DOCTYPE [^>]*>', '').replaceAll('&nbsp;',' ')
+                parser = javax.xml.parsers.SAXParserFactory.newInstance().newSAXParser()
+                gpath = new XmlSlurper(parser).parseText(siiHtml)
+                table = gpath.body.div.div.table
+                header = table.thead.tr[0]
+                expectedHeader = ['Día', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+                for (i in 0..12) {
+                    if (header.th[i] != expectedHeader[i])
+                        ec.message.addError("Checking header column ${i}: expected ${expectedHeader[i]}, got ${header.th[i]}")
+                }
+                expectedDay = 1
+                cal = Calendar.instance
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.YEAR, year)
+                for (row in table.tbody.tr) {
+                    if (expectedDay.toString() != row.th[0].toString())
+                        ec.message.addError("Expected day ${expectedDay}, but got ${row.th[0]}")
+                    for (month in 0..11) {
+                        ufValue = row.td[month].text().replaceAll('\\.', '').replace(',', '.')
+                        if (ufValue == '')
+                            break; // No value yet.
+                        ufValueDecimal = new BigDecimal(ufValue)
+                        cal.set(Calendar.MONTH, month)
+                        cal.set(Calendar.DAY_OF_MONTH, expectedDay)
+                        fromDate = cal.time
+                        cal.add(Calendar.DAY_OF_MONTH, 1)
+                        thruDate = cal.time
+                        findMap = [uomId:'CLF', toUomId:'CLP', fromDate:fromDate, thruDate:thruDate]
+                        existing = ec.entity.find('moqui.basic.UomConversion').condition(findMap).list()
+                        if (existing.size() > 1) {
+                            ec.message.addError("More than one UomConversion for fields: ${findMap}")
+                            ec.message.addError("${existing}")
+                        } else if (existing.size() > 0) {
+                            entityValue = existing.first
+                            if (entityValue.conversionFactor != ufValueDecimal)
+                                ec.message.addError("Mismatch for conversion on ${fromDate}, existing: ${entityValue.conversionFactor}, expecting ${ufValueDecimal}")
+                        } else {
+                            createMap = findMap + [conversionFactor:ufValueDecimal]
+                            ec.service.sync().name('create#moqui.basic.UomConversion').parameters(createMap).call()
+                        }
+                    }
+                    expectedDay++
+                }
             ]]></script>
         </actions>
     </service>
