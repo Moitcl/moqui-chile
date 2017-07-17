@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+    <service verb="update" noun="BancoCentralSeries">
+        <in-parameters>
+            <parameter name="user" default="ec.user.getPreference('mchile.bcentral.ws.username')"/>
+            <parameter name="password" default="ec.user.getPreference('mchile.bcentral.ws.password')"/>
+        </in-parameters>
+        <actions><script>
+            cl.moit.ws.bcentral.GetSeries(user, password)
+        </script> </actions>
+    </service>
+
+    <service verb="get" noun="UFConversion">
+        <description>Connects to the Web Service of Banco Central de Chile to get the exchange rates</description>
+        <in-parameters>
+            <parameter name="fromDate" type="Timestamp"/>
+            <parameter name="thruDate" type="Timestamp"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="newValuesAmount"/>
+        </out-parameters>
+        <actions>
+            <set field="user" from="ec.user.getPreference('mchile.bcentral.ws.username')"/>
+            <set field="password" from="ec.user.getPreference('mchile.bcentral.ws.password')"/>
+            <if condition="user != null &amp;&amp; password != null">
+                <then>
+                    <service-call name="mchile.InfoHarvestServices.call#SearchSeriesFromBCentral" in-map="context" out-map="result"/>
+                    <log message="result: ${result}"/>
+                </then>
+                <else>
+                    <!-- Try alternative: www.sii.cl -->
+                </else>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="call" noun="WSBancoCentralChile" type="interface">
+        <in-parameters>
+            <parameter name="user"/>
+            <parameter name="password"/>
+        </in-parameters>
+    </service>
+
+    <service verb="call" noun="SearchSeriesFromBCentral" type="remote-xml-rpc" location="https://si3.bcentral.cl/SieteWS/SieteWS.asmx" method="SearchSeries">
+        <implements service="mchile.InfoHarvestServices.call#WSBancoCentralChile"/>
+        <in-parameters>
+            <parameter name="firstDate"/> <!-- String -->
+            <parameter name="lastDate"/>  <!-- String -->
+            <parameter name="seriesIds" type="List"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="SearchSeriesResult" type="Map">
+                <parameter name="Codigo" type="BigInteger"/>
+                <parameter name="Descripcion"/>
+                <parameter name="Series" type="List"/>
+                <parameter name="SeriesInfos" type="List"/>
+            </parameter>
+        </out-parameters>
+    </service>
+
+    <service verb="call" noun="GetSeriesFromBCentral" type="remote-xml-rpc" location="https://si3.bcentral.cl/SieteWS/SieteWS.asmx" method="GetSeries">
+        <implements service="mchile.InfoHarvestServices.call#WSBancoCentralChile"/>
+        <in-parameters>
+            <parameter name="frequencyCode"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="SearchSeriesResult" type="Map">
+                <parameter name="Codigo" type="BigInteger"/>
+                <parameter name="Descripcion"/>
+                <parameter name="Series" type="List"/>
+                <parameter name="SeriesInfos" type="List"/>
+            </parameter>
+        </out-parameters>
+    </service>
+
+    <service verb="get" noun="UFConversionFromSII">
+        <actions>
+            <script><![CDATA[
+
+                year = 2017
+                siiUrl = 'http://www.sii.cl/pagina/valores/uf/uf' + year + '.htm'
+                siiHtml = new URL(siiUrl).text
+                siiHtml = org.moqui.util.StringUtilities.toStringCleanBom(siiHtml.bytes)
+                siiHtml = siiHtml.replaceFirst('<!DOCTYPE [^>]*>', '').replaceAll('&nbsp;',' ')
+                parser = javax.xml.parsers.SAXParserFactory.newInstance().newSAXParser()
+                gpath = new XmlSlurper(parser).parseText(siiHtml)
+                table = gpath.body.div.div.table
+                header = table.thead.tr[0]
+                expectedHeader = ['Día', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+                for (i in 0..12) {
+                    if (header.th[i] != expectedHeader[i])
+                        ec.message.addError("Checking header column ${i}: expected ${expectedHeader[i]}, got ${header.th[i]}")
+                }
+                expectedDay = 1
+                cal = Calendar.instance
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.YEAR, year)
+                for (row in table.tbody.tr) {
+                    if (expectedDay.toString() != row.th[0].toString())
+                        ec.message.addError("Expected day ${expectedDay}, but got ${row.th[0]}")
+                    for (month in 0..11) {
+                        ufValue = row.td[month].text().replaceAll('\\.', '').replace(',', '.')
+                        if (ufValue == '')
+                            break; // No value yet.
+                        ufValueDecimal = new BigDecimal(ufValue)
+                        cal.set(Calendar.MONTH, month)
+                        cal.set(Calendar.DAY_OF_MONTH, expectedDay)
+                        fromDate = cal.time
+                        cal.add(Calendar.DAY_OF_MONTH, 1)
+                        thruDate = cal.time
+                        findMap = [uomId:'CLF', toUomId:'CLP', fromDate:fromDate, thruDate:thruDate]
+                        existing = ec.entity.find('moqui.basic.UomConversion').condition(findMap).list()
+                        if (existing.size() > 1) {
+                            ec.message.addError("More than one UomConversion for fields: ${findMap}")
+                            ec.message.addError("${existing}")
+                        } else if (existing.size() > 0) {
+                            entityValue = existing.first
+                            if (entityValue.conversionFactor != ufValueDecimal)
+                                ec.message.addError("Mismatch for conversion on ${fromDate}, existing: ${entityValue.conversionFactor}, expecting ${ufValueDecimal}")
+                        } else {
+                            createMap = findMap + [conversionFactor:ufValueDecimal]
+                            ec.service.sync().name('create#moqui.basic.UomConversion').parameters(createMap).call()
+                        }
+                    }
+                    expectedDay++
+                }
+            ]]></script>
+        </actions>
+    </service>
+</services>
