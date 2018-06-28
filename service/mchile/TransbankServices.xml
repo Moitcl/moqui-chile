@@ -1,0 +1,446 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a 
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+
+    <service verb="initTransaction" noun="Webpay">
+        <!-- Llamado a initTransaction de Webpay -->
+        <in-parameters>
+            <parameter name="wSTransactionType" required="true" default-value="TR_NORMAL_WS"/>
+            <parameter name="sessionId"/>
+            <parameter name="wPMDetail"/>
+            <parameter name="commerceId"/>
+            <parameter name="buyOrder"/>
+            <parameter name="commerceCode" default-value="12345678"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="token"/>
+            <parameter name="urlTbk"/>
+        </out-parameters>
+        <actions>
+
+            <set field="orderId" value="${buyOrder}"/>
+            <script>
+                int amount = 0
+            </script>
+
+            <service-call name="mantle.order.OrderServices.place#Order" in-map="[orderId:orderId]"/>
+
+            <entity-find entity-name="mantle.order.OrderItem" list="orderList">
+                <econdition field-name="orderId" value="${orderId}"/>
+            </entity-find>
+            <iterate list="orderList" entry="order">
+                <set field="quantity" from="order.quantity" type="BigDecimal"/>
+                <set field="amountQuantity" from="order.unitAmount" type="BigDecimal"/>
+                <script>
+                    amount = (quantity*amountQuantity) + amount
+                </script>
+            </iterate>
+
+            <service-call name="mchile.TransbankServices.initConfiguration#Webpay" out-map="context"/>
+
+            <set field="publicCert" value="${publicCert}"/>
+            <set field="privateKey" value="${privateKey}"/>
+            <set field="ambient" value="${environ}"/>
+            <set field="commerceCode" value="${commerceCode}"/>
+            <set field="webpayCert" value="${webpayCert}"/>
+            <script>
+                import org.moqui.context.ExecutionContext
+                import org.moqui.entity.EntityCondition
+                import org.moqui.entity.EntityFind
+                import org.moqui.entity.EntityList
+                import org.moqui.entity.EntityValue
+                // imports para webpay
+                import java.util.Random
+                import com.transbank.webpay.wswebpay.service.NullificationOutput
+                import com.transbank.webpay.wswebpay.service.TransactionResultOutput
+                import com.transbank.webpay.wswebpay.service.WsInitTransactionOutput
+                import java.math.BigDecimal
+                import cl.transbank.webpay.configuration.Configuration
+                import java.util.ListIterator
+                import java.lang.reflect.Field
+                import java.util.ArrayList
+                import cl.transbank.webpay.Webpay
+                import cl.transbank.webpay.security.SoapSignature
+
+                String webpay_cert = webpayCert
+
+                String private_key = privateKey
+
+                String environment = ambient
+
+                String commerce_code = commerceCode
+
+                String public_cert = publicCert
+
+                Configuration configuration = new Configuration()
+
+                configuration.setWebpayCert(webpay_cert)
+                configuration.setPrivateKey(private_key)
+                configuration.setCommerceCode(commerce_code)
+                configuration.setPublicCert(public_cert)
+                configuration.setEnvironment(environment)
+                Webpay webpay = new Webpay(configuration)
+                WsInitTransactionOutput result = new WsInitTransactionOutput();
+
+                // URL para marcar como pagado
+                urlReturn = "http://localhost:8080/popc/Customer/OrderDetailTbk?orderId=" + buyOrder;
+                // URL para mostrar resultado
+                //urlFinal = "http://localhost:8080/popc/Customer/OrderDetail?orderId=" + buyOrder + "&amp;cancelled=true";
+                urlFinal = "http://localhost:8080/popc/Customer/OrderDetail?orderId=" + buyOrder;
+
+                String idSession = "aj2h4kj2";
+                result = webpay.getNormalTransaction().initTransaction(amount, idSession, buyOrder, urlReturn, urlFinal )
+
+            </script>
+
+            <set field="token" value="${result.getToken()}"/>
+            <set field="urlTbk" value="${result.getUrl()}"/>
+
+            <!-- update con token de TBK -->
+            <!--entity-find-one entity-name="mantle.order.OrderHeader" value-field="order"/>
+            <set field="oldTillShiftId" from="order.tillShiftId"/>
+            <set field="order.tillShiftId" from="tillShiftId"/>
+            <entity-update value-field="order"/-->
+        </actions>
+    </service>
+
+    <service verb="getTransactionResult" noun="Webpay">
+        <!-- Llamado a getTransactionResult de Webpay -->
+        <in-parameters>
+            <parameter name="tokenInput" required="true"/>
+            <parameter name="productStoreId" required="true"/>
+            <parameter name="defaultCurrencyUomId" required="true"/>
+            <parameter name="customerPartyId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="buyOrder"/>
+            <parameter name="sessionId"/>
+            <parameter name="cardNumber"/>
+            <parameter name="cardExpirationDate"/>
+            <parameter name="accountingDate"/>
+            <parameter name="transactionDate"/>
+            <parameter name="vCI"/>
+            <parameter name="urlRedirection"/>
+            <parameter name="authorizationCode"/>
+            <parameter name="paymentTypeCode"/>
+            <parameter name="responseCode"/>
+            <parameter name="amount" type="BigDecimal"/>
+            <parameter name="sharesNumber"/>
+            <parameter name="commerceCode"/>
+        </out-parameters>
+        <actions>
+            <!-- Se deben guardar los datos -->
+            <set field="token" value="${tokenInput}"/>
+            <service-call name="mchile.TransbankServices.initConfiguration#Webpay" out-map="context"/>
+            <set field="publicCert" value="${publicCert}"/>
+            <set field="privateKey" value="${privateKey}"/>
+            <set field="ambient" value="${environ}"/>
+            <set field="commerceCode" value="${commerceCode}"/>
+            <set field="webpayCert" value="$webpayCert"/>
+            <script>
+                import org.moqui.context.ExecutionContext
+                import org.moqui.entity.EntityCondition
+                import org.moqui.entity.EntityFind
+                 import org.moqui.entity.EntityList
+                import org.moqui.entity.EntityValue
+                // imports para webpay
+                import java.util.Random
+                import com.transbank.webpay.wswebpay.service.NullificationOutput
+                import com.transbank.webpay.wswebpay.service.TransactionResultOutput
+                import com.transbank.webpay.wswebpay.service.WsInitTransactionOutput
+                import java.math.BigDecimal
+                import cl.transbank.webpay.configuration.Configuration
+                import java.util.ListIterator
+                import java.lang.reflect.Field
+                import java.util.ArrayList
+                import cl.transbank.webpay.Webpay
+                import cl.transbank.webpay.security.SoapSignature
+
+                String webpay_cert = webpayCert
+
+                String private_key = privateKey
+
+                String environment = environ
+
+                String commerce_code = commerceCode
+
+                String public_cert = publicCert
+
+
+                Configuration configuration = new Configuration()
+
+                configuration.setCommerceCode(commerce_code)
+                configuration.setPrivateKey(private_key)
+                configuration.setPublicCert(public_cert)
+                configuration.setWebpayCert(webpay_cert)
+                configuration.setEnvironment(environment)
+
+                Webpay webpay = new Webpay(configuration)
+
+                TransactionResultOutput result = new TransactionResultOutput();
+                String token = tokenInput;
+
+                result = webpay.getNormalTransaction().getTransactionResult(token);
+
+
+                // Datos de compra a guardar
+                if(!result.getDetailOutput().isEmpty()){
+                    authorizationCode = result.getDetailOutput().get(0).getAuthorizationCode();
+                    authorizedAmount = result.getDetailOutput().get(0).getAmount().toString();
+                    paymentTypeCode = result.getDetailOutput().get(0).getPaymentTypeCode().toString();
+                    buyOrder = result.getDetailOutput().get(0).getBuyOrder();
+                    responseCode = result.getDetailOutput().get(0).getResponseCode();
+                    cardNumber = result.getCardDetail().getCardNumber();
+                }
+                urlRedirection = result.getUrlRedirection();
+
+            </script>
+            <set field="orderId" value="${buyOrder}"/>
+            <set field="authorizationCode" value="${authorizationCode}"/>
+            <set field="authorizedAmount" value="${authorizedAmount}"/>
+            <set field="paymentTypeCode" value="${paymentTypeCode}"/>
+            <set field="responseCode" value="${responseCode}" type="BigDecimal"/>
+            <!--set field="updateMap" from="[orderId:orderId]"/>
+            <service-call name="update#mantle.order.OrderHeader" out-map="context" in-map="updateMap"/-->
+
+            <!-- update de payment -->
+            <!-- Si paymentTypeCode = VD es débito, en caso contrario, es tarjeta de crédito -->
+            <if condition="paymentTypeCode in ['VD']">
+                <then>
+                    <set field="paymentInstrumentId" value="PiDebitCard"/>
+                </then>
+                <else>
+                    <set field="paymentInstrumentId" value="PiCreditCard"/>
+                </else>
+            </if>
+
+            <!--parameter name="productStoreId" required="true"/>
+            <parameter name="defaultCurrencyUomId" required="true"/>
+            <parameter name="customerPartyId" required="true"/-->
+
+            <set field="updateMap" from="[paymentTypeEnumId:'PtInvoicePayment', fromPartyId:customerPartyId, toPartyId:organizationPartyId, paymentInstrumentId:paymentInstrumentId,
+            statusId:'PmntConfirmed', amount:authorizedAmount, reconcileStatusId:'PmtrNot', orderPartSeqId:'01', effectiveDate:ec.user.nowTimestamp,
+            orderId:orderId, tbkAuthorizationCode:authorizationCode, tbkAuthorizedAmount:authorizedAmount, paymentInstrumentEnumId:paymentInstrumentId,
+            paymentAuthCode:authorizationCode, amountUomId:defaultCurrencyUomId]"/>
+            <service-call name="create#mantle.account.payment.Payment" out-map="context" in-map="updateMap"/>
+
+            <!--return message="urlRedirection: ${urlRedirection}" error="true"/-->
+            <!-- Acknowledge de transacción? -->
+            <!--service-call name="tfpos.SaleServices.acknowledgeTransaction#Webpay" in-map="token:token"/-->
+
+            <set field="urlRedirection" value="${urlRedirection}"/>
+        </actions>
+    </service>
+
+    <service verb="acknowledgeTransaction" noun="Webpay">
+        <!-- Llamado a acknowledgeTransaction de Webpay -->
+        <in-parameters>
+            <parameter name="token" required="true"/>
+        </in-parameters>
+        <actions>
+            <set field="token" value="${tokenInput}"/>
+            <service-call name="mchile.TransbankServices.initConfiguration#Webpay" out-map="context"/>
+            <set field="publicCert" value="${publicCert}"/>
+            <set field="privateKey" value="${privateKey}"/>
+            <set field="ambient" value="${environ}"/>
+            <set field="commerceCode" value="${commerceCode}"/>
+            <set field="webpayCert" value="$webpayCert"/>
+            <script>
+                import org.moqui.context.ExecutionContext
+                import org.moqui.entity.EntityCondition
+                import org.moqui.entity.EntityFind
+                import org.moqui.entity.EntityList
+                import org.moqui.entity.EntityValue
+                // imports para webpay
+                import java.util.Random
+                import com.transbank.webpay.wswebpay.service.NullificationOutput
+                import com.transbank.webpay.wswebpay.service.TransactionResultOutput
+                import com.transbank.webpay.wswebpay.service.WsInitTransactionOutput
+                import java.math.BigDecimal
+                import cl.transbank.webpay.configuration.Configuration
+                import java.util.ListIterator
+                import java.lang.reflect.Field
+                import java.util.ArrayList
+                import cl.transbank.webpay.Webpay
+                import cl.transbank.webpay.security.SoapSignature
+                // org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger("findParty")
+
+                String webpay_cert = webpayCert
+
+                String private_key = privateKey
+
+                String environment = environ
+
+                String commerce_code = commerceCode
+
+                String public_cert = publicCert
+
+                Configuration configuration = new Configuration()
+
+                configuration.setCommerceCode(commerce_code)
+                configuration.setPrivateKey(private_key)
+                configuration.setPublicCert(public_cert)
+                configuration.setWebpayCert(webpay_cert)
+                configuration.setEnvironment(environment)
+
+                Webpay webpay = new Webpay(configuration)
+
+                TransactionResultOutput result = new TransactionResultOutput();
+
+                result = webpay.getNormalTransaction().acknowledgeTransaction(token)
+
+            </script>
+        </actions>
+    </service>
+
+
+    <service verb="cancel" noun="Order">
+        <in-parameters>
+            <parameter name="buyOrder" required="true"/>
+            <parameter name="authorizedAmount" required="true"/>
+            <parameter name="authorizationCode" required="true"/>
+            <parameter name="nullifyAmount" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="tbkError" default-value="OK"/>
+        </out-parameters>
+        <actions>
+
+            <service-call name="mchile.TransbankServices.initConfiguration#Webpay" out-map="context"/>
+            <set field="publicCert" value="${publicCert}"/>
+            <set field="privateKey" value="${privateKey}"/>
+            <set field="ambient" value="${environ}"/>
+            <set field="commerceCode" value="${commerceCode}"/>
+            <set field="webpayCert" value="$webpayCert"/>
+
+            <script>
+                import org.moqui.context.ExecutionContext
+                import org.moqui.entity.EntityCondition
+                import org.moqui.entity.EntityFind
+                import org.moqui.entity.EntityList
+                import org.moqui.entity.EntityValue
+                // imports para webpay
+                import java.util.Random
+                import com.transbank.webpay.wswebpay.service.NullificationOutput
+                import com.transbank.webpay.wswebpay.service.TransactionResultOutput
+                import com.transbank.webpay.wswebpay.service.WsInitTransactionOutput
+                import java.math.BigDecimal
+                import cl.transbank.webpay.configuration.Configuration
+                import java.util.ListIterator
+                import java.lang.reflect.Field
+                import java.util.ArrayList
+                import cl.transbank.webpay.Webpay
+                import cl.transbank.webpay.security.SoapSignature
+
+                String webpay_cert = webpayCert
+
+                String private_key = privateKey
+
+                String environment = environ
+
+                String commerce_code = commerceCode
+
+                String public_cert = publicCert
+
+
+                Configuration configuration = new Configuration()
+
+                configuration.setCommerceCode(commerce_code)
+                configuration.setPrivateKey(private_key)
+                configuration.setPublicCert(public_cert)
+                configuration.setWebpayCert(webpay_cert)
+                configuration.setEnvironment(environment)
+
+                Webpay webpay = new Webpay(configuration)
+
+                WsInitTransactionOutput resultInit = new WsInitTransactionOutput();
+
+                NullificationOutput result = new NullificationOutput();
+                BigDecimal authAmount = new BigDecimal(authorizedAmount.trim());
+                BigDecimal nullAmount = new BigDecimal(nullifyAmount.trim());
+                Long commCode = new Long(commerce_code.trim());
+
+                result = webpay.getNullifyTransaction().nullify(authorizationCode, authAmount, buyOrder, nullAmount, commCode);
+
+                String tbkError = "Error"
+
+                if(result.getToken()!=null){
+                    logger.warn("Order cancelled")
+                    tbkError = "OK"
+                }else{
+                    logger.warn("Error canceling order")
+                }
+
+            </script>
+            <!-- Llamado a cancel#Order de mantle -->
+            <if condition="$tbkError == OK">
+                <service-call name="mantle.order.OrderServices.cancel#Order" in-map="orderId:buyOrder"/>
+            </if>
+
+        </actions>
+    </service>
+
+    <service verb="initConfiguration2" noun="Webpay">
+        <!--out-parameters>
+            <parameter name="webpayCert"/>
+            <parameter name="privateKey"/>
+            <parameter name="publicCert"/>
+            <parameter name="environ"/>
+            <parameter name="commerceCode"/>
+        </out-parameters-->
+        <actions>
+            <set field="webpayCert" from="ec.resource.getLocationText('/home/cherrera/git/moqui-framework/runtime/component/moqui-chile/resources/tbk.pem', true)"/>
+            <set field="privateKey" from="ec.resource.getLocationText('/home/cherrera/git/moqui-framework/runtime/component/moqui-chile/resources/597020000541.key', true)"/>
+            <set field="commerceCode" from="ec.resource.getLocationText('/home/cherrera/git/moqui-framework/runtime/component/moqui-chile/resources/commerceCode', true)"/>
+            <set field="publicCert" from="ec.resource.getLocationText('/home/cherrera/git/moqui-framework/runtime/component/moqui-chile/resources/597020000541.crt', true)"/>
+            <set field="environ" from="ec.resource.getLocationText('/home/cherrera/git/moqui-framework/runtime/component/moqui-chile/resources/environment', true)"/>
+        </actions>
+    </service>
+
+    <service verb="initConfiguration" noun="Webpay">
+        <out-parameters>
+            <parameter name="webpayCert"/>
+            <parameter name="privateKey"/>
+            <parameter name="publicCert"/>
+            <parameter name="environ"/>
+            <parameter name="commerceCode"/>
+        </out-parameters>
+        <actions>
+            <script>
+                String webpay_cert = "";
+                String private_key = "";
+                String environ_code = "INTEGRACION";
+                String commerce_code = "597020000541";
+                String public_cert = "";
+
+            </script>
+
+            <set field="webpayCert" from="ec.resource.getLocationText('/home/cherrera/git/moqui-framework/runtime/component/moqui-chile/resources/tbk.pem', true)"/>
+            <set field="privateKey" from="ec.resource.getLocationText('/home/cherrera/git/moqui-framework/runtime/component/moqui-chile/resources/597020000541.key', true)"/>
+            <!--set field="commerceCode" from="ec.resource.getLocationText('/home/cherrera/git/moqui-framework/runtime/component/moqui-chile/resources/commerceCode', true)" type="String"/-->
+            <set field="publicCert" from="ec.resource.getLocationText('/home/cherrera/git/moqui-framework/runtime/component/moqui-chile/resources/597020000541.crt', true)"/>
+            <!--set field="environ" from="ec.resource.getLocationText('/home/cherrera/git/moqui-framework/runtime/component/moqui-chile/resources/environment', true)"/-->
+
+            <!--set field="publicCert" value="${public_cert}"/-->
+            <set field="environ" value="${environ_code}"/>
+            <!--set field="privateKey" value="${private_key}"/-->
+            <!--set field="webpayCert" value="${webpay_cert}"/-->
+            <set field="commerceCode" value="${commerce_code}"/>
+        </actions>
+    </service>
+</services>
