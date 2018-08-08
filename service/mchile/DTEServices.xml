@@ -30,6 +30,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="dirReceptor" required="true"/>
             <parameter name="cmnaReceptor" required="true"/>
             <parameter name="ciudadReceptor" required="true"/>
+            <parameter name="detailList" type="List"/>
         </in-parameters>
         <out-parameters>
             <parameter name="factura"/>
@@ -42,6 +43,26 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="passS" value="5378anth"/>
             <set field="folioS" value="33"/>
             <set field="tipoFacturaS" value="34"/-->
+
+            <!-- TODO: Manejar lista de detalles que van en factura -->
+            <!--
+                Totales
+                Neto
+                Tasa IVA
+                Valor IVA
+                Total
+
+                Detalle Items:
+                Nro. Línea Detalle
+                Nombre Item
+                Cantidad Item
+                Precio Item
+                Monto Item
+
+            -->
+            <!-- TODO: Generar Folio a partir de tabla -->
+            <!-- Validación rut -->
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutReceptor]" out-map="context"/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CERT']" out-map="context"/>
             <set field="certS" from="resourceValue"/>
@@ -289,9 +310,10 @@ along with this software (see the LICENSE.md file). If not, see
             Generación de envio documento a partir de factura ya generada
         </description>
         <in-parameters>
-            <parameter name="recepS" required="false"/>
-            <parameter name="idS" required="false"/>
-            <parameter name="documentoS" required="false"/>
+            <parameter name="recepS" required="true"/>
+            <parameter name="enviadorS" required="true"/>
+            <parameter name="idS" required="true"/>
+            <parameter name="documentoS" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="idS"/>
@@ -307,6 +329,10 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="enviadorS" value="76514104-4"/>
             <set field="idS" value="TEST-MOQUI33"/>
             <set field="documentoS" value="/home/cherrera/git/moqui-framework/FACT33.xml"/> -->
+
+            <!-- Validación rut -->
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:recepS]" out-map="context"/>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]" out-map="context"/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMPLATE_ENVIO']" out-map="context"/>
             <set field="plantillaEnvio" from="resourceValue"/>
@@ -486,6 +512,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="compaS" value="76514104-4"/>
             <set field="enviadorS" value="12857517-0"/>
             <set field="documentoS" value="/home/cherrera/git/moqui-framework/ENVTEST-MOQUI33.xml"/-->
+
+            <!-- Validación rut -->
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]" out-map="context"/>
 
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CERT']" out-map="context"/>
@@ -692,6 +721,179 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="updateMap" from="[filename:archivo,desde:desde, hasta:hasta, dteTypeEnumId:dteTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, ultimoFolio:desde]"/>
             <service-call name="create#MoquiChile.Caf" out-map="context" in-map="updateMap"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="Folio">
+        <description>
+            Obtiene folio para el tipo de DTE especificado.
+            Cuida de no repetir el folio
+        </description>
+        <in-parameters>
+            <parameter name="dteTypeEnumId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="folio"/>
+        </out-parameters>
+        <actions>
+            <!-- TODO:
+
+           Solo puede haber un CAF activo por tipo DTE
+
+            -->
+            <!-- Se filtra por CAF activo (PK) para el tipo de DTE -->
+            <set field="activo" value="true"/>
+            <entity-find-one entity-name="MoquiChile.Caf" value-field="caf" for-update="true"/>
+
+            <script>
+
+                caf.ultimoFolio = caf.ultimoFolio + 1
+
+            </script>
+
+            <if condition="caf.ultimoFolio &lt; caf.desde">
+                <return message="Error en CAF" error="true"/>
+            </if>
+
+            <if condition="caf.ultimoFolio &gt; caf.hasta">
+                <return message="No se pueden usar más folios de CAF actual" error="true"/>
+            </if>
+
+
+            <entity-update value-field="caf"/>
+            <set field="folio" from="caf.ultimoFolio"/>
+
+        </actions>
+    </service>
+
+    <service verb="get2" noun="Folio">
+        <description>
+            Obtiene folio para el tipo de DTE especificado.
+            Cuida de no repetir el folio
+        </description>
+        <in-parameters>
+            <parameter name="dteTypeEnumId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="folio"/>
+        </out-parameters>
+        <actions>
+            <!-- TODO: uso de secuencias para manejo de folios
+
+           Solo puede haber un CAF activo por tipo DTE:
+
+           Secuencias:
+
+           33: dte33Seq
+           34: dte34Seq
+
+            -->
+
+            <!-- Se filtra por CAF activo (PK) -->
+            <set field="activo" value="true"/>
+            <entity-find-one entity-name="MoquiChile.Caf" value-field="caf" for-update="true"/>
+
+            <script>
+
+                caf.ultimoFolio = caf.ultimoFolio + 1
+
+            </script>
+
+            <if condition="caf.ultimoFolio &lt; caf.desde">
+                <return message="Error en CAF" error="true"/>
+            </if>
+
+            <if condition="caf.ultimoFolio &gt; caf.hasta">
+                <return message="No se pueden usar más folios de CAF actual" error="true"/>
+            </if>
+
+            <!-- Se obtiene nuevo folio de acuerdo a tipo DTE -->
+
+            <entity-update value-field="caf"/>
+            <set field="folio" from="caf.ultimoFolio"/>
+
+        </actions>
+    </service>
+
+    <service verb="facturar" noun="Invoice">
+        <description>
+            Obtiene datos para llamar a método generar#Factura
+        </description>
+        <in-parameters>
+            <parameter name="invoiceId" required="true"/>
+            <parameter name="dteTypeEnumId" required="true"/>
+        </in-parameters>
+        <actions>
+            <return error="true" message="***** invoiceId: $invoiceId, tipo Factura: $dteTypeEnumId"/>
+            <!-- TODO:
+
+                Obtener datos usando invoiceId:
+                Total Neto
+                Valor IVA
+                Total
+
+                folio
+                tipoFactura?
+                rutReceptor
+                rznSocReceptor
+                giroReceptor
+                contactoReceptor
+                dirReceptor
+                cmnaReceptor
+                ciudadReceptor
+                detalle
+
+                Por cada Item:
+                - Nro. línea detalle
+                - Nombre item
+                - Precio item
+                - Cantidad ite
+                - Monto Item
+
+            -->
+            <!-- Datos principales de invoice -->
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
+            <if condition="invoice == null"><return error="true" message="Invoice not found with ID ${invoiceId}"/></if>
+            <set field="toPartyId" from="invoice.toPartyId"/>
+            <set field="detailList" type="List"/>
+
+            <!-- Items de invoice -->
+            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemList">
+                <econdition field-name="invoiceId"/></entity-find>
+            <!--set field="invoiceTotal" from="0.0"/>
+            <iterate list="invoiceItemList" entry="invoiceItem">
+                <set field="invoiceTotal" from="invoiceTotal + ((invoiceItem.quantity != null ? invoiceItem.quantity : 1.0) * (invoiceItem.amount ?: 0.0)).setScale(2, BigDecimal.ROUND_HALF_UP)"/>
+            </iterate-->
+
+            <!-- email receptor -->
+            <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:toPartyId]" out-map="context"/>
+            <set field="username" from="emailAddress"/>
+
+            <!-- rut receptor -->
+            <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyField"/>
+            <set field="rutReceptor" from="partyField.idValue"/>
+
+            <!-- Datos para encontrar contacto -->
+            <set field="contactMechPurposeId" value="PostalBilling"/>
+            <entity-find-one entity-name="mantle.party.PartyContactMech" value-field="contactMechField"/>
+            <set field="contactMechId" from="contactMechField.contactMechId"/>
+
+            <!-- Datos de contacto -->
+            <set field="contactMechPurposeId" value="PostalBilling"/>
+            <entity-find-one entity-name="mantle.party.ContactMech" value-field="contactMechField"/>
+            <set field="dirReceptor" from="contactMechField.infoString"/>
+
+            <!-- Obtención de folio -->
+            <service-call name="MoquiChile.DTEServices.get#folio" in-map="[dteTypeEnumId:dteTypeEnumId]" out-map="context"/>
+            <!-- Se filtra por CAF activo (PK) -->
+            <set field="activo" value="true"/>
+            <entity-find-one entity-name="MoquiChile.Caf" value-field="caf" for-update="true"/>
+
+            <!-- Generacion de factura -->
+            <service-call name="MoquiChile.DTEServices.genera#Factura"
+                          in-map="[folioS:folio, tipoFacturaS:dteTypeEnumId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
+                          contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList]" out-map="context"/>
         </actions>
     </service>
 
