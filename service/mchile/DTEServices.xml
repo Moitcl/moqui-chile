@@ -21,7 +21,7 @@ along with this software (see the LICENSE.md file). If not, see
             Generación de factura de acuerdo a plantilla
         </description>
         <in-parameters>
-            <parameter name="folioS" required="true"/>
+            <!--parameter name="folioS" required="true"/-->
             <parameter name="tipoFacturaS" required="true"/>
             <parameter name="rutReceptor" required="true"/>
             <parameter name="rznSocReceptor" required="true"/>
@@ -29,38 +29,14 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="contactoReceptor" required="true"/>
             <parameter name="dirReceptor" required="true"/>
             <parameter name="cmnaReceptor" required="true"/>
-            <parameter name="ciudadReceptor" required="true"/>
-            <parameter name="detailList" type="List"/>
+            <parameter name="ciudadReceptor" default-value="${cmnaReceptor}"/>
+            <parameter name="detailList" type="List" required="true"/>
+            <parameter name="invoiceId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="factura"/>
         </out-parameters>
         <actions>
-            <!--set field="cafS" value="/home/cherrera/git/DTE-develop/scripts/CAF.xml"/>
-            <set field="plantillaS" value="/home/cherrera/git/DTE-develop/scripts/plantilla_documento.xml"/>
-            <set field="resultS" value="/home/cherrera/git/DTE-develop/scripts/PruebaDTE-Moqui.xml"/>
-            <set field="certS" value="/home/cherrera/git/DTE-develop/scripts/12857517-0.pfx"/>
-            <set field="passS" value="5378anth"/>
-            <set field="folioS" value="33"/>
-            <set field="tipoFacturaS" value="34"/-->
-
-            <!-- TODO: Manejar lista de detalles que van en factura -->
-            <!--
-                Totales
-                Neto
-                Tasa IVA
-                Valor IVA
-                Total
-
-                Detalle Items:
-                Nro. Línea Detalle
-                Nombre Item
-                Cantidad Item
-                Precio Item
-                Monto Item
-
-            -->
-            <!-- TODO: Generar Folio a partir de tabla -->
             <!-- Validación rut -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutReceptor]" out-map="context"/>
 
@@ -72,10 +48,19 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="resultS" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMP']" out-map="context"/>
             <set field="pathTemp" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_PDF']" out-map="context"/>
+            <set field="pathPdf" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CAF']" out-map="context"/>
             <set field="cafS" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMPLATE_FACTURA']" out-map="context"/>
             <set field="plantillaS" from="resourceValue"/>
+
+            <!-- Obtención de folio y path de CAF -->
+            <service-call name="mchile.DTEServices.get#Folio" in-map="[dteTypeEnumId:tipoFacturaS]" out-map="context"/>
+            <set field="folioS" from="folio" type="Integer"/>
+            <script>
+                cafS = cafS + caf
+            </script>
 
             <script>
                 import java.io.ByteArrayOutputStream;
@@ -96,7 +81,6 @@ along with this software (see the LICENSE.md file). If not, see
                 import org.apache.xmlbeans.XmlOptions;
                 import org.w3c.dom.Document;
 
-
                 import cl.nic.dte.util.Signer;
                 import cl.nic.dte.util.Utilities;
                 import cl.nic.dte.util.XMLUtil;
@@ -111,7 +95,6 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.sii.siiDte.FechaType;
                 import cl.sii.siiDte.MedioPagoType;
 
-
                 int folio;
                 DTEDocument doc;
                 AutorizacionType caf;
@@ -119,10 +102,10 @@ along with this software (see the LICENSE.md file). If not, see
                 PrivateKey key;
                 int tipoFactura;
 
-
                 // Leo el folio
                 folio = Integer.valueOf(folioS);
                 tipoFactura = Integer.valueOf(tipoFacturaS);
+
 
                 //if (tipoFactura != 33 oo tipoFactura != 34) {
                 //    throw new Exception("Debe ingresar tipo de factura 33 o 34");
@@ -152,11 +135,7 @@ along with this software (see the LICENSE.md file). If not, see
                 cert = (X509Certificate) ks.getCertificate(alias);
                 key = (PrivateKey) ks.getKey(alias, passS.toCharArray());
 
-                // Agrego al doc datos inventados para pruebas
-
-                // IdDoc
-
-                // TODO: Pasar a parámetros
+                // Se recorre lista de productos para armar documento (detailList)
 
                 IdDoc iddoc = doc.getDTE().getDocumento().getEncabezado().addNewIdDoc();
                 iddoc.setFolio(folio);
@@ -179,66 +158,94 @@ along with this software (see the LICENSE.md file). If not, see
 
                 // Receptor
                 Receptor recp = doc.getDTE().getDocumento().getEncabezado().addNewReceptor();
-                recp.setRUTRecep("60803000-K");
-                recp.setRznSocRecep("Servicio de Impuestos Internos");
-                recp.setGiroRecep("GOBIERNO CENTRAL Y ADMINISTRACION PUB.");
-                recp.setContacto("Director Impuestos Internos");
-                recp.setDirRecep("Teatinos 120");
-                recp.setCmnaRecep("Santiago");
-                recp.setCiudadRecep("Santiago");
+                recp.setRUTRecep(rutReceptor);
+                recp.setRznSocRecep(rznSocReceptor);
+                recp.setGiroRecep(giroReceptor);
+                recp.setContacto(contactoReceptor);
+                recp.setDirRecep(dirReceptor);
+                recp.setCmnaRecep(cmnaReceptor);
+                recp.setCiudadRecep(ciudadReceptor);
 
-                // TODO: Procesar lista de detalles
-                if (tipoFactura == 33) {
+            </script>
+            <if condition="tipoFactura == 33">
+                <script>
+                    int i = 0
+                    listSize = detailList.size
+                    Detalle[] det = new Detalle[listSize]
+                </script>
+                <set field="totalInvoice" value="0" type="Integer"/>
+                <iterate list="detailList" entry="detailEntry">
+                    <log message="******* Iterando invoice $detailEntry" level="warn"/>
+                    <set field="nombreItem" from="detailEntry.description"/>
+                    <set field="qtyItem" from="detailEntry.quantity" type="Integer"/>
+                    <!-- TODO: obtener precio de productId -->
+                    <set field="priceItem" from="detailEntry.amount" type="Integer"/>
+                    <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+                    <script>
+                        // Agrego detalles
+                        det[i] = Detalle.Factory.newInstance();
+                        det[i].setNroLinDet(i+1);
+                        det[i].setNmbItem(nombreItem);
+                        det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                        det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                        det[i].setMontoItem( totalItem );
+                        totalInvoice = totalInvoice + totalItem
+
+                        i = i + 1
+                    </script>
+                </iterate>
+                <script>
+                    doc.getDTE().getDocumento().setDetalleArray(det);
                     // Totales
                     Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
-                    tot.setMntNeto(33900);
+
+                    tot.setMntNeto(totalInvoice);
                     tot.setTasaIVA(BigDecimal.valueOf(19));
-                    tot.setIVA(6441);
-                    tot.setMntTotal(40341);
+                    // Valor de solo IVA
+                    totalIVA = totalInvoice * 0.19
+                    tot.setIVA(totalIVA)
+                    // total neto + IVA
+                    totalInvoice = totalInvoice + totalIVA
+                    tot.setMntTotal(totalInvoice);
+                </script>
+            </if>
+            <if condition="tipoFactura == 34">
+                <script>
+                    int i = 0
+                    listSize = detailList.size
+                    Detalle[] det = new Detalle[listSize]
+                </script>
+                <set field="totalInvoice" value="0" type="Integer"/>
+                <iterate list="detailList" entry="detailEntry">
+                    <log message="******* Iterando invoice $detailEntry" level="warn"/>
+                    <set field="nombreItem" from="detailEntry.description"/>
+                    <set field="qtyItem" from="detailEntry.quantity" type="Integer"/>
+                    <!-- TODO: obtener precio de productId -->
+                    <set field="priceItem" from="detailEntry.amount" type="Integer"/>
+                    <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+                    <script>
+                        // Agrego detalles
+                        det[i] = Detalle.Factory.newInstance();
+                        det[i].setNroLinDet(i+1);
+                        det[i].setNmbItem(nombreItem);
+                        det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                        det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                        det[i].setMontoItem( totalItem );
+                        totalInvoice = totalInvoice + totalItem
 
-                    // Agrego detalles
-                    Detalle[] det = new Detalle[2];
-                    det[0] = Detalle.Factory.newInstance();
-                    det[0].setNroLinDet(1);
-                    det[0].setNmbItem("dominio sii");
-                    det[0].setQtyItem(BigDecimal.valueOf(1));
-                    det[0].setPrcItem(BigDecimal.valueOf(16949.584));
-                    det[0].setMontoItem(16950);
-
-                    det[1] = Detalle.Factory.newInstance();
-                    det[1].setNroLinDet(2); // Revisar
-                    det[1].setNmbItem("dominio impuestosinternos");
-                    det[1].setQtyItem(BigDecimal.valueOf(1));
-                    det[1].setPrcItem(BigDecimal.valueOf(16949.584));
-                    det[1].setMontoItem(16950);
-
+                        i = i + 1
+                    </script>
+                </iterate>
+                <script>
                     doc.getDTE().getDocumento().setDetalleArray(det);
-                }
-
-                if (tipoFactura == 34) {
                     // Totales
                     Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
-                    tot.setMntExe(33900);
-                    tot.setMntTotal(33900);
+                    tot.setMntExe(totalInvoice);
+                    tot.setMntTotal(totalInvoice);
+                </script>
+            </if>
+            <script>
 
-                    // Agrego detalles
-                    Detalle[] det = new Detalle[2];
-                    det[0] = Detalle.Factory.newInstance();
-                    det[0].setNroLinDet(1);
-                    det[0].setNmbItem("implantancion dominio sii");
-                    det[0].setQtyItem(BigDecimal.valueOf(1));
-                    det[0].setPrcItem(BigDecimal.valueOf(16949.584));
-                    det[0].setMontoItem(16950);
-
-                    det[1] = Detalle.Factory.newInstance();
-                    det[1].setNroLinDet(2);
-                    det[1].setNmbItem("implantacion dominio impuestosinternos");
-                    det[1].setQtyItem(BigDecimal.valueOf(1));
-                    det[1].setPrcItem(BigDecimal.valueOf(16949.584));
-                    det[1].setMontoItem(16950);
-
-                    doc.getDTE().getDocumento().setDetalleArray(det);
-                }
                 // Timbro
 
                 doc.getDTE().timbrar(caf.getCAF(), caf.getPrivateKey(null));
@@ -280,27 +287,41 @@ along with this software (see the LICENSE.md file). If not, see
 
 
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
-                doc.save(new File("FACT" + folio + "-sinfirma.xml"), opts);
+                doc.save(new File(resultS + "FACT" + folio + "-sinfirma.xml"), opts);
                 doc.save(out, opts);
 
+                logger.warn("PATH: FACT"+folio+"-sinfirma.xml")
+
+                // Acá ocurre error
                 Document doc2 = XMLUtil.parseDocument(out.toByteArray());
+
                 byte[] salida = Signer.sign(doc2, uri, key, cert, uri, "Documento");
                 doc2 = XMLUtil.parseDocument(salida);
 
 
                 if (Signer.verify(doc2, "Documento")) {
-                    Path path = Paths.get("FACT" + folio + ".xml");
+                    Path path = Paths.get(resultS + "FACT" + folio + ".xml");
                     Files.write(path, salida);
                     logger.warn("Factura "+path+" folio "+folio+" generada OK");
                 } else {
-                    Path path = Paths.get("FACT" + folio + "-mala.xml");
+                    Path path = Paths.get(resultS + "FACT" + folio + "-mala.xml");
                     Files.write(path, salida);
                     logger.warn("Error al generar factura folio "+folio);
                 }
-
-                // TODO: Guardar en BD Path de factura y su ID (folio)
-
             </script>
+            <!-- Registro de DTE en base de datos y generación de PDF -->
+            <!--set field="fiscalTaxDocumentId" from="tipoFacturaS+folioS+fechaDTE"/-->
+            <set field="fiscalTaxDocumentId" from="tipoFacturaS+folioS"/>
+            <set field="fiscalTaxDocumentTypeEnumId" from="tipoFacturaS"/>
+            <set field="amount" from="totalInvoice"/>
+            <set field="folio" from="folioS"/>
+            <set field="xml" value="FACT${folio}.xml"/>
+            <set field="pdf" value="FACT${folio}.pdf"/>
+            <set field="receptor" from="rutReceptor"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml]" out-map="context"/>
+            <set field="xml" value="${resultS}FACT${folio}.xml"/>
+            <set field="pdf" value="${pathPdf}FACT${folio}.pdf"/>
+            <service-call name="create#tfpos.FiscalTaxDocument" in-map="context" out-map="context"/>
 
         </actions>
     </service>
@@ -639,9 +660,10 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="document"/>
             <if condition="format == 'xml'">
                 <set field="filename" value="${document.xml}"/>
-            </if><else>
+            </if>
+            <if condition="format == 'pdf'">
                 <set field="filename" value="${document.pdf}"/>
-            </else>
+            </if>
             <set field="path" value="${pathResults}"/>
         </actions>
     </service>
@@ -651,9 +673,8 @@ along with this software (see the LICENSE.md file). If not, see
             Genera archivo PDF de Factura (envio)
         </description>
         <in-parameters>
-            <parameter name="resultado" required="true"/>
-            <parameter name="enviadorS" required="true"/>
-            <parameter name="compaS" required="true"/>
+            <parameter name="pdf" required="true"/>
+            <parameter name="dte" required="true"/>
         </in-parameters>
         <actions>
             <!--set field="certS" value="/home/cherrera/git/DTE-develop/scripts/12857517-0.pfx"/>
@@ -668,7 +689,10 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="passS" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMPLATE_PDF']" out-map="context"/>
             <set field="template" from="resourceValue"/>
-
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_RESULTS']" out-map="context"/>
+            <set field="pathResults" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_PDF']" out-map="context"/>
+            <set field="pathPdf" from="resourceValue"/>
 
             <script>
                 import java.io.File;
@@ -681,13 +705,15 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.nic.dte.util.Utilities;
                 import cl.sii.siiDte.RECEPCIONDTEDocument;
 
-                Utilities.generatePDF(new FileInputStream(dte, new FileInputStream(template), new FileOutputStream(resultado));
+                pdf = pathPdf + pdf;
+                dte = pathResults + dte;
+
+                logger.warn("*** "+pdf+" - "+dte+" - "+template);
+                Utilities.generatePDF(new FileInputStream(dte), new FileInputStream(template), new FileOutputStream(pdf));
 
                 logger.warn("---------------");
-
-                logger.warn("PDF Generado: " + resultado);
+                logger.warn("PDF Generado: " + pdf);
                 logger.warn("---------------");
-
             </script>
 
         </actions>
@@ -734,6 +760,7 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <out-parameters>
             <parameter name="folio"/>
+            <parameter name="caf"/>
         </out-parameters>
         <actions>
             <!-- TODO:
@@ -743,25 +770,29 @@ along with this software (see the LICENSE.md file). If not, see
             -->
             <!-- Se filtra por CAF activo (PK) para el tipo de DTE -->
             <set field="activo" value="true"/>
-            <entity-find-one entity-name="MoquiChile.Caf" value-field="caf" for-update="true"/>
+            <entity-find-one entity-name="MoquiChile.Caf" value-field="cafEntry" for-update="true"/>
+
+            <if condition="!cafEntry">
+                <return error="true" message="No existe CAF activo para DTE tipo ${dteTypeEnumId}"/>
+            </if>
 
             <script>
-
-                caf.ultimoFolio = caf.ultimoFolio + 1
-
+                cafEntry.ultimoFolio = cafEntry.ultimoFolio + 1
             </script>
 
-            <if condition="caf.ultimoFolio &lt; caf.desde">
+            <if condition="cafEntry.ultimoFolio &lt; cafEntry.desde">
                 <return message="Error en CAF" error="true"/>
             </if>
 
-            <if condition="caf.ultimoFolio &gt; caf.hasta">
+            <if condition="cafEntry.ultimoFolio &gt; cafEntry.hasta">
                 <return message="No se pueden usar más folios de CAF actual" error="true"/>
             </if>
 
 
-            <entity-update value-field="caf"/>
-            <set field="folio" from="caf.ultimoFolio"/>
+            <entity-update value-field="cafEntry"/>
+            <set field="folio" from="cafEntry.ultimoFolio"/>
+
+            <set field="caf" from="cafEntry.filename"/>
 
         </actions>
     </service>
@@ -794,9 +825,7 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find-one entity-name="MoquiChile.Caf" value-field="caf" for-update="true"/>
 
             <script>
-
                 caf.ultimoFolio = caf.ultimoFolio + 1
-
             </script>
 
             <if condition="caf.ultimoFolio &lt; caf.desde">
@@ -824,76 +853,160 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="dteTypeEnumId" required="true"/>
         </in-parameters>
         <actions>
-            <return error="true" message="***** invoiceId: $invoiceId, tipo Factura: $dteTypeEnumId"/>
-            <!-- TODO:
-
-                Obtener datos usando invoiceId:
-                Total Neto
-                Valor IVA
-                Total
-
-                folio
-                tipoFactura?
-                rutReceptor
-                rznSocReceptor
-                giroReceptor
-                contactoReceptor
-                dirReceptor
-                cmnaReceptor
-                ciudadReceptor
-                detalle
-
-                Por cada Item:
-                - Nro. línea detalle
-                - Nombre item
-                - Precio item
-                - Cantidad ite
-                - Monto Item
-
-            -->
             <!-- Datos principales de invoice -->
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
             <if condition="invoice == null"><return error="true" message="Invoice not found with ID ${invoiceId}"/></if>
+            <set field="partyId" from="invoice.toPartyId"/>
             <set field="toPartyId" from="invoice.toPartyId"/>
-            <set field="detailList" type="List"/>
+
 
             <!-- Items de invoice -->
             <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemList">
                 <econdition field-name="invoiceId"/></entity-find>
-            <!--set field="invoiceTotal" from="0.0"/>
-            <iterate list="invoiceItemList" entry="invoiceItem">
-                <set field="invoiceTotal" from="invoiceTotal + ((invoiceItem.quantity != null ? invoiceItem.quantity : 1.0) * (invoiceItem.amount ?: 0.0)).setScale(2, BigDecimal.ROUND_HALF_UP)"/>
-            </iterate-->
+
+
+            <log level="warn" message="******************** partyID: $partyId - $invoiceItemList"/>
 
             <!-- email receptor -->
             <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:toPartyId]" out-map="context"/>
+            <if condition="!emailAddress">
+                <return error="true" message="Receptor no tiene dirección de correo"/>
+            </if>
             <set field="username" from="emailAddress"/>
+
+            <log level="warn" message="***************** email: $username"/>
 
             <!-- rut receptor -->
             <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
             <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyField"/>
+
+            <if condition="!partyField">
+                <return error="true" message="Receptor no tiene RUT"/>
+            </if>
+
             <set field="rutReceptor" from="partyField.idValue"/>
 
+            <log level="warn" message="************* rutReceptor: $rutReceptor"/>
+
             <!-- Datos para encontrar contacto -->
-            <set field="contactMechPurposeId" value="PostalBilling"/>
-            <entity-find-one entity-name="mantle.party.PartyContactMech" value-field="contactMechField"/>
+
+            <set field="contactMechId"/>
+
+            <log level="warn" message="************* $partyId - $contactMechPurposeId - $contactMechId"/>
+
+            <entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
+                <field-map field-name="partyId" from="partyId"/>
+                <field-map field-name="contactMechPurposeId" value="PostalTax"/>
+            </entity-find-one>
             <set field="contactMechId" from="contactMechField.contactMechId"/>
 
-            <!-- Datos de contacto -->
-            <set field="contactMechPurposeId" value="PostalBilling"/>
-            <entity-find-one entity-name="mantle.party.ContactMech" value-field="contactMechField"/>
-            <set field="dirReceptor" from="contactMechField.infoString"/>
+            <log level="warn" message="***** partyId: $partyId , contactMechId: $contactMechId"/>
 
-            <!-- Obtención de folio -->
-            <service-call name="MoquiChile.DTEServices.get#folio" in-map="[dteTypeEnumId:dteTypeEnumId]" out-map="context"/>
-            <!-- Se filtra por CAF activo (PK) -->
-            <set field="activo" value="true"/>
-            <entity-find-one entity-name="MoquiChile.Caf" value-field="caf" for-update="true"/>
+            <!-- Datos de contacto -->
+            <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressField"/>
+            <set field="dirReceptor" from="contactPostalAddressField.address1"/>
+            <script>
+                dirReceptor = dirReceptor + " " + contactPostalAddressField.unitNumber
+            </script>
+            <set field="cmnaReceptor" from="contactPostalAddressField.city"/>
+            <!-- ID Contacto receptor -->
+            <set field="receptorContactId" from="contactPostalAddressField.telecomContactMechId"/>
+
+            <log level="warn" message="********* contactMechId: $contactMechId - dirReceptor: $dirReceptor - cmnaReceptor: $cmnaReceptor - receptorContactId: $receptorContactId"/>
+
+
+            <!-- TODO: party puede ser Organization o Persona -->
+            <entity-find-one entity-name="mantle.party.Party" value-field="partyField"/>
+            <set field="partyTypeEnumId" from="partyField.partyTypeEnumId"/>
+
+            <set field="rznSocReceptor" value=""/>
+            <set field="giroReceptor" value="Sin Giro"/>
+
+
+            <if condition="partyTypeEnumId == 'PtyOrganization'">
+                <!-- Organizacion -->
+                <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField"/>
+                <set field="rznSocReceptor" from="organizationField.organizationName"/>
+                <set field="giroReceptor" from="organizationField.giro"/>
+                <!-- Obtención de contacto en organización -->
+                <entity-find-one entity-name="mantle.party.PartyRelationship" value-field="relationField">
+                    <field-map field-name="toPartyId" from="partyId"/>
+                    <field-map field-name="relationshipTypeEnumId" value="PtrAgent"/>
+                </entity-find-one>
+                <if condition="relationField">
+                    <set field="partyIdReceptor" from="relationField.fromPartyId"/>
+                    <entity-find-one entity-name="mantle.party.Person" value-field="personField">
+                        <field-map field-name="partyId" from="partyIdReceptor"/>
+                    </entity-find-one>
+                    <set field="contactoReceptor" from="personField.firstNAme"/>
+                    <script>
+                        contactoReceptor = contactoReceptor + " " + personField.lastName
+                    </script>
+                </if>
+
+            </if>
+            <if condition="partyTypeEnumId == 'PtyPerson'">
+                <!-- Persona Natural -->
+                <log message="***** Persona natural *****" level="warn"/>
+                <entity-find-one entity-name="mantle.party.Person" value-field="personField"/>
+                <if condition="!personField">
+                    <return error="true" message="No existe persona para facturar"/>
+                </if>
+
+                <set field="rznSocReceptor" from="personField.firstName"/>
+                <script>
+                    rznSocReceptor = rznSocReceptor + " " + personField.lastName
+                </script>
+                <set field="contactoReceptor" from="rznSocReceptor"/>
+            </if>
+
 
             <!-- Generacion de factura -->
-            <service-call name="MoquiChile.DTEServices.genera#Factura"
-                          in-map="[folioS:folio, tipoFacturaS:dteTypeEnumId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
-                          contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList]" out-map="context"/>
+            <service-call name="mchile.DTEServices.genera#Factura" in-map="[tipoFacturaS:dteTypeEnumId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
+                          contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
+                          invoiceId:invoiceId]" out-map="context"/>
+        </actions>
+    </service>
+
+    <service verb="activar" noun="Caf">
+        <description>
+            Activa CAF para ser usado
+            TODO: Agregar más inteligencia
+        </description>
+        <in-parameters>
+            <parameter name="cafId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="MoquiChile.Caf" value-field="cafField"/>
+
+            <if condition="!cafField">
+                <return error="true" message="No existe CAF"/>
+            </if>
+
+            <set field="cafField.activo" value="true"/>
+            <entity-update value-field="cafField"/>
+
+        </actions>
+    </service>
+
+    <service verb="desactivar" noun="Caf">
+        <description>
+            Desactiva CAF para ser usado
+            TODO: Agregar más inteligencia
+        </description>
+        <in-parameters>
+            <parameter name="cafId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="MoquiChile.Caf" value-field="cafField" for-update="true"/>
+
+            <if condition="!cafField">
+                <return error="true" message="No existe CAF"/>
+            </if>
+
+            <set field="cafField.activo" value="false"/>
+            <entity-update value-field="cafField"/>
+
         </actions>
     </service>
 
