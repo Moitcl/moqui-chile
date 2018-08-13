@@ -326,18 +326,24 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="generaEnvio" noun="Documento">
+    <service verb="generaEnvio" noun="Documentos">
         <description>
-            Generación de envio documento a partir de factura ya generada
+            Generación de envio documento a partir de facturas ya generadas.
+
+            En esta implementación se genera envío con una sola factura, pues se requiere que todas las facturas sean para el mismo receptor
+
         </description>
         <in-parameters>
             <parameter name="recepS" required="true"/>
             <parameter name="enviadorS" required="true"/>
             <parameter name="idS" required="true"/>
-            <parameter name="documentoS" required="true"/>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="xml" required="true"/>
+            <!--parameter name="listaFacturas" required="true" type="List"/-->
         </in-parameters>
         <out-parameters>
-            <parameter name="idS"/>
+            <parameter name="archivoEnvio"/>
         </out-parameters>
         <actions>
 
@@ -351,6 +357,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="idS" value="TEST-MOQUI33"/>
             <set field="documentoS" value="/home/cherrera/git/moqui-framework/FACT33.xml"/> -->
 
+            <!-- Recuperación de nombre de archivo de documento -->
+            <set field="documentoS" from="xml"/>
+
             <!-- Validación rut -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:recepS]" out-map="context"/>
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]" out-map="context"/>
@@ -361,6 +370,11 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="certS" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PASS_CERT']" out-map="context"/>
             <set field="passS" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_RESULTS']" out-map="context"/>
+            <set field="pathResults" from="resourceValue"/>
+
+            <!-- Variable para guardar nombre de archivo del envio -->
+            <set field="archivoEnvio" value=""/>
 
             <!--set field="DTEList" from="[]"/-->
 
@@ -399,8 +413,7 @@ along with this software (see the LICENSE.md file). If not, see
                 // Debo agregar el schema location (Sino SII rechaza)
                 XmlCursor cursor = envio.newCursor();
                 if (cursor.toFirstChild()) {
-                cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"),
-                "http://www.sii.cl/SiiDte EnvioDTE_v10.xsd");
+                    cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioDTE_v10.xsd");
                 }
 
                 // leo certificado y llave privada del archivo pkcs12
@@ -440,6 +453,7 @@ along with this software (see the LICENSE.md file). If not, see
                 DTEDefType[] dtes = new DTEDefType[DTEList.size()];
 
                 logger.warn("Tamaño:" + DTEList.size()+ " - Ubic 1 : " + DTEList[0]);
+
                 HashMap&lt;Integer, Integer&gt; hashTot = new HashMap&lt;Integer, Integer&gt;();
 
                 for (int i = 0; i &lt; DTEList.length; i++) {
@@ -487,7 +501,7 @@ along with this software (see the LICENSE.md file). If not, see
                 opts.setCharacterEncoding("ISO-8859-1");
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
 
-                envio.save(new File("ENV" + idS + "-sinfirma.xml"), opts);
+                envio.save(new File(pathResults + "ENV" + idS + "-sinfirma.xml"), opts);
                 envio.save(out, opts);
 
                 Document doc2 = XMLUtil.parseDocument(out.toByteArray());
@@ -497,22 +511,29 @@ along with this software (see the LICENSE.md file). If not, see
                 doc2 = XMLUtil.parseDocument(salida);
 
                 if (Signer.verify(doc2, "SetDTE")) {
-                    Path path = Paths.get("ENV" + idS + ".xml");
+                    archivoEnvio = pathResults + "ENV" + idS + ".xml"
+                    Path path = Paths.get(pathResults + "ENV" + idS + ".xml");
                     Files.write(path, salida);
                     logger.warn("Envio generado OK");
                 } else {
-                    Path path = Paths.get("ENV" + idS + "-mala.xml");
+                    archivoEnvio = pathResults + "ENV" + idS + "-mala.xml"
+                    Path path = Paths.get(pathResults + "ENV" + idS + "-mala.xml");
                     Files.write(path, salida);
                     logger.warn("Error al generar envio");
                 }
-
-
             </script>
+
+            <!-- Se guarda referencia a XML de envío en BD -->
+
+            <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="fiscalTaxDocumentField" cache="false" for-update="true" />
+            <log message="Encontrado: $fiscalTaxDocumentField" level="warn"/>
+            <set field="fiscalTaxDocumentField.envio" from="archivoEnvio" type="String"/>
+            <entity-update value-field="fiscalTaxDocumentField"/>
 
         </actions>
     </service>
 
-    <service verb="envia" noun="Documento">
+    <service verb="enviaSII" noun="Documento">
         <description>
             Envio documento a partir de documento envio ya generado
             compaS: rut de compañía que envía
@@ -534,15 +555,14 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="enviadorS" value="12857517-0"/>
             <set field="documentoS" value="/home/cherrera/git/moqui-framework/ENVTEST-MOQUI33.xml"/-->
 
+
             <!-- Validación rut -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]" out-map="context"/>
-
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CERT']" out-map="context"/>
             <set field="certS" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PASS_CERT']" out-map="context"/>
             <set field="passS" from="resourceValue"/>
-
 
             <script>
                 import java.io.File;
@@ -571,7 +591,6 @@ along with this software (see the LICENSE.md file). If not, see
                 logger.warn("Token: " + token);
 
                 String enviadorS = Utilities.getRutFromCertificate(x509);
-
 
                 RECEPCIONDTEDocument recp = con.uploadEnvioCertificacion(enviadorS, compaS, new File(documentoS), token);
                 logger.warn("-----------------");
@@ -859,13 +878,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="partyId" from="invoice.toPartyId"/>
             <set field="toPartyId" from="invoice.toPartyId"/>
 
-
             <!-- Items de invoice -->
             <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemList">
                 <econdition field-name="invoiceId"/></entity-find>
-
-
-            <log level="warn" message="******************** partyID: $partyId - $invoiceItemList"/>
 
             <!-- email receptor -->
             <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:toPartyId]" out-map="context"/>
@@ -873,8 +888,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="Receptor no tiene dirección de correo"/>
             </if>
             <set field="username" from="emailAddress"/>
-
-            <log level="warn" message="***************** email: $username"/>
 
             <!-- rut receptor -->
             <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
@@ -886,13 +899,9 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="rutReceptor" from="partyField.idValue"/>
 
-            <log level="warn" message="************* rutReceptor: $rutReceptor"/>
-
             <!-- Datos para encontrar contacto -->
 
             <set field="contactMechId"/>
-
-            <log level="warn" message="************* $partyId - $contactMechPurposeId - $contactMechId"/>
 
             <entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
                 <field-map field-name="partyId" from="partyId"/>
@@ -971,28 +980,6 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="activar" noun="Caf">
         <description>
             Activa CAF para ser usado
-            TODO: Agregar más inteligencia
-        </description>
-        <in-parameters>
-            <parameter name="cafId" required="true"/>
-        </in-parameters>
-        <actions>
-            <entity-find-one entity-name="MoquiChile.Caf" value-field="cafField"/>
-
-            <if condition="!cafField">
-                <return error="true" message="No existe CAF"/>
-            </if>
-
-            <set field="cafField.activo" value="true"/>
-            <entity-update value-field="cafField"/>
-
-        </actions>
-    </service>
-
-    <service verb="desactivar" noun="Caf">
-        <description>
-            Desactiva CAF para ser usado
-            TODO: Agregar más inteligencia
         </description>
         <in-parameters>
             <parameter name="cafId" required="true"/>
@@ -1004,9 +991,181 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="No existe CAF"/>
             </if>
 
-            <set field="cafField.activo" value="false"/>
+            <set field="cafField.activo" value="true"/>
             <entity-update value-field="cafField"/>
+        </actions>
+    </service>
 
+    <service verb="desactivar" noun="Caf">
+        <description>
+            Desactiva CAF para no ser usado
+        </description>
+        <in-parameters>
+            <parameter name="cafId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="MoquiChile.Caf" value-field="cafField" for-update="true"/>
+
+            <if condition="!cafField">
+                <return error="true" message="No existe CAF"/>
+            </if>
+
+            <set field="cafField.activo" value="" type="String"/>
+            <entity-update value-field="cafField"/>
+        </actions>
+    </service>
+
+
+    <service verb="preparaEnvio" noun="Documentos">
+        <description>
+            Obtiene datos para llamar a servicio enviar#Documento
+        </description>
+        <in-parameters>
+            <parameter name="documentIds" required="true"/>
+        </in-parameters>
+        <actions>
+
+            <!-- TODO: Primero generación de envíos -->
+            <!-- TODO: Después envío de documentos -->
+
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'RUT_ENVIADOR']" out-map="context"/>
+            <set field="enviadorS" value="${resourceValue}"/>
+
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'RUT_EMPRESA']" out-map="context"/>
+            <set field="compaS" value="${resourceValue}"/>
+
+            <set field="documentList" from="documentIds instanceof List ? documentIds : documentIds.split(',') as List"/>
+
+            <iterate list="documentList" entry="document">
+                <set field="documentTemp" from="document instanceof List ? document : document.split('-') as List"/>
+                <set field="fiscalTaxDocumentId" value="${documentTemp[0]}"/>
+                <set field="fiscalTaxDocumentTypeEnumId" value="${documentTemp[1]}"/>
+
+                <log message="********* Iterando: $fiscalTaxDocumentId - $fiscalTaxDocumentTypeEnumId" level="warn"/>
+                <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="detalleDocumento"/>
+                <set field="idS" value="Doc${fiscalTaxDocumentId}-${detalleDocumento.folio}"/>
+                <set field="recepS" from="detalleDocumento.receptor"/>
+                <set field="xml" from="detalleDocumento.xml"/>
+
+                <service-call name="mchile.DTEServices.generaEnvio#Documentos" in-map="[recepS:recepS, enviadorS:enviadorS, idS:idS,
+                        fiscalTaxDocumentId:fiscalTaxDocumentId, xml:xml, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" out-map="context"/>
+                <set field="documentoS" from="archivoEnvio"/>
+                <!-- TODO: Enviar finalmente al SII -->
+                <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:compaS, enviadorS:enviadorS , documentoS:documentoS]" out-map="context"/>
+                <!-- Retorna trackid -->
+            </iterate>
+        </actions>
+    </service>
+
+
+    <service verb="verificaEnSII" noun="Documento">
+        <description>
+            Verificación en el SII de DTE ya enviado
+        </description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+        </in-parameters>
+        <actions>
+
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CERT']" out-map="context"/>
+            <set field="certS" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PASS_CERT']" out-map="context"/>
+            <set field="passS" from="resourceValue"/>
+
+            <!-- TODO: Buscar archivo de envio usando llave -->
+            <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="fiscalTaxDocumentField" cache="false" for-update="false"/>
+
+            <if condition="!fiscalTaxDocumentField">
+                <return error="true" message="DTE no existe"/>
+            </if>
+
+            <set field="envio" from="fiscalTaxDocumentField.xml" type="String"/>
+            <set field="salida" value=""/>
+
+            <script>
+                import java.io.FileInputStream;
+                import java.security.KeyStore;
+                import java.security.PrivateKey;
+                import java.security.cert.X509Certificate;
+                import java.util.HashMap;
+
+                import org.apache.xmlbeans.XmlOptions;
+
+                import cl.nic.dte.net.ConexionSii;
+                import cl.nic.dte.util.Utilities;
+                import cl.sii.siiDte.DTEDocument;
+                import cl.sii.xmlSchema.RESPUESTADocument;
+
+                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;();
+                namespaces.put("", "http://www.sii.cl/SiiDte");
+                XmlOptions opts = new XmlOptions();
+                opts.setLoadSubstituteNamespaces(namespaces);
+
+                DTEDocument doc = DTEDocument.Factory.parse(new FileInputStream(envio), opts);
+
+                ConexionSii con = new ConexionSii();
+
+                // leo certificado y llave privada del archivo pkcs12
+                KeyStore ks = KeyStore.getInstance("PKCS12");
+                ks.load(new FileInputStream(certS), passS.toCharArray());
+                String alias = ks.aliases().nextElement();
+                System.out.println("Usando certificado " + alias + " del archivo PKCS12: " + certS);
+
+
+                X509Certificate x509 = (X509Certificate) ks.getCertificate(alias);
+                PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray());
+
+                String token = con.getToken(pKey, x509);
+
+                System.out.println("Token: " + token);
+
+                String enviadorS = Utilities.getRutFromCertificate(x509);
+
+                RESPUESTADocument resp = con.getEstadoDTECertificacion(enviadorS, doc.getDTE().getDocumento(), token);
+                opts.setSavePrettyPrintIndent(2);
+                opts.setSavePrettyPrint();
+                resp.save(System.out, opts);
+
+                logger.warn("------" + resp.toString())
+
+                salida = resp.toString();
+
+            </script>
+
+            <return error="false" message="${salida}"/>
+
+        </actions>
+    </service>
+
+    <service verb="load" noun="Dte">
+        <description>
+            Carga DTE recibida al sistema
+        </description>
+        <in-parameters>
+            <parameter name="nroDocumento" required="true"/>
+            <parameter name="filename" type="org.apache.commons.fileupload.FileItem" required="true"/>
+            <parameter name="emisor" required="true"/>
+            <parameter name="amount" required="true"/>
+            <parameter name="dteTypeEnumId" required="true"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:emisor]" out-map="context"/>
+
+            <set field="archivo" from="filename.getName()"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_RECIBIDAS']" out-map="context"/>
+            <set field="fileRoot" value="${resourceValue}"/>
+            <set field="contentLocation" value="${fileRoot}/${archivo}"/>
+
+            <set field="docRr" from="ec.resource.getLocationReference(contentLocation)"/>
+            <script>
+                fileStream = filename.getInputStream()
+                try { docRr.putStream(fileStream) } finally { fileStream.close() }
+            </script>
+
+
+            <set field="updateMap" from="[fiscalTaxDocumentId:nroDocumento, pdf:contentLocation,fiscalTaxDocumentTypeEnumId:dteTypeEnumId, emisor:emisor, amount:amount]"/>
+            <service-call name="create#tfpos.FiscalTaxDocument" out-map="context" in-map="updateMap"/>
         </actions>
     </service>
 
