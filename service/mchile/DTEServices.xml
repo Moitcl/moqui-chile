@@ -1139,7 +1139,8 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="nroDocumento" required="true"/>
-            <parameter name="filename" type="org.apache.commons.fileupload.FileItem" required="true"/>
+            <parameter name="xml" type="org.apache.commons.fileupload.FileItem" required="false"/>
+            <parameter name="pdf" type="org.apache.commons.fileupload.FileItem" required="false"/>
             <parameter name="emisor" required="true"/>
             <parameter name="amount" required="true"/>
             <parameter name="dteTypeEnumId" required="true"/>
@@ -1147,19 +1148,24 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:emisor]" out-map="context"/>
 
-            <set field="archivo" from="filename.getName()"/>
+            <set field="archivoPdf" from="pdf.getName()"/>
+            <set field="archivoXml" from="xml.getName()"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_RECIBIDAS']" out-map="context"/>
             <set field="fileRoot" value="${resourceValue}"/>
-            <set field="contentLocation" value="${fileRoot}/${archivo}"/>
+            <set field="contentLocationPdf" value="${fileRoot}/${archivoPdf}"/>
+            <set field="contentLocationXml" value="${fileRoot}/${archivoXml}"/>
 
-            <set field="docRr" from="ec.resource.getLocationReference(contentLocation)"/>
+            <set field="docRrPdf" from="ec.resource.getLocationReference(contentLocationPdf)"/>
+            <set field="docRrXml" from="ec.resource.getLocationReference(contentLocationXml)"/>
             <script>
-                fileStream = filename.getInputStream()
-                try { docRr.putStream(fileStream) } finally { fileStream.close() }
+                fileStream = pdf.getInputStream()
+                try { docRrPdf.putStream(fileStream) } finally { fileStream.close() }
+
+                fileStream = xml.getInputStream()
+                try { docRrXml.putStream(fileStream) } finally { fileStream.close() }
             </script>
 
-
-            <set field="updateMap" from="[fiscalTaxDocumentId:nroDocumento, pdf:contentLocation,fiscalTaxDocumentTypeEnumId:dteTypeEnumId, emisor:emisor, amount:amount]"/>
+            <set field="updateMap" from="[fiscalTaxDocumentId:nroDocumento, pdf:contentLocationPdf, xml:contentLocationXml,fiscalTaxDocumentTypeEnumId:dteTypeEnumId, emisor:emisor, amount:amount]"/>
             <service-call name="create#tfpos.FiscalTaxDocument" out-map="context" in-map="updateMap"/>
         </actions>
     </service>
