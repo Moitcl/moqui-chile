@@ -19,9 +19,9 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="genera" noun="Factura">
         <description>
             Generación de factura de acuerdo a plantilla
+            <!-- TODO: DTE de otros tipos -->
         </description>
         <in-parameters>
-            <!--parameter name="folioS" required="true"/-->
             <parameter name="tipoFacturaS" required="true"/>
             <parameter name="rutReceptor" required="true"/>
             <parameter name="rznSocReceptor" required="true"/>
@@ -285,19 +285,15 @@ along with this software (see the LICENSE.md file). If not, see
 
                 logger.warn("URI: " + uri)
 
-
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                 doc.save(new File(resultS + "FACT" + folio + "-sinfirma.xml"), opts);
                 doc.save(out, opts);
-
-                logger.warn("PATH: FACT"+folio+"-sinfirma.xml")
 
                 // Acá ocurre error
                 Document doc2 = XMLUtil.parseDocument(out.toByteArray());
 
                 byte[] salida = Signer.sign(doc2, uri, key, cert, uri, "Documento");
                 doc2 = XMLUtil.parseDocument(salida);
-
 
                 if (Signer.verify(doc2, "Documento")) {
                     Path path = Paths.get(resultS + "FACT" + folio + ".xml");
@@ -310,7 +306,6 @@ along with this software (see the LICENSE.md file). If not, see
                 }
             </script>
             <!-- Registro de DTE en base de datos y generación de PDF -->
-            <!--set field="fiscalTaxDocumentId" from="tipoFacturaS+folioS+fechaDTE"/-->
             <set field="fiscalTaxDocumentId" from="tipoFacturaS+folioS"/>
             <set field="fiscalTaxDocumentTypeEnumId" from="tipoFacturaS"/>
             <set field="amount" from="totalInvoice"/>
@@ -347,17 +342,6 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
 
-            <!-- TODO: documentoS debería ser una lista? -->
-            <!--
-            <set field="plantillaEnvio" value="/home/cherrera/git/DTE-develop/scripts/plantilla_envio.xml"/>
-            <set field="certS" value="/home/cherrera/git/DTE-develop/scripts/12857517-0.pfx"/>
-            <set field="passS" value="5378anth"/>
-            <set field="recepS" value="60803000-K"/>
-            <set field="enviadorS" value="76514104-4"/>
-            <set field="idS" value="TEST-MOQUI33"/>
-            <set field="documentoS" value="/home/cherrera/git/moqui-framework/FACT33.xml"/> -->
-
-            <!-- Recuperación de nombre de archivo de documento -->
             <set field="documentoS" from="xml"/>
 
             <!-- Validación rut -->
@@ -375,8 +359,6 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Variable para guardar nombre de archivo del envio -->
             <set field="archivoEnvio" value=""/>
-
-            <!--set field="DTEList" from="[]"/-->
 
             <script>
                 import java.io.ByteArrayOutputStream;
@@ -474,7 +456,6 @@ along with this software (see the LICENSE.md file). If not, see
                     subt.setNroDTE(new BigInteger(hashTot.get(tipo).toString()));
                     subtDtes[i] = subt;
                     i++;
-                    logger.warn("Otro for: " + i);
                 }
 
                 car.setSubTotDTEArray(subtDtes);
@@ -506,7 +487,6 @@ along with this software (see the LICENSE.md file). If not, see
 
                 Document doc2 = XMLUtil.parseDocument(out.toByteArray());
 
-                logger.warn("ids: " + idS);
                 byte[] salida = Signer.sign(doc2, "#" + idS, pKey, x509, "#" + idS,"SetDTE");
                 doc2 = XMLUtil.parseDocument(salida);
 
@@ -549,13 +529,6 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="trackId"/>
         </out-parameters>
         <actions>
-            <!--set field="certS" value="/home/cherrera/git/DTE-develop/scripts/12857517-0.pfx"/>
-            <set field="passS" value="5378anth"/>
-            <set field="compaS" value="76514104-4"/>
-            <set field="enviadorS" value="12857517-0"/>
-            <set field="documentoS" value="/home/cherrera/git/moqui-framework/ENVTEST-MOQUI33.xml"/-->
-
-
             <!-- Validación rut -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]" out-map="context"/>
 
@@ -654,9 +627,7 @@ along with this software (see the LICENSE.md file). If not, see
                 config.load(input);
 
                 resourceValue = config.getProperty(resourceName).toString();
-
             </script>
-
         </actions>
     </service>
 
@@ -696,12 +667,6 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="dte" required="true"/>
         </in-parameters>
         <actions>
-            <!--set field="certS" value="/home/cherrera/git/DTE-develop/scripts/12857517-0.pfx"/>
-            <set field="passS" value="5378anth"/>
-            <set field="compaS" value="76514104-4"/>
-            <set field="enviadorS" value="12857517-0"/>
-            <set field="documentoS" value="/home/cherrera/git/moqui-framework/ENVTEST-MOQUI33.xml"/-->
-
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CERT']" out-map="context"/>
             <set field="certS" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PASS_CERT']" out-map="context"/>
@@ -727,14 +692,12 @@ along with this software (see the LICENSE.md file). If not, see
                 pdf = pathPdf + pdf;
                 dte = pathResults + dte;
 
-                logger.warn("*** "+pdf+" - "+dte+" - "+template);
                 Utilities.generatePDF(new FileInputStream(dte), new FileInputStream(template), new FileOutputStream(pdf));
 
                 logger.warn("---------------");
                 logger.warn("PDF Generado: " + pdf);
                 logger.warn("---------------");
             </script>
-
         </actions>
     </service>
 
@@ -751,7 +714,8 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="dteTypeEnumId" required="true"/>
         </in-parameters>
         <actions>
-            <!-- TODO: Validar Rut -->
+            <!-- Validación rut -->
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rut]" out-map="context"/>
             <!-- TODO: Parseado de CAF -->
             <set field="archivo" from="filename.getName()"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CAF']" out-map="context"/>
@@ -811,53 +775,6 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="get2" noun="Folio">
-        <description>
-            Obtiene folio para el tipo de DTE especificado.
-            Cuida de no repetir el folio
-        </description>
-        <in-parameters>
-            <parameter name="dteTypeEnumId" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="folio"/>
-        </out-parameters>
-        <actions>
-            <!-- TODO: uso de secuencias para manejo de folios
-
-           Solo puede haber un CAF activo por tipo DTE:
-
-           Secuencias:
-
-           33: dte33Seq
-           34: dte34Seq
-
-            -->
-
-            <!-- Se filtra por CAF activo (PK) -->
-            <set field="activo" value="true"/>
-            <entity-find-one entity-name="MoquiChile.Caf" value-field="caf" for-update="true"/>
-
-            <script>
-                caf.ultimoFolio = caf.ultimoFolio + 1
-            </script>
-
-            <if condition="caf.ultimoFolio &lt; caf.desde">
-                <return message="Error en CAF" error="true"/>
-            </if>
-
-            <if condition="caf.ultimoFolio &gt; caf.hasta">
-                <return message="No se pueden usar más folios de CAF actual" error="true"/>
-            </if>
-
-            <!-- Se obtiene nuevo folio de acuerdo a tipo DTE -->
-
-            <entity-update value-field="caf"/>
-            <set field="folio" from="caf.ultimoFolio"/>
-
-        </actions>
-    </service>
-
     <service verb="facturar" noun="Invoice">
         <description>
             Obtiene datos para llamar a método generar#Factura
@@ -904,7 +821,6 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find-one>
             <set field="contactMechId" from="contactMechField.contactMechId"/>
 
-            <log level="warn" message="***** partyId: $partyId , contactMechId: $contactMechId"/>
 
             <!-- Datos de contacto -->
             <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressField"/>
@@ -915,9 +831,6 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="cmnaReceptor" from="contactPostalAddressField.city"/>
             <!-- ID Contacto receptor -->
             <set field="receptorContactId" from="contactPostalAddressField.telecomContactMechId"/>
-
-            <log level="warn" message="********* contactMechId: $contactMechId - dirReceptor: $dirReceptor - cmnaReceptor: $cmnaReceptor - receptorContactId: $receptorContactId"/>
-
 
             <!-- TODO: party puede ser Organization o Persona -->
             <entity-find-one entity-name="mantle.party.Party" value-field="partyField"/>
@@ -951,7 +864,6 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <if condition="partyTypeEnumId == 'PtyPerson'">
                 <!-- Persona Natural -->
-                <log message="***** Persona natural *****" level="warn"/>
                 <entity-find-one entity-name="mantle.party.Person" value-field="personField"/>
                 <if condition="!personField">
                     <return error="true" message="No existe persona para facturar"/>
@@ -1019,10 +931,6 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="documentIds" required="true"/>
         </in-parameters>
         <actions>
-
-            <!-- TODO: Primero generación de envíos -->
-            <!-- TODO: Después envío de documentos -->
-
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'RUT_ENVIADOR']" out-map="context"/>
             <set field="enviadorS" value="${resourceValue}"/>
 
@@ -1036,7 +944,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="fiscalTaxDocumentId" value="${documentTemp[0]}"/>
                 <set field="fiscalTaxDocumentTypeEnumId" value="${documentTemp[1]}"/>
 
-                <log message="********* Iterando: $fiscalTaxDocumentId - $fiscalTaxDocumentTypeEnumId" level="warn"/>
                 <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="detalleDocumento"/>
                 <set field="idS" value="Doc${fiscalTaxDocumentId}-${detalleDocumento.folio}"/>
                 <set field="recepS" from="detalleDocumento.receptor"/>
@@ -1047,7 +954,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="documentoS" from="archivoEnvio"/>
                 <!-- TODO: Enviar finalmente al SII -->
                 <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:compaS, enviadorS:enviadorS , documentoS:documentoS]" out-map="context"/>
-                <!-- Retorna trackid -->
             </iterate>
         </actions>
     </service>
@@ -1068,7 +974,6 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PASS_CERT']" out-map="context"/>
             <set field="passS" from="resourceValue"/>
 
-            <!-- TODO: Buscar archivo de envio usando llave -->
             <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="fiscalTaxDocumentField" cache="false" for-update="false"/>
 
             <if condition="!fiscalTaxDocumentField">
@@ -1127,9 +1032,7 @@ along with this software (see the LICENSE.md file). If not, see
                 salida = resp.toString();
 
             </script>
-
             <return error="false" message="${salida}"/>
-
         </actions>
     </service>
 
