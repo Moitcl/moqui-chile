@@ -32,6 +32,9 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="ciudadReceptor" default-value="${cmnaReceptor}"/>
             <parameter name="detailList" type="List" required="true"/>
             <parameter name="invoiceId" required="true"/>
+            <parameter name="medioPago" required="true"/>
+            <parameter name="formaPago" required="true" type="String"/>
+            <parameter name="textoReferencia"/>
         </in-parameters>
         <out-parameters>
             <parameter name="factura"/>
@@ -90,6 +93,7 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.sii.siiDte.DTEDefType.Documento.Encabezado.IdDoc;
                 import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Receptor;
                 import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Totales;
+                import cl.sii.siiDte.DTEDefType.Documento.Referencia;
                 import cl.sii.siiDte.DTEDocument;
                 import cl.sii.siiDte.FechaHoraType;
                 import cl.sii.siiDte.FechaType;
@@ -101,10 +105,12 @@ along with this software (see the LICENSE.md file). If not, see
                 X509Certificate cert;
                 PrivateKey key;
                 int tipoFactura;
+                int frmPago;
 
                 // Leo el folio
                 folio = Integer.valueOf(folioS);
                 tipoFactura = Integer.valueOf(tipoFacturaS);
+                frmPago = Integer.valueOf(formaPago);
 
 
                 //if (tipoFactura != 33 oo tipoFactura != 34) {
@@ -145,16 +151,24 @@ along with this software (see the LICENSE.md file). If not, see
                 iddoc.setTipoDTE(BigInteger.valueOf(tipoFactura));
 
                 iddoc.xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+
+                // Indicador Servicio
+                // 3 para Factura de Servicios
+                // Para Facturas de Exportación:
+                //   4 Servicios de Hotelería
+                //   5 Servicio de Transporte Terrestre Internacional
                 iddoc.setIndServicio(BigInteger.valueOf(3));
-                iddoc.setFmaPago(BigInteger.valueOf(1));
 
                 Calendar cal = Calendar.getInstance();
                 cal.add(Calendar.DAY_OF_MONTH, 45);
                 iddoc.xsetFchCancel(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
 
-                // TODO: Revisar medios de pago
-                iddoc.setMedioPago(MedioPagoType.Enum.forString("LT"));
-                iddoc.setFmaPago(BigInteger.valueOf(2));
+                // Medio y forma de pago
+                iddoc.setMedioPago(MedioPagoType.Enum.forString(medioPago));
+                iddoc.setFmaPago(BigInteger.valueOf(frmPago));
+
+                // Referencia
+                //iddoc.setReferencia(textoReferencia);
 
                 // Receptor
                 Receptor recp = doc.getDTE().getDocumento().getEncabezado().addNewReceptor();
@@ -244,6 +258,42 @@ along with this software (see the LICENSE.md file). If not, see
                     tot.setMntTotal(totalInvoice);
                 </script>
             </if>
+            <!-- TODO: Nota de Crédito Electrónica -->
+            <if condition="tipoFactura == 61">
+                <script>
+                    int i = 0
+                    listSize = detailList.size
+                    Detalle[] det = new Detalle[listSize]
+                </script>
+                <set field="totalInvoice" value="0" type="Integer"/>
+                <iterate list="detailList" entry="detailEntry">
+                    <log message="******* Iterando invoice $detailEntry" level="warn"/>
+                    <set field="nombreItem" from="detailEntry.description"/>
+                    <set field="qtyItem" from="detailEntry.quantity" type="Integer"/>
+                    <!-- TODO: obtener precio de productId -->
+                    <set field="priceItem" from="detailEntry.amount" type="Integer"/>
+                    <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+                    <script>
+                        // Agrego detalles
+                        det[i] = Detalle.Factory.newInstance();
+                        det[i].setNroLinDet(i+1);
+                        det[i].setNmbItem(nombreItem);
+                        det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                        det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                        det[i].setMontoItem( totalItem );
+                        totalInvoice = totalInvoice + totalItem
+
+                        i = i + 1
+                    </script>
+                </iterate>
+                <script>
+                    doc.getDTE().getDocumento().setDetalleArray(det);
+                    // Totales
+                    Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
+                    tot.setMntExe(totalInvoice);
+                    tot.setMntTotal(totalInvoice);
+                </script>
+            </if>
             <script>
 
                 // Timbro
@@ -289,7 +339,6 @@ along with this software (see the LICENSE.md file). If not, see
                 doc.save(new File(resultS + "FACT" + folio + "-sinfirma.xml"), opts);
                 doc.save(out, opts);
 
-                // Acá ocurre error
                 Document doc2 = XMLUtil.parseDocument(out.toByteArray());
 
                 byte[] salida = Signer.sign(doc2, uri, key, cert, uri, "Documento");
@@ -529,6 +578,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="trackId"/>
         </out-parameters>
         <actions>
+
             <!-- Validación rut -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]" out-map="context"/>
 
@@ -782,8 +832,52 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="invoiceId" required="true"/>
             <parameter name="dteTypeEnumId" required="true"/>
+            <parameter name="textoReferencia"/>
         </in-parameters>
         <actions>
+            <!-- Manejo forma y medio de pago -->
+
+            <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
+            <set field="paymentId" from="paymentApplicationList.paymentId"/>
+
+            <entity-find-one entity-name="mantle.account.payment.Payment" value-field="payment"/>
+            <!-- Ajuste de forma de pago -->
+            <set field="medioPago" value="OT"/>
+            <set field="formaPago" value="3"/>
+            <if condition="payment.paymentInstrumentEnumId == 'PiCreditCard'">
+                <set field="medioPago" value="TC"/>
+                <set field="formaPago" value="2"/>
+            </if>
+            <if condition="payment.paymentInstrumentEnumId == 'PiCompanyCheck'">
+                <set field="medioPago" value="CH"/>
+                <set field="formaPago" value="1"/>
+            </if>
+            <if condition="payment.paymentInstrumentEnumId == 'PiPersonalCheck'">
+                <set field="medioPago" value="CH"/>
+                <set field="formaPago" value="1"/>
+            </if>
+            <if condition="payment.paymentInstrumentEnumId == 'PiCompanyCheckDate'">
+                <set field="medioPago" value="CF"/>
+                <set field="formaPago" value="2"/>
+            </if>
+            <if condition="payment.paymentInstrumentEnumId == 'PiPersonalCheckDate'">
+                <set field="medioPago" value="CF"/>
+                <set field="formaPago" value="2"/>
+            </if>
+            <if condition="payment.paymentInstrumentEnumId == 'PiCash'">
+                <set field="medioPago" value="EF"/>
+                <set field="formaPago" value="1"/>
+            </if>
+            <if condition="payment.paymentInstrumentEnumId == 'PiLetra'">
+                <set field="medioPago" value="LT"/>
+                <set field="formaPago" value="2"/>
+            </if>
+            <if condition="payment.paymentInstrumentEnumId == 'PiBillingAccount'">
+                <set field="medioPago" value="PE"/>
+                <set field="formaPago" value="1"/>
+            </if>
+
+
             <!-- Datos principales de invoice -->
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
             <if condition="invoice == null"><return error="true" message="Invoice not found with ID ${invoiceId}"/></if>
@@ -880,7 +974,7 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Generacion de factura -->
             <service-call name="mchile.DTEServices.genera#Factura" in-map="[tipoFacturaS:dteTypeEnumId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
                           contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
-                          invoiceId:invoiceId]" out-map="context"/>
+                          invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, textoReferencia:textoReferencia]" out-map="context"/>
         </actions>
     </service>
 
@@ -1070,6 +1164,169 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="updateMap" from="[fiscalTaxDocumentId:nroDocumento, pdf:contentLocationPdf, xml:contentLocationXml,fiscalTaxDocumentTypeEnumId:dteTypeEnumId, emisor:emisor, amount:amount]"/>
             <service-call name="create#tfpos.FiscalTaxDocument" out-map="context" in-map="updateMap"/>
+        </actions>
+    </service>
+
+    <service verb="generar" noun="NotaCredito">
+        <description>
+            Obtiene datos para llamar a método generar#Factura para Nota de Crédito
+        </description>
+        <in-parameters>
+            <parameter name="returnId" required="true"/>
+        </in-parameters>
+        <actions>
+            <!-- TODO: Datos para nota de crédito -->
+
+            <!-- Datos de devolución, para armar nota de crédito -->
+            <service-call name="mantle.order.ReturnServices.get#ReturnDisplayInfo" in-map="[returnId:returnId]" out-map="context"/>
+            <!--
+               vendorPartyId
+               customerPartyId
+               postalContactMechId
+               productId
+               orderId
+               returnQuantity
+               responseAmount
+
+            -->
+
+            <!-- Recuperación de referencias -->
+            <entity-find entity-name="MoquiChile.ReferenciaReturn" list="referenciaList">
+                <econdition field-name="returnId" from="returnId"/>
+            </entity-find>
+            <return error="true" message="************* Referencias: $referenciaList"/>
+
+            <!-- Items de invoice -->
+            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemList">
+                <econdition field-name="invoiceId"/></entity-find>
+
+            <!-- email receptor -->
+            <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:toPartyId]" out-map="context"/>
+            <if condition="!emailAddress">
+                <return error="true" message="Receptor no tiene dirección de correo"/>
+            </if>
+            <set field="username" from="emailAddress"/>
+
+            <!-- rut receptor -->
+            <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyField"/>
+
+            <if condition="!partyField">
+                <return error="true" message="Receptor no tiene RUT"/>
+            </if>
+
+            <set field="rutReceptor" from="partyField.idValue"/>
+
+            <!-- Datos para encontrar contacto -->
+
+            <set field="contactMechId"/>
+
+            <entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
+                <field-map field-name="partyId" from="partyId"/>
+                <field-map field-name="contactMechPurposeId" value="PostalTax"/>
+            </entity-find-one>
+            <set field="contactMechId" from="contactMechField.contactMechId"/>
+
+
+            <!-- Datos de contacto -->
+            <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressField"/>
+            <set field="dirReceptor" from="contactPostalAddressField.address1"/>
+            <script>
+                dirReceptor = dirReceptor + " " + contactPostalAddressField.unitNumber
+            </script>
+            <set field="cmnaReceptor" from="contactPostalAddressField.city"/>
+            <!-- ID Contacto receptor -->
+            <set field="receptorContactId" from="contactPostalAddressField.telecomContactMechId"/>
+
+            <!-- TODO: party puede ser Organization o Persona -->
+            <entity-find-one entity-name="mantle.party.Party" value-field="partyField"/>
+            <set field="partyTypeEnumId" from="partyField.partyTypeEnumId"/>
+
+            <set field="rznSocReceptor" value=""/>
+            <set field="giroReceptor" value="Sin Giro"/>
+
+
+            <if condition="partyTypeEnumId == 'PtyOrganization'">
+                <!-- Organizacion -->
+                <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField"/>
+                <set field="rznSocReceptor" from="organizationField.organizationName"/>
+                <set field="giroReceptor" from="organizationField.giro"/>
+                <!-- Obtención de contacto en organización -->
+                <entity-find-one entity-name="mantle.party.PartyRelationship" value-field="relationField">
+                    <field-map field-name="toPartyId" from="partyId"/>
+                    <field-map field-name="relationshipTypeEnumId" value="PtrAgent"/>
+                </entity-find-one>
+                <if condition="relationField">
+                    <set field="partyIdReceptor" from="relationField.fromPartyId"/>
+                    <entity-find-one entity-name="mantle.party.Person" value-field="personField">
+                        <field-map field-name="partyId" from="partyIdReceptor"/>
+                    </entity-find-one>
+                    <set field="contactoReceptor" from="personField.firstNAme"/>
+                    <script>
+                        contactoReceptor = contactoReceptor + " " + personField.lastName
+                    </script>
+                </if>
+
+            </if>
+            <if condition="partyTypeEnumId == 'PtyPerson'">
+                <!-- Persona Natural -->
+                <entity-find-one entity-name="mantle.party.Person" value-field="personField"/>
+                <if condition="!personField">
+                    <return error="true" message="No existe persona para facturar"/>
+                </if>
+
+                <set field="rznSocReceptor" from="personField.firstName"/>
+                <script>
+                    rznSocReceptor = rznSocReceptor + " " + personField.lastName
+                </script>
+                <set field="contactoReceptor" from="rznSocReceptor"/>
+            </if>
+
+
+            <!-- Generacion de nota de crédito -->
+            <service-call name="mchile.DTEServices.genera#Factura" in-map="[tipoFacturaS:'61', rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
+                          contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
+                          invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, textoReferencia:textoReferencia]" out-map="context"/>
+        </actions>
+    </service>
+
+    <service verb="agregar" noun="Referencia">
+        <description>
+            Agrega una referencia para DTE
+        </description>
+        <in-parameters>
+            <parameter name="returnId" required="true"/>
+            <parameter name="folio" required="true"/>
+            <parameter name="rutOtroContribuyente" required="true"/>
+            <parameter name="dteTypeEnumId" required="true"/>
+            <parameter name="idAdicional"/>
+            <parameter name="fecha" required="true"/>
+            <parameter name="codigoReferenciaEnumId" required="true"/>
+            <parameter name="razonReferencia"/>
+        </in-parameters>
+        <actions>
+            <!-- Verificación de RUT -->
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutOtroContribuyente]"/>
+
+            <log message="***** codigoReferenciaEnumId: $codigoReferenciaEnumId, idAdicional: $idAdicional "/>
+
+            <!-- Inserción en tabla referenceReturn -->
+            <set field="createMap" from="[dteTypeEnumId:dteTypeEnumId, codigoReferenciaEnumId:codigoReferenciaEnumId, fecha:fecha, rut:rutOtroContribuyente, idAdicional:idAdicional,
+                                          folio:folio, returnId:returnId]"/>
+            <service-call name="create#MoquiChile.ReferenciaReturn" out-map="context" in-map="createMap"/>
+        </actions>
+    </service>
+
+    <service verb="eliminar" noun="Referencia">
+        <description>
+            Eliminar referencia de una DTE
+        </description>
+        <in-parameters>
+            <parameter name="referenciaReturnId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="MoquiChile.ReferenciaReturn" value-field="referenciaField" for-update="true"/>
+            <entity-delete value-field="referenciaField"/>
         </actions>
     </service>
 
