@@ -32,9 +32,9 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="ciudadReceptor" default-value="${cmnaReceptor}"/>
             <parameter name="detailList" type="List" required="true"/>
             <parameter name="invoiceId" required="true"/>
-            <parameter name="medioPago" required="true"/>
-            <parameter name="formaPago" required="true" type="String"/>
-            <parameter name="textoReferencia"/>
+            <parameter name="medioPago" required="false"/>
+            <parameter name="formaPago" required="false" type="String"/>
+            <parameter name="referenciaList" type="List"/>
         </in-parameters>
         <out-parameters>
             <parameter name="factura"/>
@@ -58,12 +58,18 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMPLATE_FACTURA']" out-map="context"/>
             <set field="plantillaS" from="resourceValue"/>
 
+            <!-- TODO: prueba de Nota de crédito con CAF de DTE 34 -->
+            <set field="tipoFacturaS" value="34"/>
+
             <!-- Obtención de folio y path de CAF -->
             <service-call name="mchile.DTEServices.get#Folio" in-map="[dteTypeEnumId:tipoFacturaS]" out-map="context"/>
             <set field="folioS" from="folio" type="Integer"/>
             <script>
                 cafS = cafS + caf
             </script>
+
+            <!-- TODO: prueba -->
+            <set field="tipoFacturaS" value="61"/>
 
             <script>
                 import java.io.ByteArrayOutputStream;
@@ -80,6 +86,9 @@ along with this software (see the LICENSE.md file). If not, see
                 import java.util.Calendar;
                 import java.util.Date;
                 import java.util.HashMap;
+                import java.text.ParseException;
+                import java.text.SimpleDateFormat;
+                import java.util.Date;
 
                 import org.apache.xmlbeans.XmlOptions;
                 import org.w3c.dom.Document;
@@ -99,19 +108,20 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.sii.siiDte.FechaType;
                 import cl.sii.siiDte.MedioPagoType;
 
+
                 int folio;
                 DTEDocument doc;
                 AutorizacionType caf;
                 X509Certificate cert;
                 PrivateKey key;
                 int tipoFactura;
-                int frmPago;
+                int frmPago = 1;
 
                 // Leo el folio
                 folio = Integer.valueOf(folioS);
                 tipoFactura = Integer.valueOf(tipoFacturaS);
-                frmPago = Integer.valueOf(formaPago);
-
+                if(formaPago != null)
+                   frmPago = Integer.valueOf(formaPago);
 
                 //if (tipoFactura != 33 oo tipoFactura != 34) {
                 //    throw new Exception("Debe ingresar tipo de factura 33 o 34");
@@ -167,9 +177,6 @@ along with this software (see the LICENSE.md file). If not, see
                 iddoc.setMedioPago(MedioPagoType.Enum.forString(medioPago));
                 iddoc.setFmaPago(BigInteger.valueOf(frmPago));
 
-                // Referencia
-                //iddoc.setReferencia(textoReferencia);
-
                 // Receptor
                 Receptor recp = doc.getDTE().getDocumento().getEncabezado().addNewReceptor();
                 recp.setRUTRecep(rutReceptor);
@@ -181,6 +188,7 @@ along with this software (see the LICENSE.md file). If not, see
                 recp.setCiudadRecep(ciudadReceptor);
 
             </script>
+
             <if condition="tipoFactura == 33">
                 <script>
                     int i = 0
@@ -256,8 +264,10 @@ along with this software (see the LICENSE.md file). If not, see
                     Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
                     tot.setMntExe(totalInvoice);
                     tot.setMntTotal(totalInvoice);
+
                 </script>
             </if>
+
             <!-- TODO: Nota de Crédito Electrónica -->
             <if condition="tipoFactura == 61">
                 <script>
@@ -266,12 +276,16 @@ along with this software (see the LICENSE.md file). If not, see
                     Detalle[] det = new Detalle[listSize]
                 </script>
                 <set field="totalInvoice" value="0" type="Integer"/>
+
                 <iterate list="detailList" entry="detailEntry">
                     <log message="******* Iterando invoice $detailEntry" level="warn"/>
                     <set field="nombreItem" from="detailEntry.description"/>
-                    <set field="qtyItem" from="detailEntry.quantity" type="Integer"/>
+                    <set field="qtyItem" from="detailEntry.returnQuantity" type="Integer"/>
                     <!-- TODO: obtener precio de productId -->
-                    <set field="priceItem" from="detailEntry.amount" type="Integer"/>
+                    <if condition="!detailEntry.responseAmount">
+                        <return error="true" message="No hay precio para crédito producto $nombreItem"/>
+                    </if>
+                    <set field="priceItem" from="detailEntry.responseAmount" type="Integer"/>
                     <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
                     <script>
                         // Agrego detalles
@@ -292,8 +306,46 @@ along with this software (see the LICENSE.md file). If not, see
                     Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
                     tot.setMntExe(totalInvoice);
                     tot.setMntTotal(totalInvoice);
+
+                    i = 0
+                    listSize = referenciaList.size
+                    Referencia[] ref = new Referencia[listSize]
+                </script>
+
+                <iterate list="referenciaList" entry="referenciaEntry">
+                    <log message="*********** Agregando referencias $referenciaEntry" level="warn"/>
+                    <set field="folioRef" from="referenciaEntry.folio" type="Integer"/>
+                    <set field="codRef" from="referenciaEntry.codigoReferenciaEnumId" type="Integer"/>
+                    <set field="fechaRef" from="referenciaEntry.fecha" type="String"/>
+                    <script>
+                        // Agrego referencias
+                        ref[i] = Referencia.Factory.newInstance();
+                        ref[i].setNroLinRef(i+1);
+                        ref[i].setTpoDocRef(referenciaEntry.dteTypeEnumId);
+                        ref[i].setIndGlobal(0);
+                        ref[i].setRUTOtr(rutReceptor);
+
+                        //Calendar cal = Calendar.getInstance();
+                        //cal.add(Calendar.DAY_OF_MONTH, 45);
+                        //iddoc.xsetFchCancel(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+                        //ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+
+                        SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
+                        Date date = formatter.parse(fechaRef);
+                        ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
+                        ref[i].setCodRef(codRef);
+                        ref[i].setRazonRef(referenciaEntry.razonReferencia);
+                        ref[i].setFolioRef(referenciaEntry.folio.toString());
+
+                        i = i + 1
+                    </script>
+                </iterate>
+                <script>
+                    doc.getDTE().getDocumento().setReferenciaArray(ref);
                 </script>
             </if>
+
+
             <script>
 
                 // Timbro
@@ -1187,25 +1239,38 @@ along with this software (see the LICENSE.md file). If not, see
                orderId
                returnQuantity
                responseAmount
-
             -->
 
             <!-- Recuperación de referencias -->
             <entity-find entity-name="MoquiChile.ReferenciaReturn" list="referenciaList">
                 <econdition field-name="returnId" from="returnId"/>
             </entity-find>
-            <return error="true" message="************* Referencias: $referenciaList"/>
 
-            <!-- Items de invoice -->
-            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemList">
-                <econdition field-name="invoiceId"/></entity-find>
+            <!-- Items de la devolución -->
+            <entity-find entity-name="mantle.order.return.ReturnItem" list="returnItemList">
+                <econdition field-name="returnId"/></entity-find>
 
             <!-- email receptor -->
-            <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:toPartyId]" out-map="context"/>
+            <entity-find-one entity-name="mantle.order.return.ReturnHeader" value-field="returnField"/>
+
+            <if condition="!returnField">
+                <return error="true" message="No existe devolución"/>
+            </if>
+            <if condition="!returnField.customerPartyId">
+                <return error="true" message="No existe tercero asociado a devolución"/>
+            </if>
+
+            <set field="partyId" from="returnField.customerPartyId"/>
+
+            <!-- TODO: Lógica para evitar emitir notas a uno mismo -->
+
+
+            <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:returnField.customerPartyId]" out-map="context"/>
             <if condition="!emailAddress">
                 <return error="true" message="Receptor no tiene dirección de correo"/>
             </if>
             <set field="username" from="emailAddress"/>
+
 
             <!-- rut receptor -->
             <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
@@ -1225,6 +1290,11 @@ along with this software (see the LICENSE.md file). If not, see
                 <field-map field-name="partyId" from="partyId"/>
                 <field-map field-name="contactMechPurposeId" value="PostalTax"/>
             </entity-find-one>
+
+            <if condition="!contactMechField">
+                <return error="true" message="Receptor no tiene dirección para impuestos"/>
+            </if>
+
             <set field="contactMechId" from="contactMechField.contactMechId"/>
 
 
@@ -1238,9 +1308,14 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- ID Contacto receptor -->
             <set field="receptorContactId" from="contactPostalAddressField.telecomContactMechId"/>
 
-            <!-- TODO: party puede ser Organization o Persona -->
+
             <entity-find-one entity-name="mantle.party.Party" value-field="partyField"/>
+            <if condition="!partyField">
+                <return error="true" message="Receptor no existe"/>
+            </if>
+
             <set field="partyTypeEnumId" from="partyField.partyTypeEnumId"/>
+
 
             <set field="rznSocReceptor" value=""/>
             <set field="giroReceptor" value="Sin Giro"/>
@@ -1285,8 +1360,8 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Generacion de nota de crédito -->
             <service-call name="mchile.DTEServices.genera#Factura" in-map="[tipoFacturaS:'61', rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
-                          contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
-                          invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, textoReferencia:textoReferencia]" out-map="context"/>
+                          contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:returnItemList,
+                          invoiceId:returnId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList]" out-map="context"/>
         </actions>
     </service>
 
@@ -1308,8 +1383,6 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Verificación de RUT -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutOtroContribuyente]"/>
 
-            <log message="***** codigoReferenciaEnumId: $codigoReferenciaEnumId, idAdicional: $idAdicional "/>
-
             <!-- Inserción en tabla referenceReturn -->
             <set field="createMap" from="[dteTypeEnumId:dteTypeEnumId, codigoReferenciaEnumId:codigoReferenciaEnumId, fecha:fecha, rut:rutOtroContribuyente, idAdicional:idAdicional,
                                           folio:folio, returnId:returnId]"/>
@@ -1327,6 +1400,295 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <entity-find-one entity-name="MoquiChile.ReferenciaReturn" value-field="referenciaField" for-update="true"/>
             <entity-delete value-field="referenciaField"/>
+        </actions>
+    </service>
+
+    <service verb="envia" noun="Recepcion">
+        <description>
+            Envío de respuesta a emisor DTE.
+
+            Esta implementación inicialmente responde a un solo envío
+
+            En un paso posterior se puede enviar Aceptación o Rechazo
+        </description>
+        <in-parameters>
+            <parameter name="tipoFacturaS" required="true"/>
+            <parameter name="rutReceptor" required="true"/>
+            <parameter name="rznSocReceptor" required="true"/>
+            <parameter name="giroReceptor" required="true"/>
+            <parameter name="contactoReceptor" required="true"/>
+            <parameter name="dirReceptor" required="true"/>
+            <parameter name="cmnaReceptor" required="true"/>
+            <parameter name="ciudadReceptor" default-value="${cmnaReceptor}"/>
+            <parameter name="detailList" type="List" required="true"/>
+            <parameter name="invoiceId" required="true"/>
+            <parameter name="medioPago" required="false"/>
+            <parameter name="formaPago" required="false" type="String"/>
+            <parameter name="referenciaList" type="List"/>
+        </in-parameters>
+        <actions>
+            <!-- Validación rut -->
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutReceptor]" out-map="context"/>
+
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CERT']" out-map="context"/>
+            <set field="certS" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PASS_CERT']" out-map="context"/>
+            <set field="passS" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_RESULTS']" out-map="context"/>
+            <set field="resultS" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMP']" out-map="context"/>
+            <set field="pathTemp" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_PDF']" out-map="context"/>
+            <set field="pathPdf" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CAF']" out-map="context"/>
+            <set field="cafS" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMPLATE_FACTURA']" out-map="context"/>
+            <set field="plantillaS" from="resourceValue"/>
+
+            <!-- TODO: prueba de Nota de crédito con CAF de DTE 34 -->
+            <set field="tipoFacturaS" value="34"/>
+
+            <!-- Obtención de folio y path de CAF -->
+            <service-call name="mchile.DTEServices.get#Folio" in-map="[dteTypeEnumId:tipoFacturaS]" out-map="context"/>
+            <set field="folioS" from="folio" type="Integer"/>
+            <script>
+                cafS = cafS + caf
+            </script>
+
+            <!-- TODO: prueba -->
+            <set field="tipoFacturaS" value="61"/>
+
+            <script>
+                import java.io.ByteArrayOutputStream;
+                import java.io.File;
+                import java.io.FileInputStream;
+                import java.math.BigDecimal;
+                import java.math.BigInteger;
+                import java.nio.file.Files;
+                import java.nio.file.Path;
+                import java.nio.file.Paths;
+                import java.security.KeyStore;
+                import java.security.PrivateKey;
+                import java.security.cert.X509Certificate;
+                import java.util.Calendar;
+                import java.util.Date;
+                import java.util.HashMap;
+                import java.text.ParseException;
+                import java.text.SimpleDateFormat;
+                import java.util.Date;
+
+                import org.apache.xmlbeans.XmlOptions;
+                import org.w3c.dom.Document;
+
+                import cl.nic.dte.util.Signer;
+                import cl.nic.dte.util.Utilities;
+                import cl.nic.dte.util.XMLUtil;
+                import cl.sii.siiDte.AUTORIZACIONDocument;
+                import cl.sii.siiDte.AutorizacionType;
+                import cl.sii.siiDte.DTEDefType.Documento.Detalle;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.IdDoc;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Receptor;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Totales;
+                import cl.sii.siiDte.DTEDefType.Documento.Referencia;
+                import cl.sii.siiDte.DTEDocument;
+                import cl.sii.siiDte.FechaHoraType;
+                import cl.sii.siiDte.FechaType;
+                import cl.sii.siiDte.MedioPagoType;
+
+
+                int folio;
+                DTEDocument doc;
+                AutorizacionType caf;
+                X509Certificate cert;
+                PrivateKey key;
+                int tipoFactura;
+                int frmPago = 1;
+
+                // Leo el folio
+                //folio = Integer.valueOf(folioS);
+                tipoFactura = Integer.valueOf(tipoFacturaS);
+                //if(formaPago != null)
+                //frmPago = Integer.valueOf(formaPago);
+
+                // Leo Autorizacion
+                // Debo meter el namespace porque SII no lo genera
+                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;();
+                namespaces.put("", "http://www.sii.cl/SiiDte");
+                namespaces.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+                XmlOptions opts = new XmlOptions();
+                opts.setLoadSubstituteNamespaces(namespaces);
+
+                // No va CAF
+                //caf = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts).getAUTORIZACION();
+
+
+                // Construyo base a partir del template
+                doc = DTEDocument.Factory.parse(new File(plantillaS), opts);
+
+                // leo certificado y llave privada del archivo pkcs12
+                KeyStore ks = KeyStore.getInstance("PKCS12");
+                ks.load(new FileInputStream(certS), passS.toCharArray());
+                String alias = ks.aliases().nextElement();
+
+                logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
+
+
+                cert = (X509Certificate) ks.getCertificate(alias);
+                key = (PrivateKey) ks.getKey(alias, passS.toCharArray());
+
+                // Se recorre lista de productos para armar documento (detailList)
+
+                IdDoc iddoc = doc.getDTE().getDocumento().getEncabezado().addNewIdDoc();
+                //iddoc.setFolio(folio);
+                //doc.getDTE().getDocumento().setID("N" + iddoc.getFolio());
+                doc.getDTE().getDocumento().setID("N" + fiscalTaxDocumentId);
+
+                // Tipo de DTE
+                //iddoc.setTipoDTE(BigInteger.valueOf(tipoFactura));
+
+                iddoc.xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+
+                // RutResponde
+                // RutRecibe
+                // IdRespuesta
+                // Nro. Detalles (1) en este caso
+                // NmbContacto
+                // FonoContacto
+                // MailContacto
+                // TmstFirmaResp
+                // Array:
+                //      RecepcionEnvio
+                //      NmbEnvio (nombre archivo envio)
+                //      FchRecep
+                //      CodEnvio (Número único generado por el receptor)
+                //      EnvioDTEID (Valor del Atributo ID del Tag EnvioDTE del Envio)
+                //      RutEmisor (igual al de carátula)
+                //      RutReceptor (igual al de carátula)
+                //      EstadoRecepEnv (estado recepción del envío)
+                //              0: Recibido Conforme
+                //              1: Envío rechazado: Error de schema
+                //              2: Envío rechazado: Error de firma
+                //              3: Envío rechazado: RUT Receptor no Corresponde
+                //              90: Envío rechazado: envío repetido
+                //              91: Envío rechazado: Archivo Ilegible
+                //              99: Envío rechazado: Otros
+                //      RecepEnvGlosa: Informacion Adicional Para el Estado de Recepcion
+                //      NroDTE Número de documentos en el envío que se informan como no recibidos
+                //      **** Opcional ****
+                //      RecepcionDTE: Resultados de Recepcion de los Documentos Incluidos en el Envio
+                //              TipoDTE
+                //              Folio
+                //              FchEmis
+                //              RUTEmisor
+                //              RUTRecep
+                //              MntTotal
+                //              EstadoRecepDTE (0: DTE Recibido OK)
+                //                              1: DTE No Recibido - Error de Firma
+                //                              2: DTE No Recibido - Error en RUT Emisor
+                //                              3: DTE No Recibido - Error en RUT Receptor
+                //                              4: DTE No Recibido - DTE Repetido
+                //                              99: DTE No Recibido - Otros
+                //              RecepDTEGlosa: Informacion Adicional para el Estado de Recepcion del DTE
+                //
+                //      **** Opcional: Aceptación/Rechazo comercial
+
+
+                Calendar cal = Calendar.getInstance();
+                cal.add(Calendar.DAY_OF_MONTH, 45);
+                iddoc.xsetFchCancel(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+
+                // Medio y forma de pago
+                //iddoc.setMedioPago(MedioPagoType.Enum.forString(medioPago));
+                //iddoc.setFmaPago(BigInteger.valueOf(frmPago));
+
+                // Receptor
+                Receptor recp = doc.getDTE().getDocumento().getEncabezado().addNewReceptor();
+                recp.setRUTRecep(rutReceptor);
+                recp.setRznSocRecep(rznSocReceptor);
+                recp.setGiroRecep(giroReceptor);
+                recp.setContacto(contactoReceptor);
+                recp.setDirRecep(dirReceptor);
+                recp.setCmnaRecep(cmnaReceptor);
+                recp.setCiudadRecep(ciudadReceptor);
+
+                // Timbro
+
+                doc.getDTE().timbrar(caf.getCAF(), caf.getPrivateKey(null));
+
+                // antes de firmar le doy formato a los datos
+                opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces);
+                opts.setLoadSubstituteNamespaces(namespaces);
+                opts.setLoadAdditionalNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(4);
+
+                // releo el doc para que se reflejen los cambios de formato
+                doc = DTEDocument.Factory.parse(doc.newInputStream(opts), opts);
+
+                // Guardo
+                opts = new XmlOptions();
+                opts.setCharacterEncoding("ISO-8859-1");
+                opts.setSaveImplicitNamespaces(namespaces);
+
+                String uri = "";
+
+                FechaHoraType now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                if (doc.getDTE().isSetDocumento()) {
+                uri = doc.getDTE().getDocumento().getID();
+                doc.getDTE().getDocumento().xsetTmstFirma(now);
+                } else if (doc.getDTE().isSetLiquidacion()) {
+                uri = doc.getDTE().getLiquidacion().getID();
+                doc.getDTE().getLiquidacion().xsetTmstFirma(now);
+                } else if (doc.getDTE().isSetExportaciones()) {
+                uri = doc.getDTE().getExportaciones().getID();
+                doc.getDTE().getExportaciones().xsetTmstFirma(now);
+                }
+
+                uri = "#" + uri;
+
+                logger.warn("URI: " + uri)
+
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                doc.save(new File(resultS + "RESP" + folio + "-sinfirma.xml"), opts);
+                doc.save(out, opts);
+
+                Document doc2 = XMLUtil.parseDocument(out.toByteArray());
+
+                byte[] salida = Signer.sign(doc2, uri, key, cert, uri, "Documento");
+                doc2 = XMLUtil.parseDocument(salida);
+
+                if (Signer.verify(doc2, "Documento")) {
+                Path path = Paths.get(resultS + "RESP" + folio + ".xml");
+                Files.write(path, salida);
+                logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                } else {
+                Path path = Paths.get(resultS + "RESP" + folio + "-mala.xml");
+                Files.write(path, salida);
+                logger.warn("Error al generar factura folio "+folio);
+                }
+            </script>
+            <!-- Registro de DTE en base de datos y generación de PDF -->
+            <set field="respuesta" value="RESP${folio}.xml"/>
+
+            <!-- TODO: Envío de correo con respuesta -->
+            <entity-find-one entity-name="mantle.product.store.ProductStore" value-field="productStore">
+                <field-map field-name="productStoreId" from="storeEmail.productStoreId"/></entity-find-one>
+            <!-- simple bodyParameters, let the screen do data prep -->
+            <set field="bodyParameters" from="[shipmentId:shipmentId, orderIdSet:new TreeSet(orderIdSet),
+                        invoiceId:(invoiceIdSet ? invoiceIdSet.first() : null),
+                        storeDomain:productStore.storeDomain, profileUrlPath:productStore.profileUrlPath,
+                        headerImagePath:storeEmail.headerImagePath, detailLinkPath:storeEmail.detailLinkPath]"/>
+
+            <if condition="!storeEmail.emailTemplateId"><continue/></if>
+            <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" out-map="sendOut" out-map-add-to-existing="false"
+                          in-map="[emailTemplateId:storeEmail.emailTemplateId, emailTypeEnumId:emailTypeEnumId,
+                                toAddresses:toAddresses, bodyParameters:bodyParameters, toUserId:toUserId]"/>
+            <script>if (sendOut.emailMessageId) { ec.service.sync().name("create#mantle.shipment.ShipmentEmailMessage")
+                .parameter("shipmentId", shipmentId).parameter("emailMessageId", sendOut.emailMessageId).disableAuthz().call() }</script>
+            <message>Email sent to ${toAddresses}${sendOut.emailMessageId ? ', message ID ' + sendOut.emailMessageId : ''}</message>
+
         </actions>
     </service>
 
