@@ -266,7 +266,7 @@
 									border-left-width="0.5pt" border-left-style="solid"
 									border-right-width="0.5pt" border-right-style="solid"
 									border-bottom-width="0.5pt" border-bottom-style="solid"
-									number-columns-spanned="4">
+									number-columns-spanned="4">Prueba
 									<fo:block />
 								</fo:table-cell>
 							</fo:table-row>
@@ -328,6 +328,66 @@
 					</fo:table>
 				</fo:block>
 			</fo:block-container>
+
+			<!-- Lista de Referencias -->
+			<fo:block-container absolute-position="absolute" left="2cm"
+								top="17cm">
+				<fo:block font-size="8pt" font-family="monospace"
+						  color="black" text-align="left" space-before="8pt">
+					<fo:table table-layout="fixed" width="100%"
+							  border-collapse="collapse">
+						<fo:table-column column-width="12.5cm" />
+
+						<fo:table-body>
+							<fo:table-row>
+								<fo:table-cell text-align="left"
+											   border-width="0.5pt" border-style="solid">
+									<fo:block>
+										<fo:inline font-weight="bold">
+											Referencias
+										</fo:inline>
+									</fo:block>
+								</fo:table-cell>
+
+							</fo:table-row>
+
+							<xsl:choose>
+								<xsl:when
+										test="Referencia[NroLinRef=1]">
+									<xsl:apply-templates
+											select="Referencia[NroLinRef=1]" />
+								</xsl:when>
+								<xsl:otherwise>
+									<xsl:call-template
+											name="ReferenciaVacio" />
+								</xsl:otherwise>
+							</xsl:choose>
+							<xsl:choose>
+								<xsl:when
+										test="Referencia[NroLinRef=2]">
+									<xsl:apply-templates
+											select="Referencia[NroLinRef=2]" />
+								</xsl:when>
+								<xsl:otherwise>
+									<xsl:call-template
+											name="ReferenciaVacio" />
+								</xsl:otherwise>
+							</xsl:choose>
+
+							<!--fo:table-row>
+								<fo:table-cell text-align="center"
+											   border-left-width="0.5pt" border-left-style="solid"
+											   border-right-width="0.5pt" border-right-style="solid"
+											   border-bottom-width="0.5pt" border-bottom-style="solid"
+											   number-columns-spanned="1">Prueba
+									<fo:block />
+								</fo:table-cell>
+							</fo:table-row-->
+						</fo:table-body>
+					</fo:table>
+				</fo:block>
+			</fo:block-container>
+
 			<xsl:apply-templates select="TED" />
 		</fo:block>
 	</xsl:template>
@@ -343,7 +403,7 @@
 			top="0cm">
 			<fo:block>
 				<fo:external-graphic
-					src="url('/home/cherrera/git/moqui-framework/runtime/component/moqui-chile/DTE/TEMPLATES/logo-emisor.jpg')"  width="30%" content-height="30%" content-width="scale-to-fit" scaling="uniform"/>
+					src="url('logo-emisor.jpg')" width="30%" content-height="30%" content-width="scale-to-fit" scaling="uniform"/>
 			</fo:block>
 		</fo:block-container>
 
@@ -384,9 +444,9 @@
 		<!-- Recuadro con folio -->
 		<fo:block-container absolute-position="absolute" top="0cm"
 			margin-top="0.5cm" left="12cm" height="3cm" width="7.5cm"
-			border-color="green" border-style="solid" border-width="0.5mm">
+			border-color="red" border-style="solid" border-width="0.5mm">
 			<fo:block font-size="14pt" font-family="monospace"
-				font-weight="bold" color="green" text-align="center"
+				font-weight="bold" color="red" text-align="center"
 				hyphenate="false">
 				R.U.T.:
 				<xsl:call-template name="RutFormat">
@@ -396,15 +456,14 @@
 				</xsl:call-template>
 			</fo:block>
 			<fo:block font-size="14pt" font-family="monospace"
-				font-weight="bold" color="green" text-align="center">
+				font-weight="bold" color="red" text-align="center">
 				<xsl:choose>
 					<xsl:when test="$tipo=33">
 						FACTURA ELECTRONICA
 					</xsl:when>
-					<xsl:when test="$tipo=34">
-                                                FACTURA ELECTRONICA EXENTA
-                                        </xsl:when>
-
+                    <xsl:when test="$tipo=34">
+                        FACTURA ELECTRONICA EXENTA
+                    </xsl:when>
 					<xsl:when test="$tipo=52">
 						GUIA DE DESPACHO ELECTRONICA
 					</xsl:when>
@@ -419,11 +478,19 @@
 					</xsl:otherwise>
 				</xsl:choose>
 			</fo:block>
+
 			<fo:block font-size="14pt" font-family="monospace"
-				font-weight="bold" color="green" text-align="center">
+				font-weight="bold" color="red" text-align="center">
 				N&#176;
 				<xsl:value-of select="$folio" />
 			</fo:block>
+		</fo:block-container>
+		<fo:block-container absolute-position="absolute" top="3cm"
+							margin-top="0.5cm" left="12cm" height="3cm" width="7.5cm">
+     		<fo:block font-size="12pt" font-family="monospace"
+				  font-weight="bold" color="red" text-align="center">
+			S.I.I. - Santiago Oriente
+		</fo:block>
 		</fo:block-container>
 
 	</xsl:template>
@@ -611,6 +678,50 @@
 		</fo:table-row>
 	</xsl:template>
 
+<!-- Referencias -->
+        <xsl:template match="Referencia">
+                <fo:table-row >
+                        <fo:table-cell text-align="left" border-left-width="0.5pt"
+                                border-left-style="solid" border-right-width="0.5pt"
+                                border-right-style="solid" margin-right="2mm"  height="0.8cm">
+                                <fo:block>
+									<xsl:choose>
+										<xsl:when test="CodRef=1">
+											Anula Doc. Ref.
+										</xsl:when>
+										<xsl:when test="CodRef=2">
+											Corrige Texto
+										</xsl:when>
+										<xsl:when test="CodRef=3">
+											Corrige Montos
+										</xsl:when>
+									</xsl:choose>
+									<xsl:choose>
+										<xsl:when test="TpoDocRef=33">
+											Factura Electrónica
+										</xsl:when>
+										<xsl:when test="TpoDocRef=34">
+											Factura Electrónica Exenta
+										</xsl:when>
+										<xsl:when test="TpoDocRef=52">
+											Guía de Despacho Electrónica
+										</xsl:when>
+										<xsl:when test="TpoDocRef=56">
+											Nota de Débito Electrónica
+										</xsl:when>
+										<xsl:when test="TpoDocRef=61">
+											Nota de Crédito Electrónica
+										</xsl:when>
+									</xsl:choose>
+									Nro.
+								    <xsl:value-of select="FolioRef" /> de <xsl:value-of select="FchRef"/>, RUT <xsl:value-of select="RUTOtr" />: <xsl:value-of select="RazonRef"/>
+							</fo:block>
+                        </fo:table-cell>
+
+                </fo:table-row>
+        </xsl:template>
+
+
 	<!-- Timbre electrónico -->
 	<xsl:template match="TED">
 		<xsl:variable name="myted" select="." />
@@ -644,7 +755,7 @@
 			</fo:block>
 			<fo:block font-size="8pt" font-family="sans-serif"
 				text-align="center">
-				Res. XX de 2007 - Verifique Documento: www.sii.cl
+				Res. 99 de 2014 - Verifique Documento: www.sii.cl
 			</fo:block>
 		</fo:block-container>
 	</xsl:template>
@@ -766,6 +877,42 @@
 				<fo:block white-space-treatment="preserve">&#xa0;</fo:block>
 			</fo:table-cell>
 		</fo:table-row>
+	</xsl:template>
+
+	<xsl:template name="ReferenciaVacio">
+		<fo:table-row>
+			<fo:table-cell text-align="center" border-left-width="0.5pt"
+						   border-left-style="solid" border-right-width="0.5pt"
+						   border-right-style="solid" height="0.8cm">
+				<fo:block white-space-treatment="preserve">&#xa0;</fo:block>
+			</fo:table-cell>
+			<fo:table-cell text-align="center" border-left-width="0.5pt"
+						   border-left-style="solid" border-right-width="0.5pt"
+						   border-right-style="solid" height="0.8cm">
+				<fo:block white-space-treatment="preserve">&#xa0;</fo:block>
+			</fo:table-cell>
+			<fo:table-cell text-align="center" border-left-width="0.5pt"
+						   border-left-style="solid" border-right-width="0.5pt"
+						   border-right-style="solid" height="0.8cm">
+				<fo:block white-space-treatment="preserve">&#xa0;</fo:block>
+			</fo:table-cell>
+			<fo:table-cell text-align="center" border-left-width="0.5pt"
+						   border-left-style="solid" border-right-width="0.5pt"
+						   border-right-style="solid" height="0.8cm">
+				<fo:block white-space-treatment="preserve">&#xa0;</fo:block>
+			</fo:table-cell>
+			<fo:table-cell text-align="center" border-left-width="0.5pt"
+						   border-left-style="solid" border-right-width="0.5pt"
+						   border-right-style="solid" height="0.8cm">
+				<fo:block white-space-treatment="preserve">&#xa0;</fo:block>
+			</fo:table-cell>
+			<fo:table-cell text-align="center" border-left-width="0.5pt"
+						   border-left-style="solid" border-right-width="0.5pt"
+						   border-right-style="solid" height="0.8cm">
+				<fo:block white-space-treatment="preserve">&#xa0;</fo:block>
+			</fo:table-cell>
+		</fo:table-row>
+
 	</xsl:template>
 
 </xsl:stylesheet>

@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns=""
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd"
+        default-menu-include="false">
+
+    <parameter name="fiscalTaxDocumentId" required="true"/>
+
+    <transition name="genNotaDebito">
+        <parameter name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+        <!--service-call name="mchile.DTEServices.generar#NotaDebito" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]"/-->
+        <default-response url="//${appRoot}/MoquiChile/DetalleFactura"/>
+    </transition>
+
+
+    <actions>
+        <!-- Se busca invoiceId asociado a fiscalTaxDocumentId -->
+
+        <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="facturaField"/>
+        <if condition="!facturaField">
+            <return error="true" message="No existe factura especificada"/>
+        </if>
+        <set field="invoiceId" from="facturaField.invoiceId"/>
+
+        <!-- Se busca detalle de invoice -->
+
+        <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
+        <if condition="invoice == null"><return error="true" message="Invoice ${invoiceId} not found"/></if>
+        <!-- set statusId for StatusChangeSection -->
+        <set field="statusId" from="invoice?.statusId"/>
+
+        <entity-find entity-name="mantle.party.PartyRole" list="fromOrgInternalList">
+            <econdition field-name="partyId" from="invoice.fromPartyId"/><econdition field-name="roleTypeId" value="OrgInternal"/></entity-find>
+        <set field="isFromPartyOrgInternal" from="fromOrgInternalList as boolean"/>
+        <set field="organizationPartyId" from="isFromPartyOrgInternal ? invoice.fromPartyId : invoice.toPartyId"/>
+    </actions>
+
+    <widgets>
+        <container-row>
+            <row-col lg="6">
+                <container>
+
+
+                    <link url="Invoice.pdf" text="Current PDF" link-type="anchor-button">
+                        <parameter name="invoiceId"/>
+                    </link>
+                    <form-single name="EditInvoice" transition="${invoiceEditable ? 'updateInvoice' : 'updateInvoiceClosed'}" map="invoice">
+                        <field name="invoiceId"><default-field><display/></default-field></field>
+                        <field name="fromPartyId"><default-field title="From">
+                            <link url="editParty" entity-name="mantle.party.PartyDetail" text="PartyNameTemplate" link-type="anchor"
+                                  parameter-map="[partyId:fromPartyId]"/>
+                        </default-field></field>
+                        <field name="toPartyId"><default-field title="To">
+                            <link url="editParty" entity-name="mantle.party.PartyDetail" text="PartyNameTemplate" link-type="anchor"
+                                  parameter-map="[partyId:toPartyId]"/>
+                        </default-field></field>
+                        <field name="invoiceTypeEnumId">
+                            <conditional-field title="Type" condition="invoiceEditable">
+                                <widget-template-include location="component://webroot/template/screen/BasicWidgetTemplates.xml#enumDropDown">
+                                    <set field="enumTypeId" value="InvoiceType"/></widget-template-include>
+                            </conditional-field>
+                            <default-field title="Type"><display-entity entity-name="moqui.basic.Enumeration"/></default-field>
+                        </field>
+                        <field name="productStoreId">
+                            <conditional-field title="Store" condition="invoiceEditable">
+                                <drop-down allow-empty="true"><entity-options key="${productStoreId}" text="${productStoreId}: ${storeName}">
+                                    <entity-find entity-name="mantle.product.store.ProductStore">
+                                        <order-by field-name="storeName"/></entity-find></entity-options>
+                                </drop-down>
+                            </conditional-field>
+                            <conditional-field title="Store" condition="invoice.productStoreId">
+                                <display-entity entity-name="mantle.product.store.ProductStore" text="${productStoreId}: ${storeName}"/>
+                            </conditional-field>
+                            <default-field><ignored/></default-field>
+                        </field>
+                        <field name="timePeriodId">
+                            <conditional-field condition="invoice.timePeriodId" title="Time Period">
+                                <link url="editTimePeriod" text="TimePeriodNameTemplate" link-type="anchor"
+                                      entity-name="mantle.party.time.TimePeriod" parameter-map="[timePeriodId:invoice.timePeriodId]"/>
+                            </conditional-field>
+                            <default-field><ignored/></default-field>
+                        </field>
+                        <field name="referenceNumber"><default-field title="Their Invoice" tooltip="Other party invoice or other reference number">
+                            <text-line size="40"/></default-field></field>
+                        <field name="otherPartyOrderId"><default-field title="Their Order" tooltip="Other party purchase or sales order ID">
+                            <text-line size="40"/></default-field></field>
+                        <field name="dupWarning">
+                            <conditional-field title="" condition="dupInvoiceList">
+                                <label text="Found invoice(s) with same Reference Number: ${dupInvoiceList.invoiceId}" style="text-danger"/>
+                            </conditional-field>
+                            <default-field><ignored/></default-field>
+                        </field>
+                        <field name="invoiceDate">
+                            <conditional-field condition="invoiceEditable"><date-time/></conditional-field>
+                            <default-field title="Date"><display also-hidden="false"/></default-field>
+                        </field>
+                        <field name="invoiceTotal"><default-field title="Total"><display currency-unit-field="invoice.currencyUomId"/></default-field></field>
+                        <field name="dueDate"><default-field><date-time type="date"/></default-field></field>
+                        <field name="settlementTermId"><default-field title="Settlement Term">
+                            <drop-down allow-empty="true">
+                                <entity-options key="${settlementTermId}" text="${description}">
+                                    <entity-find entity-name="mantle.account.invoice.SettlementTerm">
+                                        <order-by field-name="description"/>
+                                    </entity-find>
+                                </entity-options>
+                            </drop-down>
+                        </default-field></field>
+                        <field name="description"><default-field><text-line size="60"/></default-field></field>
+                        <field name="invoiceMessage"><default-field><text-area cols="60" rows="3"/></default-field></field>
+
+                        <field name="submitButton"><default-field title="Update"><submit/></default-field></field>
+
+                        <field-layout>
+                            <field-row><field-ref name="invoiceId"/><field-ref name="invoiceTypeEnumId"/></field-row>
+                            <field-row><field-ref name="invoiceDate"/><field-ref name="invoiceTotal"/></field-row>
+                            <fields-not-referenced/>
+                        </field-layout>
+                    </form-single>
+
+
+                </container>
+            </row-col>
+        </container-row>
+    </widgets>
+</screen>

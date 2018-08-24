@@ -3,48 +3,68 @@
         xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd"
         menu-image="glyphicon glyphicon-shopping-cart" menu-image-type="icon" default-menu-title="Nota de Débito"
         default-menu-index="30">
-    <transition name="genNotaCredito">
-        <actions>
-            <service-call name="mchile.DTEServices.genNotaCredito#Return" in-map="[returnId:returnId, dteTypeEnumId:'61']"/>
-        </actions>
-        <default-response url="."/>
+
+    <!--transition name="genNotaDebito">
+        <service-call name="mchile.DTEServices.generar#NotaDebito" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]"/>
+        <default-response url="//${appRoot}/MoquiChile/DetalleFactura"/>
+    </transition-->
+
+    <transition name="genNotaDebito"><default-response url="../DetalleFactura"/></transition>
+
+    <transition name="agregarRefNotaDebito">
+        <service-call name="mchile.DTEServices.agregar#RefNotaDebito" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, dteTypeEnumId:dteTypeEnumId, fecha:fecha,
+            rutOtroContribuyente:rutOtroContribuyente, codigoReferenciaEnumId:codigoReferenciaEnumId, razonReferencia:razonReferencia, idAdicional:idAdicional, folio:folio]"/>
+        <default-response url="." save-current-screen="true"/>
     </transition>
+
+    <transition name="verRefNotaDebito">
+        <parameter name="returnId" from="returnId"/>
+        <actions>
+            <entity-find entity-name="MoquiChile.ReferenciaFactura" list="referenciaList">
+                <econdition field-name="returnId" from="returnId"/>
+            </entity-find>
+        </actions>
+        <default-response url="." save-current-screen="true"/>
+    </transition>
+
+    <transition name="eliminarRefNotaDebito">
+        <parameter name="referenciaFacturaId" from="referenciaFacturaId"/>
+        <actions>
+            <service-call name="mchile.DTEServices.eliminar#Referencia" in-map="[referenciaFacturaId:referenciaFacturaId]"/>
+        </actions>
+        <default-response url="." save-current-screen="true"/>
+    </transition>
+
     <actions>
-        <!--entity-find entity-name="tfpos.InvoiceAndFiscalTaxDocument" list="invoices"-->
-        <entity-find entity-name="mantle.order.return.ReturnHeader" list="returnsList">
-            <search-form-inputs default-order-by="-entryDate"/>
-            <!--econdition field-name="folio" operator="is-null"/-->
+        <entity-find entity-name="tfpos.FiscalTaxDocument" list="dteList">
+            <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in"
+                        from="['33','34','61','56','52']"/>
+            <econdition field-name="envio" operator="is-null"/>
+            <econdition field-name="invoiceId" operator="is-not-null"/>
         </entity-find>
+
     </actions>
+
     <widgets>
-        <form-list name="ReturnsForm" list="returnsList" header-dialog="true" saved-finds="true" show-csv-button="true" transition="genNotaCredito">
-            <row-actions>
-                <!-- Encontrar username -->
-                <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:customerPartyId]" out-map="context"/>
-                <set field="username" from="emailAddress"/>
-
-                <!-- Encontrar método de pago -->
-                <entity-find-one entity-name="mantle.account.method.PaymentMethod" value-field="paymentMethodField">
-                    <select-field field-name="paymentMethodTypeEnumId"/>
-                </entity-find-one>
-                <set field="paymentMethodTypeEnumId" from="paymentMethodField.paymentMethodTypeEnumId"/>
-
-            </row-actions>
-            <field name="returnId">
-                <header-field title="Invoice ID" show-order-by="true"><text-find/></header-field>
-                <default-field><display/></default-field>
+        <form-list name="DteForm" list="dteList" show-pdf-button="true" show-csv-button="true" header-dialog="true" saved-finds="true" skip-form="true">
+            <field name="fiscalTaxDocumentId">
+                <header-field show-order-by="true"><text-line size="6"/></header-field>
+                <default-field>
+                    <display/>
+                </default-field>
             </field>
-            <field name="statusId">
-                <header-field title="Status" show-order-by="true"><text-find/></header-field>
-                <default-field><display/></default-field>
+            <field name="folio">
+                <header-field show-order-by="true"><text-line size="6"/></header-field>
+                <default-field>
+                    <display/>
+                </default-field>
             </field>
-
-            <field name="paymentMethodTypeEnumId">
-                <header-field title="Método de Pago" show-order-by="false">
+            <field name="fiscalTaxDocumentTypeEnumId">
+                <header-field title="Type" show-order-by="true">
                     <drop-down allow-empty="true" allow-multiple="true">
                         <entity-options key="${enumId}">
                             <entity-find entity-name="moqui.basic.Enumeration">
-                                <econdition field-name="enumTypeId" value="Type"/>
+                                <econdition field-name="enumTypeId" value="DteType"/>
                             </entity-find>
                         </entity-options>
                     </drop-down>
@@ -53,8 +73,61 @@
                     <display-entity entity-name="moqui.basic.Enumeration"/>
                 </default-field>
             </field>
+            <field name="receptor">
+                <header-field show-order-by="true"><text-line size="6"/></header-field>
+                <default-field>
+                    <display/>
+                </default-field>
+            </field>
+            <field name="amount">
+                <header-field show-order-by="true"><text-line size="6"/></header-field>
+                <default-field>
+                    <display/>
+                </default-field>
+            </field>
+            <field name="referenciasField">
+                <default-field title="">
+                    <container-dialog id="AgregarReferenciaDialog" button-text="Agregar Referencia">
+                        <form-single name="AgregarReferenciaForm" transition="agregarRefNotaDebito">
+                            <field name="fiscalTaxDocumentId"><default-field><hidden/></default-field>
+                            </field>
+                            <field name="dteTypeEnumId" from="fiscalTaxDocumentTypeEnumId"><default-field title="Tipo DTE Referencia">
+                                <drop-down><entity-options key="${enumId}" text="">
+                                    <entity-find entity-name="moqui.basic.Enumeration">
+                                        <econdition field-name="enumTypeId" value="DteType"/>
+                                    </entity-find>
+                                </entity-options></drop-down>
+                            </default-field></field>
 
-            <field name="genNotaCreditoForm"><default-field title="Generar Nota de Crédito"><submit/></default-field></field>
+                            <field name="folio">
+                                <default-field title="Folio Referencia"><text-line size="10" default-value="${folio}"/></default-field>
+                            </field>
+                            <field name="rutOtroContribuyente">
+                                <default-field title="RUT Otro Contribuyente"><text-line size="15" default-value="${receptor}"/></default-field>
+                            </field>
+                            <field name="idAdicional">
+                                <default-field title="ID Adicional Otro Contribuyente"><text-line size="15"/></default-field>
+                            </field>
+                            <field name="fecha">
+                                <default-field title="Fecha Documento Referencia"><date-time format="YYYY-MM-DD"/> </default-field>
+                            </field>
+                            <field name="codigoReferenciaEnumId"><default-field title="Código Referencia">
+                                <drop-down><entity-options key="${enumId}" text="">
+                                    <entity-find entity-name="moqui.basic.Enumeration">
+                                        <econdition field-name="enumTypeId" value="CodigoReferencia"/>
+                                    </entity-find>
+                                </entity-options></drop-down>
+                            </default-field></field>
+                            <field name="razonReferencia">
+                                <default-field title="Razón Referencia"><text-line size="20"/></default-field>
+                            </field>
+                            <field name="submitButton"><default-field title="Añadir"><submit/></default-field></field>
+                        </form-single>
+                    </container-dialog>
+                    <link url="VerRefNotaDebito" text="Ver Referencias" url-type="plain" link-type="auto" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]"/>
+                    <link url="genNotaDebito" text="Generar Nota de Débito" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" link-type="auto"/>
+                </default-field>
+            </field>
         </form-list>
     </widgets>
 </screen>
