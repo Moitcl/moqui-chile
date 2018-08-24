@@ -7,8 +7,25 @@
 
     <transition name="genNotaDebito">
         <parameter name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
-        <!--service-call name="mchile.DTEServices.generar#NotaDebito" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]"/-->
-        <default-response url="//${appRoot}/MoquiChile/DetalleFactura"/>
+        <actions>
+        <script><![CDATA[
+                    items = new StringBuilder()
+                    for (int i = 0; ; i++) {
+                        if ((context.get("_useRowSubmit") == "true" || context.get("_useRowSubmit_" + i) == "true")
+                                && context.get("_rowSubmit_" + i) != "true") continue
+                        String curKey = "invoiceItemSeqId_" + i
+                        String quantity = "quantity_" + i
+                        String amount = "amount_" + i
+                        String productId = "productId_" + i
+                        if (context.containsKey(curKey))  {
+                            if (items.length() > 0) items.append(",")
+                            items.append(context.get(curKey)+"-"+context.get(quantity)+"-"+context.get(amount)+"-"+context.get(productId))
+                        } else { break }
+                    }
+            ]]></script>
+            <service-call name="mchile.DTEServices.generar#NotaDebito" in-map="context + [fiscalTaxDocumentId:fiscalTaxDocumentId, invoiceId:invoiceId]"/>
+        </actions>
+        <default-response url="./FindDTE"/>
     </transition>
 
 
@@ -32,18 +49,54 @@
             <econdition field-name="partyId" from="invoice.fromPartyId"/><econdition field-name="roleTypeId" value="OrgInternal"/></entity-find>
         <set field="isFromPartyOrgInternal" from="fromOrgInternalList as boolean"/>
         <set field="organizationPartyId" from="isFromPartyOrgInternal ? invoice.fromPartyId : invoice.toPartyId"/>
+
+
+        <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
+        <if condition="invoice == null"><return error="true" message="Invoice ${invoiceId} not found"/></if>
+        <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemList">
+            <econdition field-name="invoiceId"/><order-by field-name="invoiceItemSeqId"/></entity-find>
+        <set field="topItemList" from="invoiceItemList.findAll({ it.parentItemSeqId == null })"/>
+
+        <!-- put items with parentItemSeqId in the list after their parent -->
+        <script><![CDATA[
+            itemWithChildrenSet = new HashSet()
+            List reverseList = invoiceItemList.cloneList().orderByFields(["-invoiceItemSeqId"])
+            for (invoiceItem in reverseList) {
+                if (invoiceItem.parentItemSeqId) {
+                    itemWithChildrenSet.add(invoiceItem.parentItemSeqId)
+                    invoiceItemList.move(invoiceItemList.indexMatching([invoiceItemSeqId:invoiceItem.invoiceItemSeqId]),
+                            invoiceItemList.indexMatching([invoiceItemSeqId:invoiceItem.parentItemSeqId])+1)
+                }
+            }
+        ]]></script>
+
+        <set field="editableStatusIds" from="new HashSet(['InvoiceInProcess', 'InvoiceIncoming', 'InvoiceReceived'])"/>
+        <set field="invoiceEditable" from="invoice.statusId in editableStatusIds"/>
+
+        <entity-find entity-name="mantle.party.PartyRole" list="fromOrgInternalList">
+            <econdition field-name="partyId" from="invoice.fromPartyId"/><econdition field-name="roleTypeId" value="OrgInternal"/></entity-find>
+        <set field="isFromPartyOrgInternal" from="fromOrgInternalList as boolean"/>
+        <set field="organizationPartyId" from="isFromPartyOrgInternal ? invoice.fromPartyId : invoice.toPartyId"/>
+
+        <if condition="invoice.invoiceTypeEnumId == 'InvoiceSales' || invoice.invoiceTypeEnumId == 'InvoiceReturn'"><then>
+            <entity-find entity-name="moqui.basic.EnumAndGroup" list="itemTypeEnumList">
+                <econdition field-name="enumGroupEnumId" from="isFromPartyOrgInternal ? 'EngItemsSales' : 'EngItemsPurchase'"/><order-by field-name="description"/></entity-find>
+        </then><else-if condition="invoice.invoiceTypeEnumId == 'InvoicePayroll'">
+            <entity-find entity-name="moqui.basic.EnumAndParent" list="itemTypeEnumList">
+                <econdition field-name="parentEnumId" operator="in" value="ItemPayrollIncome,ItemPayrollDeduct,ItemPayrollTaxes,ItemPayrollExpense"/>
+                <order-by field-name="description"/></entity-find>
+        </else-if><else>
+            <entity-find entity-name="moqui.basic.Enumeration" list="itemTypeEnumList">
+                <econdition field-name="enumTypeId" value="ItemType"/><order-by field-name="description"/></entity-find>
+        </else></if>
+
     </actions>
 
     <widgets>
         <container-row>
-            <row-col lg="6">
+            <row-col>
                 <container>
-
-
-                    <link url="Invoice.pdf" text="Current PDF" link-type="anchor-button">
-                        <parameter name="invoiceId"/>
-                    </link>
-                    <form-single name="EditInvoice" transition="${invoiceEditable ? 'updateInvoice' : 'updateInvoiceClosed'}" map="invoice">
+                    <form-single name="EditInvoice" skip-start="true">
                         <field name="invoiceId"><default-field><display/></default-field></field>
                         <field name="fromPartyId"><default-field title="From">
                             <link url="editParty" entity-name="mantle.party.PartyDetail" text="PartyNameTemplate" link-type="anchor"
@@ -72,42 +125,11 @@
                             </conditional-field>
                             <default-field><ignored/></default-field>
                         </field>
-                        <field name="timePeriodId">
-                            <conditional-field condition="invoice.timePeriodId" title="Time Period">
-                                <link url="editTimePeriod" text="TimePeriodNameTemplate" link-type="anchor"
-                                      entity-name="mantle.party.time.TimePeriod" parameter-map="[timePeriodId:invoice.timePeriodId]"/>
-                            </conditional-field>
-                            <default-field><ignored/></default-field>
-                        </field>
-                        <field name="referenceNumber"><default-field title="Their Invoice" tooltip="Other party invoice or other reference number">
-                            <text-line size="40"/></default-field></field>
-                        <field name="otherPartyOrderId"><default-field title="Their Order" tooltip="Other party purchase or sales order ID">
-                            <text-line size="40"/></default-field></field>
-                        <field name="dupWarning">
-                            <conditional-field title="" condition="dupInvoiceList">
-                                <label text="Found invoice(s) with same Reference Number: ${dupInvoiceList.invoiceId}" style="text-danger"/>
-                            </conditional-field>
-                            <default-field><ignored/></default-field>
-                        </field>
                         <field name="invoiceDate">
                             <conditional-field condition="invoiceEditable"><date-time/></conditional-field>
                             <default-field title="Date"><display also-hidden="false"/></default-field>
                         </field>
                         <field name="invoiceTotal"><default-field title="Total"><display currency-unit-field="invoice.currencyUomId"/></default-field></field>
-                        <field name="dueDate"><default-field><date-time type="date"/></default-field></field>
-                        <field name="settlementTermId"><default-field title="Settlement Term">
-                            <drop-down allow-empty="true">
-                                <entity-options key="${settlementTermId}" text="${description}">
-                                    <entity-find entity-name="mantle.account.invoice.SettlementTerm">
-                                        <order-by field-name="description"/>
-                                    </entity-find>
-                                </entity-options>
-                            </drop-down>
-                        </default-field></field>
-                        <field name="description"><default-field><text-line size="60"/></default-field></field>
-                        <field name="invoiceMessage"><default-field><text-area cols="60" rows="3"/></default-field></field>
-
-                        <field name="submitButton"><default-field title="Update"><submit/></default-field></field>
 
                         <field-layout>
                             <field-row><field-ref name="invoiceId"/><field-ref name="invoiceTypeEnumId"/></field-row>
@@ -117,6 +139,35 @@
                     </form-single>
 
 
+                    <form-list name="EditInvoiceItems" list="invoiceItemList" transition="genNotaDebito" multi="true">
+                        <hidden-parameters><parameter name="invoiceId"/></hidden-parameters>
+                        <field name="_useRowSubmit"><default-field><hidden default-value="true"/></default-field></field>
+                        <field name="invoiceItemSeqId"><default-field title="Item"><display/></default-field></field>
+                        <field name="productId">
+                            <default-field title="Product"><display text=" "/>
+                                <link url="editProduct" text="ProductNameTemplate" entity-name="mantle.product.Product" link-type="anchor" condition="productId"/>
+                            </default-field>
+                        </field>
+                        <field name="itemTypeEnumId">
+                            <conditional-field condition="invoiceEditable">
+                                <drop-down><list-options list="itemTypeEnumList" key="${enumId}" text="${description}"/></drop-down></conditional-field>
+                            <default-field title="Type"><display-entity entity-name="moqui.basic.Enumeration"/></default-field>
+                        </field>
+                        <field name="quantity"><default-field><text-line size="4"/></default-field></field>
+                        <field name="amount"><default-field><text-line size="8"/></default-field></field>
+                        <field name="itemDate"><default-field><display/></default-field></field>
+                        <field name="total" from="((quantity != null ? quantity : 1.0) * (amount ?: 0.0))">
+                            <default-field><display currency-unit-field="invoice.currencyUomId"/></default-field></field>
+                        <field name="deleteButton"><default-field title="">
+                            <link url="deleteInvoiceItem" text="Delete" condition="invoiceEditable" confirmation="Delete this item?"
+                                  parameter-map="[invoiceId:invoiceId, invoiceItemSeqId:invoiceItemSeqId]"/>
+                        </default-field></field>
+                        <field name="_rowSubmit"><default-field title="Corregir">
+                            <check no-current-selected-key="false"><option key="true" text=" "/></check></default-field>
+                        </field>
+                        <field name="submitButton"><default-field title="Generar Nota de Débito"><submit/></default-field></field>
+
+                    </form-list>
                 </container>
             </row-col>
         </container-row>
