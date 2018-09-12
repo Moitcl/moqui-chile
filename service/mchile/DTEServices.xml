@@ -1112,6 +1112,27 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="get" noun="AceptacionFilename">
+        <description>
+            Retorna nombre de archivo de acuse recibo DTE Terceros
+        </description>
+        <in-parameters>
+            <parameter name="aceptacionDteId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="filename"/>
+            <parameter name="path"/>
+        </out-parameters>
+        <actions>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_ACEPTACIONES']" out-map="context"/>
+            <set field="pathResults" from="resourceValue"/>
+
+            <entity-find-one entity-name="MoquiChile.AceptacionDte" value-field="document"/>
+                <set field="filename" value="${document.xml}"/>
+            <set field="path" value="${pathResults}"/>
+        </actions>
+    </service>
+
     <service verb="genera" noun="PDF">
         <description>
             Genera archivo PDF de Factura (envio)
@@ -2075,9 +2096,6 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="rutRecibe" required="true"/>
             <parameter name="nroDetalles" default-value="1"/>
             <parameter name="xml" required="true"/>
-            <parameter name="nmbContacto"/><!-- Contacto que envía -->
-            <parameter name="fonoContacto"/>
-            <parameter name="mailContacto"/>
         </in-parameters>
         <actions>
             <!-- Validación rut -->
@@ -2119,8 +2137,12 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="envioRecibido" from="xml"/>
             <set field="dirS" value="/home/cherrera/git/moqui-framework/runtime/component/moqui-chile/DTE/TEMP/"/>
             <set field="idS" from="aceptacionDteId"/>
+            <set field="nmbEnvio" value=""/>
+            <set field="fchRecep" value=""/>
+            <set field="rutEmisor" value=""/>
+            <set field="rutReceptor" value=""/>
+            <set field="estadoRecepEnvEnumId" value=""/>
 
-            <log message="ID: ${idS}" level="warn"/>
             <script>
                 import java.io.ByteArrayOutputStream;
                 import java.io.File;
@@ -2228,7 +2250,6 @@ along with this software (see the LICENSE.md file). If not, see
                 KeyStore ks = KeyStore.getInstance("PKCS12");
                 ks.load(new FileInputStream(certS), passS.toCharArray());
                 String alias = ks.aliases().nextElement();
-
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
 
                 cert = (X509Certificate) ks.getCertificate(alias);
@@ -2240,12 +2261,15 @@ along with this software (see the LICENSE.md file). If not, see
 
                 File f = new File(envioRecibido);
                 rre.setNmbEnvio(f.getName());
-                //rre.xsetFchRecep(XmlDateTime.Factory.newValue(Utilities.fechaHoraFormat.format(new Date())));
                 rre.xsetFchRecep(FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date())));
                 rre.setCodEnvio(Long.parseLong(idS));
                 rre.setEnvioDTEID(envio.getEnvioDTE().getSetDTE().getID());
                 rre.setEstadoRecepEnv(0);
                 rre.setRecepEnvGlosa("Envio Recibido Conforme");
+
+                fchRecep = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date())).toString()
+                envioDteId = envio.getEnvioDTE().getSetDTE().getID()
+                estadoRecepEnvEnumId = 0
 
                 if (envioFirmaOK &amp;&amp; envioEsquemaOK &amp;&amp; envioRutOK ) {
                     X509Certificate x509 = XMLUtil.getCertificate(envio.getEnvioDTE().getSignature());
@@ -2257,6 +2281,7 @@ along with this software (see the LICENSE.md file). If not, see
                         logger.warn("DTE ID " + dte.getDocumento().getID() + " Firmado por: " + x509.getSubjectX500Principal().getName());
                         logger.warn("Por almacenar en " + dirS);
                         String nombreDTE = dirS + "dte-"+dte.getDocumento().getEncabezado().getEmisor().getRUTEmisor()+"-"+dte.getDocumento().getEncabezado().getIdDoc().getFolio()+".xml";
+                        rutEmisor = dte.getDocumento().getEncabezado().getEmisor().getRUTEmisor()
                         try {
                             FileOutputStream fout = new FileOutputStream(nombreDTE);
                             fout.write(dte.getBytes());
@@ -2315,6 +2340,7 @@ along with this software (see the LICENSE.md file). If not, see
                             if( !firmaOKDTE) {
                                 resDTE.setEstadoDTE(new Integer(2));
                                 resDTE.setEstadoDTEGlosa("DTE rechazado - Error de Firma");
+                                estadoRecepEnvEnumId = 2
                                 logger.warn("DTE Rechazado - Error de Firma");
                                 rDTE.setEstadoRecepDTE(new Integer(1));
                                 rDTE.setRecepDTEGlosa("DTE No Recibido - Error de Firma");
@@ -2338,12 +2364,15 @@ along with this software (see the LICENSE.md file). If not, see
                     // Revisar si es problema de esquema o de firma
                     if(!envioEsquemaOK) {
                         rre.setEstadoRecepEnv(1);
+                        estadoRecepEnvEnumId = 1
                         rre.setRecepEnvGlosa("Envio Rechazado - Error de schema: " + errorEsquema);
                     } else if (!envioFirmaOK) {
                         rre.setEstadoRecepEnv(2);
+                        estadoRecepEnvEnumId = 1
                         rre.setRecepEnvGlosa("Envio Rechazado - Error de Firma: " + errorFirma);
                     } else if (!envioRutOK) {
                         rre.setEstadoRecepEnv(3);
+                        estadoRecepEnvEnumId = 1
                         rre.setRecepEnvGlosa("Envio Rechazado - RUT receptor no corresponde");
                     }
                     logger.warn("Glosa respuesta envío: " + rre.getRecepEnvGlosa());
@@ -2468,75 +2497,831 @@ along with this software (see the LICENSE.md file). If not, see
                 respuesta.save(new File(resultS + "RESP-" + idS + ".xml"), opts);
                 respuesta.save(out2, opts);
             </script>
-            <!-- TODO: Registro de DTE en base de datos y generación de PDF -->
-            <!--set field="respuesta" value="RESP-${idS}.xml"/-->
+            <!-- Recuperación de algunos datos desde FiscalTaxDocument -->
+            <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="fiscalTaxDocumentField">
+                <field-map field-name="fiscalTaxDocumentId"/>
+            </entity-find-one>
+
             <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nmbContacto:nmbContacto,
                                         fonoContacto:fonoContacto, mailContacto:mailContacto]"/>
             <service-call name="create#MoquiChile.AceptacionDte" out-map="context" in-map="createMap"/>
 
             <entity-find-one entity-name="MoquiChile.AceptacionDte" value-field="aceptacionField" for-update="true"/>
-            <set field="aceptacionField.tmstFirmaResp" from="tmstFirmaResp" type="String"/>
-            <set field="aceptacionField.nmbEnvio" from="nmbEnvio" type="String"/>
+            <set field="aceptacionField.nmbEnvio" from="fiscalTaxDocumentField.razonSocial" type="String"/>
             <set field="aceptacionField.fchRecep" from="fchRecep" type="String"/>
-            <set field="aceptacionField.codEnvio" from="codEnvio" type="String"/>
-            <set field="aceptacionField.envioDteId" from="envioDteId" type="String"/>
+            <set field="aceptacionField.codEnvio" from="idS" type="String"/>
             <set field="aceptacionField.rutEmisor" from="rutEmisor" type="String"/>
-            <set field="aceptacionField.rutReceptor" from="rutReceptor" type="String"/>
+            <set field="aceptacionField.envioDteId" value="RESP-${idS}" type="String"/>
+            <set field="aceptacionField.rutEmisor" from="rutEmisor" type="String"/>
+            <set field="aceptacionField.rutReceptor" from="rutResponde" type="String"/>
             <set field="aceptacionField.estadoRecepEnvEnumId" from="estadoRecepEnvEnumId" type="String"/>
+            <set field="aceptacionField.nroDetalles" value="1" type="Integer"/>
+            <set field="aceptacionField.xml" value="${resultS}RESP-${idS}.xml" type="String"/>
             <entity-update value-field="aceptacionField"/>
 
-            <log message="Email para: cherrera156@gmail.com, ID ${fiscalTaxDocumentId}"/>
             <!-- TODO: Envío de correo con respuesta -->
-            <service-call name="mchile.DTEServices.prueba#Attachment" out-map="context"/>
-            <!--set field="bodyParameters" from="[orderId:'100000', fiscalTaxDocumentId:fiscalTaxDocumentId]"/>
+            <set field="bodyParameters" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, nmbContacto:nmbContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]"/>
             <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" async="true">
-                <field-map field-name="orderId" value="100000"/>
+                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
                 <field-map field-name="emailTypeEnumId" from="emailTypeEnumId"/>
                 <field-map field-name="toAddresses" value="cherrera156@gmail.com"/>
                 <field-map field-name="emailTemplateId" value="Aceptacion"/>
                 <field-map field-name="bodyParameters" from="bodyParameters"/>
-            </service-call-->
+            </service-call>
 
         </actions>
     </service>
 
     <service verb="prueba" noun="Attachment">
-    <description>
-        Envío de respuesta a emisor DTE.
+        <description>
+            Envío de respuesta a emisor DTE.
 
-        Esta implementación inicialmente responde a un solo envío
+            Esta implementación inicialmente responde a un solo envío
 
-        En un paso posterior se puede enviar Aceptación o Rechazo
-    </description>
-    <in-parameters>
-        <parameter name="tipoFacturaS" required="false"/>
-    </in-parameters>
-    <actions>
-        <!--set field="shipmentId" value="100000"/>
-        <set field="bodyParameters" from="[shipmentId:shipmentId, orderIdSet:null,
-                        invoiceId:(invoiceIdSet ? invoiceIdSet.first() : null),
-                        storeDomain:'Prueba', profileUrlPath:'http://127.0.0.1/profile',
-                        headerImagePath:'http://127.0.0.1/header.jpg', detailLinkPath:'http://127.0.0.1/detail']"/>
-        <set field="toAddresses" value="cherrera156@gmail.com"/>
+            En un paso posterior se puede enviar Aceptación o Rechazo
+        </description>
+        <in-parameters>
+            <parameter name="tipoFacturaS" required="false"/>
+        </in-parameters>
+        <actions>
+            <!--set field="shipmentId" value="100000"/>
+            <set field="bodyParameters" from="[shipmentId:shipmentId, orderIdSet:null,
+                            invoiceId:(invoiceIdSet ? invoiceIdSet.first() : null),
+                            storeDomain:'Prueba', profileUrlPath:'http://127.0.0.1/profile',
+                            headerImagePath:'http://127.0.0.1/header.jpg', detailLinkPath:'http://127.0.0.1/detail']"/>
+            <set field="toAddresses" value="cherrera156@gmail.com"/>
 
-        <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" out-map="sendOut" out-map-add-to-existing="false"
-                      in-map="[emailTemplateId:'NOTIFICATION', emailTypeEnumId:emailTypeEnumId,
-                                toAddresses:'cherrera156@gmail.com', bodyParameters:bodyParameters, toUserId:toUserId]"/>
-        <script>if (sendOut.emailMessageId) { ec.service.sync().name("create#mantle.shipment.ShipmentEmailMessage")
-            .parameter("shipmentId", shipmentId).parameter("emailMessageId", sendOut.emailMessageId).disableAuthz().call() }</script>
-        <message>Email sent to ${toAddresses}${sendOut.emailMessageId ? ', message ID ' + sendOut.emailMessageId : ''}</message-->
+            <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" out-map="sendOut" out-map-add-to-existing="false"
+                          in-map="[emailTemplateId:'NOTIFICATION', emailTypeEnumId:emailTypeEnumId,
+                                    toAddresses:'cherrera156@gmail.com', bodyParameters:bodyParameters, toUserId:toUserId]"/>
+            <script>if (sendOut.emailMessageId) { ec.service.sync().name("create#mantle.shipment.ShipmentEmailMessage")
+                .parameter("shipmentId", shipmentId).parameter("emailMessageId", sendOut.emailMessageId).disableAuthz().call() }</script>
+            <message>Email sent to ${toAddresses}${sendOut.emailMessageId ? ', message ID ' + sendOut.emailMessageId : ''}</message-->
 
-        <set field="bodyParameters" from="[orderId:'100000']"/>
-        <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" async="true">
-                <field-map field-name="orderId" value="100000"/>
+            <!-- TODO: Funciona attachment! -->
+            <!--set field="bodyParameters" from="[invoiceId:'111883']"/>
+            <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" async="true">
+                    <field-map field-name="invoiceId" value="111883"/>
+                    <field-map field-name="emailTypeEnumId" from="emailTypeEnumId"/>
+                    <field-map field-name="toAddresses" value="cherrera156@gmail.com"/>
+                    <field-map field-name="emailTemplateId" value="PopcInvoiceFinalized"/>
+                    <field-map field-name="bodyParameters" from="bodyParameters"/>
+            </service-call-->
+            <set field="bodyParameters" from="[invoiceId:'111883']"/>
+            <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" async="true">
+                <field-map field-name="invoiceId" value="111883"/>
                 <field-map field-name="emailTypeEnumId" from="emailTypeEnumId"/>
-                <field-map field-name="toAddresses" value="cherrera156@gmail.com"/> <!--from="ec.user.userAccount.emailAddress"/-->
-                <!--field-map field-name="emailTemplateId" value="PopcOrderPlaced"/-->
+                <field-map field-name="toAddresses" value="cherrera156@gmail.com"/>
                 <field-map field-name="emailTemplateId" value="Aceptacion"/>
                 <field-map field-name="bodyParameters" from="bodyParameters"/>
-        </service-call>
+            </service-call>
 
-    </actions>
+
+        </actions>
+    </service>
+    <service verb="genera" noun="Libro">
+        <description>
+            Generación de libro de Compra/Venta
+        </description>
+        <in-parameters>
+            <parameter name="tipo" required="true"/><!-- Compra o venta -->
+            <parameter name="periodo"/><!-- Si es nulo, se toma el mes anterior -->
+            <parameter name="mensual" default-value="true"/><!-- Libro mensual o especial (requerido por SII) -->
+            <!-- Se consideran solo envíos totales -->
+        </in-parameters>
+        <actions>
+            <!-- Validación rut -->
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutReceptor]" out-map="context"/>
+
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CERT']" out-map="context"/>
+            <set field="certS" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PASS_CERT']" out-map="context"/>
+            <set field="passS" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_RESULTS']" out-map="context"/>
+            <set field="resultS" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMP']" out-map="context"/>
+            <set field="pathTemp" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_PDF']" out-map="context"/>
+            <set field="pathPdf" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CAF']" out-map="context"/>
+            <set field="cafS" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMPLATE_FACTURA']" out-map="context"/>
+            <set field="plantillaS" from="resourceValue"/>
+
+            <set field="tipoFactura" from="tipoFacturaS"/>
+
+            <!-- Obtención de folio y path de CAF -->
+            <service-call name="mchile.DTEServices.get#Folio" in-map="[dteTypeEnumId:tipoFacturaS]" out-map="context"/>
+            <set field="folioS" from="folio" type="Integer"/>
+            <script>
+                cafS = cafS + caf
+            </script>
+
+            <script>
+                import java.io.ByteArrayOutputStream;
+                import java.io.File;
+                import java.io.FileInputStream;
+                import java.math.BigDecimal;
+                import java.math.BigInteger;
+                import java.nio.file.Files;
+                import java.nio.file.Path;
+                import java.nio.file.Paths;
+                import java.security.KeyStore;
+                import java.security.PrivateKey;
+                import java.security.cert.X509Certificate;
+                import java.util.Calendar;
+                import java.util.Date;
+                import java.util.HashMap;
+                import java.text.ParseException;
+                import java.text.SimpleDateFormat;
+                import java.util.Date;
+
+                import org.apache.xmlbeans.XmlOptions;
+                import org.w3c.dom.Document;
+
+                import cl.nic.dte.util.Signer;
+                import cl.nic.dte.util.Utilities;
+                import cl.nic.dte.util.XMLUtil;
+                import cl.sii.siiDte.AUTORIZACIONDocument;
+                import cl.sii.siiDte.AutorizacionType;
+                import cl.sii.siiDte.DTEDefType.Documento.Detalle;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.IdDoc;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Receptor;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Totales;
+                import cl.sii.siiDte.DTEDefType.Documento.Referencia;
+                import cl.sii.siiDte.DTEDocument;
+                import cl.sii.siiDte.FechaHoraType;
+                import cl.sii.siiDte.FechaType;
+                import cl.sii.siiDte.MedioPagoType;
+
+
+                int folio;
+                DTEDocument doc;
+                AutorizacionType caf;
+                X509Certificate cert;
+                PrivateKey key;
+                int tipoFactura;
+                int frmPago = 1;
+
+                // Leo el folio
+                folio = Integer.valueOf(folioS);
+                tipoFactura = Integer.valueOf(tipoFacturaS);
+                if(formaPago != null)
+                frmPago = Integer.valueOf(formaPago);
+
+                //if (tipoFactura != 33 oo tipoFactura != 34) {
+                //    throw new Exception("Debe ingresar tipo de factura 33 o 34");
+                //}
+                // Leo Autorizacion
+                // Debo meter el namespace porque SII no lo genera
+                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;();
+                namespaces.put("", "http://www.sii.cl/SiiDte");
+                namespaces.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+                XmlOptions opts = new XmlOptions();
+                opts.setLoadSubstituteNamespaces(namespaces);
+
+                caf = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts).getAUTORIZACION();
+
+
+                // Construyo base a partir del template
+                doc = DTEDocument.Factory.parse(new File(plantillaS), opts);
+
+                // leo certificado y llave privada del archivo pkcs12
+                KeyStore ks = KeyStore.getInstance("PKCS12");
+                ks.load(new FileInputStream(certS), passS.toCharArray());
+                String alias = ks.aliases().nextElement();
+
+                logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
+
+
+                cert = (X509Certificate) ks.getCertificate(alias);
+                key = (PrivateKey) ks.getKey(alias, passS.toCharArray());
+
+                // Se recorre lista de productos para armar documento (detailList)
+
+                IdDoc iddoc = doc.getDTE().getDocumento().getEncabezado().addNewIdDoc();
+                iddoc.setFolio(folio);
+                doc.getDTE().getDocumento().setID("N" + iddoc.getFolio());
+
+                // Tipo de DTE
+                iddoc.setTipoDTE(BigInteger.valueOf(tipoFactura));
+
+                iddoc.xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+
+                // Indicador Servicio
+                // 3 para Factura de Servicios
+                // Para Facturas de Exportación:
+                //   4 Servicios de Hotelería
+                //   5 Servicio de Transporte Terrestre Internacional
+                iddoc.setIndServicio(BigInteger.valueOf(3));
+
+                Calendar cal = Calendar.getInstance();
+                cal.add(Calendar.DAY_OF_MONTH, 45);
+                iddoc.xsetFchCancel(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+
+                // Medio y forma de pago
+                iddoc.setMedioPago(MedioPagoType.Enum.forString(medioPago));
+                iddoc.setFmaPago(BigInteger.valueOf(frmPago));
+
+                // Receptor
+                Receptor recp = doc.getDTE().getDocumento().getEncabezado().addNewReceptor();
+                recp.setRUTRecep(rutReceptor);
+                recp.setRznSocRecep(rznSocReceptor);
+                recp.setGiroRecep(giroReceptor);
+                recp.setContacto(contactoReceptor);
+                recp.setDirRecep(dirReceptor);
+                recp.setCmnaRecep(cmnaReceptor);
+                recp.setCiudadRecep(ciudadReceptor);
+
+            </script>
+
+
+            <if condition="tipoFactura == 33">
+                <script>
+                    int i = 0
+                    listSize = detailList.size
+                    Detalle[] det = new Detalle[listSize]
+                </script>
+                <set field="totalInvoice" value="0" type="Integer"/>
+                <iterate list="detailList" entry="detailEntry">
+                    <log message="******* Iterando invoice $detailEntry" level="warn"/>
+                    <set field="nombreItem" from="detailEntry.description"/>
+                    <set field="qtyItem" from="detailEntry.quantity" type="Integer"/>
+                    <!-- TODO: obtener precio de productId -->
+                    <set field="priceItem" from="detailEntry.amount" type="Integer"/>
+                    <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+                    <script>
+                        // Agrego detalles
+                        det[i] = Detalle.Factory.newInstance();
+                        det[i].setNroLinDet(i+1);
+                        det[i].setNmbItem(nombreItem);
+                        det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                        det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                        det[i].setMontoItem( totalItem );
+                        totalInvoice = totalInvoice + totalItem
+
+                        i = i + 1
+                    </script>
+                </iterate>
+                <script>
+                    i = 0
+                    listSize = referenciaList.size
+                    Referencia[] ref = new Referencia[listSize]
+                </script>
+                <iterate list="referenciaList" entry="referenciaEntry">
+                    <set field="folioRef" from="referenciaEntry.folio" type="Integer"/>
+                    <set field="codRef" from="referenciaEntry.codigoReferenciaEnumId" type="Integer"/>
+                    <set field="fechaRef" from="referenciaEntry.fecha" type="String"/>
+                    <script>
+                        // Agrego referencias
+                        ref[i] = Referencia.Factory.newInstance();
+                        ref[i].setNroLinRef(i+1);
+                        ref[i].setTpoDocRef(referenciaEntry.dteTypeEnumId);
+                        ref[i].setIndGlobal(0);
+                        ref[i].setRUTOtr(rutReceptor);
+
+                        SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
+                        Date date = formatter.parse(fechaRef);
+                        ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
+                        ref[i].setCodRef(codRef);
+                        ref[i].setRazonRef(referenciaEntry.razonReferencia);
+                        ref[i].setFolioRef(referenciaEntry.folio.toString());
+
+                        i = i + 1
+                    </script>
+                </iterate>
+                <script>
+                    doc.getDTE().getDocumento().setReferenciaArray(ref);
+                </script>
+
+                <script>
+                    doc.getDTE().getDocumento().setDetalleArray(det);
+                    // Totales
+                    Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
+
+                    tot.setMntNeto(totalInvoice);
+                    tot.setTasaIVA(BigDecimal.valueOf(19));
+                    // Valor de solo IVA
+                    totalIVA = totalInvoice * 0.19
+                    tot.setIVA(totalIVA)
+                    // total neto + IVA
+                    totalInvoice = totalInvoice + totalIVA
+                    tot.setMntTotal(totalInvoice);
+                </script>
+            </if>
+            <if condition="tipoFactura == 34">
+                <script>
+                    int i = 0
+                    listSize = detailList.size
+                    Detalle[] det = new Detalle[listSize]
+                </script>
+                <set field="totalInvoice" value="0" type="Integer"/>
+
+
+                <iterate list="detailList" entry="detailEntry">
+                    <log message="******* Iterando invoice $detailEntry" level="warn"/>
+                    <set field="nombreItem" from="detailEntry.description"/>
+                    <set field="qtyItem" from="detailEntry.quantity" type="Integer"/>
+                    <!-- TODO: obtener precio de productId -->
+                    <set field="priceItem" from="detailEntry.amount" type="Integer"/>
+                    <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+                    <script>
+                        // Agrego detalles
+                        det[i] = Detalle.Factory.newInstance();
+                        det[i].setNroLinDet(i+1);
+                        det[i].setNmbItem(nombreItem);
+                        det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                        det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                        det[i].setMontoItem( totalItem );
+                        totalInvoice = totalInvoice + totalItem
+
+                        i = i + 1
+                    </script>
+                </iterate>
+
+                <script>
+                    i = 0
+                    listSize = referenciaList.size
+                    Referencia[] ref = new Referencia[listSize]
+                </script>
+                <iterate list="referenciaList" entry="referenciaEntry">
+                    <log message="Agregando referencia $referenciaEntry" level="warn"/>
+                    <set field="folioRef" from="referenciaEntry.folio" type="Integer"/>
+                    <set field="codRef" from="referenciaEntry.codigoReferenciaEnumId" type="Integer"/>
+                    <set field="fechaRef" from="referenciaEntry.fecha" type="String"/>
+                    <script>
+                        // Agrego referencias
+                        ref[i] = Referencia.Factory.newInstance();
+                        ref[i].setNroLinRef(i+1);
+                        ref[i].setTpoDocRef(referenciaEntry.dteTypeEnumId);
+                        ref[i].setIndGlobal(0);
+                        ref[i].setRUTOtr(rutReceptor);
+
+                        SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
+                        Date date = formatter.parse(fechaRef);
+                        ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
+                        ref[i].setCodRef(codRef);
+                        ref[i].setRazonRef(referenciaEntry.razonReferencia);
+                        ref[i].setFolioRef(referenciaEntry.folio.toString());
+
+                        i = i + 1
+                    </script>
+                </iterate>
+                <script>
+                    doc.getDTE().getDocumento().setReferenciaArray(ref);
+                </script>
+
+                <script>
+                    doc.getDTE().getDocumento().setDetalleArray(det);
+                    // Totales
+                    Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
+                    tot.setMntExe(totalInvoice);
+                    tot.setMntTotal(totalInvoice);
+
+                </script>
+            </if>
+
+            <!-- TODO: Nota de Crédito Electrónica -->
+            <if condition="tipoFactura == 61">
+                <script>
+                    int i = 0
+                    listSize = detailList.size
+                    Detalle[] det = new Detalle[listSize]
+                </script>
+                <set field="totalInvoice" value="0" type="Integer"/>
+
+                <iterate list="detailList" entry="detailEntry">
+                    <log message="******* Iterando invoice $detailEntry" level="warn"/>
+                    <set field="nombreItem" from="detailEntry.description"/>
+                    <set field="qtyItem" from="detailEntry.returnQuantity" type="Integer"/>
+                    <!-- TODO: obtener precio de productId -->
+                    <if condition="!detailEntry.responseAmount">
+                        <return error="true" message="No hay precio para crédito producto $nombreItem"/>
+                    </if>
+                    <set field="priceItem" from="detailEntry.responseAmount" type="Integer"/>
+                    <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+                    <script>
+                        // Agrego detalles
+                        det[i] = Detalle.Factory.newInstance();
+                        det[i].setNroLinDet(i+1);
+                        det[i].setNmbItem(nombreItem);
+                        det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                        det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                        det[i].setMontoItem( totalItem );
+                        totalInvoice = totalInvoice + totalItem
+
+                        i = i + 1
+                    </script>
+                </iterate>
+                <script>
+                    doc.getDTE().getDocumento().setDetalleArray(det);
+                    // Totales
+                    Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
+                    tot.setMntExe(totalInvoice);
+                    tot.setMntTotal(totalInvoice);
+
+                    i = 0
+                    listSize = referenciaList.size
+                    Referencia[] ref = new Referencia[listSize]
+                </script>
+
+                <iterate list="referenciaList" entry="referenciaEntry">
+                    <set field="folioRef" from="referenciaEntry.folio" type="Integer"/>
+                    <set field="codRef" from="referenciaEntry.codigoReferenciaEnumId" type="Integer"/>
+                    <set field="fechaRef" from="referenciaEntry.fecha" type="String"/>
+                    <script>
+                        // Agrego referencias
+                        ref[i] = Referencia.Factory.newInstance();
+                        ref[i].setNroLinRef(i+1);
+                        ref[i].setTpoDocRef(referenciaEntry.dteTypeEnumId);
+                        ref[i].setIndGlobal(0);
+                        ref[i].setRUTOtr(rutReceptor);
+
+                        SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
+                        Date date = formatter.parse(fechaRef);
+                        ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
+                        ref[i].setCodRef(codRef);
+                        ref[i].setRazonRef(referenciaEntry.razonReferencia);
+                        ref[i].setFolioRef(referenciaEntry.folio.toString());
+
+                        i = i + 1
+                    </script>
+                </iterate>
+                <script>
+                    doc.getDTE().getDocumento().setReferenciaArray(ref);
+                </script>
+            </if>
+
+            <!-- TODO: Nota de Débito Electrónica -->
+            <if condition="tipoFactura == 56">
+                <script>
+                    int i = 0
+                    listSize = detailList.size
+                    Detalle[] det = new Detalle[listSize]
+                </script>
+                <set field="totalInvoice" value="0" type="Integer"/>
+
+                <!-- TODO: En este caso la lista de detalles es lo que hay que modificar -->
+                <!-- TODO: detailList:[01-1-100.000-102193, 02-1-100.000-11092] -->
+
+                <iterate list="detailList" entry="detailEntry">
+
+                    <set field="detailTemp" from="detailEntry instanceof List ? detailEntry : detailEntry.split('-') as List"/>
+                    <set field="itemNumber" value="${detailTemp[0]}"/>
+                    <set field="qtyItem" value="${detailTemp[1]}" type="Integer"/>
+                    <set field="priceItem" value="${detailTemp[2]}" type="Integer"/>
+                    <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+
+                    <!-- TODO: obtener nombre de productId -->
+                    <entity-find-one entity-name="mantle.store.Product" value-field="productField"/>
+                    <set field="nombreItem" from="productField.productName"/>
+
+                    <script>
+                        // Agrego detalles
+                        det[i] = Detalle.Factory.newInstance();
+                        det[i].setNroLinDet(i+1);
+                        det[i].setNmbItem(nombreItem);
+                        det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                        det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                        det[i].setMontoItem( totalItem );
+                        totalInvoice = totalInvoice + totalItem
+
+                        i = i + 1
+                    </script>
+                </iterate>
+                <script>
+                    doc.getDTE().getDocumento().setDetalleArray(det);
+                    // Totales
+                    Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
+                    tot.setMntExe(totalInvoice);
+                    tot.setMntTotal(totalInvoice);
+
+                    i = 0
+                    listSize = referenciaList.size
+                    Referencia[] ref = new Referencia[listSize]
+                </script>
+
+                <iterate list="referenciaList" entry="referenciaEntry">
+                    <set field="folioRef" from="referenciaEntry.folio" type="Integer"/>
+                    <set field="codRef" from="referenciaEntry.codigoReferenciaEnumId" type="Integer"/>
+                    <set field="fechaRef" from="referenciaEntry.fecha" type="String"/>
+                    <script>
+                        // Agrego referencias
+                        ref[i] = Referencia.Factory.newInstance();
+                        ref[i].setNroLinRef(i+1);
+                        ref[i].setTpoDocRef(referenciaEntry.dteTypeEnumId);
+                        ref[i].setIndGlobal(0);
+                        ref[i].setRUTOtr(rutReceptor);
+
+                        SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
+                        Date date = formatter.parse(fechaRef);
+                        ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
+                        ref[i].setCodRef(codRef);
+                        ref[i].setRazonRef(referenciaEntry.razonReferencia);
+                        ref[i].setFolioRef(referenciaEntry.folio.toString());
+
+                        i = i + 1
+                    </script>
+                </iterate>
+                <script>
+                    doc.getDTE().getDocumento().setReferenciaArray(ref);
+                </script>
+            </if>
+
+            <!-- TODO: Factura de Exportación Electrónica -->
+            <if condition="tipoFactura == 110">
+                <script>
+                    int i = 0
+                    listSize = detailList.size
+                    Detalle[] det = new Detalle[listSize]
+                </script>
+                <set field="totalInvoice" value="0" type="Integer"/>
+
+
+                <iterate list="detailList" entry="detailEntry">
+                    <log message="******* Iterando invoice $detailEntry" level="warn"/>
+                    <set field="nombreItem" from="detailEntry.description"/>
+                    <set field="qtyItem" from="detailEntry.quantity" type="Integer"/>
+                    <!-- TODO: obtener precio de productId -->
+                    <set field="priceItem" from="detailEntry.amount" type="Integer"/>
+                    <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+                    <script>
+                        // Agrego detalles
+                        det[i] = Detalle.Factory.newInstance();
+                        det[i].setNroLinDet(i+1);
+                        det[i].setNmbItem(nombreItem);
+                        det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                        det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                        det[i].setMontoItem( totalItem );
+                        totalInvoice = totalInvoice + totalItem
+
+                        i = i + 1
+                    </script>
+                </iterate>
+
+                <script>
+                    i = 0
+                    listSize = referenciaList.size
+                    Referencia[] ref = new Referencia[listSize]
+                </script>
+                <iterate list="referenciaList" entry="referenciaEntry">
+                    <log message="Agregando referencia $referenciaEntry" level="warn"/>
+                    <set field="folioRef" from="referenciaEntry.folio" type="Integer"/>
+                    <set field="codRef" from="referenciaEntry.codigoReferenciaEnumId" type="Integer"/>
+                    <set field="fechaRef" from="referenciaEntry.fecha" type="String"/>
+                    <script>
+                        // Agrego referencias
+                        ref[i] = Referencia.Factory.newInstance();
+                        ref[i].setNroLinRef(i+1);
+                        ref[i].setTpoDocRef(referenciaEntry.dteTypeEnumId);
+                        ref[i].setIndGlobal(0);
+                        ref[i].setRUTOtr(rutReceptor);
+
+                        SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
+                        Date date = formatter.parse(fechaRef);
+                        ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
+                        ref[i].setCodRef(codRef);
+                        ref[i].setRazonRef(referenciaEntry.razonReferencia);
+                        ref[i].setFolioRef(referenciaEntry.folio.toString());
+
+                        i = i + 1
+                    </script>
+                </iterate>
+                <script>
+                    doc.getDTE().getDocumento().setReferenciaArray(ref);
+                </script>
+
+                <script>
+                    doc.getDTE().getDocumento().setDetalleArray(det);
+                    // Totales
+                    Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
+                    tot.setMntExe(totalInvoice);
+                    tot.setMntTotal(totalInvoice);
+
+                </script>
+            </if>
+
+            <!-- TODO: Nota de Débito de Exportación -->
+            <if condition="tipoFactura == 111">
+                <script>
+                    int i = 0
+                    listSize = detailList.size
+                    Detalle[] det = new Detalle[listSize]
+                </script>
+                <set field="totalInvoice" value="0" type="Integer"/>
+
+                <!-- TODO: En este caso la lista de detalles es lo que hay que modificar -->
+                <!-- TODO: detailList:[01-1-100.000-102193, 02-1-100.000-11092] -->
+
+                <iterate list="detailList" entry="detailEntry">
+
+                    <set field="detailTemp" from="detailEntry instanceof List ? detailEntry : detailEntry.split('-') as List"/>
+                    <set field="itemNumber" value="${detailTemp[0]}"/>
+                    <set field="qtyItem" value="${detailTemp[1]}" type="Integer"/>
+                    <set field="priceItem" value="${detailTemp[2]}" type="Integer"/>
+                    <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+
+                    <!-- TODO: obtener nombre de productId -->
+                    <entity-find-one entity-name="mantle.store.Product" value-field="productField"/>
+                    <set field="nombreItem" from="productField.productName"/>
+
+                    <script>
+                        // Agrego detalles
+                        det[i] = Detalle.Factory.newInstance();
+                        det[i].setNroLinDet(i+1);
+                        det[i].setNmbItem(nombreItem);
+                        det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                        det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                        det[i].setMontoItem( totalItem );
+                        totalInvoice = totalInvoice + totalItem
+
+                        i = i + 1
+                    </script>
+                </iterate>
+                <script>
+                    doc.getDTE().getDocumento().setDetalleArray(det);
+                    // Totales
+                    Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
+                    tot.setMntExe(totalInvoice);
+                    tot.setMntTotal(totalInvoice);
+
+                    i = 0
+                    listSize = referenciaList.size
+                    Referencia[] ref = new Referencia[listSize]
+                </script>
+
+                <iterate list="referenciaList" entry="referenciaEntry">
+                    <set field="folioRef" from="referenciaEntry.folio" type="Integer"/>
+                    <set field="codRef" from="referenciaEntry.codigoReferenciaEnumId" type="Integer"/>
+                    <set field="fechaRef" from="referenciaEntry.fecha" type="String"/>
+                    <script>
+                        // Agrego referencias
+                        ref[i] = Referencia.Factory.newInstance();
+                        ref[i].setNroLinRef(i+1);
+                        ref[i].setTpoDocRef(referenciaEntry.dteTypeEnumId);
+                        ref[i].setIndGlobal(0);
+                        ref[i].setRUTOtr(rutReceptor);
+
+                        SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
+                        Date date = formatter.parse(fechaRef);
+                        ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
+                        ref[i].setCodRef(codRef);
+                        ref[i].setRazonRef(referenciaEntry.razonReferencia);
+                        ref[i].setFolioRef(referenciaEntry.folio.toString());
+
+                        i = i + 1
+                    </script>
+                </iterate>
+                <script>
+                    doc.getDTE().getDocumento().setReferenciaArray(ref);
+                </script>
+            </if>
+
+            <!-- TODO: Nota de Crédito de Exportación -->
+            <if condition="tipoFactura == 112">
+                <script>
+                    int i = 0
+                    listSize = detailList.size
+                    Detalle[] det = new Detalle[listSize]
+                </script>
+                <set field="totalInvoice" value="0" type="Integer"/>
+
+                <iterate list="detailList" entry="detailEntry">
+                    <log message="******* Iterando invoice $detailEntry" level="warn"/>
+                    <set field="nombreItem" from="detailEntry.description"/>
+                    <set field="qtyItem" from="detailEntry.returnQuantity" type="Integer"/>
+                    <!-- TODO: obtener precio de productId -->
+                    <if condition="!detailEntry.responseAmount">
+                        <return error="true" message="No hay precio para crédito producto $nombreItem"/>
+                    </if>
+                    <set field="priceItem" from="detailEntry.responseAmount" type="Integer"/>
+                    <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+                    <script>
+                        // Agrego detalles
+                        det[i] = Detalle.Factory.newInstance();
+                        det[i].setNroLinDet(i+1);
+                        det[i].setNmbItem(nombreItem);
+                        det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                        det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                        det[i].setMontoItem( totalItem );
+                        totalInvoice = totalInvoice + totalItem
+
+                        i = i + 1
+                    </script>
+                </iterate>
+                <script>
+                    doc.getDTE().getDocumento().setDetalleArray(det);
+                    // Totales
+                    Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
+                    tot.setMntExe(totalInvoice);
+                    tot.setMntTotal(totalInvoice);
+
+                    i = 0
+                    listSize = referenciaList.size
+                    Referencia[] ref = new Referencia[listSize]
+                </script>
+
+                <iterate list="referenciaList" entry="referenciaEntry">
+                    <set field="folioRef" from="referenciaEntry.folio" type="Integer"/>
+                    <set field="codRef" from="referenciaEntry.codigoReferenciaEnumId" type="Integer"/>
+                    <set field="fechaRef" from="referenciaEntry.fecha" type="String"/>
+                    <script>
+                        // Agrego referencias
+                        ref[i] = Referencia.Factory.newInstance();
+                        ref[i].setNroLinRef(i+1);
+                        ref[i].setTpoDocRef(referenciaEntry.dteTypeEnumId);
+                        ref[i].setIndGlobal(0);
+                        ref[i].setRUTOtr(rutReceptor);
+
+                        SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
+                        Date date = formatter.parse(fechaRef);
+                        ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
+                        ref[i].setCodRef(codRef);
+                        ref[i].setRazonRef(referenciaEntry.razonReferencia);
+                        ref[i].setFolioRef(referenciaEntry.folio.toString());
+
+                        i = i + 1
+                    </script>
+                </iterate>
+                <script>
+                    doc.getDTE().getDocumento().setReferenciaArray(ref);
+                </script>
+            </if>
+
+            <script>
+
+                // Timbro
+
+                doc.getDTE().timbrar(caf.getCAF(), caf.getPrivateKey(null));
+
+                // antes de firmar le doy formato a los datos
+                opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces);
+                opts.setLoadSubstituteNamespaces(namespaces);
+                opts.setLoadAdditionalNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(4);
+
+                // releo el doc para que se reflejen los cambios de formato
+                doc = DTEDocument.Factory.parse(doc.newInputStream(opts), opts);
+
+                // Guardo
+                opts = new XmlOptions();
+                opts.setCharacterEncoding("ISO-8859-1");
+                opts.setSaveImplicitNamespaces(namespaces);
+
+                String uri = "";
+
+                FechaHoraType now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                if (doc.getDTE().isSetDocumento()) {
+                uri = doc.getDTE().getDocumento().getID();
+                doc.getDTE().getDocumento().xsetTmstFirma(now);
+                } else if (doc.getDTE().isSetLiquidacion()) {
+                uri = doc.getDTE().getLiquidacion().getID();
+                doc.getDTE().getLiquidacion().xsetTmstFirma(now);
+                } else if (doc.getDTE().isSetExportaciones()) {
+                uri = doc.getDTE().getExportaciones().getID();
+                doc.getDTE().getExportaciones().xsetTmstFirma(now);
+                }
+
+                uri = "#" + uri;
+
+                logger.warn("URI: " + uri)
+
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                doc.save(new File(resultS + "FACT" + folio + "-sinfirma.xml"), opts);
+                doc.save(out, opts);
+
+                Document doc2 = XMLUtil.parseDocument(out.toByteArray());
+
+                byte[] salida = Signer.sign(doc2, uri, key, cert, uri, "Documento");
+                doc2 = XMLUtil.parseDocument(salida);
+
+                if (Signer.verify(doc2, "Documento")) {
+                Path path = Paths.get(resultS + "FACT" + folio + ".xml");
+                Files.write(path, salida);
+                logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                } else {
+                Path path = Paths.get(resultS + "FACT" + folio + "-mala.xml");
+                Files.write(path, salida);
+                logger.warn("Error al generar factura folio "+folio);
+                }
+            </script>
+            <!-- Registro de DTE en base de datos y generación de PDF -->
+            <set field="fiscalTaxDocumentId" from="tipoFacturaS+folioS"/>
+            <set field="fiscalTaxDocumentTypeEnumId" from="tipoFacturaS"/>
+            <set field="amount" from="totalInvoice"/>
+            <set field="folio" from="folioS"/>
+            <set field="xml" value="FACT${folio}.xml"/>
+            <set field="pdf" value="FACT${folio}.pdf"/>
+            <set field="receptor" from="rutReceptor"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml]" out-map="context"/>
+            <set field="xml" value="${resultS}FACT${folio}.xml"/>
+            <set field="pdf" value="${pathPdf}FACT${folio}.pdf"/>
+            <service-call name="create#tfpos.FiscalTaxDocument" in-map="context" out-map="context"/>
+
+        </actions>
     </service>
 
 </services>
