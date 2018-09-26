@@ -18,7 +18,7 @@
                         } else { break }
                     }
             ]]></script>
-            <service-call name="mchile.DTEServices.preparaEnvio#Documentos" in-map="context"/>
+            <service-call name="mchile.DTEServices.preparaEnvio#Documentos" in-map="context + [libro:'TRUE']"/>
         </actions>
         <default-response url="."/>
     </transition>
@@ -68,10 +68,32 @@
         <default-response type="none"/>
     </transition>
 
+    <!--transition name="verificarEnSII">
+        <parameter name="fiscalTaxDocumentId"/>
+        <parameter name="fiscalTaxDocumentTypeEnumId"/>
+        <actions>
+            <service-call name="mchile.DTEServices.verificaEnSII#Documento"
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" out-map="verifyOut"/>
+            <log message="-> ${verifyOut.statusSii}" level="warn"/>
+            <if condition="verifyOut.statusSii == '0'">
+                <return error="false" message="${verifyOut.salida}"/>
+            </if>
+            <if condition="verifyOut.statusSii != '0'">
+                <return error="true" message="${verifyOut.salida}"/>
+            </if>
+        </actions>
+        <default-response url="."/>
+    </transition-->
+    <transition name="genLibro">
+        <actions>
+            <service-call name="mchile.DTEServices.genera#Libro" out-map="context" in-map="[tipo:dteTypeEnumId, tipoLibro:tipoLibro, tipoEnvio:tipoEnvio, periodo:periodo]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
     <actions>
-        <service-call name="mchile.DTEServices.genera#Libro" out-map="context" in-map="[tipo:'VENTA']"/>
-        <!--set field="searchMap" from="[productCategoryId:'StoreProducts', productTypeEnumId:'PtAsset',
-                    assetClassEnumId:'AsClsInventory']"/-->
+        <!--service-call name="mchile.DTEServices.genera#Libro" out-map="context" in-map="[tipo:'VENTA', tipoLibro:'MENSUAL', tipoEnvio:'TOTAL', periodo:'2004-01']"/-->
+
         <entity-find entity-name="tfpos.FiscalTaxDocument" list="dteList">
             <!--search-form-inputs/-->
             <!--econdition-object field="searchMap"/-->
@@ -84,25 +106,13 @@
         <label text="Libros de Compraventa generados" type="h4"/>
 
         <container-dialog id="GenLibroDialog" button-text="Generar Libro de Compraventa">
-            <form-single name="LoadDteForm" transition="loadDte">
-
-                <!--field name="dteTypeEnumId">
-                    <default-field title="DTE Type">
-                        <drop-down>
-                            <entity-options key="${enumId}">
-                                <entity-find entity-name="moqui.basic.Enumeration">
-                                    <econdition field-name="enumTypeId" value="DteType"/>
-                                </entity-find>
-                            </entity-options>
-                        </drop-down>
-                    </default-field>
-                </field-->
+            <form-single name="LoadDteForm" transition="genLibro">
 
                 <field name="dteTypeEnumId">
                     <default-field title="Tipo Libro">
                         <drop-down>
-                            <option key="PvtLibroCompra" text="Compras"/>
                             <option key="PvtLibroVenta"  text="Ventas"/>
+                            <option key="PvtLibroCompra" text="Compras"/>
                         </drop-down>
                     </default-field>
                 </field>
@@ -121,7 +131,7 @@
                         </drop-down>
                     </default-field>
                 </field>
-                <field name="mensualEspecial">
+                <field name="tipoLibro">
                     <default-field title="Mensual o Especial">
                         <drop-down>
                             <option key="MENSUAL" text="Mensual"/>
@@ -184,6 +194,11 @@
                 <check no-current-selected-key="false"><option key="true" text=" "/></check></default-field>
             </field>
             <field name="envioSII"><default-field title="Enviar a SII"><submit/></default-field></field>
+            <!--field name="verificarEnSII">
+                <default-field title=" ">
+                    <link url="verificarEnSII" tooltip="Verificar Estado en SII"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" text="Verificar en SII"/>
+                </default-field>
+            </field-->
         </form-list>
     </widgets>
 </screen>

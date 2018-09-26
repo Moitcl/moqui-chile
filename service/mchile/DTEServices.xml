@@ -59,6 +59,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="plantillaS" from="resourceValue"/>
 
             <set field="tipoFactura" from="tipoFacturaS"/>
+            <set field="fechaEmision"/>
 
             <!-- Obtención de folio y path de CAF -->
             <service-call name="mchile.DTEServices.get#Folio" in-map="[dteTypeEnumId:tipoFacturaS]" out-map="context"/>
@@ -112,6 +113,7 @@ along with this software (see the LICENSE.md file). If not, see
                 PrivateKey key;
                 int tipoFactura;
                 int frmPago = 1;
+                int listSize = 0;
 
                 // Leo el folio
                 folio = Integer.valueOf(folioS);
@@ -119,10 +121,6 @@ along with this software (see the LICENSE.md file). If not, see
                 if(formaPago != null)
                    frmPago = Integer.valueOf(formaPago);
 
-                //if (tipoFactura != 33 oo tipoFactura != 34) {
-                //    throw new Exception("Debe ingresar tipo de factura 33 o 34");
-                //}
-                // Leo Autorizacion
                 // Debo meter el namespace porque SII no lo genera
                 HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;();
                 namespaces.put("", "http://www.sii.cl/SiiDte");
@@ -155,8 +153,11 @@ along with this software (see the LICENSE.md file). If not, see
 
                 // Tipo de DTE
                 iddoc.setTipoDTE(BigInteger.valueOf(tipoFactura));
-
                 iddoc.xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+
+                SimpleDateFormat formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
+                Date dateFechaEmision = new Date();
+                fechaEmision = formatterFechaEmision.format(dateFechaEmision);
 
                 // Indicador Servicio
                 // 3 para Factura de Servicios
@@ -168,7 +169,6 @@ along with this software (see the LICENSE.md file). If not, see
                 Calendar cal = Calendar.getInstance();
                 cal.add(Calendar.DAY_OF_MONTH, 45);
                 iddoc.xsetFchCancel(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
-
                 // Medio y forma de pago
                 iddoc.setMedioPago(MedioPagoType.Enum.forString(medioPago));
                 iddoc.setFmaPago(BigInteger.valueOf(frmPago));
@@ -183,13 +183,19 @@ along with this software (see the LICENSE.md file). If not, see
                 recp.setCmnaRecep(cmnaReceptor);
                 recp.setCiudadRecep(ciudadReceptor);
 
+
             </script>
+
+            <!-- Campos para elaboración de libro -->
+            <set field="montoNeto" value="0"/>
+            <set field="montoExento" value="0"/>
+            <set field="montoIVARecuperable" value="0"/>
 
 
             <if condition="tipoFactura == 33">
                 <script>
                     int i = 0
-                    listSize = detailList.size
+                    listSize = detailList.size()
                     Detalle[] det = new Detalle[listSize]
                 </script>
                 <set field="totalInvoice" value="0" type="Integer"/>
@@ -210,12 +216,13 @@ along with this software (see the LICENSE.md file). If not, see
                         det[i].setMontoItem( totalItem );
                         totalInvoice = totalInvoice + totalItem
 
+
                         i = i + 1
                     </script>
                 </iterate>
                 <script>
                     i = 0
-                    listSize = referenciaList.size
+                    listSize = referenciaList.size()
                     Referencia[] ref = new Referencia[listSize]
                 </script>
                 <iterate list="referenciaList" entry="referenciaEntry">
@@ -250,9 +257,11 @@ along with this software (see the LICENSE.md file). If not, see
                     Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
 
                     tot.setMntNeto(totalInvoice);
+                    montoNeto = totalInvoice;
                     tot.setTasaIVA(BigDecimal.valueOf(19));
                     // Valor de solo IVA
                     totalIVA = totalInvoice * 0.19
+                    montoIVARecuperable = totalIVA;
                     tot.setIVA(totalIVA)
                     // total neto + IVA
                     totalInvoice = totalInvoice + totalIVA
@@ -262,11 +271,10 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="tipoFactura == 34">
                 <script>
                     int i = 0
-                    listSize = detailList.size
+                    listSize = detailList.size()
                     Detalle[] det = new Detalle[listSize]
                 </script>
                 <set field="totalInvoice" value="0" type="Integer"/>
-
 
                 <iterate list="detailList" entry="detailEntry">
                     <log message="******* Iterando invoice $detailEntry" level="warn"/>
@@ -284,15 +292,22 @@ along with this software (see the LICENSE.md file). If not, see
                         det[i].setPrcItem(BigDecimal.valueOf(priceItem));
                         det[i].setMontoItem( totalItem );
                         totalInvoice = totalInvoice + totalItem
+                        montoNeto = totalInvoice
+                        montoExento = totalInvoice
 
                         i = i + 1
                     </script>
                 </iterate>
-
                 <script>
                     i = 0
-                    listSize = referenciaList.size
-                    Referencia[] ref = new Referencia[listSize]
+                    Referencia[] ref = null;
+                    if(referenciaList.size != 0) {
+                        listSize = referenciaList.size();
+                        //ref = new Referencia[listSize];
+                    } else {
+                        listSize = 0;
+                    }
+                    //Referencia[] ref = new Referencia[listSize]
                 </script>
                 <iterate list="referenciaList" entry="referenciaEntry">
                     <log message="Agregando referencia $referenciaEntry" level="warn"/>
@@ -306,7 +321,6 @@ along with this software (see the LICENSE.md file). If not, see
                         ref[i].setTpoDocRef(referenciaEntry.dteTypeEnumId);
                         ref[i].setIndGlobal(0);
                         ref[i].setRUTOtr(rutReceptor);
-
                         SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
                         Date date = formatter.parse(fechaRef);
                         ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
@@ -335,7 +349,7 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="tipoFactura == 61">
                 <script>
                     int i = 0
-                    listSize = detailList.size
+                    listSize = detailList.size()
                     Detalle[] det = new Detalle[listSize]
                 </script>
                 <set field="totalInvoice" value="0" type="Integer"/>
@@ -371,7 +385,7 @@ along with this software (see the LICENSE.md file). If not, see
                     tot.setMntTotal(totalInvoice);
 
                     i = 0
-                    listSize = referenciaList.size
+                    listSize = referenciaList.size()
                     Referencia[] ref = new Referencia[listSize]
                 </script>
 
@@ -406,7 +420,7 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="tipoFactura == 56">
                 <script>
                     int i = 0
-                    listSize = detailList.size
+                    listSize = detailList.size()
                     Detalle[] det = new Detalle[listSize]
                 </script>
                 <set field="totalInvoice" value="0" type="Integer"/>
@@ -447,7 +461,7 @@ along with this software (see the LICENSE.md file). If not, see
                     tot.setMntTotal(totalInvoice);
 
                     i = 0
-                    listSize = referenciaList.size
+                    listSize = referenciaList.size()
                     Referencia[] ref = new Referencia[listSize]
                 </script>
 
@@ -482,7 +496,7 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="tipoFactura == 110">
                 <script>
                     int i = 0
-                    listSize = detailList.size
+                    listSize = detailList.size()
                     Detalle[] det = new Detalle[listSize]
                 </script>
                 <set field="totalInvoice" value="0" type="Integer"/>
@@ -511,7 +525,7 @@ along with this software (see the LICENSE.md file). If not, see
 
                 <script>
                     i = 0
-                    listSize = referenciaList.size
+                    listSize = referenciaList.size()
                     Referencia[] ref = new Referencia[listSize]
                 </script>
                 <iterate list="referenciaList" entry="referenciaEntry">
@@ -555,7 +569,7 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="tipoFactura == 111">
                 <script>
                     int i = 0
-                    listSize = detailList.size
+                    listSize = detailList.size()
                     Detalle[] det = new Detalle[listSize]
                 </script>
                 <set field="totalInvoice" value="0" type="Integer"/>
@@ -596,7 +610,7 @@ along with this software (see the LICENSE.md file). If not, see
                     tot.setMntTotal(totalInvoice);
 
                     i = 0
-                    listSize = referenciaList.size
+                    listSize = referenciaList.size()
                     Referencia[] ref = new Referencia[listSize]
                 </script>
 
@@ -631,7 +645,7 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="tipoFactura == 112">
                 <script>
                     int i = 0
-                    listSize = detailList.size
+                    listSize = detailList.size()
                     Detalle[] det = new Detalle[listSize]
                 </script>
                 <set field="totalInvoice" value="0" type="Integer"/>
@@ -667,7 +681,7 @@ along with this software (see the LICENSE.md file). If not, see
                     tot.setMntTotal(totalInvoice);
 
                     i = 0
-                    listSize = referenciaList.size
+                    listSize = referenciaList.size()
                     Referencia[] ref = new Referencia[listSize]
                 </script>
 
@@ -766,6 +780,10 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="xml" value="FACT${folio}.xml"/>
             <set field="pdf" value="FACT${folio}.pdf"/>
             <set field="receptor" from="rutReceptor"/>
+            <set field="montoNeto" from="montoNeto"/>
+            <set field="montoExento" from="montoExento"/>
+            <set field="montoIVARecuperable" from="montoIVARecuperable"/>
+            <set field="fechaEmision" from="fechaEmision"/>
             <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml]" out-map="context"/>
             <set field="xml" value="${resultS}FACT${folio}.xml"/>
             <set field="pdf" value="${pathPdf}FACT${folio}.pdf"/>
@@ -782,7 +800,7 @@ along with this software (see the LICENSE.md file). If not, see
 
         </description>
         <in-parameters>
-            <parameter name="recepS" required="true"/>
+            <parameter name="recepS" required="false"/> <!-- No se requiere para libros de compra/venta -->
             <parameter name="enviadorS" required="true"/>
             <parameter name="idS" required="true"/>
             <parameter name="fiscalTaxDocumentId" required="true"/>
@@ -798,7 +816,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="documentoS" from="xml"/>
 
             <!-- Validación rut -->
-            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:recepS]" out-map="context"/>
+            <if condition="recepS">
+                <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:recepS]" out-map="context"/>
+            </if>
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]" out-map="context"/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMPLATE_ENVIO']" out-map="context"/>
@@ -812,7 +832,6 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Variable para guardar nombre de archivo del envio -->
             <set field="archivoEnvio" value=""/>
-
             <script>
                 import java.io.ByteArrayOutputStream;
                 import java.io.File;
@@ -966,6 +985,193 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="generaEnvio" noun="Libro">
+        <description>
+            Generación de envio de libro de compra/venta
+        </description>
+        <in-parameters>
+            <parameter name="enviadorS" required="true"/>
+            <parameter name="idS" required="true"/>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="xml" required="true"/>
+            <!--parameter name="listaFacturas" required="true" type="List"/-->
+        </in-parameters>
+        <out-parameters>
+            <parameter name="archivoEnvio"/>
+        </out-parameters>
+        <actions>
+
+            <set field="documentoS" from="xml"/>
+
+
+            <!-- Validación rut -->
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]" out-map="context"/>
+
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMPLATE_ENVIO']" out-map="context"/>
+            <set field="plantillaEnvio" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CERT']" out-map="context"/>
+            <set field="certS" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PASS_CERT']" out-map="context"/>
+            <set field="passS" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_RESULTS']" out-map="context"/>
+            <set field="pathResults" from="resourceValue"/>
+
+            <!-- Variable para guardar nombre de archivo del envio -->
+            <set field="archivoEnvio" value=""/>
+            <script>
+                import java.io.ByteArrayOutputStream;
+                import java.io.File;
+                import java.io.FileInputStream;
+                import java.math.BigInteger;
+                import java.nio.file.Files;
+                import java.nio.file.Path;
+                import java.nio.file.Paths;
+                import java.security.KeyStore;
+                import java.security.PrivateKey;
+                import java.security.cert.X509Certificate;
+                import java.util.Date;
+                import java.util.HashMap;
+
+                import javax.xml.namespace.QName;
+
+                import org.apache.xmlbeans.XmlCursor;
+                import org.apache.xmlbeans.XmlOptions;
+                import org.w3c.dom.Document;
+
+                import cl.nic.dte.util.Signer;
+                import cl.nic.dte.util.Utilities;
+                import cl.nic.dte.util.XMLUtil;
+                import cl.sii.siiDte.DTEDefType;
+                import cl.sii.siiDte.DTEDocument;
+                import cl.sii.siiDte.EnvioDTEDocument;
+                import cl.sii.siiDte.FechaHoraType;
+                import cl.sii.siiDte.EnvioDTEDocument.EnvioDTE.SetDTE.Caratula.SubTotDTE;
+
+                // Construyo Envio
+                EnvioDTEDocument envio = EnvioDTEDocument.Factory.parse(new FileInputStream(plantillaEnvio));
+
+                // Debo agregar el schema location (Sino SII rechaza)
+                XmlCursor cursor = envio.newCursor();
+                if (cursor.toFirstChild()) {
+                cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioDTE_v10.xsd");
+                }
+
+                // leo certificado y llave privada del archivo pkcs12
+                KeyStore ks = KeyStore.getInstance("PKCS12");
+                ks.load(new FileInputStream(certS), passS.toCharArray());
+                String alias = ks.aliases().nextElement();
+                logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS);
+
+                X509Certificate x509 = (X509Certificate) ks.getCertificate(alias);
+                String enviadorS = Utilities.getRutFromCertificate(x509);
+                PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray());
+
+                // Asigno un ID
+                envio.getEnvioDTE().getSetDTE().setID(idS);
+
+                cl.sii.siiDte.EnvioDTEDocument.EnvioDTE.SetDTE.Caratula car =
+                envio.getEnvioDTE().getSetDTE().getCaratula();
+
+                car.setRutReceptor(recepS);
+                car.setRutEnvia(enviadorS);
+
+                // documentos a enviar
+                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;();
+                namespaces.put("", "http://www.sii.cl/SiiDte");
+                XmlOptions opts = new XmlOptions();
+                opts.setLoadSubstituteNamespaces(namespaces);
+
+                // Cantidad de documentos a enviar
+                //DTEDefType[] dtes = new DTEDefType[otherArgs.length];
+
+                //String[] otherArgs = parser.getRemainingArgs();
+                String[] DTEList = new String[1];
+
+                // TODO: Armar lista de documentos
+                DTEList[0] = documentoS;
+
+                DTEDefType[] dtes = new DTEDefType[DTEList.size()];
+
+                logger.warn("Tamaño:" + DTEList.size()+ " - Ubic 1 : " + DTEList[0]);
+
+                HashMap&lt;Integer, Integer&gt; hashTot = new HashMap&lt;Integer, Integer&gt;();
+
+                for (int i = 0; i &lt; DTEList.length; i++) {
+                dtes[i] = DTEDocument.Factory.parse(new FileInputStream(DTEList[i]), opts).getDTE();
+                // armar hash para totalizar por tipoDTE
+                if (hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) != null) {
+                hashTot.put(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue(),
+                hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) + 1);
+                } else {
+                hashTot.put(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue(), 1);
+                }
+                }
+                SubTotDTE[] subtDtes = new SubTotDTE[hashTot.size()];
+                int i = 0;
+                for (Integer tipo : hashTot.keySet()) {
+                SubTotDTE subt = SubTotDTE.Factory.newInstance();
+                subt.setTpoDTE(new BigInteger(tipo.toString()));
+                subt.setNroDTE(new BigInteger(hashTot.get(tipo).toString()));
+                subtDtes[i] = subt;
+                i++;
+                }
+
+                car.setSubTotDTEArray(subtDtes);
+                // Le doy un formato bonito (debo hacerlo antes de firmar para no
+                // afectar los DTE internos)
+                opts = new XmlOptions();
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(4);
+                envio = EnvioDTEDocument.Factory.parse(envio.newInputStream(opts));
+
+
+                envio.getEnvioDTE().getSetDTE().setDTEArray(dtes);
+
+                FechaHoraType now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                envio.getEnvioDTE().getSetDTE().getCaratula().xsetTmstFirmaEnv(now);
+
+
+                // firmo
+                //envio.sign(pKey, x509);
+
+
+                opts = new XmlOptions();
+                opts.setCharacterEncoding("ISO-8859-1");
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+                envio.save(new File(pathResults + "ENV" + idS + "-sinfirma.xml"), opts);
+                envio.save(out, opts);
+
+                Document doc2 = XMLUtil.parseDocument(out.toByteArray());
+
+                byte[] salida = Signer.sign(doc2, "#" + idS, pKey, x509, "#" + idS,"SetDTE");
+                doc2 = XMLUtil.parseDocument(salida);
+
+                if (Signer.verify(doc2, "SetDTE")) {
+                archivoEnvio = pathResults + "ENV" + idS + ".xml"
+                Path path = Paths.get(pathResults + "ENV" + idS + ".xml");
+                Files.write(path, salida);
+                logger.warn("Envio generado OK");
+                } else {
+                archivoEnvio = pathResults + "ENV" + idS + "-mala.xml"
+                Path path = Paths.get(pathResults + "ENV" + idS + "-mala.xml");
+                Files.write(path, salida);
+                logger.warn("Error al generar envio");
+                }
+            </script>
+
+            <!-- Se guarda referencia a XML de envío en BD -->
+
+            <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="fiscalTaxDocumentField" cache="false" for-update="true" />
+            <log message="Encontrado: $fiscalTaxDocumentField" level="warn"/>
+            <set field="fiscalTaxDocumentField.envio" from="archivoEnvio" type="String"/>
+            <entity-update value-field="fiscalTaxDocumentField"/>
+
+        </actions>
+    </service>
+
     <service verb="enviaSII" noun="Documento">
         <description>
             Envio documento a partir de documento envio ya generado
@@ -1051,6 +1257,7 @@ along with this software (see the LICENSE.md file). If not, see
 
         </actions>
     </service>
+
 
     <service verb="load" noun="DTEConfig">
         <description>
@@ -1473,6 +1680,7 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="documentIds" required="true"/>
+            <parameter name="libro" />
         </in-parameters>
         <actions>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'RUT_ENVIADOR']" out-map="context"/>
@@ -1489,15 +1697,24 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="fiscalTaxDocumentTypeEnumId" value="${documentTemp[1]}"/>
 
                 <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="detalleDocumento"/>
-                <set field="idS" value="Doc${fiscalTaxDocumentId}-${detalleDocumento.folio}"/>
+                <if condition="detalleDocumento.folio">
+                    <set field="idS" value="Doc${fiscalTaxDocumentId}-${detalleDocumento.folio}"/>
+                </if>
+                <if condition="!detalleDocumento.folio">
+                    <set field="idS" from="fiscalTaxDocumentId"/>
+                </if>
                 <set field="recepS" from="detalleDocumento.receptor"/>
                 <set field="xml" from="detalleDocumento.xml"/>
 
-                <service-call name="mchile.DTEServices.generaEnvio#Documentos" in-map="[recepS:recepS, enviadorS:enviadorS, idS:idS,
+                <if condition="!libro">
+                    <service-call name="mchile.DTEServices.generaEnvio#Documentos" in-map="[recepS:recepS, enviadorS:enviadorS, idS:idS,
                         fiscalTaxDocumentId:fiscalTaxDocumentId, xml:xml, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" out-map="context"/>
-                <set field="documentoS" from="archivoEnvio"/>
-                <!-- TODO: Enviar finalmente al SII -->
-                <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:compaS, enviadorS:enviadorS , documentoS:documentoS]" out-map="context"/>
+                    <set field="documentoS" from="archivoEnvio"/>
+                    <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:compaS, enviadorS:enviadorS , documentoS:documentoS]" out-map="context"/>
+                </if>
+                <if condition="libro">
+                    <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:compaS, enviadorS:enviadorS , documentoS:xml]" out-map="context"/>
+                </if>
             </iterate>
         </actions>
     </service>
@@ -2543,11 +2760,21 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="tipo" required="true"/><!-- Compra o venta -->
-            <parameter name="tipoEnvio" default="'MENSUAL'"/><!-- MENSUAL, PARCIAL -->
-            <parameter name="periodo" default-value="'2004-01'"/><!-- Si es nulo, se toma el mes anterior -->
-            <parameter name="mensualEspecial" default-value="true"/><!-- Libro mensual o especial (requerido por SII) -->
+            <parameter name="tipoLibro" required="true"/><!-- MENSUAL-ESPECIAL-RECTIFICA-->
+            <parameter name="tipoEnvio" default="'TOTAL'"/><!-- PARCIAL-FINAL-TOTAL-AJUSTE -->
+            <parameter name="periodo" required="true"/><!-- Si es nulo, se toma el mes anterior -->
         </in-parameters>
         <actions>
+            <!-- Conversion de tipo de libro para uso con librerías de SII -->
+            <if condition="tipo == 'PvtLibroVenta'">
+                <set field="tipo" value="VENTA"/>
+            </if>
+            <if condition="tipo == 'PvtLibroCompra'">
+                <set field="tipo" value="COMPRA"/>
+            </if>
+
+            <return error="true" message="tipo: $tipo - tipoLibro: $tipoLibro - tipoEnvio: $tipoEnvio - periodo: $periodo"/>
+
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CERT']" out-map="context"/>
             <set field="certS" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PASS_CERT']" out-map="context"/>
@@ -2562,6 +2789,16 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="cafS" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMPLATE_LIBRO']" out-map="context"/>
             <set field="plantillaS" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'RUT_EMPRESA']" out-map="context"/>
+            <set field="emisorS" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'RUT_ENVIADOR']" out-map="context"/>
+            <set field="enviadorS" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'NRO_RESOL']" out-map="context"/>
+            <set field="nroResol" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'FCH_RESOL']" out-map="context"/>
+            <set field="fchResol" from="resourceValue"/>
+
+
             <set field="resultadoFirmado" from="resultS"/>
 
             <set field="tipoFactura" from="tipoFacturaS"/>
@@ -2569,17 +2806,18 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="entryDate" from="ec.user.nowTimestamp"/>
             <set field="idS" value=""/>
 
-            <!-- TODO: Valores por Default
-                envio de tipo TOTAL en Carátula
-                Resumen Período debe ir siempre
-                Detalle debe ir en caso de tipo TOTAL
-            -->
-
+            <!-- TODO: Variables no implementadas -->
+            <set field="nroSegmento" value=""/>
+            <set field="folioNotificacion" value=""/>
+            <set field="codAutRec" value=""/>
             <script>
                 import java.math.BigDecimal;
                 import java.text.SimpleDateFormat;
                 import java.util.ArrayList;
                 import java.util.Properties;
+                import java.util.Iterator;
+                import java.util.Map;
+                import java.util.Map.Entry;
                 import java.nio.file.Path;
                 import org.apache.xmlbeans.XmlCursor;
                 import org.apache.xmlbeans.XmlOptions;
@@ -2602,38 +2840,141 @@ along with this software (see the LICENSE.md file). If not, see
 
                 import cl.sii.siiDte.libroCV.LibroCompraVentaDocument;
                 import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta;
+                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.ResumenPeriodo.TotalesPeriodo;
                 import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro;
                 import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.ResumenPeriodo;
                 import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.ResumenSegmento;
+                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Caratula;
 
                 LectorFichero lectorFichero = new LectorFichero();
 
                 //String rutaLibro="/var/www/html/Centaurus/DTE/"+empID+"/BASELIBRO/"+nomDoc;
                 String rutaLibro="/home/cherrera/LibroPrueba.csv";
 
-                String resultadoSinFirma = "/tmp/LBR"+empID+".xml";
+                String resultadoSinFirma = "/tmp/LBR-temp.xml";
 
-                SimpleDateFormat dateFormat = new SimpleDateFormat("ddMMyyyy-HHmm");
-                idS  = dateFormat.format(new Date());
+                SimpleDateFormat dateFormat = new SimpleDateFormat("ddMMyyyy_HHmm");
+                idS  = "ID"+dateFormat.format(new Date());
 
 
                 ComunicadorAppClienteTXT c = new ComunicadorAppClienteTXT();
                 Validador val = new Validador();
 
                 ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasCaratulas= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
+                ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasCaratulas2= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
                 ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasTotal= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
                 ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasDetalle= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
                 ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasSegmentos= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
 
-                // Leer campos desde base de datos: Último Período (o período especificado)
-                // Armar arreglos para reusar código
-
                 // Lee y llena los campos  => Caratula se debe armar con parámetros
-                arrayLineasCaratulas = c.formatoLibroCVLineas(rutaLibro,arrayLineasCaratulas, "C");
-                arrayLineasTotal= c.formatoLibroCVLineas(rutaLibro,arrayLineasTotal, "T");
-                arrayLineasDetalle = c.formatoLibroCVLineas(rutaLibro,arrayLineasDetalle, "D");
-                arrayLineasSegmentos = c.formatoLibroCVLineas(rutaLibro,arrayLineasSegmentos, "S");
+                // CARATULA
+                //arrayLineasCaratulas = c.formatoLibroCVLineas(rutaLibro,arrayLineasCaratulas, "C");
+                arrayLineasCaratulas.add(new ArrayList&lt;String&gt;());
+                arrayLineasCaratulas.get(0).add(emisorS);
+                arrayLineasCaratulas.get(0).add(enviadorS);
+                arrayLineasCaratulas.get(0).add(periodo);
+                arrayLineasCaratulas.get(0).add(fchResol);
+                arrayLineasCaratulas.get(0).add(nroResol);
+                arrayLineasCaratulas.get(0).add(tipo);
+                arrayLineasCaratulas.get(0).add(tipoLibro);
+                arrayLineasCaratulas.get(0).add(tipoEnvio);
 
+                arrayLineasCaratulas.get(0).add(nroSegmento);         // Solo para tipo de envio PARCIAL
+                arrayLineasCaratulas.get(0).add(folioNotificacion); // Solo para envío ESPECIAL
+                arrayLineasCaratulas.get(0).add(codAutRec);         // Solo para reemplazo de libro
+
+                </script>
+
+                <if condition="tipo == 'VENTA'">
+                    <entity-find entity-name="tfpos.FiscalTaxDocument" list="dteList">
+                        <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" from="[33, 34]"/>
+                        <econdition field-name="emisor" operator="is-null"/><!-- Emitidas por la empresa -->
+                    </entity-find>
+                </if>
+                <if condition="tipo == 'COMPRA'">
+                    <entity-find entity-name="tfpos.FiscalTaxDocument" list="dteList">
+                        <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" from="[33, 34]"/>
+                        <econdition field-name="emisor" operator="is-not-null"/><!-- Recibidas por la empresa -->
+                    </entity-find>
+                </if>
+
+                <script>
+                    HashMap dteHash = new HashMap();
+                </script>
+
+                <set field="total" value="0" type="Integer"/>
+                <!-- Iteración sobre todos los DTE emitidos/recibidos en la base de datos -->
+                <iterate list="dteList" entry="dteEntry">
+
+                    <log message="DTE Tipo: ${dteEntry.fiscalTaxDocumentTypeEnumId} id: ${dteEntry.fiscalTaxDocumentId}" level="warn"/>
+                    <script>
+                        ArrayList tempArrayList = dteHash.get(dteEntry.fiscalTaxDocumentTypeEnumId);
+                        System.out.println("Arreglo ya creado: " + tempArrayList);
+                        if(tempArrayList == null ) {
+                            tempArrayList = new ArrayList&lt;String&gt;();
+                            // Se agregan los campos requeridos
+                            tempArrayList.add("1"); // setTotDoc
+                            tempArrayList.add(dteEntry.montoExento); // topMntExe OK
+                            tempArrayList.add(dteEntry.montoNeto); // totMntNeto OK
+                            tempArrayList.add(dteEntry.montoIVARecuperable); // TotMntIVA OK
+                            // TotMntTotal es TotMntNeto + TotMntIVA
+                            BigDecimal TotMntTotal = new BigDecimal(dteEntry.montoNeto);
+                            TotMntTotal = TotMntTotal.add(new BigDecimal(dteEntry.montoIVARecuperable));
+                            System.out.println("Sumando: " + dteEntry.montoNeto + " + " +dteEntry.montoIVARecuperable +"="+TotMntTotal);
+                            tempArrayList.add(TotMntTotal);
+                            dteHash.put(dteEntry.fiscalTaxDocumentTypeEnumId, tempArrayList);
+                            System.out.println("creado arreglo \n" + tempArrayList);
+                            // Último campo: 50
+                        } else {
+                            int totDocAnterior = 1 + Integer.parseInt(tempArrayList.get(0))
+                            System.out.println("total documentos: " + totDocAnterior);
+                            tempArrayList.remove(0);
+                            tempArrayList.add(0, Integer.toString(totDocAnterior))
+
+                            BigDecimal montoExentoAnterior = new BigDecimal(0)
+                            if(dteEntry.montoExento != null) {
+                                montoExentoAnterior = montoExentoAnterior.add(new BigDecimal(tempArrayList.get(1)));
+                                montoExentoAnterior = montoExentoAnterior.add(new BigDecimal(dteEntry.montoExento));
+                                System.out.println("Monto Exento sumado: " + montoExentoAnterior);
+                            }
+                            BigDecimal montoNetoAnterior = new BigDecimal(0);
+                            if(dteEntry.montoNeto != null) {
+                                montoNetoAnterior = montoNetoAnterior.add(tempArrayList.get(2));
+                                montoNetoAnterior = montoNetoAnterior.add(dteEntry.montoNeto);
+                                System.out.println("Monto neto sumado: " + montoNetoAnterior);
+                            }
+
+                            BigDecimal montoIVAAnterior = new BigDecimal(0);
+                            if(dteEntry.montoIVARecuperable != null) {
+                                montoIVAAnterior = montoIVAAnterior.add(tempArrayList.get(3));
+                                montoIVAAnterior = montoIVAAnterior.add(dteEntry.montoIVARecuperable);
+                                System.out.println("Monto IVA sumado: " + montoIVAAnterior);
+                            }
+
+                            BigDecimal totMntTotalAnterior = new BigDecimal(0);
+                            totMntTotalAnterior = totMntTotalAnterior.add(new BigDecimal(tempArrayList.get(4)));
+                            totMntTotalAnterior = totMntTotalAnterior.add(new BigDecimal(dteEntry.montoIVARecuperable));
+
+                            tempArrayList.remove(1);
+                            tempArrayList.add(1, montoExentoAnterior.toString());
+                            tempArrayList.remove(2);
+                            tempArrayList.add(2, montoNetoAnterior);
+                            tempArrayList.remove(3);
+                            tempArrayList.add(3, montoIVAAnterior);
+                            tempArrayList.remove(4);
+                            tempArrayList.add(4, totMntTotalAnterior);
+                        }
+
+                        //dteHash.put(dteEntry.fiscalTaxDocumentTypeEnumId, tempArrayList);
+
+                    </script>
+                </iterate>
+                <!-- TODO: Agregar totales sin usar libreria -->
+                <script>
+                //arrayLineasTotal= c.formatoLibroCVLineas(rutaLibro,arrayLineasTotal, "T");
+                //System.out.println("ARRAY TOTALES: " + arrayLineasTotal);
+                //arrayLineasDetalle = c.formatoLibroCVLineas(rutaLibro,arrayLineasDetalle, "D");
+                //arrayLineasSegmentos = c.formatoLibroCVLineas(rutaLibro,arrayLineasSegmentos, "S");
 
                 // Valida los campos
                 val.validaEntradaLCVCaratula(arrayLineasCaratulas);
@@ -2658,33 +2999,55 @@ along with this software (see the LICENSE.md file). If not, see
                 libCV.getLibroCompraVenta().getEnvioLibro().setID(idS);
 
                 XmlCursor cursor = libCV.newCursor();
-
                 ResumenPeriodo resumenPeriodo = envioLibro.addNewResumenPeriodo();
 
                 AgregarCamposLibros addCampos = new AgregarCamposLibros();
-
                 // Agregar CARATULA
                 addCampos.addDatosCaratula(envioLibro, arrayLineasCaratulas);
-                // Agregar TOTALES
-                addCampos.addDatosTotales(resumenPeriodo,arrayLineasTotal,c.getCantidadTotales());
 
-                System.out.println("XML:\n " + libCV.toString());
+                // Agregar TOTALES
+                //addCampos.addDatosTotales(resumenPeriodo,arrayLineasTotal,c.getCantidadTotales());
+                System.out.println("Hash a recorrer: " + dteHash);
+                    Iterator&lt;Entry&lt;String, String&gt;&gt; it = dteHash.entrySet().iterator();
+                    while (it.hasNext()) {
+                        Map.Entry&lt;String, String&gt; pair = (Map.Entry&lt;String, String&gt;) it.next();
+                        System.out.println(pair.getKey() + " = " + pair.getValue());
+                        TotalesPeriodo totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
+                        totalesPeriodo.setTpoDoc(Integer.valueOf(pair.getKey()));
+                        totalesPeriodo.setTotDoc(Integer.valueOf( pair.getValue().get(0)));
+                        totalesPeriodo.setTotMntExe( Long.parseLong(pair.getValue().get(1).toString()) );
+                        totalesPeriodo.setTotMntNeto(Long.parseLong(pair.getValue().get(2).toString()) );
+                        totalesPeriodo.setTotMntIVA( Long.parseLong(pair.getValue().get(3).toString()) );
+                        totalesPeriodo.setTotMntTotal(Long.parseLong(pair.getValue().get(4).toString())  );
+                    }
+
 
                 outPDF=lectorFichero.crearFicheroMMDDFlex(resultadoFirmado, arrayLineasCaratulas.get(0).get(3));
-                outPDF+="/"+arrayLineasCaratulas.get(0).get(5)+"_"+arrayLineasCaratulas.get(0).get(6)+"_"+arrayLineasCaratulas.get(0).get(7)+".xml";
+                outPDF+="/"+arrayLineasCaratulas.get(0).get(5)+"_"+arrayLineasCaratulas.get(0).get(6)+"_"+arrayLineasCaratulas.get(0).get(7)+"_"+idS+".xml";
+
 
                 // Agregar RESUMEN SEGMENTO
-                if (arrayLineasSegmentos.size()>0) {
-                    if (arrayLineasSegmentos.get(0).get(0)!=null) {
-                        System.out.println("Agregando segmento");
-                        ResumenSegmento resumenSegmento = envioLibro.addNewResumenSegmento();
-                        addCampos.addDatosResumenSegmento(resumenSegmento,arrayLineasSegmentos, c.getCantidadSegmentos());
-                    }
-                }
-                // Agregar DETALLES
-                addCampos.addDatosDetalle(envioLibro, arrayLineasDetalle,c.getCantidadDetallesTotales());
+                //if (arrayLineasSegmentos.size()>0) {
+                //    if (arrayLineasSegmentos.get(0).get(0)!=null) {
+                //        System.out.println("Agregando segmento");
+                //        ResumenSegmento resumenSegmento = envioLibro.addNewResumenSegmento();
+                //        addCampos.addDatosResumenSegmento(resumenSegmento,arrayLineasSegmentos, c.getCantidadSegmentos());
+                //    }
+                //}
 
+
+                // Agregar DETALLES (SOLO LIBRO DE COMPRAS)
+                if(tipo.equals("COMPRA")) {
+                    addCampos.addDatosDetalle(envioLibro, arrayLineasDetalle,c.getCantidadDetallesTotales());
+                }
+                // Debo meter el namespace porque SII no lo genera
+                //HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;();
+                //namespaces.put("", "http://www.sii.cl/SiiDte");
+                //namespaces.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
                 XmlOptions opts = new XmlOptions();
+                //opts.setLoadSubstituteNamespaces(namespaces);
+
+                //XmlOptions opts = new XmlOptions();
                 opts = new XmlOptions();
                 opts.setSavePrettyPrint();
                 opts.setSavePrettyPrintIndent(0);
@@ -2696,18 +3059,19 @@ along with this software (see the LICENSE.md file). If not, see
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                 //libCV.save(archivoEnvio, opts);
 
-                //libCV.save(new File(resultS + "LIBCV" + idS + "-sinfirma.xml"), opts);
-                //libCV.save(out, opts);
+                libCV.save(new File(resultS + "LIBCV" + idS + "-sinfirma.xml"), opts);
+                libCV.save(out, opts);
+
+                System.out.println("XML:\n " + libCV.toString())
 
                 FirmaLibro firmaLibro = new FirmaLibro();
 
                 //String mensaje=firmaLibro.firmarLibro(certS, passS, resultadoSinFirma,outPDF,empresaINT,"ENVIADO",arrayLineasCaratulas.get(0).get(5),arrayLineasCaratulas.get(0).get(2),"xmlasdas",tipoEnvioS);
-                String mensaje=firmaLibro.firmarLibro(certS, passS, resultadoSinFirma,outPDF,10,"ENVIADO",arrayLineasCaratulas.get(0).get(5),arrayLineasCaratulas.get(0).get(2),"xmlasdas",tipoEnvio);
+                String mensaje=firmaLibro.firmarLibro(certS, passS, resultS + "LIBCV" + idS + "-sinfirma.xml",outPDF,10,"ENVIADO",arrayLineasCaratulas.get(0).get(5),arrayLineasCaratulas.get(0).get(2),"xmlasdas",tipoEnvio);
 
                 System.out.println("LIBRO ENVIADO CORRECTAMENTE\n"+mensaje+"@"+outPDF);
 
             </script>
-            <!-- TODO: Enviar documento a SII -->
             <!-- Registro de DTE en base de datos y generación de PDF -->
             <set field="periodo" from="arrayLineasCaratulas.get(0).get(2)"/>
             <set field="tipoLibro" from="arrayLineasCaratulas.get(0).get(5)"/>
