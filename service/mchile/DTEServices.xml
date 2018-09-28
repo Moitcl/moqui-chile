@@ -41,7 +41,7 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
             <!-- Validación rut -->
-            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutReceptor]" out-map="context"/>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutReceptor]"/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CERT']" out-map="context"/>
             <set field="certS" from="resourceValue"/>
@@ -787,6 +787,7 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml]" out-map="context"/>
             <set field="xml" value="${resultS}FACT${folio}.xml"/>
             <set field="pdf" value="${pathPdf}FACT${folio}.pdf"/>
+            <!-- TODO: cambiar por update -->
             <service-call name="create#tfpos.FiscalTaxDocument" in-map="context" out-map="context"/>
 
         </actions>
@@ -817,9 +818,9 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Validación rut -->
             <if condition="recepS">
-                <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:recepS]" out-map="context"/>
+                <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:recepS]"/>
             </if>
-            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]" out-map="context"/>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMPLATE_ENVIO']" out-map="context"/>
             <set field="plantillaEnvio" from="resourceValue"/>
@@ -1006,7 +1007,7 @@ along with this software (see the LICENSE.md file). If not, see
 
 
             <!-- Validación rut -->
-            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]" out-map="context"/>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMPLATE_ENVIO']" out-map="context"/>
             <set field="plantillaEnvio" from="resourceValue"/>
@@ -1190,7 +1191,7 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
 
             <!-- Validación rut -->
-            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]" out-map="context"/>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CERT']" out-map="context"/>
             <set field="certS" from="resourceValue"/>
@@ -1389,16 +1390,21 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="filename" type="org.apache.commons.fileupload.FileItem"/>
-            <parameter name="rut" required="true"/>
             <parameter name="desde" required="true"/>
             <parameter name="hasta" required="true"/>
             <parameter name="fechaAutorizacion" required="true"/>
             <parameter name="dteTypeEnumId" required="true"/>
         </in-parameters>
         <actions>
+            <!-- Carga de RUT de empresa -->
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'RUT_EMPRESA']" out-map="context"/>
+            <set field="rut" value="${resourceValue}"/>
+
             <!-- Validación rut -->
-            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rut]" out-map="context"/>
-            <!-- TODO: Parseado de CAF -->
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rut]"/>
+
+            <return error="true" message="RUT: $rut"/>
+
             <set field="archivo" from="filename.getName()"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CAF']" out-map="context"/>
             <set field="fileRoot" value="${resourceValue}"/>
@@ -1412,13 +1418,27 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="updateMap" from="[filename:archivo,desde:desde, hasta:hasta, dteTypeEnumId:dteTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, ultimoFolio:desde]"/>
             <service-call name="create#MoquiChile.Caf" out-map="context" in-map="updateMap"/>
+
+            <!-- TODO: Creación de registros para reservar folios -->
+            <script><![CDATA[
+                int inicio = Integer.parseInt(desde);
+                int fin = Integer.parseInt(hasta);
+                for (int folio = inicio; folio <= fin; folio++) {]]></script>
+                    <set field="fiscalTaxDocumentId" value="$dteTypeEnumId-$folio-$rut"/>
+                    <log message="Creando: $fiscalTaxDocumentId, $dteTypeEnumId, $folio, $rut"/>
+                    <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:dteTypeEnumId, folio:folio, emisor:rut]"/>
+                    <service-call name="create#tfpos.FiscalTaxDocument" out-map="context" in-map="createMap"/>
+                <script><![CDATA[
+                }
+            ]]></script>
+
         </actions>
     </service>
 
     <service verb="get" noun="Folio">
         <description>
             Obtiene folio para el tipo de DTE especificado.
-            Cuida de no repetir el folio
+            Busca el folio más bajo disponible
         </description>
         <in-parameters>
             <parameter name="dteTypeEnumId" required="true"/>
@@ -1436,7 +1456,10 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="No existe CAF activo para DTE tipo ${dteTypeEnumId}"/>
             </if>
 
-            <script>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'RUT_EMPRESA']" out-map="context"/>
+            <set field="rutEmisor" value="${resourceValue}"/>
+
+            <!--script>
                 cafEntry.ultimoFolio = cafEntry.ultimoFolio + 1
             </script>
 
@@ -1446,11 +1469,32 @@ along with this software (see the LICENSE.md file). If not, see
 
             <if condition="cafEntry.ultimoFolio &gt; cafEntry.hasta">
                 <return message="No se pueden usar más folios de CAF actual" error="true"/>
+            </if-->
+
+            <!-- TODO: Se verifica que exista DTE tipo dteTypeEnumID con el folio requerido y rut emisor = RUT_EMPRESA
+                 Si no existe implica que no hay CAF disponible
+            -->
+            <!--script>
+                int desde = Integer.valueOf(cafEntry.desde);
+                int hasta = Integer.valueOf(cafEntry.hasta);
+            </script-->
+            <entity-find entity-name="tfpos.FiscalTaxDocument" list="reservedList">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="dteTypeEnumId"/>
+                <econdition field-name="emisor" from="rutEmisor"/>
+                <econdition field-name="folio" operator="less-equals" from="cafEntry.hasta"/>
+                <econdition field-name="folio" operator="greater-equals" from="cafEntry.desde"/>
+                <select-field field-name="folio"/>
+                <order-by field-name="folio"/>
+            </entity-find>
+
+            <if condition="!reservedList">
+                <return error="true" message="No hay folios disponibles para DTE tipo ${dteTypeEnumId} ${cafEntry.desde}-${cafEntry.hasta} - ${cafEntry.filename}"/>
             </if>
+           
+            <set field="folio" from="reservedList.first().folio"/>
 
-
-            <entity-update value-field="cafEntry"/>
-            <set field="folio" from="cafEntry.ultimoFolio"/>
+            <!--entity-update value-field="cafEntry"/-->
+            <!--set field="folio" from="cafEntry.ultimoFolio"/-->
 
             <set field="caf" from="cafEntry.filename"/>
 
@@ -1849,7 +1893,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="notasDebitoCreditoFacturasCompra"/>
         </in-parameters>
         <actions>
-            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:emisor]" out-map="context"/>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:emisor]"/>
 
             <set field="archivoPdf" from="pdf.getName()"/>
             <set field="archivoXml" from="xml.getName()"/>
@@ -2316,7 +2360,7 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <actions>
             <!-- Validación rut -->
-            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutRecibe]" out-map="context"/>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutRecibe]"/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CERT']" out-map="context"/>
             <set field="certS" from="resourceValue"/>
