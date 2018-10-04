@@ -357,10 +357,6 @@
 									<xsl:apply-templates
 											select="Referencia[NroLinRef=1]" />
 								</xsl:when>
-								<xsl:otherwise>
-									<xsl:call-template
-											name="ReferenciaVacio" />
-								</xsl:otherwise>
 							</xsl:choose>
 							<xsl:choose>
 								<xsl:when
@@ -368,21 +364,8 @@
 									<xsl:apply-templates
 											select="Referencia[NroLinRef=2]" />
 								</xsl:when>
-								<xsl:otherwise>
-									<xsl:call-template
-											name="ReferenciaVacio" />
-								</xsl:otherwise>
 							</xsl:choose>
 
-							<!--fo:table-row>
-								<fo:table-cell text-align="center"
-											   border-left-width="0.5pt" border-left-style="solid"
-											   border-right-width="0.5pt" border-right-style="solid"
-											   border-bottom-width="0.5pt" border-bottom-style="solid"
-											   number-columns-spanned="1">Prueba
-									<fo:block />
-								</fo:table-cell>
-							</fo:table-row-->
 						</fo:table-body>
 					</fo:table>
 				</fo:block>
@@ -403,7 +386,7 @@
 			top="0cm">
 			<fo:block>
 				<fo:external-graphic
-					src="url('logo-emisor.jpg')" width="30%" content-height="30%" content-width="scale-to-fit" scaling="uniform"/>
+					src="url('/home/cherrera/git/moqui-framework/runtime/component/moqui-chile/DTE/TEMPLATES/logo-emisor.jpg')" width="30%" content-height="30%" content-width="scale-to-fit" scaling="uniform"/>
 			</fo:block>
 		</fo:block-container>
 

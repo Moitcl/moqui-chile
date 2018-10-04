@@ -57,12 +57,15 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="cafS" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMPLATE_FACTURA']" out-map="context"/>
             <set field="plantillaS" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'RUT_EMPRESA']" out-map="context"/>
+            <set field="emisorS" from="resourceValue"/>
 
             <set field="tipoFactura" from="tipoFacturaS"/>
             <set field="fechaEmision"/>
 
             <!-- Obtención de folio y path de CAF -->
             <service-call name="mchile.DTEServices.get#Folio" in-map="[dteTypeEnumId:tipoFacturaS]" out-map="context"/>
+
             <set field="folioS" from="folio" type="Integer"/>
             <script>
                 cafS = cafS + caf
@@ -170,7 +173,11 @@ along with this software (see the LICENSE.md file). If not, see
                 cal.add(Calendar.DAY_OF_MONTH, 45);
                 iddoc.xsetFchCancel(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
                 // Medio y forma de pago
-                iddoc.setMedioPago(MedioPagoType.Enum.forString(medioPago));
+                if (medioPago != null ) {
+                    iddoc.setMedioPago(MedioPagoType.Enum.forString(medioPago));
+                } else {
+                    iddoc.setMedioPago(MedioPagoType.Enum.forString("CH"));
+                }
                 iddoc.setFmaPago(BigInteger.valueOf(frmPago));
 
                 // Receptor
@@ -185,7 +192,6 @@ along with this software (see the LICENSE.md file). If not, see
 
 
             </script>
-
             <!-- Campos para elaboración de libro -->
             <set field="montoNeto" value="0"/>
             <set field="montoExento" value="0"/>
@@ -225,6 +231,7 @@ along with this software (see the LICENSE.md file). If not, see
                     listSize = referenciaList.size()
                     Referencia[] ref = new Referencia[listSize]
                 </script>
+
                 <iterate list="referenciaList" entry="referenciaEntry">
                     <set field="folioRef" from="referenciaEntry.folio" type="Integer"/>
                     <set field="codRef" from="referenciaEntry.codigoReferenciaEnumId" type="Integer"/>
@@ -301,14 +308,17 @@ along with this software (see the LICENSE.md file). If not, see
                 <script>
                     i = 0
                     Referencia[] ref = null;
-                    if(referenciaList.size != 0) {
+                    if(referenciaList.size() != 0) {
                         listSize = referenciaList.size();
-                        //ref = new Referencia[listSize];
+                        ref = new Referencia[listSize];
                     } else {
                         listSize = 0;
                     }
                     //Referencia[] ref = new Referencia[listSize]
+
                 </script>
+
+
                 <iterate list="referenciaList" entry="referenciaEntry">
                     <log message="Agregando referencia $referenciaEntry" level="warn"/>
                     <set field="folioRef" from="referenciaEntry.folio" type="Integer"/>
@@ -319,7 +329,7 @@ along with this software (see the LICENSE.md file). If not, see
                         ref[i] = Referencia.Factory.newInstance();
                         ref[i].setNroLinRef(i+1);
                         ref[i].setTpoDocRef(referenciaEntry.dteTypeEnumId);
-                        ref[i].setIndGlobal(0);
+                        //ref[i].setIndGlobal(0);
                         ref[i].setRUTOtr(rutReceptor);
                         SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
                         Date date = formatter.parse(fechaRef);
@@ -331,11 +341,9 @@ along with this software (see the LICENSE.md file). If not, see
                         i = i + 1
                     </script>
                 </iterate>
-                <script>
-                    doc.getDTE().getDocumento().setReferenciaArray(ref);
-                </script>
 
                 <script>
+                    doc.getDTE().getDocumento().setReferenciaArray(ref);
                     doc.getDTE().getDocumento().setDetalleArray(det);
                     // Totales
                     Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
@@ -344,7 +352,6 @@ along with this software (see the LICENSE.md file). If not, see
 
                 </script>
             </if>
-
             <!-- TODO: Nota de Crédito Electrónica -->
             <if condition="tipoFactura == 61">
                 <script>
@@ -353,7 +360,7 @@ along with this software (see the LICENSE.md file). If not, see
                     Detalle[] det = new Detalle[listSize]
                 </script>
                 <set field="totalInvoice" value="0" type="Integer"/>
-
+                <log message="Creando DTE tipo 61" level="warn"/>
                 <iterate list="detailList" entry="detailEntry">
                     <log message="******* Iterando invoice $detailEntry" level="warn"/>
                     <set field="nombreItem" from="detailEntry.description"/>
@@ -364,6 +371,7 @@ along with this software (see the LICENSE.md file). If not, see
                     </if>
                     <set field="priceItem" from="detailEntry.responseAmount" type="Integer"/>
                     <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+                    <!-- TODO: Revisar Medio Pago -->
                     <script>
                         // Agrego detalles
                         det[i] = Detalle.Factory.newInstance();
@@ -372,23 +380,38 @@ along with this software (see the LICENSE.md file). If not, see
                         det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
                         det[i].setPrcItem(BigDecimal.valueOf(priceItem));
                         det[i].setMontoItem( totalItem );
+                        //det[i].setMedioPago(MedioPagoType.Enum.forString(medioPago));
                         totalInvoice = totalInvoice + totalItem
-
                         i = i + 1
                     </script>
                 </iterate>
+                <!-- TODO: Monto Exento => Nota Crédito de Factura Exenta -->
+                <!-- TODO: Buscar primero referencias -->
                 <script>
                     doc.getDTE().getDocumento().setDetalleArray(det);
                     // Totales
                     Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
-                    tot.setMntExe(totalInvoice);
-                    tot.setMntTotal(totalInvoice);
 
+                    long montoExe = 0;
+                    long montoNeto = Long.valueOf(totalInvoice)
+                    long montoIva = montoNeto * 0.19
+                    long montoTotal = montoIva + montoNeto
+
+                    tot.setTasaIVA(BigDecimal.valueOf(19));
+                    tot.setMntExe(montoExe);
+                    tot.setIVA(montoIva);
+                    tot.setMntNeto(montoNeto);
+                    tot.setMntTotal(montoTotal);
                     i = 0
-                    listSize = referenciaList.size()
-                    Referencia[] ref = new Referencia[listSize]
+                    Referencia[] ref = null;
+                    if(referenciaList.size() != 0) {
+                        listSize = referenciaList.size();
+                        ref = new Referencia[listSize];
+                    } else {
+                        listSize = 0;
+                    }
                 </script>
-
+                <!-- TODO: Si la referencia es tipo fe de erratas, Monto Item puede ser 0 -->
                 <iterate list="referenciaList" entry="referenciaEntry">
                     <set field="folioRef" from="referenciaEntry.folio" type="Integer"/>
                     <set field="codRef" from="referenciaEntry.codigoReferenciaEnumId" type="Integer"/>
@@ -398,7 +421,8 @@ along with this software (see the LICENSE.md file). If not, see
                         ref[i] = Referencia.Factory.newInstance();
                         ref[i].setNroLinRef(i+1);
                         ref[i].setTpoDocRef(referenciaEntry.dteTypeEnumId);
-                        ref[i].setIndGlobal(0);
+                        // Valor Opcional
+                        //ref[i].setIndGlobal(Enum.forString("0"));
                         ref[i].setRUTOtr(rutReceptor);
 
                         SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
@@ -406,8 +430,8 @@ along with this software (see the LICENSE.md file). If not, see
                         ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
                         ref[i].setCodRef(codRef);
                         ref[i].setRazonRef(referenciaEntry.razonReferencia);
+                        ref[i].setRazonRef("na");
                         ref[i].setFolioRef(referenciaEntry.folio.toString());
-
                         i = i + 1
                     </script>
                 </iterate>
@@ -415,7 +439,6 @@ along with this software (see the LICENSE.md file). If not, see
                     doc.getDTE().getDocumento().setReferenciaArray(ref);
                 </script>
             </if>
-
             <!-- TODO: Nota de Débito Electrónica -->
             <if condition="tipoFactura == 56">
                 <script>
@@ -429,7 +452,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <!-- TODO: detailList:[01-1-100.000-102193, 02-1-100.000-11092] -->
 
                 <iterate list="detailList" entry="detailEntry">
-
+                    <log message="******* Iterando invoice $detailEntry" level="warn"/>
                     <set field="detailTemp" from="detailEntry instanceof List ? detailEntry : detailEntry.split('-') as List"/>
                     <set field="itemNumber" value="${detailTemp[0]}"/>
                     <set field="qtyItem" value="${detailTemp[1]}" type="Integer"/>
@@ -713,7 +736,6 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
 
             <script>
-
                 // Timbro
 
                 doc.getDTE().timbrar(caf.getCAF(), caf.getPrivateKey(null));
@@ -735,7 +757,6 @@ along with this software (see the LICENSE.md file). If not, see
                 opts.setSaveImplicitNamespaces(namespaces);
 
                 String uri = "";
-
                 FechaHoraType now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
 
                 if (doc.getDTE().isSetDocumento()) {
@@ -754,42 +775,45 @@ along with this software (see the LICENSE.md file). If not, see
                 logger.warn("URI: " + uri)
 
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
-                doc.save(new File(resultS + "FACT" + folio + "-sinfirma.xml"), opts);
+                doc.save(new File(resultS + "DTE" + tipoFactura + "-" + folio + "-sinfirma.xml"), opts);
                 doc.save(out, opts);
-
                 Document doc2 = XMLUtil.parseDocument(out.toByteArray());
-
                 byte[] salida = Signer.sign(doc2, uri, key, cert, uri, "Documento");
                 doc2 = XMLUtil.parseDocument(salida);
 
                 if (Signer.verify(doc2, "Documento")) {
-                    Path path = Paths.get(resultS + "FACT" + folio + ".xml");
+                    Path path = Paths.get(resultS + "DTE" + tipoFactura + "-" + folio + ".xml");
                     Files.write(path, salida);
                     logger.warn("Factura "+path+" folio "+folio+" generada OK");
                 } else {
-                    Path path = Paths.get(resultS + "FACT" + folio + "-mala.xml");
+                    Path path = Paths.get(resultS + "DTE" + tipoFactura + "-" + folio + "-mala.xml");
                     Files.write(path, salida);
                     logger.warn("Error al generar factura folio "+folio);
                 }
             </script>
             <!-- Registro de DTE en base de datos y generación de PDF -->
-            <set field="fiscalTaxDocumentId" from="tipoFacturaS+folioS"/>
             <set field="fiscalTaxDocumentTypeEnumId" from="tipoFacturaS"/>
-            <set field="amount" from="totalInvoice"/>
-            <set field="folio" from="folioS"/>
-            <set field="xml" value="FACT${folio}.xml"/>
-            <set field="pdf" value="FACT${folio}.pdf"/>
-            <set field="receptor" from="rutReceptor"/>
-            <set field="montoNeto" from="montoNeto"/>
-            <set field="montoExento" from="montoExento"/>
-            <set field="montoIVARecuperable" from="montoIVARecuperable"/>
-            <set field="fechaEmision" from="fechaEmision"/>
+            <set field="xml" value="${resultS}DTE${tipoFactura}-${folio}.xml"/>
+            <set field="pdf" value="${pathPdf}DTE${tipoFactura}-${folio}.pdf"/>
             <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml]" out-map="context"/>
-            <set field="xml" value="${resultS}FACT${folio}.xml"/>
-            <set field="pdf" value="${pathPdf}FACT${folio}.pdf"/>
             <!-- TODO: cambiar por update -->
-            <service-call name="create#tfpos.FiscalTaxDocument" in-map="context" out-map="context"/>
+            <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="dteField" for-update="true">
+                <field-map field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <field-map field-name="folio" from="folioS"/>
+            </entity-find-one>
 
+            <set field="dteField.amount" from="totalInvoice"/>
+            <set field="dteField.emisor" from="emisorS"/>
+            <set field="dteField.xml" from="xml"/>
+            <set field="dteField.pdf" from="pdf"/>
+            <set field="dteField.receptor" from="rutReceptor"/>
+            <set field="dteField.montoNeto" from="montoNeto" type="BigDecimal"/>
+            <set field="dteField.montoExento" from="montoExento" type="BigDecimal"/>
+            <set field="dteField.invoiceId" from="invoiceId"/>
+            <set field="dteField.montoIVARecuperable" from="montoIVARecuperable" type="BigDecimal"/>
+            <set field="dteField.fechaEmision" from="fechaEmision"/>
+
+            <entity-update value-field="dteField"/>
         </actions>
     </service>
 
@@ -1251,9 +1275,7 @@ along with this software (see the LICENSE.md file). If not, see
                     logger.warn("Error "+ statusXML + " al enviar DTE");
                 }
 
-                logger.warn(textXML);
                 logger.warn("-----------------");
-
             </script>
 
         </actions>
@@ -1372,8 +1394,8 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.nic.dte.util.Utilities;
                 import cl.sii.siiDte.RECEPCIONDTEDocument;
 
-                pdf = pathPdf + pdf;
-                dte = pathResults + dte;
+                //pdf = pathPdf + pdf;
+                //dte = pathResults + dte;
 
                 Utilities.generatePDF(new FileInputStream(dte), new FileInputStream(template), new FileOutputStream(pdf));
 
@@ -1401,9 +1423,8 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="rut" value="${resourceValue}"/>
 
             <!-- Validación rut -->
-            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rut]"/>
-
-            <return error="true" message="RUT: $rut"/>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rut]" out-map="salidaRut"/>
+            <set field="rutNoDv" from="salidaRut.rut"/>
 
             <set field="archivo" from="filename.getName()"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CAF']" out-map="context"/>
@@ -1424,7 +1445,7 @@ along with this software (see the LICENSE.md file). If not, see
                 int inicio = Integer.parseInt(desde);
                 int fin = Integer.parseInt(hasta);
                 for (int folio = inicio; folio <= fin; folio++) {]]></script>
-                    <set field="fiscalTaxDocumentId" value="$dteTypeEnumId-$folio-$rut"/>
+                    <set field="fiscalTaxDocumentId" value="$dteTypeEnumId$folio$rutNoDv"/>
                     <log message="Creando: $fiscalTaxDocumentId, $dteTypeEnumId, $folio, $rut"/>
                     <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:dteTypeEnumId, folio:folio, emisor:rut]"/>
                     <service-call name="create#tfpos.FiscalTaxDocument" out-map="context" in-map="createMap"/>
@@ -1483,9 +1504,11 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="emisor" from="rutEmisor"/>
                 <econdition field-name="folio" operator="less-equals" from="cafEntry.hasta"/>
                 <econdition field-name="folio" operator="greater-equals" from="cafEntry.desde"/>
+                <econdition field-name="xml" operator="is-null"/>
                 <select-field field-name="folio"/>
                 <order-by field-name="folio"/>
             </entity-find>
+
 
             <if condition="!reservedList">
                 <return error="true" message="No hay folios disponibles para DTE tipo ${dteTypeEnumId} ${cafEntry.desde}-${cafEntry.hasta} - ${cafEntry.filename}"/>
@@ -2096,7 +2119,6 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="items" required="true"/>
         </in-parameters>
         <actions>
-
             <!-- TODO: Datos para nota de débito -->
             <!-- TODO: Nota de Débito lleva IVA si modifica montos -->
 
@@ -2105,22 +2127,13 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Con detalle cambiado, generar la nota de débito con referencia a factura -->
 
             <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
-            <!--
-               vendorPartyId
-               customerPartyId
-               postalContactMechId
-               productId
-               orderId
-               returnQuantity
-               responseAmount
-            -->
 
-            <!-- Recuperación de referencias para obtener folio -->
-            <entity-find entity-name="MoquiChile.ReferenciaFactura" list="referenciaList">
-                <econdition field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
-            </entity-find>
+            <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="factField"/>
 
-            <set field="folioFact" from="referenciaList.first.folio"/>
+            <if condition="!factField">
+                <return error="true" message="No se encontró folio para factura ${fiscalTaxDocumentId}"/>
+            </if>
+            <set field="folioFact" from="factField.folio"/>
 
             <!-- TODO: Items a modificar a partir de lista de parámetros en referenciaList -->
             <set field="itemList" from="items instanceof List ? items : items.split(',') as List"/>
@@ -2139,10 +2152,9 @@ along with this software (see the LICENSE.md file). If not, see
 
             <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:partyId]" out-map="context"/>
             <if condition="!emailAddress">
-                <return error="true" message="Receptor no tiene dirección de correo"/>
+                <return error="true" message="Receptor no tiene dirección de correo party: $partyId"/>
             </if>
             <set field="username" from="emailAddress"/>
-
 
             <!-- rut receptor -->
             <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
@@ -2154,20 +2166,32 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="rutReceptor" from="partyField.idValue"/>
 
-            <!-- Datos para encontrar contacto -->
-
+            <service-call name="mantle.party.ContactServices.get#PartyContactInfoList" out-map="contactOut"
+            in-map="[partyId:partyId, getAll:true]"/>
             <set field="contactMechId"/>
+            <iterate list="contactOut.postalAddressList" entry="postalAddList">
+                <log message="==> $postalAddList.postalContactMechId"/>
+                <log message="==> $postalAddList.postalContactMechPurposeId"/>
+                <if condition="postalAddList.postalContactMechPurposeId == 'PostalTax'">
+                    <set field="contactMechId" from="postalAddList.postalContactMechId"/>
+                    <log message="Obteniendo dirección postal para impuestos: $contactMechId"/>
+                </if>
+            </iterate>
 
-            <entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
+            <!-- Datos para encontrar contacto -->
+            <!--set field="contactMechId"/-->
+            <!-- TODO: Se requiere que contactMechId sea el correcto -->
+            <!--entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
                 <field-map field-name="partyId" from="partyId"/>
                 <field-map field-name="contactMechPurposeId" value="PostalTax"/>
-            </entity-find-one>
+            </entity-find-one-->
 
-            <if condition="!contactMechField">
+            <!--if condition="!contactMechField"-->
+            <if condition="!contactMechId">
                 <return error="true" message="Receptor no tiene dirección para impuestos"/>
             </if>
 
-            <set field="contactMechId" from="contactMechField.contactMechId"/>
+            <!--set field="contactMechId" from="contactMechField.contactMechId"/-->
 
             <!-- Datos de contacto -->
             <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressField"/>
@@ -2179,6 +2203,7 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- ID Contacto receptor -->
             <set field="receptorContactId" from="contactPostalAddressField.telecomContactMechId"/>
 
+
             <entity-find-one entity-name="mantle.party.Party" value-field="partyField"/>
             <if condition="!partyField">
                 <return error="true" message="Receptor no existe"/>
@@ -2188,7 +2213,6 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="rznSocReceptor" value=""/>
             <set field="giroReceptor" value="Sin Giro"/>
-
 
             <if condition="partyTypeEnumId == 'PtyOrganization'">
                 <!-- Organizacion -->
