@@ -444,9 +444,9 @@
 					<xsl:when test="$tipo=33">
 						FACTURA ELECTRONICA
 					</xsl:when>
-                    <xsl:when test="$tipo=34">
-                        FACTURA ELECTRONICA EXENTA
-                    </xsl:when>
+		                        <xsl:when test="$tipo=34">
+                                                FACTURA ELECTRONICA EXENTA
+		                        </xsl:when>
 					<xsl:when test="$tipo=52">
 						GUIA DE DESPACHO ELECTRONICA
 					</xsl:when>
@@ -456,6 +456,12 @@
 					<xsl:when test="$tipo=61">
 						NOTA DE CREDITO ELECTRONICA
 					</xsl:when>
+                                        <xsl:when test="$tipo=110">
+                                                FACTURA DE EXPORTACION ELECTRONICA
+                                        </xsl:when>
+					<xsl:when test="$tipo=112">
+                                                NOTA DE CREDITO EXPORTACION ELECTRONICA
+                                        </xsl:when>
 					<xsl:otherwise>
 						CORREGIR EN TEMPLATE XSL
 					</xsl:otherwise>
