@@ -1981,8 +1981,8 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="nroDocumento" required="true"/>
-            <parameter name="xml" type="org.apache.commons.fileupload.FileItem" required="false"/>
-            <parameter name="pdf" type="org.apache.commons.fileupload.FileItem" required="false"/>
+            <parameter name="xml" type="org.apache.commons.fileupload.FileItem" required="true"/>
+            <parameter name="pdf" type="org.apache.commons.fileupload.FileItem" required="true"/>
             <parameter name="emisor" required="true"/>
             <parameter name="emailEmisor" required="true"/>
             <parameter name="amount" required="true"/>
@@ -2018,6 +2018,15 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="contentLocationPdf" value="${fileRoot}/${archivoPdf}"/>
             <set field="contentLocationXml" value="${fileRoot}/${archivoXml}"/>
 
+            <!-- TODO: Si archivoXml es null implica que es un documento en papel -->
+
+            <if condition="!archivoXml">
+                <return error="true" message="Entrada a error"/>
+            </if>
+
+            <return error="true" message="=> $archivoXml"/>
+
+
             <set field="docRrPdf" from="ec.resource.getLocationReference(contentLocationPdf)"/>
             <set field="docRrXml" from="ec.resource.getLocationReference(contentLocationXml)"/>
             <script>
@@ -2036,6 +2045,170 @@ along with this software (see the LICENSE.md file). If not, see
                                          montoNetoActivoFijo:montoNetoActivoFijo, montoIVAActivoFijo:montoIVAActivoFijo, montoIVANoRetenido:montoIVANoRetenido, codigoSucursal:codigoSucursal,
                                          notasDebitoCreditoFacturasCompra:notasDebitoCreditoFacturasCompra]"/>
             <service-call name="create#tfpos.FiscalTaxDocument" out-map="context" in-map="updateMap"/>
+        </actions>
+    </service>
+
+    <service verb="load" noun="Dt">
+        <description>
+            Carga documento tributario en papel recibido de tercero
+        </description>
+        <in-parameters>
+            <parameter name="nroDocumento" required="true"/>
+            <parameter name="pdf" type="org.apache.commons.fileupload.FileItem" required="true"/>
+            <parameter name="emisor" required="true"/>
+            <parameter name="emailEmisor" required="true"/>
+            <parameter name="amount" required="true"/>
+            <parameter name="dteTypeEnumId" required="true"/>
+            <parameter name="montoNeto"/>
+            <parameter name="tasaImpuesto"/>
+            <parameter name="tipoImpuesto"/>
+            <parameter name="razonSocial"/>
+            <parameter name="fechaEmision"/>
+            <parameter name="documentoAnulado"/>
+            <parameter name="montoExento"/>
+            <parameter name="montoIVARecuperable"/>
+            <parameter name="codigoIVANoRecuperable"/>
+            <parameter name="montoIVANoRecuperable"/>
+            <parameter name="montoIVAUsoComun"/>
+            <parameter name="codigoOtroImpuestoORetencion"/>
+            <parameter name="tasaOtroImpuestoORetencion"/>
+            <parameter name="montoOtroImpuestoORetencionConCredito"/>
+            <parameter name="montoOtroImpuestoORetencionSinCredito"/>
+            <parameter name="montoNetoActivoFijo"/>
+            <parameter name="montoIVAActivoFijo"/>
+            <parameter name="montoIVANoRetenido"/>
+            <parameter name="codigoSucursal"/>
+            <parameter name="notasDebitoCreditoFacturasCompra"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:emisor]"/>
+
+            <set field="archivoPdf" from="pdf.getName()"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_RECIBIDAS']" out-map="context"/>
+            <set field="fileRoot" value="${resourceValue}"/>
+            <set field="contentLocationPdf" value="${fileRoot}/${archivoPdf}"/>
+
+            <return error="true" message="=> $archivoXml"/>
+
+
+            <set field="docRrPdf" from="ec.resource.getLocationReference(contentLocationPdf)"/>
+            <script>
+                fileStream = pdf.getInputStream()
+                try { docRrPdf.putStream(fileStream) } finally { fileStream.close() }
+
+            </script>
+
+            <set field="updateMap" from="[fiscalTaxDocumentId:nroDocumento, pdf:contentLocationPdf,fiscalTaxDocumentTypeEnumId:dteTypeEnumId, emisor:emisor, emailEmisor:emailEmisor, amount:amount,
+                                         montoNeto:montoNeto, tasaImpuesto:tasaImpuesto, tipoImpuesto:tipoImpuesto, razonSocial:razonSocial, fechaEmision:fechaEmision, documentoAnulado:documentoAnulado,
+                                         montoExento:montoExento, montoIVARecuperable:montoIVARecuperable, codigoIVANoRecuperable:codigoIVANoRecuperable, montoIVANoRecuperable:montoIVANoRecuperable,
+                                         montoIVAUsoComun:montoIVAUsoComun, codigoOtroImpuestoORetencion:codigoOtroImpuestoORetencion, tasaOtroImpuestoORetencion:tasaOtroImpuestoORetencion,
+                                         montoOtroImpuestoORetencionConCredito:montoOtroImpuestoORetencionConCredito, montoOtroImpuestoORetencionSinCredito:montoOtroImpuestoORetencionSinCredito,
+                                         montoNetoActivoFijo:montoNetoActivoFijo, montoIVAActivoFijo:montoIVAActivoFijo, montoIVANoRetenido:montoIVANoRetenido, codigoSucursal:codigoSucursal,
+                                         notasDebitoCreditoFacturasCompra:notasDebitoCreditoFacturasCompra]"/>
+            <service-call name="create#tfpos.FiscalTaxDocument" out-map="context" in-map="updateMap"/>
+
+            <!-- TODO: entradas en asientos contables -->
+
+            <!-- Factura -->
+            <if condition="dteTypeEnumId.equals('30')">
+                <!--
+                Registro de valor neto en gasto 4.... D
+                            Si es activo fijo:  1.... D
+
+                Registro de IVA Crédito Fiscal  1-6-02-01-000 D
+
+                Registro proveedores nacional   2-2-01-01-000 C
+
+                -->
+                <!-- Accounting Transaction para factura de compra -->
+                <!--service-call name="create#mantle.ledger.transaction.AcctgTrans" out-map="context"/>
+                <entity-find-one entity-name="mantle.ledger.transaction.AcctgTrans" value-field="newacctgtrans" for-update="true"/>
+                <set field="newacctgtrans.acctgTransTypeEnumId" value="AttIncomingPayment"/>
+                <set field="newacctgtrans.organizationPartyId" value="${partyId}"/>
+                <set field="newacctgtrans.transactionDate" from="ec.user.nowTimestamp" type="Date"/>
+                <set field="newacctgtrans.glFiscalTypeEnumId" value="GLFT_ACTUAL"/>
+                <set field="newacctgtrans.amountUomId" value="CLP"/>
+                <set field="newacctgtrans.isPosted" value="Y"/>
+                <entity-update value-field="newacctgtrans"/-->
+
+                <!-- Accounting Transaction Entry para gasto en 4-1-00-00-000 si no es activo fijo-->
+                <!--set field="acctgTransId" from="newacctgtrans.acctgTransId"/>
+                <service-call name="create#mantle.ledger.transaction.AcctgTransEntry" in-map="context"/>
+                <entity-find-one entity-name="mantle.ledger.transaction.AcctgTransEntry" value-field="newacctgtransentry" for-update="true"/>
+                <set field="newacctgtransentry.debitCreditFlag" value="D"/>
+                <set field="newacctgtransentry.isSummary" value="N"/>
+                <set field="newacctgtransentry.amount" from="montoNeto"/>
+                <set field="newacctgtransentry.description" value="Factura de Compra"/>
+                <set field="newacctgtransentry.glAccountId" value="410000000"/>
+                <set field="newacctgtransentry.reconcileStatusId" value="AterNot"/>
+                <entity-update value-field="newacctgtransentry"/-->
+
+                <!-- TODO: Lo mismo pero en caso de activo fijo -->
+
+                <!-- Crédito Proveedores Nacionales -->
+                <!--set field="acctgTransId" from="newacctgtrans.acctgTransId"/>
+                <service-call name="create#mantle.ledger.transaction.AcctgTransEntry" in-map="context"/>
+                <entity-find-one entity-name="mantle.ledger.transaction.AcctgTransEntry" value-field="newacctgtransentry" for-update="true"/>
+                <set field="newacctgtransentry.debitCreditFlag" value="C"/>
+                <set field="newacctgtransentry.isSummary" value="N"/>
+                <set field="newacctgtransentry.amount" from="montoNeto"/>
+                <set field="newacctgtransentry.description" value="Pago Factura Proveedor Nacional"/>
+                <set field="newacctgtransentry.glAccountId" value="220101000"/>
+                <set field="newacctgtransentry.reconcileStatusId" value="AterNot"/>
+                <entity-update value-field="newacctgtransentry"/-->
+
+            </if>
+
+            <!-- Nota de Crédito -->
+            <if condition="dteTypeEnumId.equals('60')">
+                <!--
+                Registro de valor neto en gasto 4.... C
+                            Si es activo fijo:  1.... C
+
+                Registro de IVA Crédito Fiscal  1-6-02-01-000 C
+
+                Registro proveedores nacional   2-2-01-01-000 D
+
+                -->
+            </if>
+
+            <!-- Nota Débito -->
+            <if condition="dteTypeEnumId.equals('30')">
+                <!--
+                Registro de valor neto en gasto 4.... D
+                            Si es activo fijo:  1.... D
+
+                Registro de IVA Crédito Fiscal  1-6-02-01-000 D
+
+                Registro proveedores nacional   2-2-01-01-000 C
+
+                -->
+            </if>
+
+
+            <!-- Accounting Transaction para credito de cheques en cartera (GL 130102000) -->
+            <service-call name="create#mantle.ledger.transaction.AcctgTrans" out-map="context"/>
+            <entity-find-one entity-name="mantle.ledger.transaction.AcctgTrans" value-field="newacctgtrans" for-update="true"/>
+            <set field="newacctgtrans.acctgTransTypeEnumId" value="AttIncomingPayment"/>
+            <set field="newacctgtrans.organizationPartyId" value="${partyId}"/>
+            <set field="newacctgtrans.transactionDate" from="ec.user.nowTimestamp" type="Date"/>
+            <set field="newacctgtrans.glFiscalTypeEnumId" value="GLFT_ACTUAL"/>
+            <set field="newacctgtrans.amountUomId" value="CLP"/>
+            <set field="newacctgtrans.isPosted" value="Y"/>
+            <entity-update value-field="newacctgtrans"/>
+
+            <!-- Accounting Transaction Entry para referenciar GL -->
+            <set field="acctgTransId" from="newacctgtrans.acctgTransId"/>
+            <service-call name="create#mantle.ledger.transaction.AcctgTransEntry" in-map="context"/>
+            <entity-find-one entity-name="mantle.ledger.transaction.AcctgTransEntry" value-field="newacctgtransentry" for-update="true"/>
+            <set field="newacctgtransentry.debitCreditFlag" value="C"/>
+            <set field="newacctgtransentry.isSummary" value="N"/>
+            <set field="newacctgtransentry.amount" from="depositEntry.amount"/>
+            <set field="newacctgtransentry.description" value="Crédito por Cheque Depositado"/>
+            <set field="newacctgtransentry.glAccountId" value="130102000"/>
+            <set field="newacctgtransentry.reconcileStatusId" value="AterNot"/>
+            <entity-update value-field="newacctgtransentry"/>
+
         </actions>
     </service>
 
