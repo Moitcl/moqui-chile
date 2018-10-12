@@ -49,21 +49,24 @@
 
         <return error="true" message="Folio: $folio"/-->
 
-        <entity-find entity-name="tfpos.InvoiceAndFiscalTaxDocument" list="invoiceList">
+        <!--entity-find entity-name="tfpos.InvoiceAndFiscalTaxDocument" list="invoiceList"-->
+        <entity-find entity-name="mantle.account.invoice.Invoice" list="invoiceList">
             <search-form-inputs default-order-by="-forInvoiceId"/>
             <econdition field-name="invoiceTypeEnumId" value="InvoiceSales"/>
             <!-- TODO: Revisar condiciones para no listar lo ya facturado -->
             <!--econdition field-name="statusId" value="PmntConfirmed"/-->
             <econditions combine="or">
+                <econdition field-name="statusId" value="InvoiceInProcess"/>
                 <econdition field-name="statusId" value="PmntConfirmed"/>
                 <econdition field-name="statusId" value="PmntReceived"/>
                 <econdition field-name="statusId" value="PmntAuthorized"/>
                 <econdition field-name="statusId" value="PmntDelivered"/>
             </econditions>
-            <econdition field-name="folio" operator="is-null"/>
-            <econdition field-name="fromPartyId" operator="not-equals" value="cvsport"/>
-            <econdition field-name="fromPartyId" operator="not-equals" value="cliente0"/>
+            <!--econdition field-name="folio" operator="is-null"/-->
+            <!--econdition field-name="fromPartyId" operator="not-equals" value="cvsport"/>
+            <econdition field-name="fromPartyId" operator="not-equals" value="cliente0"/-->
         </entity-find>
+        <log message="$invoiceList" level="warn"/>
 
     </actions>
     <widgets>
@@ -123,36 +126,62 @@
                     <set field="contactoReceptor" from="rznSocReceptor"/>
                 </if>
 
+                <!-- Receptor toPartyId -->
+                <entity-find-one entity-name="mantle.party.Party" value-field="partyField">
+                    <field-map field-name="partyId" from="toPartyId"/>
+                </entity-find-one>
+                <set field="partyTypeEnumId" from="partyField.partyTypeEnumId"/>
+
+                <if condition="partyTypeEnumId == 'PtyOrganization'">
+                    <!-- Organizacion -->
+                    <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField">
+                        <field-map field-name="partyId" from="toPartyId"/>
+                    </entity-find-one>
+                    <set field="receptor" from="organizationField.organizationName"/>
+                </if>
+                <if condition="partyTypeEnumId == 'PtyPerson'">
+                    <!-- Persona Natural -->
+                    <entity-find-one entity-name="mantle.party.Person" value-field="personField">
+                        <field-map field-name="partyId" from="toPartyId"/>
+                    </entity-find-one>
+                    <if condition="!personField">
+                        <return error="true" message="No existe persona para facturar"/>
+                    </if>
+
+                    <set field="rznSocReceptor" from="personField.firstName"/>
+                    <script>
+                        rznSocReceptor = rznSocReceptor + " " + personField.lastName
+                    </script>
+                    <set field="contactoReceptor" from="rznSocReceptor"/>
+                </if>
+
             </row-actions>
 
             <field name="invoiceId">
                 <header-field title="Invoice ID" show-order-by="true"><text-find/></header-field>
-                <!--default-field><link url="editInvoice" text="${invoiceId}" link-type="anchor"/-->
-                <!--default-field><link url="//vapps/PopcAdmin/Accounting/Invoice/EditInvoice" text="${invoiceId}" link-type="anchor"/-->
                 <default-field><link url="editInvoice" text="${invoiceId}" link-type="anchor" parameter-map="[invoiceId:invoiceId]"/>
                 </default-field>
             </field>
-
             <field name="paymentId">
                 <header-field title="Payment ID" show-order-by="true"><text-find/></header-field>
                 <default-field><display/></default-field>
             </field>
             <field name="rznSocReceptor">
-                <header-field title="Customer" show-order-by="true"><text-find/></header-field>
+                <header-field title="Emisor" show-order-by="true"><text-find/></header-field>
                 <default-field><display/></default-field>
             </field>
-            <field name="username">
+            <field name="receptor">
+                <header-field title="Receptor" show-order-by="true"><text-find/></header-field>
+                <default-field><display/></default-field>
+            </field>
+            <!--field name="username">
                 <header-field show-order-by="true"><text-line size="20"/></header-field>
                 <conditional-field condition="username != null">
                     <display text="${username}"/>
                 </conditional-field>
-            </field>
-            <field name="orderId">
-                <header-field title="Order ID" show-order-by="true"><text-find/></header-field>
-                <default-field><display/></default-field>
-            </field>
-            <field name="effectiveDate">
-                <header-field title="placedDate" show-order-by="true"><text-find/></header-field>
+            </field-->
+            <field name="invoiceDate">
+                <header-field title="Fecha" show-order-by="true"><text-find/></header-field>
                 <default-field><display/></default-field>
             </field>
             <field name="invoiceTotal">
@@ -163,7 +192,7 @@
 
             <field name="addReferenciasForm">
                 <default-field title="">
-                    <container-dialog id="AgregarReferenciaDialog" button-text="Agr. Referencia">
+                    <!--container-dialog id="AgregarReferenciaDialog" button-text="Agr. Referencia">
                         <form-single name="AgregarReferenciaForm" transition="agregarReferenciaFact">
                             <field name="invoiceId"><default-field><hidden/></default-field>
                             </field>
@@ -199,11 +228,11 @@
                             </field>
                             <field name="submitButton"><default-field title="Añadir"><submit/></default-field></field>
                         </form-single>
-                    </container-dialog>
-                    <link url="VerReferenciasFact" text="Ver Referencias" url-type="plain" link-type="auto" parameter-map="[invoiceId:invoiceId]"/>
-                    <link url="genFactura" text="Factura" url-type="transition" link-type="auto" parameter-map="[invoiceId:invoiceId]"/>
-                    <link url="genFacturaExenta" text="Fact. Exenta" url-type="transition" link-type="auto" parameter-map="[invoiceId:invoiceId]"/>
-                    <link url="genFacturaExportacion" text="Fact. Exportación" url-type="transition" link-type="auto" parameter-map="[invoiceId:invoiceId]"/>
+                    </container-dialog-->
+                    <!--link url="VerReferenciasFact" text="Ver Referencias" url-type="plain" link-type="auto" parameter-map="[invoiceId:invoiceId]"/-->
+                    <link url="genFactura" text="Generar Factura" url-type="transition" link-type="auto" parameter-map="[invoiceId:invoiceId]"/>
+                    <link url="genFacturaExenta" text="Generar Fact. Exenta" url-type="transition" link-type="auto" parameter-map="[invoiceId:invoiceId]"/>
+                    <!--link url="genFacturaExportacion" text="Fact. Exportación" url-type="transition" link-type="auto" parameter-map="[invoiceId:invoiceId]"/-->
                 </default-field>
             </field>
         </form-list>
