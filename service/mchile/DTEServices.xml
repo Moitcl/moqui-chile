@@ -183,7 +183,7 @@ along with this software (see the LICENSE.md file). If not, see
 
                 // Receptor
                 Receptor recp = doc.getDTE().getDocumento().getEncabezado().addNewReceptor();
-                recp.setRUTRecep(rutReceptor);
+                recp.setRUTRecep(rutReceptor.trim());
                 recp.setRznSocRecep(rznSocReceptor);
                 recp.setGiroRecep(giroReceptor);
                 recp.setContacto(contactoReceptor);
@@ -329,16 +329,19 @@ along with this software (see the LICENSE.md file). If not, see
                         // Agrego referencias
                         ref[i] = Referencia.Factory.newInstance();
                         ref[i].setNroLinRef(i+1);
-                        ref[i].setTpoDocRef(referenciaEntry.dteTypeEnumId);
-                        //ref[i].setIndGlobal(0);
-                        ref[i].setRUTOtr(rutReceptor);
-                        SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
-                        Date date = formatter.parse(fechaRef);
-                        ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
-                        ref[i].setCodRef(codRef);
-                        ref[i].setRazonRef(referenciaEntry.razonReferencia);
-                        ref[i].setFolioRef(referenciaEntry.folio.toString());
-
+                        if(referenciaEntry.dteTypeEnumId.equals('0')) {
+                            ref[i].setTpoDocRef('SET');
+                            ref[i].setRazonRef(referenciaEntry.razonReferencia);
+                        } else {
+                            ref[i].setTpoDocRef(referenciaEntry.dteTypeEnumId);
+                            ref[i].setRUTOtr(rutReceptor);
+                            SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
+                            Date date = formatter.parse(fechaRef);
+                            ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
+                            ref[i].setCodRef(codRef);
+                            ref[i].setRazonRef(referenciaEntry.razonReferencia);
+                            ref[i].setFolioRef(referenciaEntry.folio.toString());
+                        }
                         i = i + 1
                     </script>
                 </iterate>
@@ -362,50 +365,10 @@ along with this software (see the LICENSE.md file). If not, see
                 </script>
                 <set field="totalInvoice" value="0" type="Integer"/>
                 <log message="Creando DTE tipo 61" level="warn"/>
-                <iterate list="detailList" entry="detailEntry">
-                    <log message="******* Iterando invoice $detailEntry" level="warn"/>
-                    <set field="nombreItem" from="detailEntry.description"/>
-                    <set field="qtyItem" from="detailEntry.returnQuantity" type="Integer"/>
-                    <!-- TODO: obtener precio de productId -->
-                    <!--if condition="!detailEntry.responseAmount"-->
-                    <if condition="!detailEntry.returnPrice">
-                        <return error="true" message="No hay precio para crédito producto $nombreItem"/>
-                    </if>
-                    <!--set field="priceItem" from="detailEntry.responseAmount" type="Integer"/-->
-                    <set field="priceItem" from="detailEntry.returnPrice" type="Integer"/>
-                    <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
-                    <!-- TODO: Revisar Medio Pago -->
 
-                    <script>
-                        // Agrego detalles
-                        det[i] = Detalle.Factory.newInstance();
-                        det[i].setNroLinDet(i+1);
-                        det[i].setNmbItem(nombreItem);
-                        det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
-                        det[i].setPrcItem(BigDecimal.valueOf(priceItem));
-                        det[i].setMontoItem( totalItem );
-                        //det[i].setMedioPago(MedioPagoType.Enum.forString(medioPago));
-                        totalInvoice = totalInvoice + totalItem
-                        i = i + 1
-                    </script>
-                </iterate>
                 <!-- TODO: Monto Exento => Nota Crédito de Factura Exenta -->
-                <!-- TODO: Buscar primero referencias -->
                 <script>
-                    doc.getDTE().getDocumento().setDetalleArray(det);
-                    // Totales
-                    Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
 
-                    long montoExe = 0;
-                    long montoNeto = Long.valueOf(totalInvoice)
-                    long montoIva = montoNeto * 0.19
-                    long montoTotal = montoIva + montoNeto
-
-                    tot.setTasaIVA(BigDecimal.valueOf(19));
-                    tot.setMntExe(montoExe);
-                    tot.setIVA(montoIva);
-                    tot.setMntNeto(montoNeto);
-                    tot.setMntTotal(montoTotal);
                     i = 0
                     Referencia[] ref = null;
                     if(referenciaList.size() != 0) {
@@ -415,6 +378,7 @@ along with this software (see the LICENSE.md file). If not, see
                         listSize = 0;
                     }
                 </script>
+                <set field="dteExenta" value="false" type="Boolean"/>
                 <!-- TODO: Si la referencia es tipo fe de erratas, Monto Item puede ser 0 -->
                 <iterate list="referenciaList" entry="referenciaEntry">
                     <set field="folioRef" from="referenciaEntry.folio" type="Integer"/>
@@ -424,24 +388,88 @@ along with this software (see the LICENSE.md file). If not, see
                         // Agrego referencias
                         ref[i] = Referencia.Factory.newInstance();
                         ref[i].setNroLinRef(i+1);
-                        ref[i].setTpoDocRef(referenciaEntry.dteTypeEnumId);
+
+                        if(referenciaEntry.dteTypeEnumId.equals('0')) {
+                            ref[i].setTpoDocRef('SET');
+                            ref[i].setCodRef(codRef);
+                            ref[i].setFolioRef(referenciaEntry.folio.toString());
+                        } else {
+                            ref[i].setTpoDocRef(referenciaEntry.dteTypeEnumId);
+                            ref[i].setCodRef(codRef);
+                            ref[i].setFolioRef(referenciaEntry.folio.toString());
+                        }
+                        if(referenciaEntry.dteTypeEnumId.equals("34")) {
+                            dteExenta = true;
+                        }
                         // Valor Opcional
-                        //ref[i].setIndGlobal(Enum.forString("0"));
-                        ref[i].setRUTOtr(rutReceptor);
+                        //ref[i].xsetIndGlobal('0');
+                        //ref[i].setRUTOtr(rutReceptor);
 
                         SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
                         Date date = formatter.parse(fechaRef);
-                        ref[i].xsetFchRef(FechaType.Factory.newValue(date));
-                        ref[i].setCodRef(codRef);
+                        //ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+                        ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
                         ref[i].setRazonRef(referenciaEntry.razonReferencia);
-                        ref[i].setRazonRef("na");
-                        ref[i].setFolioRef(referenciaEntry.folio.toString());
+
+
+                        i = i + 1
+                    </script>
+                </iterate>
+                <script>
+                    i = 0;
+                </script>
+                <iterate list="detailList" entry="detailEntry">
+                    <log message="******* Iterando invoice $detailEntry" level="warn"/>
+                    <set field="nombreItem" from="detailEntry.description"/>
+                    <set field="qtyItem" from="detailEntry.returnQuantity" type="Integer"/>
+                    <if condition="!detailEntry.returnPrice">
+                        <return error="true" message="No hay precio para crédito producto $nombreItem"/>
+                    </if>
+                    <set field="priceItem" from="detailEntry.returnPrice" type="Integer"/>
+                    <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+
+                    <script>
+                        // Agrego detalles
+                        det[i] = Detalle.Factory.newInstance();
+                        det[i].setNroLinDet(i+1);
+                        det[i].setNmbItem(nombreItem);
+                        if(dteExenta) {
+                            det[i].setIndExe(1);
+                        }
+                        det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                        det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                        det[i].setMontoItem( totalItem );
+                        totalInvoice = totalInvoice + totalItem
                         i = i + 1
                     </script>
                 </iterate>
                 <script>
                     doc.getDTE().getDocumento().setReferenciaArray(ref);
+
+                    doc.getDTE().getDocumento().setDetalleArray(det);
+                    // Totales
+                    Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
+
+                    long montoExe = 0;
+                    long montoNeto = Long.valueOf(totalInvoice)
+                    long montoIva = montoNeto * 0.19
+                    long montoTotal = montoIva + montoNeto
+                    long montoIvaExento = 0
+                    if(!dteExenta) {
+                        tot.setTasaIVA(BigDecimal.valueOf(19));
+                        tot.setMntExe(montoExe);
+                        tot.setIVA(montoIva);
+                        tot.setMntNeto(montoNeto);
+                        tot.setMntTotal(montoTotal);
+                    } else {
+                        //tot.setTasaIVA(BigDecimal.valueOf(0));  No va
+                        tot.setMntExe(montoNeto);
+                        //tot.setMntNeto(montoNeto);
+                        tot.setMntTotal(montoNeto);
+                    }
+
                 </script>
+
             </if>
             <!-- TODO: Nota de Débito Electrónica -->
             <if condition="tipoFactura == 56">
