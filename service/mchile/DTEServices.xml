@@ -15,6 +15,39 @@ along with this software (see the LICENSE.md file). If not, see
 <services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
           xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
 
+    <service verb="escape" noun="Characters">
+        <in-parameters>
+            <parameter name="cadenaString" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="outString"/>
+        </out-parameters>
+        <actions>
+            <script><![CDATA[
+                // Escapamos letras o signos
+                StringBuilder sb = new StringBuilder();
+                for(int i = 0; i < cadenaString.length(); i++){
+                    char c = cadenaString.charAt(i);
+                    switch(c){
+                        case '<': sb.append("&lt;"); break;
+                        case '>': sb.append("&gt;"); break;
+                        case '\"': sb.append("&quot;"); break;
+                        case '&': sb.append("&amp;"); break;
+                        case '\'': sb.append("&apos;"); break;
+                        case 'Ñ': sb.append("&Ntilde;"); break;
+                    default:
+                        if(c>0x7e) {
+                            sb.append("&#"+((int)c)+";");
+                        } else {
+                            sb.append(c);
+                        }
+                    }
+                }
+                outString = sb.toString();
+            ]]></script>
+            <set field="outString" from="sb.toString()"/>
+        </actions>
+    </service>
 
     <service verb="genera" noun="Factura">
         <description>
@@ -195,9 +228,9 @@ along with this software (see the LICENSE.md file). If not, see
 
             </script>
             <!-- Campos para elaboración de libro -->
-            <set field="montoNeto" value="0"/>
-            <set field="montoExento" value="0"/>
-            <set field="montoIVARecuperable" value="0"/>
+            <set field="montoNeto" value="0" type="Long"/>
+            <set field="montoExento" value="0" type="Long"/>
+            <set field="montoIVARecuperable" value="0" type="Long"/>
 
 
             <if condition="tipoFactura == 33">
@@ -292,7 +325,14 @@ along with this software (see the LICENSE.md file). If not, see
                     <!-- TODO: obtener precio de productId -->
                     <set field="priceItem" from="detailEntry.amount" type="Integer"/>
                     <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
-                    <script>
+
+                    <service-call name="mchile.DTEServices.escape#Characters" in-map="[cadenaString:nombreItem]" out-map="context"/>
+                    <set field="nombreItem" from="outString"/>
+
+                    <script><![CDATA[
+
+                        logger.warn("String: " + nombreItem);
+
                         // Agrego detalles
                         det[i] = Detalle.Factory.newInstance();
                         det[i].setNroLinDet(i+1);
@@ -305,7 +345,7 @@ along with this software (see the LICENSE.md file). If not, see
                         montoExento = totalInvoice
 
                         i = i + 1
-                    </script>
+                    ]]></script>
                 </iterate>
                 <script>
                     i = 0
@@ -356,6 +396,8 @@ along with this software (see the LICENSE.md file). If not, see
                     Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
                     tot.setMntExe(totalInvoice);
                     tot.setMntTotal(totalInvoice);
+                    montoTotal = totalInvoice;
+                    montoExento = totalInvoice;
 
                 </script>
             </if>
@@ -431,6 +473,9 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="priceItem" from="detailEntry.returnPrice" type="Integer"/>
                     <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
 
+                    <service-call name="mchile.DTEServices.escape#Characters" in-map="[cadenaString:nombreItem]" out-map="context"/>
+                    <set field="nombreItem" from="outString"/>
+
                     <script>
                         // Agrego detalles
                         det[i] = Detalle.Factory.newInstance();
@@ -466,7 +511,7 @@ along with this software (see the LICENSE.md file). If not, see
                     Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
 
                     long montoExe = 0;
-                    long montoNeto = Long.valueOf(totalInvoice)
+                    montoNeto = Long.valueOf(totalInvoice)
                     long montoIva = montoNeto * 0.19
                     long montoTotal = montoIva + montoNeto
                     long montoIvaExento = 0
@@ -480,12 +525,16 @@ along with this software (see the LICENSE.md file). If not, see
                             tot.setIVA(montoIva);
                             tot.setMntNeto(montoNeto);
                             tot.setMntTotal(montoTotal);
+                            montoExento = montoExe;
+                            montoIvaRecuperable = montoIva;
                         } else {
                             logger.warn("Else 5")
                             //tot.setTasaIVA(BigDecimal.valueOf(0));  No va
                             tot.setMntExe(montoNeto);
                             //tot.setMntNeto(montoNeto);
                             tot.setMntTotal(montoNeto);
+                            montoExento = montoNeto;
+                            montoIvaRecuperable = 0;
                         }
                     } else {
                         if(!dteExenta) {
@@ -575,6 +624,10 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="qtyItem" value="${detailTemp[1]}" type="Long"/>
                     <set field="priceItem" value="${detailTemp[2]}" type="String"/>
                     <set field="nombreItem" value="${detailTemp[3]}"/>
+
+                    <service-call name="mchile.DTEServices.escape#Characters" in-map="[cadenaString:nombreItem]" out-map="context"/>
+                    <set field="nombreItem" from="outString"/>
+
                     <script><![CDATA[
                         logger.warn("DTE Exenta: " + dteExenta)
                         priceItem = priceItem.replace(".","");
@@ -585,7 +638,7 @@ along with this software (see the LICENSE.md file). If not, see
                         det[i].setNmbItem(nombreItem);
 
                         if(codRef != 2 && codRef != 1) {
-                            logger.warn("If 1");
+                            logger.warn("If 1: totalItemTmp: " + totalItemTmp);
                             det[i].setQtyItem(qtyItem);
                             det[i].setPrcItem(Long.valueOf(priceItem));
                             det[i].setMontoItem(Long.valueOf(totalItemTmp));
@@ -593,9 +646,7 @@ along with this software (see the LICENSE.md file). If not, see
                             logger.warn("If 2");
                             det[i].setMontoItem(0);
                         }
-                        //if(codRef == 2) {
                         totalInvoice = totalInvoice + totalItemTmp
-                        //}
 
                         i = i + 1
                     ]]></script>
@@ -606,7 +657,7 @@ along with this software (see the LICENSE.md file). If not, see
                     Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
 
                     long montoExe = 0;
-                    long montoNeto = Long.valueOf(totalInvoice)
+                    montoNeto = Long.valueOf(totalInvoice)
                     long montoIva = montoNeto * 0.19
                     long montoTotal = montoIva + montoNeto
                     logger.warn("codRef:" + codRef +", dteExenta:" +dteExenta);
@@ -620,10 +671,14 @@ along with this software (see the LICENSE.md file). If not, see
                             tot.setIVA(montoIva);
                             tot.setMntNeto(montoNeto);
                             tot.setMntTotal(montoTotal);
-                        } else { // Cod 1 o 3 con factura exenta en la NC
+                            montoExento = montoExe;
+                            montoNeto = montoNeto;
+                            montoIvaRecuperable = montoIva;
+                        } else { // Cod con factura exenta en la NC
                             logger.warn("Else 5, montoNeto: " + montoNeto)
-                            tot.setMntExe(montoExe);
-                            tot.setMntTotal(montoTotal);
+                            tot.setMntExe(montoNeto);
+                            tot.setMntTotal(montoNeto);
+                            montoExento = montoNeto;
                         }
                     } else {
                         logger.warn("CodRef == 1, " + dteExenta);
@@ -1049,7 +1104,6 @@ along with this software (see the LICENSE.md file). If not, see
                 if (cursor.toFirstChild()) {
                     cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioDTE_v10.xsd");
                 }
-
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
                 ks.load(new FileInputStream(certS), passS.toCharArray());
@@ -1077,9 +1131,6 @@ along with this software (see the LICENSE.md file). If not, see
                 opts.setLoadSubstituteNamespaces(namespaces);
 
                 // Cantidad de documentos a enviar
-                //DTEDefType[] dtes = new DTEDefType[otherArgs.length];
-
-
                 DTEDefType[] dtes = new DTEDefType[DTEList.size()];
 
                 HashMap&lt;Integer, Integer&gt; hashTot = new HashMap&lt;Integer, Integer&gt;();
@@ -1103,7 +1154,6 @@ along with this software (see the LICENSE.md file). If not, see
                     subtDtes[i] = subt;
                     i++;
                 }
-
                 car.setSubTotDTEArray(subtDtes);
                 // Le doy un formato bonito (debo hacerlo antes de firmar para no
                 // afectar los DTE internos)
@@ -1168,18 +1218,15 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="enviadorS" required="true"/>
             <parameter name="idS" required="true"/>
-            <parameter name="fiscalTaxDocumentId" required="true"/>
-            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <!--parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/-->
             <parameter name="xml" required="true"/>
-            <!--parameter name="listaFacturas" required="true" type="List"/-->
         </in-parameters>
         <out-parameters>
             <parameter name="archivoEnvio"/>
         </out-parameters>
         <actions>
-
             <set field="documentoS" from="xml"/>
-
 
             <!-- Validación rut -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/>
@@ -1192,6 +1239,8 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="passS" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_RESULTS']" out-map="context"/>
             <set field="pathResults" from="resourceValue"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'RUT_EMPRESA']" out-map="context"/>
+            <set field="emisorS" from="resourceValue"/>
 
             <!-- Variable para guardar nombre de archivo del envio -->
             <set field="archivoEnvio" value=""/>
@@ -1230,7 +1279,7 @@ along with this software (see the LICENSE.md file). If not, see
                 // Debo agregar el schema location (Sino SII rechaza)
                 XmlCursor cursor = envio.newCursor();
                 if (cursor.toFirstChild()) {
-                cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioDTE_v10.xsd");
+                    cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioDTE_v10.xsd");
                 }
 
                 // leo certificado y llave privada del archivo pkcs12
@@ -1273,27 +1322,32 @@ along with this software (see the LICENSE.md file). If not, see
 
                 HashMap&lt;Integer, Integer&gt; hashTot = new HashMap&lt;Integer, Integer&gt;();
 
-                for (int i = 0; i &lt; DTEList.length; i++) {
-                dtes[i] = DTEDocument.Factory.parse(new FileInputStream(DTEList[i]), opts).getDTE();
+                //for (int i = 0; i &lt; DTEList.length; i++) {
+                //dtes[i] = DTEDocument.Factory.parse(new FileInputStream(DTEList[i]), opts).getDTE();
                 // armar hash para totalizar por tipoDTE
-                if (hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) != null) {
-                hashTot.put(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue(),
-                hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) + 1);
-                } else {
-                hashTot.put(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue(), 1);
-                }
-                }
-                SubTotDTE[] subtDtes = new SubTotDTE[hashTot.size()];
-                int i = 0;
-                for (Integer tipo : hashTot.keySet()) {
-                SubTotDTE subt = SubTotDTE.Factory.newInstance();
-                subt.setTpoDTE(new BigInteger(tipo.toString()));
-                subt.setNroDTE(new BigInteger(hashTot.get(tipo).toString()));
-                subtDtes[i] = subt;
-                i++;
+                //if (hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) != null) {
+                //    hashTot.put(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue(),
+                //    hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) + 1);
+                //} else {
+                //    hashTot.put(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue(), 1);
+                //}
+                //}
+               // SubTotDTE[] subtDtes = new SubTotDTE[hashTot.size()];
+                //int i = 0;
+                //for (Integer tipo : hashTot.keySet()) {
+                //    SubTotDTE subt = SubTotDTE.Factory.newInstance();
+                //    subt.setTpoDTE(new BigInteger(tipo.toString()));
+                //    subt.setNroDTE(new BigInteger(hashTot.get(tipo).toString()));
+                //    subtDtes[i] = subt;
+                //    i++;
+                //}
+
+                // Version para libro de compraventa
+                for (int i = 0; i &lt; DTEList.length; i++ ) {
+                    dtes[i] = DTEDocument.Factory.parse(new FileInputStream(DTEList[i]), opts).getDTE();
                 }
 
-                car.setSubTotDTEArray(subtDtes);
+                //car.setSubTotDTEArray(subtDtes);
                 // Le doy un formato bonito (debo hacerlo antes de firmar para no
                 // afectar los DTE internos)
                 opts = new XmlOptions();
@@ -1326,22 +1380,21 @@ along with this software (see the LICENSE.md file). If not, see
                 doc2 = XMLUtil.parseDocument(salida);
 
                 if (Signer.verify(doc2, "SetDTE")) {
-                archivoEnvio = pathResults + "ENV" + idS + ".xml"
-                Path path = Paths.get(pathResults + "ENV" + idS + ".xml");
-                Files.write(path, salida);
-                logger.warn("Envio generado OK");
+                    archivoEnvio = pathResults + "ENV" + idS + ".xml"
+                    Path path = Paths.get(pathResults + "ENV" + idS + ".xml");
+                    Files.write(path, salida);
+                    logger.warn("Envio generado OK");
                 } else {
-                archivoEnvio = pathResults + "ENV" + idS + "-mala.xml"
-                Path path = Paths.get(pathResults + "ENV" + idS + "-mala.xml");
-                Files.write(path, salida);
-                logger.warn("Error al generar envio");
+                    archivoEnvio = pathResults + "ENV" + idS + "-mala.xml"
+                    Path path = Paths.get(pathResults + "ENV" + idS + "-mala.xml");
+                    Files.write(path, salida);
+                    logger.warn("Error al generar envio");
                 }
             </script>
 
             <!-- Se guarda referencia a XML de envío en BD -->
 
             <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="fiscalTaxDocumentField" cache="false" for-update="true" />
-            <log message="Encontrado: $fiscalTaxDocumentField" level="warn"/>
             <set field="fiscalTaxDocumentField.envio" from="archivoEnvio" type="String"/>
             <entity-update value-field="fiscalTaxDocumentField"/>
 
@@ -1637,7 +1690,6 @@ along with this software (see the LICENSE.md file). If not, see
                 opts.setLoadSubstituteNamespaces(namespaces);
 
                 AutorizacionType caf;
-                //caf = AUTORIZACIONDocument.Factory.parse(new File('/home/cherrera/Downloads/52-GuiaDespachoElec.xml'), opts).getAUTORIZACION();
                 caf = AUTORIZACIONDocument.Factory.parse(filename.getInputStream(), opts).getAUTORIZACION();
                 desde = caf.getCAF().getDA().getRNG().getD().toString();
                 hasta = caf.getCAF().getDA().getRNG().getH().toString();
@@ -1649,12 +1701,8 @@ along with this software (see the LICENSE.md file). If not, see
             </script>
 
             <if condition="!rutCaf.equals(rut.trim())">
-                <return error="true" message="RUT de archivo CAF no corresponde al registrado en el sistema como emisor: $rutCaf::$rut"/>
+                <return error="true" message="RUT de archivo CAF no corresponde al registrado en el sistema como emisor: $rutCaf :: $rut"/>
             </if>
-
-            <!--return message="XML leído: $contentLocation, Desde: $desde, Hasta: $hasta, fecha: $fechaAutorizacion, dteType: $dteTypeEnumId, rut: $rutCaf" error="true"/-->
-
-
 
             <set field="updateMap" from="[filename:archivo,desde:desde, hasta:hasta, dteTypeEnumId:dteTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, ultimoFolio:desde]"/>
             <service-call name="create#MoquiChile.Caf" out-map="context" in-map="updateMap"/>
@@ -1973,6 +2021,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="libro" />
         </in-parameters>
         <actions>
+
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'RUT_ENVIADOR']" out-map="context"/>
             <set field="enviadorS" value="${resourceValue}"/>
 
@@ -1983,14 +2032,28 @@ along with this software (see the LICENSE.md file). If not, see
 
 
 
-                <if condition="!libro">
-                    <service-call name="mchile.DTEServices.generaEnvio#Documentos" in-map="[recepS:recepS, enviadorS:enviadorS, documentList:documentList ]" out-map="context"/>
+            <if condition="!libro">
+                <service-call name="mchile.DTEServices.generaEnvio#Documentos" in-map="[recepS:recepS, enviadorS:enviadorS, documentList:documentList ]" out-map="context"/>
+                <set field="documentoS" from="archivoEnvio"/>
+                <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:compaS, enviadorS:enviadorS , documentoS:documentoS]" out-map="context"/>
+            </if>
+            <if condition="libro">
+
+                <iterate list="documentList" entry="libroEntry">
+                    <set field="detailLibro" from="libroEntry instanceof List ? libroEntry : libroEntry.split('-') as List"/>
+                    <set field="fiscalTaxDocumentId" from="detailLibro[0]"/>
+                    <log level="warn" message="fiscalTaxDocumentId: $fiscalTaxDocumentId"/>
+                    <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="libroField">
+                        <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+                    </entity-find-one>
+                    <set field="xml" from="libroField.xml"/>
+
+                    <!--service-call name="mchile.DTEServices.generaEnvio#Libro" in-map="[enviadorS:enviadorS, idS:'ID178', xml:xml ]" out-map="context"/-->
                     <set field="documentoS" from="archivoEnvio"/>
-                    <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:compaS, enviadorS:enviadorS , documentoS:documentoS]" out-map="context"/>
-                </if>
-                <if condition="libro">
+
                     <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:compaS, enviadorS:enviadorS , documentoS:xml]" out-map="context"/>
-                </if>
+                </iterate>
+            </if>
         </actions>
     </service>
 
@@ -2226,8 +2289,6 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="fileRoot" value="${resourceValue}"/>
             <set field="contentLocationPdf" value="${fileRoot}/${archivoPdf}"/>
 
-            <return error="true" message="=> $archivoXml"/>
-
 
             <set field="docRrPdf" from="ec.resource.getLocationReference(contentLocationPdf)"/>
             <script>
@@ -2350,20 +2411,35 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="eliminar" noun="DTETercero">
+    <service verb="eliminar" noun="DTE">
         <description>
-           Elimina registro de una DTE recibida de un tercero proveedor
+           Elimina registro de una DTE de cualquier tipo
         </description>
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
-            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
         </in-parameters>
         <actions>
-
             <!-- TODO: Borrar archivo de filesystem -->
             <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="dteField" for-update="true"/>
-            <entity-delete value-field="dteField"/>
 
+            <set field="xml" from="dteField.xml"/>
+
+            <if condition="!xml">
+                <return error="true" message="DTE a borrar no existe"/>
+            </if>
+
+
+            <script>
+                import java.nio.file.Path;
+                import java.nio.file.Paths;
+                import java.nio.file.Files;
+
+                Path fileToDelete = Paths.get(xml);
+                Files.delete(fileToDelete);
+            </script>
+
+            <!--entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="dteField" for-update="true"/-->
+            <entity-delete value-field="dteField"/>
         </actions>
     </service>
 
@@ -3317,8 +3393,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="tipo" value="COMPRA"/>
             </if>
 
-            <return error="true" message="tipo: $tipo - tipoLibro: $tipoLibro - tipoEnvio: $tipoEnvio - periodo: $periodo"/>
-
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CERT']" out-map="context"/>
             <set field="certS" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PASS_CERT']" out-map="context"/>
@@ -3346,6 +3420,8 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="resultadoFirmado" from="resultS"/>
 
             <set field="tipoFactura" from="tipoFacturaS"/>
+
+            <set field="fechaEmision" value=""/>
 
             <set field="entryDate" from="ec.user.nowTimestamp"/>
             <set field="idS" value=""/>
@@ -3389,16 +3465,20 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.ResumenPeriodo;
                 import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.ResumenSegmento;
                 import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Caratula;
+                import cl.sii.siiDte.FechaType;
 
                 LectorFichero lectorFichero = new LectorFichero();
 
-                //String rutaLibro="/var/www/html/Centaurus/DTE/"+empID+"/BASELIBRO/"+nomDoc;
                 String rutaLibro="/home/cherrera/LibroPrueba.csv";
 
                 String resultadoSinFirma = "/tmp/LBR-temp.xml";
 
                 SimpleDateFormat dateFormat = new SimpleDateFormat("ddMMyyyy_HHmm");
                 idS  = "ID"+dateFormat.format(new Date());
+
+                SimpleDateFormat formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
+                Date dateFechaEmision = new Date();
+                fechaEmision = formatterFechaEmision.format(dateFechaEmision);
 
 
                 ComunicadorAppClienteTXT c = new ComunicadorAppClienteTXT();
@@ -3431,16 +3511,18 @@ along with this software (see the LICENSE.md file). If not, see
 
                 <if condition="tipo == 'VENTA'">
                     <entity-find entity-name="tfpos.FiscalTaxDocument" list="dteList">
-                        <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" from="[33, 34]"/>
-                        <econdition field-name="emisor" operator="is-null"/><!-- Emitidas por la empresa -->
+                        <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" from="[33, 34, 56, 61]"/>
+                        <econdition field-name="envio" operator="is-not-null"/>
+                        <econdition field-name="emisor" from="emisorS"/><!-- Emitidas por la empresa -->
                     </entity-find>
                 </if>
                 <if condition="tipo == 'COMPRA'">
                     <entity-find entity-name="tfpos.FiscalTaxDocument" list="dteList">
-                        <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" from="[33, 34]"/>
-                        <econdition field-name="emisor" operator="is-not-null"/><!-- Recibidas por la empresa -->
+                        <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" from="[33, 34, 56, 61]"/>
+                        <econdition field-name="receptor" from="emisorS"/><!-- Recibidas por la empresa -->
                     </entity-find>
                 </if>
+
 
                 <script>
                     HashMap dteHash = new HashMap();
@@ -3464,7 +3546,8 @@ along with this software (see the LICENSE.md file). If not, see
                             // TotMntTotal es TotMntNeto + TotMntIVA
                             BigDecimal TotMntTotal = new BigDecimal(dteEntry.montoNeto);
                             TotMntTotal = TotMntTotal.add(new BigDecimal(dteEntry.montoIVARecuperable));
-                            System.out.println("Sumando: " + dteEntry.montoNeto + " + " +dteEntry.montoIVARecuperable +"="+TotMntTotal);
+                            TotMntTotal = TotMntTotal.add(new BigDecimal(dteEntry.montoExento));
+                            System.out.println("Sumando: " + " + " + dteEntry.montoExento +"+"  +  dteEntry.montoNeto + " + " +dteEntry.montoIVARecuperable +"="+TotMntTotal);
                             tempArrayList.add(TotMntTotal);
                             dteHash.put(dteEntry.fiscalTaxDocumentTypeEnumId, tempArrayList);
                             System.out.println("creado arreglo \n" + tempArrayList);
@@ -3498,6 +3581,7 @@ along with this software (see the LICENSE.md file). If not, see
                             BigDecimal totMntTotalAnterior = new BigDecimal(0);
                             totMntTotalAnterior = totMntTotalAnterior.add(new BigDecimal(tempArrayList.get(4)));
                             totMntTotalAnterior = totMntTotalAnterior.add(new BigDecimal(dteEntry.montoIVARecuperable));
+                            totMntTotalAnterior = totMntTotalAnterior.add(new BigDecimal(dteEntry.montoExento));
 
                             tempArrayList.remove(1);
                             tempArrayList.add(1, montoExentoAnterior.toString());
@@ -3539,8 +3623,8 @@ along with this software (see the LICENSE.md file). If not, see
                 EnvioLibro envioLibro = libroCompraVenta.addNewEnvioLibro();
 
                 // ID de libro se debería calcular
-                //libCV.getLibroCompraVenta().getEnvioLibro().setID("V2001-3");
                 libCV.getLibroCompraVenta().getEnvioLibro().setID(idS);
+                //libCV.xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
 
                 XmlCursor cursor = libCV.newCursor();
                 ResumenPeriodo resumenPeriodo = envioLibro.addNewResumenPeriodo();
@@ -3552,8 +3636,8 @@ along with this software (see the LICENSE.md file). If not, see
                 // Agregar TOTALES
                 //addCampos.addDatosTotales(resumenPeriodo,arrayLineasTotal,c.getCantidadTotales());
                 System.out.println("Hash a recorrer: " + dteHash);
-                    Iterator&lt;Entry&lt;String, String&gt;&gt; it = dteHash.entrySet().iterator();
-                    while (it.hasNext()) {
+                Iterator&lt;Entry&lt;String, String&gt;&gt; it = dteHash.entrySet().iterator();
+                while (it.hasNext()) {
                         Map.Entry&lt;String, String&gt; pair = (Map.Entry&lt;String, String&gt;) it.next();
                         System.out.println(pair.getKey() + " = " + pair.getValue());
                         TotalesPeriodo totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
@@ -3563,7 +3647,7 @@ along with this software (see the LICENSE.md file). If not, see
                         totalesPeriodo.setTotMntNeto(Long.parseLong(pair.getValue().get(2).toString()) );
                         totalesPeriodo.setTotMntIVA( Long.parseLong(pair.getValue().get(3).toString()) );
                         totalesPeriodo.setTotMntTotal(Long.parseLong(pair.getValue().get(4).toString())  );
-                    }
+                }
 
 
                 outPDF=lectorFichero.crearFicheroMMDDFlex(resultadoFirmado, arrayLineasCaratulas.get(0).get(3));
@@ -3610,10 +3694,7 @@ along with this software (see the LICENSE.md file). If not, see
 
                 FirmaLibro firmaLibro = new FirmaLibro();
 
-                //String mensaje=firmaLibro.firmarLibro(certS, passS, resultadoSinFirma,outPDF,empresaINT,"ENVIADO",arrayLineasCaratulas.get(0).get(5),arrayLineasCaratulas.get(0).get(2),"xmlasdas",tipoEnvioS);
                 String mensaje=firmaLibro.firmarLibro(certS, passS, resultS + "LIBCV" + idS + "-sinfirma.xml",outPDF,10,"ENVIADO",arrayLineasCaratulas.get(0).get(5),arrayLineasCaratulas.get(0).get(2),"xmlasdas",tipoEnvio);
-
-                System.out.println("LIBRO ENVIADO CORRECTAMENTE\n"+mensaje+"@"+outPDF);
 
             </script>
             <!-- Registro de DTE en base de datos y generación de PDF -->
