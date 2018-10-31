@@ -56,7 +56,7 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="tipoFacturaS" required="true"/>
-            <parameter name="emisorS" required="true"/>
+            <parameter name="activeOrgId" required="true"/>
             <parameter name="rutReceptor" required="true"/>
             <parameter name="rznSocReceptor" required="true"/>
             <parameter name="giroReceptor" required="true"/>
@@ -74,7 +74,29 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="factura"/>
         </out-parameters>
         <actions>
-            <return error="true" message="emisor: $emisorS"/>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
+                <econdition field-name="partyId" from="activeOrgId"/></entity-find>
+
+            <if condition="!partyIdentificationList.idValue[0]">
+                <return error="true" message="Organización no tiene RUT definido"/>
+            </if>
+            <set field="emisorS" from="partyIdentificationList.idValue[0]"/>
+
+
+
+            <!-- Recuperacion de parametros de la organizacion -->
+            <entity-find-one entity-name="mantle.party.Organization" value-field="orgField">
+                <field-map field-name="partyId" from="activeOrgId"/>
+                <select-field field-name="giro"/>
+                <select-field field-name="templateFactura"/>
+                <select-field field-name="templatePdf"/>
+                <select-field field-name="templateEnvio"/>
+                <select-field field-name="templateAceptaciones"/>
+                <select-field field-name="templateLibro"/>
+                <select-field field-name="logo"/>
+                <select-field field-name="fchResol"/>
+                <select-field field-name="nroResol"/>
+            </entity-find-one>
 
             <!-- Validación rut -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutReceptor]"/>
@@ -88,21 +110,19 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="resultS" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMP']" out-map="context"/>
             <set field="pathTemp" from="resourceValue"/>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_PDF']" out-map="context"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:orgField.templatePdf]" out-map="context"/>
             <set field="pathPdf" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CAF']" out-map="context"/>
             <set field="cafS" from="resourceValue"/>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMPLATE_FACTURA']" out-map="context"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:orgField.templateFactura]" out-map="context"/>
             <set field="plantillaS" from="resourceValue"/>
-            <!--service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'RUT_EMPRESA']" out-map="context"/>
-            <set field="emisorS" from="resourceValue"/-->
 
             <set field="tipoFactura" from="tipoFacturaS"/>
             <set field="fechaEmision"/>
 
 
             <!-- Obtención de folio y path de CAF -->
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[dteTypeEnumId:tipoFacturaS]" out-map="context"/>
+            <service-call name="mchile.DTEServices.get#Folio" in-map="[dteTypeEnumId:tipoFacturaS, activeOrgId:activeOrgId]" out-map="context"/>
 
             <set field="folioS" from="folio" type="Integer"/>
             <set field="codRef" value="0" type="Integer"/>
@@ -484,9 +504,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <log message="******* Iterando invoice $detailEntry" level="warn"/>
                     <set field="nombreItem" from="detailEntry.description"/>
                     <set field="qtyItem" from="detailEntry.returnQuantity" type="Integer"/>
-                    <!--if condition="!detailEntry.returnPrice">
-                        <return error="false" message="No hay precio para crédito producto $nombreItem"/>
-                    </if-->
+
                     <set field="priceItem" from="detailEntry.returnPrice" type="Integer"/>
                     <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
 
@@ -1023,7 +1041,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="fiscalTaxDocumentTypeEnumId" from="tipoFacturaS"/>
             <set field="xml" value="${resultS}DTE${tipoFactura}-${folio}.xml"/>
             <set field="pdf" value="${pathPdf}DTE${tipoFactura}-${folio}.pdf"/>
-            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml]" out-map="context"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, activeOrgId:activeOrgId]" out-map="context"/>
             <!-- TODO: cambiar por update -->
             <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="dteField" for-update="true">
                 <field-map field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
@@ -1049,17 +1067,33 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="generaEnvio" noun="Documentos">
         <description>
             Generación de envio documento a partir de facturas ya generadas.
-
         </description>
         <in-parameters>
             <parameter name="recepS" required="false"/>
             <parameter name="enviadorS" required="true"/>
+            <parameter name="activeOrgId" required="true"/>
             <parameter name="documentList" required="true" type="List"/>
         </in-parameters>
         <out-parameters>
             <parameter name="archivoEnvio"/>
         </out-parameters>
         <actions>
+
+            <!-- Recuperacion de parametros de la organizacion -->
+            <entity-find-one entity-name="mantle.party.Organization" value-field="orgField">
+                <field-map field-name="partyId" from="activeOrgId"/>
+                <select-field field-name="giro"/>
+                <select-field field-name="templateFactura"/>
+                <select-field field-name="templatePdf"/>
+                <select-field field-name="templateEnvio"/>
+                <select-field field-name="templateAceptaciones"/>
+                <select-field field-name="templateLibro"/>
+                <select-field field-name="logo"/>
+                <select-field field-name="fchResol"/>
+                <select-field field-name="nroResol"/>
+            </entity-find-one>
+
+
             <set field="idS" value="Doc"/>
 
             <script>
@@ -1071,14 +1105,9 @@ along with this software (see the LICENSE.md file). If not, see
                 String datetime = ft.format(dNow);
                 idS = idS + datetime;
 
-            </script>
-
-
-            <script>
                 String[] DTEList = new String[documentList.size()];
                 int j = 0;
             </script>
-            <!-- TODO: armar lista documentos -->
            <iterate list="documentList" entry="docField">
                <set field="fiscalTaxDocument" from="docField"/>
                <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="dteField">
@@ -1093,10 +1122,6 @@ along with this software (see the LICENSE.md file). If not, see
 
                 </script>
            </iterate>
-            <script>
-                logger.warn("tamaño: " + j)
-            </script>
-
 
             <!-- Validación rut -->
             <if condition="recepS">
@@ -1104,7 +1129,7 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/>
 
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMPLATE_ENVIO']" out-map="context"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:orgField.templateEnvio]" out-map="context"/>
             <set field="plantillaEnvio" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CERT']" out-map="context"/>
             <set field="certS" from="resourceValue"/>
@@ -1262,12 +1287,12 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="generaEnvio" noun="Libro">
         <description>
             Generación de envio de libro de compra/venta
+            DEPRECATED
         </description>
         <in-parameters>
             <parameter name="enviadorS" required="true"/>
             <parameter name="idS" required="true"/>
-            <!--parameter name="fiscalTaxDocumentId" required="true"/>
-            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/-->
+            <parameter name="activeOrgId" required="true"/>
             <parameter name="xml" required="true"/>
         </in-parameters>
         <out-parameters>
@@ -1624,13 +1649,29 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="pdf" required="true"/>
             <parameter name="dte" required="true"/>
+            <parameter name="activeOrgId" required="true"/>
         </in-parameters>
         <actions>
+
+            <!-- Recuperacion de parametros de la organizacion -->
+            <entity-find-one entity-name="mantle.party.Organization" value-field="orgField">
+                <field-map field-name="partyId" from="activeOrgId"/>
+                <select-field field-name="giro"/>
+                <select-field field-name="templateFactura"/>
+                <select-field field-name="templatePdf"/>
+                <select-field field-name="templateEnvio"/>
+                <select-field field-name="templateAceptaciones"/>
+                <select-field field-name="templateLibro"/>
+                <select-field field-name="logo"/>
+                <select-field field-name="fchResol"/>
+                <select-field field-name="nroResol"/>
+            </entity-find-one>
+
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CERT']" out-map="context"/>
             <set field="certS" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PASS_CERT']" out-map="context"/>
             <set field="passS" from="resourceValue"/>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMPLATE_PDF']" out-map="context"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:orgField.templatePdf]" out-map="context"/>
             <set field="template" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_RESULTS']" out-map="context"/>
             <set field="pathResults" from="resourceValue"/>
@@ -1779,12 +1820,22 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="dteTypeEnumId" required="true"/>
+            <parameter name="activeOrgId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="folio"/>
             <parameter name="caf"/>
         </out-parameters>
         <actions>
+
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
+                <econdition field-name="partyId" from="activeOrgId"/></entity-find>
+
+            <if condition="!partyIdentificationList.idValue[0]">
+                <return error="true" message="Organización no tiene RUT definido"/>
+            </if>
+            <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
+
             <!-- Se filtra por CAF activo (PK) para el tipo de DTE -->
             <set field="activo" value="true"/>
             <entity-find-one entity-name="MoquiChile.Caf" value-field="cafEntry" for-update="true"/>
@@ -1793,28 +1844,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="No existe CAF activo para DTE tipo ${dteTypeEnumId}"/>
             </if>
 
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'RUT_EMPRESA']" out-map="context"/>
-            <set field="rutEmisor" value="${resourceValue}"/>
-
-            <!--script>
-                cafEntry.ultimoFolio = cafEntry.ultimoFolio + 1
-            </script>
-
-            <if condition="cafEntry.ultimoFolio &lt; cafEntry.desde">
-                <return message="Error en CAF" error="true"/>
-            </if>
-
-            <if condition="cafEntry.ultimoFolio &gt; cafEntry.hasta">
-                <return message="No se pueden usar más folios de CAF actual" error="true"/>
-            </if-->
-
-            <!-- TODO: Se verifica que exista DTE tipo dteTypeEnumID con el folio requerido y rut emisor = RUT_EMPRESA
-                 Si no existe implica que no hay CAF disponible
-            -->
-            <!--script>
-                int desde = Integer.valueOf(cafEntry.desde);
-                int hasta = Integer.valueOf(cafEntry.hasta);
-            </script-->
             <entity-find entity-name="tfpos.FiscalTaxDocument" list="reservedList">
                 <econdition field-name="fiscalTaxDocumentTypeEnumId" from="dteTypeEnumId"/>
                 <econdition field-name="emisor" from="rutEmisor"/>
@@ -1831,9 +1860,6 @@ along with this software (see the LICENSE.md file). If not, see
            
             <set field="folio" from="reservedList.first().folio"/>
 
-            <!--entity-update value-field="cafEntry"/-->
-            <!--set field="folio" from="cafEntry.ultimoFolio"/-->
-
             <set field="caf" from="cafEntry.filename"/>
 
         </actions>
@@ -1849,13 +1875,6 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="activeOrgId" required="true"/>
         </in-parameters>
         <actions>
-            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                <econdition field-name="partyId" from="activeOrgId"/></entity-find>
-
-            <if condition="!partyIdentificationList.idValue[0]">
-                <return error="true" message="Organización no tiene RUT definido"/>
-            </if>
-            <set field="emisorS" from="partyIdentificationList.idValue[0]"/>
 
             <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
 
@@ -2026,7 +2045,7 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
 
             <!-- Generacion de factura -->
-            <service-call name="mchile.DTEServices.genera#Factura" in-map="[tipoFacturaS:dteTypeEnumId, emisorS:emisorS, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
+            <service-call name="mchile.DTEServices.genera#Factura" in-map="[tipoFacturaS:dteTypeEnumId, activeOrgId:activeOrgId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
                           contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
                           invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList]" out-map="context"/>
         </actions>
@@ -2095,7 +2114,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="documentList" from="documentIds instanceof List ? documentIds : documentIds.split(',') as List"/>
 
             <if condition="!libro">
-                <service-call name="mchile.DTEServices.generaEnvio#Documentos" in-map="[recepS:recepS, enviadorS:enviadorS, documentList:documentList ]" out-map="context"/>
+                <service-call name="mchile.DTEServices.generaEnvio#Documentos" in-map="[recepS:recepS, activeOrgId:activeOrgId, enviadorS:enviadorS, documentList:documentList ]" out-map="context"/>
                 <set field="documentoS" from="archivoEnvio"/>
                 <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:emisorS, enviadorS:enviadorS , documentoS:documentoS]" out-map="context"/>
             </if>
@@ -2110,7 +2129,7 @@ along with this software (see the LICENSE.md file). If not, see
                     </entity-find-one>
                     <set field="xml" from="libroField.xml"/>
 
-                    <service-call name="mchile.DTEServices.generaEnvio#Libro" in-map="[enviadorS:enviadorS, idS:'ID178', xml:xml ]" out-map="context"/>
+                    <service-call name="mchile.DTEServices.generaEnvio#Libro" in-map="[enviadorS:enviadorS, activeOrgId:activeOrgId, idS:'ID178', xml:xml ]" out-map="context"/>
                     <set field="documentoS" from="archivoEnvio"/>
 
                     <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:emisorS, enviadorS:enviadorS , documentoS:xml]" out-map="context"/>
@@ -2221,6 +2240,7 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="nroDocumento" required="true"/>
+            <parameter name="activeOrgId" required="true"/>
             <parameter name="xml" type="org.apache.commons.fileupload.FileItem" required="true"/>
             <parameter name="pdf" type="org.apache.commons.fileupload.FileItem" required="true"/>
             <parameter name="emisor" required="true"/>
@@ -2249,7 +2269,18 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="notasDebitoCreditoFacturasCompra"/>
         </in-parameters>
         <actions>
+
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
+                <econdition field-name="partyId" from="activeOrgId"/></entity-find>
+
+            <if condition="!partyIdentificationList.idValue[0]">
+                <return error="true" message="Organización no tiene RUT definido"/>
+            </if>
+            <set field="receptor" from="partyIdentificationList.idValue[0]"/>
+
+
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:emisor]"/>
+            <set field="pkDocumento" value="${emisor}-${nroDocumento}"/>
 
             <set field="archivoPdf" from="pdf.getName()"/>
             <set field="archivoXml" from="xml.getName()"/>
@@ -2264,9 +2295,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="Entrada a error"/>
             </if>
 
-            <return error="true" message="=> $archivoXml"/>
-
-
             <set field="docRrPdf" from="ec.resource.getLocationReference(contentLocationPdf)"/>
             <set field="docRrXml" from="ec.resource.getLocationReference(contentLocationXml)"/>
             <script>
@@ -2277,7 +2305,7 @@ along with this software (see the LICENSE.md file). If not, see
                 try { docRrXml.putStream(fileStream) } finally { fileStream.close() }
             </script>
 
-            <set field="updateMap" from="[fiscalTaxDocumentId:nroDocumento, pdf:contentLocationPdf, xml:contentLocationXml,fiscalTaxDocumentTypeEnumId:dteTypeEnumId, emisor:emisor, emailEmisor:emailEmisor, amount:amount,
+            <set field="updateMap" from="[fiscalTaxDocumentId:pkDocumento, receptor:receptor, pdf:contentLocationPdf, xml:contentLocationXml,fiscalTaxDocumentTypeEnumId:dteTypeEnumId, emisor:emisor, emailEmisor:emailEmisor, amount:amount,
                                          montoNeto:montoNeto, tasaImpuesto:tasaImpuesto, tipoImpuesto:tipoImpuesto, razonSocial:razonSocial, fechaEmision:fechaEmision, documentoAnulado:documentoAnulado,
                                          montoExento:montoExento, montoIVARecuperable:montoIVARecuperable, codigoIVANoRecuperable:codigoIVANoRecuperable, montoIVANoRecuperable:montoIVANoRecuperable,
                                          montoIVAUsoComun:montoIVAUsoComun, codigoOtroImpuestoORetencion:codigoOtroImpuestoORetencion, tasaOtroImpuestoORetencion:tasaOtroImpuestoORetencion,
@@ -3014,11 +3042,34 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="activeOrgId" required="true"/>
             <parameter name="rutRecibe" required="true"/>
             <parameter name="nroDetalles" default-value="1"/>
             <parameter name="xml" required="true"/>
         </in-parameters>
         <actions>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
+                <econdition field-name="partyId" from="activeOrgId"/></entity-find>
+
+            <if condition="!partyIdentificationList.idValue[0]">
+                <return error="true" message="Organización no tiene RUT definido"/>
+            </if>
+            <set field="rutResponde" from="partyIdentificationList.idValue[0]"/>
+
+            <!-- Recuperacion de parametros de la organizacion -->
+            <entity-find-one entity-name="mantle.party.Organization" value-field="orgField">
+                <field-map field-name="partyId" from="activeOrgId"/>
+                <select-field field-name="giro"/>
+                <select-field field-name="templateFactura"/>
+                <select-field field-name="templatePdf"/>
+                <select-field field-name="templateEnvio"/>
+                <select-field field-name="templateAceptaciones"/>
+                <select-field field-name="templateLibro"/>
+                <select-field field-name="logo"/>
+                <select-field field-name="fchResol"/>
+                <select-field field-name="nroResol"/>
+            </entity-find-one>
+
             <!-- Validación rut -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutRecibe]"/>
 
@@ -3030,14 +3081,12 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="resultS" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMP']" out-map="context"/>
             <set field="pathTemp" from="resourceValue"/>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_PDF']" out-map="context"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:orgField.templatePdf]" out-map="context"/>
             <set field="pathPdf" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CAF']" out-map="context"/>
             <set field="cafS" from="resourceValue"/>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_TEMPLATE_ACEPTACION']" out-map="context"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:orgField.templateAceptaciones]" out-map="context"/>
             <set field="plantillaS" from="resourceValue"/>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'RUT_EMPRESA']" out-map="context"/>
-            <set field="rutResponde" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'RUT_ENVIADOR']" out-map="context"/>
             <set field="rutEnviador" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_RECIBIDAS']" out-map="context"/>
@@ -3056,7 +3105,6 @@ along with this software (see the LICENSE.md file). If not, see
 
 
             <set field="envioRecibido" from="xml"/>
-            <!--set field="dirS" value="/home/cherrera/git/moqui-framework/runtime/component/moqui-chile/DTE/TEMP/"/-->
             <set field="idS" from="aceptacionDteId"/>
             <set field="nmbEnvio" value=""/>
             <set field="fchRecep" value=""/>

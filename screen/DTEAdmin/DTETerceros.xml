@@ -6,16 +6,21 @@
     <transition-include name="searchPartyList" location="component://SimpleScreens/template/party/PartyForms.xml"/>
 
     <transition name="loadDte">
-        <service-call name="mchile.DTEServices.load#Dte" in-map="[xml:xml, pdf:pdf, amount:amount, emisor:emisor, emailEmisor:emailEmisor,
-            amount:amount, montoNeto:montoNeto, nroDocumento:nroDocumento, tasaImpuesto:tasaImpuesto, tipoImpuesto:tipoImpuesto,
-            razonSocial:razonSocial, fechaEmision:fechaEmision, documentoAnulado:documentoAnulado, montoExento:montoExento, montoIVARecuperable:montoIVARecuperable,
-            codigoIVANoRecuperable:codigoIVANoRecuperable, montoIVANoRecuperable:montoIVANoRecuperable, montoIVAUsoComun:montoIVAUsoComun,
-            codigoOtroImpuestoORetencion:codigoOtroImpuestoORetencion, tasaOtroImpuestoORetencion:tasaOtroImpuestoORetencion, montoOtroImpuestoORetencionConCredito:montoOtroImpuestoORetencionConCredito,
-            montoOtroImpuestoORetencionSinCredito:montoOtroImpuestoORetencionSinCredito, montoNetoActivoFijo:montoNetoActivoFijo, montoIVAActivoFijo:montoIVAActivoFijo,
-            montoIVANoRetenido:montoIVANoRetenido, codigoSucursal:codigoSucursal, notasDebitoCreditoFacturasCompra:notasDebitoCreditoFacturasCompra, dteTypeEnumId:dteTypeEnumId]"/>
-        <!-- Creación y envio de aceptación -->
-        <service-call name="mchile.DTEServices.enviar#Aceptacion"
-                      in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, rutRecibe:emisor, xml:xml ]"/>
+        <parameter name="fiscalTaxDocumentId"/>
+        <parameter name="fiscalTaxDocumentTypeEnumId"/>
+        <parameter name="activeOrgId"/>
+        <actions>
+            <service-call name="mchile.DTEServices.load#Dte" in-map="[xml:xml, pdf:pdf, activeOrgId:activeOrgId, amount:amount, emisor:emisor, emailEmisor:emailEmisor,
+                amount:amount, montoNeto:montoNeto, nroDocumento:nroDocumento, tasaImpuesto:tasaImpuesto, tipoImpuesto:tipoImpuesto,
+                razonSocial:razonSocial, fechaEmision:fechaEmision, documentoAnulado:documentoAnulado, montoExento:montoExento, montoIVARecuperable:montoIVARecuperable,
+                codigoIVANoRecuperable:codigoIVANoRecuperable, montoIVANoRecuperable:montoIVANoRecuperable, montoIVAUsoComun:montoIVAUsoComun,
+                codigoOtroImpuestoORetencion:codigoOtroImpuestoORetencion, tasaOtroImpuestoORetencion:tasaOtroImpuestoORetencion, montoOtroImpuestoORetencionConCredito:montoOtroImpuestoORetencionConCredito,
+                montoOtroImpuestoORetencionSinCredito:montoOtroImpuestoORetencionSinCredito, montoNetoActivoFijo:montoNetoActivoFijo, montoIVAActivoFijo:montoIVAActivoFijo,
+                montoIVANoRetenido:montoIVANoRetenido, codigoSucursal:codigoSucursal, notasDebitoCreditoFacturasCompra:notasDebitoCreditoFacturasCompra, dteTypeEnumId:dteTypeEnumId]"/>
+                <!-- Creación y envio de aceptación -->
+            <!--service-call name="mchile.DTEServices.enviar#Aceptacion"
+                      in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, rutRecibe:emisor, xml:xml, activeOrgId:activeOrgId ]"/-->
+        </actions>
         <default-response url="."/>
     </transition>
 
@@ -52,11 +57,12 @@
     <transition name="enviarAceptacion">
         <parameter name="fiscalTaxDocumentId"/>
         <parameter name="fiscalTaxDocumentTypeEnumId"/>
+        <parameter name="activeOrgId"/>
         <parameter name="emisor"/>
         <parameter name="xml"/>
         <actions>
             <service-call name="mchile.DTEServices.enviar#Aceptacion"
-                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, rutRecibe:emisor, xml:xml ]"/>
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, activeOrgId:activeOrgId, rutRecibe:emisor, xml:xml ]"/>
         </actions>
         <default-response url="."/>
     </transition>
@@ -114,7 +120,10 @@
         </actions>
         <default-response type="none"/>
     </transition>
-
+    <pre-actions>
+        <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="userOrgList"/>
+        <set field="activeOrgId" from="userOrgList.activeOrgId"/>
+    </pre-actions>
     <actions>
         <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'RUT_EMPRESA']" out-map="context"/>
         <set field="emisorS" from="resourceValue"/>
@@ -131,9 +140,9 @@
 
         <label text="Carga y Listado de Documentos Tributarios recibidos de terceros (proveedores)" type="h4"/>
 
-        <container-dialog id="LoadDteDialog" button-text="Cargar DTE y Enviar Aceptación">
+        <container-dialog id="LoadDteDialog" button-text="Cargar DTE">
             <form-single name="LoadDteForm" transition="loadDte">
-
+                <field name="activeOrgId"><default-field><hidden default-value="true"/></default-field></field>
                 <field name="xml">
                     <default-field>
                         <file size="30"/>
@@ -285,7 +294,7 @@
 
         <container-dialog id="LoadDtDialog" button-text="Cargar Documentos no Electrónicos">
             <form-single name="LoadDtForm" transition="loadDt">
-
+                <field name="activeOrgId"><default-field><hidden default-value="true"/></default-field></field>
                 <field name="vendorPartyId"><default-field title="Supplier"><drop-down allow-empty="true">
                     <dynamic-options transition="searchPartyList" server-search="true" min-length="2" parameter-map="[roleTypeId:vendorRole]"/>
                 </drop-down></default-field></field>
@@ -505,7 +514,7 @@
             <!-- Movido a Dialog -->
             <field name="enviarAceptacion">
                 <default-field title=" ">
-                    <link url="enviarAceptacion" tooltip="Reenviar Aceptación"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, emisor:emisor, xml:xml]" text="Reenviar Aceptación"/>
+                    <link url="enviarAceptacion" tooltip="Enviar Aceptación"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, emisor:emisor, xml:xml]" text="Enviar Aceptación"/>
                 </default-field>
             </field>
         </form-list>
