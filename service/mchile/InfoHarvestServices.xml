@@ -115,17 +115,23 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="get" noun="UFConversionFromSII">
+        <in-parameters>
+            <parameter name="year" type="Integer"/>
+        </in-parameters>
         <actions>
             <script><![CDATA[
-
-                year = 2017
-                siiUrl = 'http://www.sii.cl/pagina/valores/uf/uf' + year + '.htm'
+                if (!year)
+                    year = Calendar.instance.get(Calendar.YEAR)
+                siiUrl = 'http://www.sii.cl/valores_y_fechas/uf/uf' + year + '.htm'
                 siiHtml = new URL(siiUrl).text
                 siiHtml = org.moqui.util.StringUtilities.toStringCleanBom(siiHtml.bytes)
-                siiHtml = siiHtml.replaceFirst('<!DOCTYPE [^>]*>', '').replaceAll('&nbsp;',' ')
+                siiHtml = siiHtml.replaceFirst('<!doctype [^>]*>', '').replaceAll('&nbsp;', ' ').
+                        replaceAll('<meta [^>]*>', '').replaceAll('&ntilde;', 'ñ').replaceAll('&aacute', 'á').
+                        replaceAll('<br>', '<br/>').replaceAll('&iacute;', 'í')
                 parser = javax.xml.parsers.SAXParserFactory.newInstance().newSAXParser()
                 gpath = new XmlSlurper(parser).parseText(siiHtml)
-                table = gpath.body.div.div.table
+                table = gpath.'**'.find {it.@id == 'mes_all'}.div.table
+                //ec.logger.info("got table: ${table}")
                 header = table.thead.tr[0]
                 expectedHeader = ['Día', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
                 for (i in 0..12) {
@@ -152,7 +158,7 @@ along with this software (see the LICENSE.md file). If not, see
                         fromDate = cal.time
                         cal.add(Calendar.DAY_OF_MONTH, 1)
                         thruDate = cal.time
-                        findMap = [uomId:'CLF', toUomId:'CLP', fromDate:fromDate, thruDate:thruDate]
+                        findMap = [uomId: 'CLF', toUomId: 'CLP', fromDate: fromDate, thruDate: thruDate]
                         existing = ec.entity.find('moqui.basic.UomConversion').condition(findMap).list()
                         if (existing.size() > 1) {
                             ec.message.addError("More than one UomConversion for fields: ${findMap}")
@@ -162,7 +168,7 @@ along with this software (see the LICENSE.md file). If not, see
                             if (entityValue.conversionFactor != ufValueDecimal)
                                 ec.message.addError("Mismatch for conversion on ${fromDate}, existing: ${entityValue.conversionFactor}, expecting ${ufValueDecimal}")
                         } else {
-                            createMap = findMap + [conversionFactor:ufValueDecimal]
+                            createMap = findMap + [conversionFactor: ufValueDecimal]
                             ec.service.sync().name('create#moqui.basic.UomConversion').parameters(createMap).call()
                         }
                     }
