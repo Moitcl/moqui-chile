@@ -28,7 +28,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="password" from="ec.user.getPreference('mchile.bcentral.ws.password')"/>
             <if condition="user != null &amp;&amp; password != null">
                 <then>
-                    <service-call name="mchile.datacollect.BancoCentralChile.call#SearchSeriesFromBCentral" in-map="context" out-map="result"/>
+                    <service-call name="mchile.datacollect.BancoCentralChile.get#SeriesData" in-map="context" out-map="result"/>
                     <log message="result: ${result}"/>
                 </then>
                 <else>
@@ -61,11 +61,48 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="update" noun="SeriesList">
+        <in-parameters>
+            <parameter name="frequencyCode" default-value="DAILY"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mchile.datacollect.BancoCentralChile.get#SeriesList" in-map="context" out-map="context"/>
+            <set field="originPartyId" value="CHLBCENTRAL"/>
+            <set field="frequencyByCode" from="[DAILY:'MchDsfDaily', MONTHLY:'MchDsfMonthly', QUARTERLY:'MchDsfQuarterly', ANNUAL:'MchDsfYearly']"/>
+            <iterate list="searchSeriesResult" entry="searchSeries">
+                <set field="frequencyEnumId" from="searchSeries.frequency?frequencyByCode[searchSeries.frequency]:null"/>
+                <set field="firstItemDate" from="searchSeries.firstObservation"/>
+                <set field="fromDate"
+                     from="searchSeries.createdAt &lt; firstItemDate? searchSeries.createdAt: firstItemDate"/>
+                <set field="seriesMap"
+                     from="[description:searchSeries.spanishTitle, frequencyEnumId:frequencyEnumId,
+                            originPartyId:originPartyId, originSeriesId:searchSeries.seriesId, fromDate:fromDate,
+                            firstItemDate:firstItemDate, lastItemDate:searchSeries.lastObservation,
+                            lastSeriesUpdatedDate:searchSeries.updated]"/>
+                <entity-find entity-name="mchile.datacollect.DataSeries" list="existingSeries">
+                    <econdition field-name="originSeriesId" from="searchSeries.seriesId"/>
+                    <econdition field-name="originPartyId"/>
+                </entity-find>
+                <if condition="existingSeries"><then>
+                    <set field="existing" from="existingSeries.first"/>
+                    <set field="dataSeriesId" from="existing.dataSeriesId"/>
+                    <service-call name="update#mchile.datacollect.DataSeries" in-map="[dataSeriesId:dataSeriesId]+seriesMap"/>
+                </then><else>
+                    <log message="Adding: ${seriesMap}"/>
+                    <service-call name="create#mchile.datacollect.DataSeries"
+                                  in-map="seriesMap" out-map="context"/>
+                </else></if>
+                <service-call name="store#moqui.basic.LocalizedEntityField"
+                              in-map="[entityName:'mchile.datacollect.DataSeries', fieldName:'description',
+                               locale:'en', pkValue:dataSeriesId, localized:searchSeries.englishTitle]"/>
+            </iterate>
+        </actions>
+    </service>
+
     <service verb="get" noun="SeriesList">
         <description>Gets available series from Banco Central for the defined frequencyCode.
             Valid frequencyCodes are DAILY, MONTHLY, QUARTERLY, ANNUAL
         </description>
-        <implements service="mchile.datacollect.BancoCentralChile.call#WSBancoCentralChile"/>
         <in-parameters>
             <parameter name="frequencyCode" default-value="DAILY"/>
         </in-parameters>
@@ -90,8 +127,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="user" from="ec.user.getPreference('mchile.bcentral.ws.username')"/>
             <set field="password" from="ec.user.getPreference('mchile.bcentral.ws.password')"/>
             <script><![CDATA[
-                searchSeriesResult = cl.moit.ws.bcentral.BancoCentralWSConsumer.searchSeries(user, password,
-                        frequencyCode)
+                searchSeriesResult = cl.moit.ws.bcentral.BancoCentralWSConsumer.searchSeries(user, password, frequencyCode)
             ]]></script>
         </actions>
     </service>
