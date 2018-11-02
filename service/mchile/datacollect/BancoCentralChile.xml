@@ -38,25 +38,56 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="update" noun="SeriesData">
+        <in-parameters>
+            <parameter name="firstDate"/> <!-- String , YYYY-MM-DD -->
+            <parameter name="lastDate"/>  <!-- String , YYYY-MM-DD -->
+            <parameter name="seriesId"/>
+        </in-parameters>
+        <actions>
+            <set field="originPartyId" value="CHLBCENTRAL"/>
+            <service-call name="mchile.datacollect.BancoCentralChile.get#SeriesData" in-map="context" out-map="context"/>
+            <iterate list="series" entry="serie">
+                <entity-find entity-name="mchile.datacollect.DataSeries" list="dataSeries">
+                    <econdition field-name="originPartyId"/>
+                    <econdition field-name="originSeriesId" from="serie.originSeriesId"/>
+                </entity-find>
+                <if condition="dataSeries">
+                    <set field="dataSeriesId" from="dataSeries.dataSeriesId"/>
+                    <service-call name="store#mchile.datacollect.DataSeriesValue"
+                                  in-map="[dataSeriesId:dataSeriesId, date:serie.date, value:serie.value]"/>
+                </if>
+            </iterate>
+        </actions>
+    </service>
+
     <service verb="get" noun="SeriesData">
         <in-parameters>
             <parameter name="firstDate"/> <!-- String , YYYY-MM-DD -->
             <parameter name="lastDate"/>  <!-- String , YYYY-MM-DD -->
-            <parameter name="seriesIds" type="List"/>
+            <parameter name="seriesId"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="searchSeriesResult" type="Map">
+            <parameter name="codigo"/>
+            <parameter name="descripcion"/>
+            <parameter name="series" type="Map">
                 <parameter name="codigo" type="BigInteger"/>
                 <parameter name="descripcion"/>
-                <parameter name="series" type="List"/>
-                <parameter name="seriesInfos" type="List"/>
+                <parameter name="series" type="List">
+                    <parameter name="originSeriesId"/>
+                    <parameter name="date" type="Date"/>
+                    <parameter name="value" type="BigDecimal"/>
+                </parameter>
             </parameter>
         </out-parameters>
         <actions>
             <set field="user" from="ec.user.getPreference('mchile.bcentral.ws.username')"/>
             <set field="password" from="ec.user.getPreference('mchile.bcentral.ws.password')"/>
             <script><![CDATA[
-                result = cl.moit.ws.bcentral.BancoCentralWSConsumer.getSeries(user, password, firstDate, lastDate, seriesIds)
+                result = cl.moit.ws.bcentral.BancoCentralWSConsumer.getSeries(user, password, firstDate, lastDate, seriesId)
+                codigo = result.codigo
+                descricion = result.descripcion
+                series = result.series
             ]]></script>
         </actions>
     </service>
@@ -107,6 +138,8 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="frequencyCode" default-value="DAILY"/>
         </in-parameters>
         <out-parameters>
+            <parameter name="codigo" type="BigInteger"/>
+            <parameter name="descripcion"/>
             <parameter name="searchSeriesResult" type="List">
                 <parameter name="series" type="Map">
                     <parameter name="seriesId" type="String"/>
@@ -127,7 +160,10 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="user" from="ec.user.getPreference('mchile.bcentral.ws.username')"/>
             <set field="password" from="ec.user.getPreference('mchile.bcentral.ws.password')"/>
             <script><![CDATA[
-                searchSeriesResult = cl.moit.ws.bcentral.BancoCentralWSConsumer.searchSeries(user, password, frequencyCode)
+                result = cl.moit.ws.bcentral.BancoCentralWSConsumer.searchSeries(user, password, frequencyCode)
+                searchSeriesResult = result.searchSeriesResult
+                codigo = result.codigo
+                descipcion = result.descipcion
             ]]></script>
         </actions>
     </service>

@@ -37,7 +37,7 @@ class BancoCentralWSConsumer {
         return seriesInfoList
     }
 
-    public static List<Map<String,Object>> searchSeries(String user, String password, String frequency) {
+    public static Map<String,Object> searchSeries(String user, String password, String frequency) {
         if (!frequency in validFrequencies) {
             throw new Exception("Invalid frequency '${frequency}', expected one of ${validFrequencies}")
         }
@@ -66,29 +66,42 @@ class BancoCentralWSConsumer {
         }
         def seriesInfos = result.SeriesInfos.internetSeriesInfo
 
-        logger.warn("Codigo: ${result.Codigo}")
-        logger.warn("Descripcion: ${result.Descripcion}")
-        logger.warn("SeriesInfos.class: ${seriesInfos.getClass()}")
-        logger.warn("SeriesInfos[0]: ${seriesInfos[0]}")
+        //logger.warn("Codigo: ${result.Codigo}")
+        //logger.warn("Descripcion: ${result.Descripcion}")
+        //logger.warn("SeriesInfos.class: ${seriesInfos.getClass()}")
+        //logger.warn("SeriesInfos[0]: ${seriesInfos[0]}")
 
         def seriesInfoLists = BancoCentralWSConsumer.seriesInfosToListOfMaps(seriesInfos)
+        Map<String, Object> resultMap = [seriesInfoLists:seriesInfoLists, codigo:result.Codigo, descripcion:result.Descripcion]
+        return resultMap
     }
 
-    public static List<Map<String,Object>> seriesResultsToListOfMaps(groovy.util.slurpersupport.NodeChildren seriesResults) {
+    public static List<Map<String, Object>> seriesResultsToListOfMaps(groovy.util.slurpersupport.NodeChildren
+                                                                         seriesResults) {
+
+        List<Map<String,Object>> resultsList = []
+        DateFormat dateFormat = new SimpleDateFormat("d-M-y")
+        for (obs in seriesResults) {
+            Date date = dateFormat.parse(obs.indexDateString.text())
+            BigDecimal value
+            try {
+                value = new BigDecimal(obs.value.text())
+            } catch (Exception e) {
+                value = null
+            }
+            resultsList.add([originSeriesId:obs.seriesKey.seriesId.text(), date:date, value:value])
+        }
+
+        return resultsList
 
     }
 
-    public static List<Map<String,Object>> getSeries(String user, String password, String firstDate, String lastDate,
-                                                     List seriesIds) {
+    public static Map<String,Object> getSeries(String user, String password, String firstDate, String lastDate,
+                                                     String seriesId) {
 
         def client = new SOAPClient('https://si3.bcentral.cl/sietews/sietews.asmx?wsdl')
         String firstDateXml = firstDate? "<firstDate>${firstDate}</firstDate>": ""
         String lastDateXml = lastDate? "<lastDate>${lastDate}</lastDate>": ""
-        StringBuffer seriesIdsXml = new StringBuffer("<seriesIds>")
-        seriesIds.each {
-            seriesIdsXml.append("\n<string>${it}</string>")
-        }
-        seriesIdsXml.append("</seriesIds>")
         def response = client.send(
                 connectTimeout:5000,
                 readTimeout:20000,
@@ -103,7 +116,9 @@ class BancoCentralWSConsumer {
                            <password>${password}</password>
                            ${firstDateXml}
                            ${lastDateXml}
-                           ${seriesIdsXml.toString()}
+                           <seriesIds>
+                               <string>${seriesId}</string>
+                           </seriesIds>
                        </GetSeries>
                    </soap-env:Body>
                </soap-env:Envelope>""")
@@ -112,18 +127,22 @@ class BancoCentralWSConsumer {
         if (response.httpResponse.statusMessage=="OK") {
             result = response.GetSeriesResponse.GetSeriesResult
         }
-        def series = result.fameSeries
+        def series = result.Series.fameSeries
+        def obs = series.obs
+
+        def receivedSeriesId = series.header.seriesKey.seriesId
+        def precision = series.header.precision
         // header (series ID)
         // <seriesKey><keyFamilyId>F072</keyFamilyId><seriesId>F072.XPF.USD.N.O.D</seriesId><dataStage>INTERNAL</dataStage><exists>true</exists></seriesKey><precision>2</precision>
         // lista de <obs></obs>: <obs><indexDateString>02-10-2018</indexDateString><seriesKey><keyFamilyId>F072</keyFamilyId><seriesId>F072.XPF.USD.N.O.D</seriesId><dataStage>INTERNAL</dataStage><exists>true</exists></seriesKey><statusCode>OK</statusCode><value>102.3123</value></obs>
 
-        logger.warn("")
-        logger.warn("Codigo: ${result.Codigo}")
-        logger.warn("Descripcion: ${result.Descripcion}")
-        logger.warn("Series.class: ${series.getClass()}")
-        logger.warn("Series[0]: ${series[0]}")
+        //logger.warn("Codigo: ${result.Codigo}")
+        //logger.warn("Descripcion: ${result.Descripcion}")
+        //logger.warn("Series.class: ${series.getClass()}")
+        //logger.warn("Obs[0]: ${obs[0]}")
 
-        //def seriesInfoLists = BancoCentralWSConsumer.seriesInfosToListOfMaps(seriesInfos)
+        def seriesInfoLists = BancoCentralWSConsumer.seriesResultsToListOfMaps(obs)
+        return [series:seriesInfoLists, codigo:result.Codigo, descripcion:result.Descripcion]
     }
 
 }
