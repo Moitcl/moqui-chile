@@ -127,11 +127,11 @@ class BancoCentralWSConsumer {
         if (response.httpResponse.statusMessage=="OK") {
             result = response.GetSeriesResponse.GetSeriesResult
         }
-        def series = result.Series.fameSeries
-        def obs = series.obs
+        def fameSeries = result.Series.fameSeries
+        def obs = fameSeries.obs
 
-        def receivedSeriesId = series.header.seriesKey.seriesId
-        def precision = series.header.precision
+        def receivedSeriesId = fameSeries.header.seriesKey.seriesId
+        def precision = fameSeries.header.precision
         // header (series ID)
         // <seriesKey><keyFamilyId>F072</keyFamilyId><seriesId>F072.XPF.USD.N.O.D</seriesId><dataStage>INTERNAL</dataStage><exists>true</exists></seriesKey><precision>2</precision>
         // lista de <obs></obs>: <obs><indexDateString>02-10-2018</indexDateString><seriesKey><keyFamilyId>F072</keyFamilyId><seriesId>F072.XPF.USD.N.O.D</seriesId><dataStage>INTERNAL</dataStage><exists>true</exists></seriesKey><statusCode>OK</statusCode><value>102.3123</value></obs>
