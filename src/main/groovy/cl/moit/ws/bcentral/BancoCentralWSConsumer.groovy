@@ -89,7 +89,7 @@ class BancoCentralWSConsumer {
             } catch (Exception e) {
                 value = null
             }
-            resultsList.add([originSeriesId:obs.seriesKey.seriesId.text(), date:date, value:value])
+            resultsList.add([originSeriesId:(obs.seriesKey.seriesId.text() as String), date:date, value:value])
         }
 
         return resultsList
