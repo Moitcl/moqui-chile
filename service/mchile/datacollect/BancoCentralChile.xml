@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+    <service verb="get" noun="UFConversion">
+        <description>Connects to the Web Service of Banco Central de Chile to get the exchange rates</description>
+        <in-parameters>
+            <parameter name="fromDate" type="Timestamp"/>
+            <parameter name="thruDate" type="Timestamp"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="newValuesAmount"/>
+        </out-parameters>
+        <actions>
+            <set field="user" from="ec.user.getPreference('mchile.bcentral.ws.username')"/>
+            <set field="password" from="ec.user.getPreference('mchile.bcentral.ws.password')"/>
+            <if condition="user != null &amp;&amp; password != null">
+                <then>
+                    <service-call name="mchile.datacollect.BancoCentralChile.get#SeriesData" in-map="context" out-map="result"/>
+                    <log message="result: ${result}"/>
+                </then>
+                <else>
+                    <!-- Try alternative: www.sii.cl -->
+                </else>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="update" noun="SeriesData">
+        <in-parameters>
+            <parameter name="firstDate"/> <!-- String , YYYY-MM-DD -->
+            <parameter name="lastDate"/>  <!-- String , YYYY-MM-DD -->
+            <parameter name="seriesId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="numUpdated" type="Integer"/>
+            <parameter name="numDuplicated" type="Integer"/>
+        </out-parameters>
+        <actions>
+            <set field="originPartyId" value="CHLBCENTRAL"/>
+            <service-call name="mchile.datacollect.BancoCentralChile.get#SeriesData" in-map="context" out-map="context"/>
+            <set field="errorList" from="[]"/>
+            <set field="numUpdated" from="0"/>
+            <set field="numDuplicated" from="0"/>
+            <iterate list="series" entry="serie">
+                <entity-find entity-name="mchile.datacollect.DataSeries" list="dataSeries">
+                    <econdition field-name="originPartyId"/>
+                    <econdition field-name="originSeriesId" from="serie.originSeriesId"/>
+                </entity-find>
+                <if condition="dataSeries">
+                    <set field="dataSeriesId" from="dataSeries.first.dataSeriesId"/>
+                    <set field="date" from="serie.date"/>
+                    <entity-find entity-name="mchile.datacollect.DataSeriesValue" list="existingList">
+                        <econdition field-name="dataSeriesId"/>
+                        <econdition field-name="date"/>
+                    </entity-find>
+                    <if condition="existingList"><then>
+                        <if condition="existingList.first.value == serie.value"><then>
+                            <script>numDuplicated++</script>
+                        </then><else>
+                            <script>ec.message.addError("Error adding value for date ${date}, dataSeriesId ${dataSeriesId}, received ${serie.value}, existing: ${existingList.first.value}")</script>
+                        </else></if>
+                    </then><else>
+                        <service-call name="create#mchile.datacollect.DataSeriesValue" in-map="[dataSeriesId:dataSeriesId, date:date, value:serie.value]"/>
+                        <script>numUpdated++</script>
+                    </else></if>
+                </if>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="get" noun="SeriesData">
+        <in-parameters>
+            <parameter name="firstDate"/> <!-- String , YYYY-MM-DD -->
+            <parameter name="lastDate"/>  <!-- String , YYYY-MM-DD -->
+            <parameter name="seriesId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="codigo"/>
+            <parameter name="descripcion"/>
+            <parameter name="series" type="Map">
+                <parameter name="codigo" type="BigInteger"/>
+                <parameter name="descripcion"/>
+                <parameter name="series" type="List">
+                    <parameter name="originSeriesId"/>
+                    <parameter name="date" type="Date"/>
+                    <parameter name="value" type="BigDecimal"/>
+                </parameter>
+            </parameter>
+        </out-parameters>
+        <actions>
+            <set field="user" from="ec.user.getPreference('mchile.bcentral.ws.username')"/>
+            <set field="password" from="ec.user.getPreference('mchile.bcentral.ws.password')"/>
+            <script><![CDATA[
+                result = cl.moit.ws.bcentral.BancoCentralWSConsumer.getSeries(user, password, firstDate, lastDate, seriesId)
+                codigo = result.codigo
+                descricion = result.descripcion
+                series = result.series
+            ]]></script>
+        </actions>
+    </service>
+
+    <service verb="update" noun="SeriesList">
+        <in-parameters>
+            <parameter name="frequencyCodeList" default="['DAILY']" type="List"/>
+        </in-parameters>
+        <actions>
+            <iterate list="frequencyCodeList" entry="frequencyCode">
+                <service-call name="mchile.datacollect.BancoCentralChile.get#SeriesList" in-map="context" out-map="context"/>
+                <if condition="codigo">
+                    <script>ec.message.addError(descripcion)</script>
+                </if>
+                <set field="originPartyId" value="CHLBCENTRAL"/>
+                <set field="frequencyByCode" from="[DAILY:'MchDsfDaily', MONTHLY:'MchDsfMonthly', QUARTERLY:'MchDsfQuarterly', ANNUAL:'MchDsfYearly']"/>
+                <iterate list="searchSeriesResult" entry="searchSeries">
+                    <set field="frequencyEnumId" from="searchSeries.frequency?frequencyByCode[searchSeries.frequency]:null"/>
+                    <set field="firstItemDate" from="searchSeries.firstObservation"/>
+                    <set field="fromDate"
+                         from="searchSeries.createdAt &lt; firstItemDate? searchSeries.createdAt: firstItemDate"/>
+                    <set field="seriesMap"
+                         from="[description:searchSeries.spanishTitle, frequencyEnumId:frequencyEnumId,
+                            originPartyId:originPartyId, originSeriesId:searchSeries.seriesId, fromDate:fromDate,
+                            firstItemDate:firstItemDate, lastItemDate:searchSeries.lastObservation,
+                            lastSeriesUpdatedDate:searchSeries.updated]"/>
+                    <entity-find entity-name="mchile.datacollect.DataSeries" list="existingSeries">
+                        <econdition field-name="originSeriesId" from="searchSeries.seriesId"/>
+                        <econdition field-name="originPartyId"/>
+                    </entity-find>
+                    <if condition="existingSeries"><then>
+                        <set field="existing" from="existingSeries.first"/>
+                        <set field="dataSeriesId" from="existing.dataSeriesId"/>
+                        <service-call name="update#mchile.datacollect.DataSeries" in-map="[dataSeriesId:dataSeriesId]+seriesMap"/>
+                    </then><else>
+                        <log message="Adding: ${seriesMap}"/>
+                    <service-call name="create#mchile.datacollect.DataSeries"
+                                  in-map="seriesMap" out-map="context"/>
+                    </else></if>
+                    <service-call name="store#moqui.basic.LocalizedEntityField"
+                                  in-map="[entityName:'mchile.datacollect.DataSeries', fieldName:'description',
+                               locale:'en', pkValue:dataSeriesId, localized:searchSeries.englishTitle]"/>
+                </iterate>
+           </iterate>
+        </actions>
+    </service>
+
+    <service verb="get" noun="SeriesList">
+        <description>Gets available series from Banco Central for the defined frequencyCode.
+            Valid frequencyCodes are DAILY, MONTHLY, QUARTERLY, ANNUAL
+        </description>
+        <in-parameters>
+            <parameter name="frequencyCode" default-value="DAILY"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="codigo" type="BigInteger"/>
+            <parameter name="descripcion"/>
+            <parameter name="searchSeriesResult" type="List">
+                <parameter name="series" type="Map">
+                    <parameter name="seriesId" type="String"/>
+                    <parameter name="frequency" type="String"/>
+                    <parameter name="frequencyCode" type="String"/>
+                    <parameter name="observed" type="String"/>
+                    <parameter name="observedCode" type="String"/>
+                    <parameter name="spanishTitle" type="String"/>
+                    <parameter name="englishTitle" type="String"/>
+                    <parameter name="firstObservation" type="Date"/>
+                    <parameter name="lastObservation" type="Date"/>
+                    <parameter name="updated" type="Date"/>
+                    <parameter name="createdAt" type="Date"/>
+                </parameter>
+            </parameter>
+        </out-parameters>
+        <actions>
+            <set field="user" from="ec.user.getPreference('mchile.bcentral.ws.username')"/>
+            <set field="password" from="ec.user.getPreference('mchile.bcentral.ws.password')"/>
+            <script><![CDATA[
+                result = cl.moit.ws.bcentral.BancoCentralWSConsumer.searchSeries(user, password, frequencyCode)
+                searchSeriesResult = result.searchSeriesResult
+                codigo = result.codigo
+                descripcion = result.descripcion
+            ]]></script>
+        </actions>
+    </service>
+
+</services>

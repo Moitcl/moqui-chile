@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd">
+    <transition name="updateSeriesList">
+        <service-call name="mchile.datacollect.BancoCentralChile.update#SeriesList"/>
+        <default-response url="."/>
+    </transition>
+    <transition name="updateSeriesData">
+        <service-call name="mchile.datacollect.DataCollectServices.update#SeriesData"/>
+        <default-response url="."/>
+    </transition>
+    <actions>
+        <entity-find entity-name="mchile.datacollect.DataSeries" list="dataSeriesList">
+            <search-form-inputs/>
+        </entity-find>
+    </actions>
+    <widgets>
+        <label text="Series de datos disponibles" type="h1"/>
+        <container-row>
+            <row-col lg="6">
+                <form-single name="DataSeriesSearch">
+                    <field name="originSeriesId"><default-field title="Series Id"><text-find size="20"/></default-field></field>
+                    <field name="description"><default-field><text-find size="20"/></default-field></field>
+                    <field name="search"><default-field><submit/></default-field></field>
+                </form-single>
+            </row-col>
+            <row-col lg="6">
+                <label text="Update list from Banco Central de Chile" type="h3"/>
+                <form-single name="UpdateSeries" transition="updateSeriesList">
+                    <field name="frequencyCodeList">
+                        <default-field>
+                            <drop-down allow-multiple="true" allow-empty="true" no-current-selected-key="DAILY,MONTHLY,QUARTERLY,ANNUAL">
+                                <list-options
+                                        list="[[key:'DAILY', text:'Daily'], [key:'MONTHLY', text:'Monthly'], [key:'QUARTERLY', text:'Quarterly'], [key:'ANNUAL', text:'Annual']]"
+                                        text="${text}" key="${key}"/>
+                            </drop-down>
+                        </default-field>
+                    </field>
+                    <field name="update"><default-field><submit/></default-field></field>
+                </form-single>
+            </row-col>
+        </container-row>
+        <form-list name="DataSeries" list="dataSeriesList">
+            <row-actions>
+                <set field="fetchFromDate" from="lastSeriesFetchDate"/>
+                <if condition="fetchFromDate == null"><set field="fetchFromDate" from="lastItemDate"/></if>
+                <if condition="fetchFromDate == null"><set field="fetchFromDate" from="ec.user.nowTimestamp"/></if>
+                <set field="fetchThruDate" from="ec.user.nowTimestamp"/>
+                <if condition="fetchFromDate > fetchThruDate">
+                    <set field="fetchThruDate" from="fetchThruDate"/>
+                    <set field="fetchFromDate" from="ec.user.nowTimestamp"/>
+                </if>
+            </row-actions>
+            <!--<auto-fields-entity entity-name="mchile.datacollect.DataSeries"/>-->
+            <field name="dataSeriesId"><default-field><hidden/></default-field></field>
+            <field name="originPartyId"><header-field show-order-by="true" title="Source Party"/><default-field>
+                <display-entity entity-name="mantle.party.PartyDetail" key-field-name="partyId" text="PartyNameTemplate"/>
+            </default-field></field>
+            <field name="originSeriesId"><header-field show-order-by="true" title="Series ID"/><default-field><display/></default-field></field>
+            <field name="description"><default-field><display/></default-field></field>
+            <field name="dataSeriesTypeEnumId"><header-field show-order-by="true" title="Series Type" /><default-field><display-entity entity-name="moqui.basic.Enumeration"/></default-field></field>
+            <field name="frequencyEnumId"><header-field show-order-by="true" title="Frequency" /><default-field><display-entity entity-name="moqui.basic.Enumeration"/></default-field></field>
+            <field name="fromDate"><header-field show-order-by="true"/><default-field><display/></default-field></field>
+            <field name="thruDate"><header-field show-order-by="true"/><default-field><display/></default-field></field>
+            <field name="firstItemDate"><header-field show-order-by="true"/><default-field><display/></default-field></field>
+            <field name="lastItemDate"><header-field show-order-by="true"/><default-field><display/></default-field></field>
+            <field name="action"><default-field>
+                <link url="../Values" text="View" parameter-map="[dataSeriesId:dataSeriesId]"/>
+                <container-dialog id="UpdateCatalog" button-text="Fetch new Values">
+                    <form-single name="FetchValuesForm" transition="updateSeriesData">
+                        <field name="dataSeriesId"><default-field><hidden/></default-field></field>
+                        <field name="fetchFromDate"><default-field><date-time/></default-field></field>
+                        <field name="fetchThruDate"><default-field><date-time/>
+                        </default-field></field>
+                        <field name="submit"><default-field><submit/></default-field></field>
+                    </form-single>
+                </container-dialog>
+            </default-field></field>
+            <field name="lastSeriesFetchDate"><header-field show-order-by="true"/><default-field><display/></default-field></field>
+            <form-list-column><field-ref name="dataSeriesId"/><field-ref name="originPartyId"/></form-list-column>
+            <form-list-column><field-ref name="originSeriesId"/><field-ref name="description"/></form-list-column>
+            <form-list-column><field-ref name="frequencyEnumId"/><field-ref name="dataSeriesTypeEnumId"/></form-list-column>
+            <form-list-column><field-ref name="fromDate"/><field-ref name="thruDate"/></form-list-column>
+            <form-list-column><field-ref name="firstItemDate"/><field-ref name="lastItemDate"/></form-list-column>
+            <form-list-column><field-ref name="action"/></form-list-column>
+            <form-list-column><field-ref name="lastSeriesFetchDate"/></form-list-column>
+        </form-list>
+    </widgets>
+</screen>
