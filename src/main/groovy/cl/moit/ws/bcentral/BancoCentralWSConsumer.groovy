@@ -72,7 +72,7 @@ class BancoCentralWSConsumer {
         //logger.warn("SeriesInfos[0]: ${seriesInfos[0]}")
 
         def seriesInfoLists = BancoCentralWSConsumer.seriesInfosToListOfMaps(seriesInfos)
-        Map<String, Object> resultMap = [seriesInfoLists:seriesInfoLists, codigo:result.Codigo, descripcion:result.Descripcion]
+        Map<String, Object> resultMap = [seriesInfoLists:seriesInfoLists, codigo:result.Codigo as String, descripcion:result.Descripcion as String]
         return resultMap
     }
 
@@ -142,7 +142,7 @@ class BancoCentralWSConsumer {
         //logger.warn("Obs[0]: ${obs[0]}")
 
         def seriesInfoLists = BancoCentralWSConsumer.seriesResultsToListOfMaps(obs)
-        return [series:seriesInfoLists, codigo:result.Codigo, descripcion:result.Descripcion]
+        return [series:seriesInfoLists, codigo:result.Codigo as String, descripcion:result.Descripcion as String]
     }
 
 }
