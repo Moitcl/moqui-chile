@@ -44,40 +44,40 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="lastDate"/>  <!-- String , YYYY-MM-DD -->
             <parameter name="seriesId"/>
         </in-parameters>
+        <out-parameters>
+            <parameter name="numUpdated" type="Integer"/>
+            <parameter name="numDuplicated" type="Integer"/>
+        </out-parameters>
         <actions>
             <set field="originPartyId" value="CHLBCENTRAL"/>
             <service-call name="mchile.datacollect.BancoCentralChile.get#SeriesData" in-map="context" out-map="context"/>
             <set field="errorList" from="[]"/>
             <set field="numUpdated" from="0"/>
+            <set field="numDuplicated" from="0"/>
             <iterate list="series" entry="serie">
                 <entity-find entity-name="mchile.datacollect.DataSeries" list="dataSeries">
                     <econdition field-name="originPartyId"/>
                     <econdition field-name="originSeriesId" from="serie.originSeriesId"/>
                 </entity-find>
                 <if condition="dataSeries">
-                    <set field="dataSeriesId" from="dataSeries.dataSeriesId"/>
+                    <set field="dataSeriesId" from="dataSeries.first.dataSeriesId"/>
                     <set field="date" from="serie.date"/>
                     <entity-find entity-name="mchile.datacollect.DataSeriesValue" list="existingList">
                         <econdition field-name="dataSeriesId"/>
                         <econdition field-name="date"/>
                     </entity-find>
                     <if condition="existingList"><then>
-                        <if condition="existingList.first.value == serie.value">
-                            <script>errorList.add("Error adding value for date ${date}, dataSeriesId ${dataSeriesId}, received ${serie.value}, existing: ${existingList.first.value}")</script>
-                        </if>
+                        <if condition="existingList.first.value == serie.value"><then>
+                            <script>numDuplicated++</script>
+                        </then><else>
+                            <script>ec.message.addError("Error adding value for date ${date}, dataSeriesId ${dataSeriesId}, received ${serie.value}, existing: ${existingList.first.value}")</script>
+                        </else></if>
                     </then><else>
-                        <service-call name="create#mchile.datacollect.DataSeriesValue"
-                                      in-map="[dataSeriesId:dataSeriesId, date:date, value:serie.value]"/>
+                        <service-call name="create#mchile.datacollect.DataSeriesValue" in-map="[dataSeriesId:dataSeriesId, date:date, value:serie.value]"/>
                         <script>numUpdated++</script>
                     </else></if>
                 </if>
             </iterate>
-            <if condition="true || numUpdated || errorList">
-                <script><![CDATA[
-                    ec.makeNotificationMessage().topic("DataCollection").title(title).
-                            message([errorList:errorList, numUpdated:numUpdated] as Map<String, Object>).send()
-                ]]></script>
-            </if>
         </actions>
     </service>
 
@@ -117,9 +117,6 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="frequencyCodeList" default="['DAILY']" type="List"/>
         </in-parameters>
         <actions>
-            <if condition="frequencyCode instanceof List">
-                <log message="got a list: ${frequencyCode}"/>
-            </if>
             <iterate list="frequencyCodeList" entry="frequencyCode">
                 <service-call name="mchile.datacollect.BancoCentralChile.get#SeriesList" in-map="context" out-map="context"/>
                 <if condition="codigo">
