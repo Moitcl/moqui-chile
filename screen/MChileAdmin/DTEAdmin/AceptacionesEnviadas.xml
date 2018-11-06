@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd"
+        menu-image="glyphicon glyphicon-shopping-cart" menu-image-type="icon" default-menu-title="Aceptaciones Enviadas"
+        default-menu-index="2">
+
+    <transition name="loadDte">
+        <service-call name="mchile.DTEServices.load#Dte" in-map="[xml:xml, pdf:pdf, amount:amount, emisor:emisor, emailEmisor:emailEmisor,
+            amount:amount, montoNeto:montoNeto, nroDocumento:nroDocumento, tasaImpuesto:tasaImpuesto, tipoImpuesto:tipoImpuesto,
+            razonSocial:razonSocial, fechaEmision:fechaEmision, documentoAnulado:documentoAnulado, montoExento:montoExento, montoIVARecuperable:montoIVARecuperable,
+            codigoIVANoRecuperable:codigoIVANoRecuperable, montoIVANoRecuperable:montoIVANoRecuperable, montoIVAUsoComun:montoIVAUsoComun,
+            codigoOtroImpuestoORetencion:codigoOtroImpuestoORetencion, tasaOtroImpuestoORetencion:tasaOtroImpuestoORetencion, montoOtroImpuestoORetencionConCredito:montoOtroImpuestoORetencionConCredito,
+            montoOtroImpuestoORetencionSinCredito:montoOtroImpuestoORetencionSinCredito, montoNetoActivoFijo:montoNetoActivoFijo, montoIVAActivoFijo:montoIVAActivoFijo,
+            montoIVANoRetenido:montoIVANoRetenido, codigoSucursal:codigoSucursal, notasDebitoCreditoFacturasCompra:notasDebitoCreditoFacturasCompra, dteTypeEnumId:dteTypeEnumId]"/>
+        <!-- Creación y envio de aceptación -->
+        <service-call name="mchile.DTEServices.enviar#Aceptacion"
+                      in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, rutRecibe:emisor, xml:xml ]"/>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="verificarEnSII">
+        <parameter name="fiscalTaxDocumentId"/>
+        <parameter name="fiscalTaxDocumentTypeEnumId"/>
+        <actions>
+            <service-call name="mchile.DTEServices.verificaEnSII#Documento"
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" out-map="verifyOut"/>
+            <log message="-> ${verifyOut.statusSii}" level="warn"/>
+            <if condition="verifyOut.statusSii == '0'">
+                <return error="false" message="${verifyOut.salida}"/>
+            </if>
+            <if condition="verifyOut.statusSii != '0'">
+                <return error="true" message="${verifyOut.salida}"/>
+            </if>
+
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <!-- TODO: Enviar aceptación a tercero -->
+    <transition name="enviarAceptacion">
+        <parameter name="fiscalTaxDocumentId"/>
+        <parameter name="fiscalTaxDocumentTypeEnumId"/>
+        <parameter name="emisor"/>
+        <parameter name="xml"/>
+        <actions>
+            <service-call name="mchile.DTEServices.enviar#Aceptacion"
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, rutRecibe:emisor, xml:xml ]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="eliminarDTETercero">
+        <parameter name="fiscalTaxDocumentId"/>
+        <parameter name="fiscalTaxDocumentTypeEnumId"/>
+        <actions>
+            <service-call name="mchile.DTEServices.eliminar#DTETercero"
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="pdf" read-only="true">
+        <parameter name="fiscalTaxDocumentId"/>
+        <actions>
+
+            <set field="extraPathNameList" from="sri.screenUrlInfo.extraPathNameList"/>
+
+            <if condition="extraPathNameList &amp;&amp; !fiscalTaxDocumentId">
+                <set field="fiscalTaxDocumentId" from="extraPathNameList[0]"/></if>
+            <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="document" cache="false">
+                <field-map field-name="fiscalTaxDocumentId"/></entity-find-one>
+            <log level="warn" message="------- $document.pdf param: $fiscalTaxDocumentId"/>
+
+            <if condition="document == null"><then>
+                <!-- NOTE: consider returning a default image instead of 404 -->
+                <script>ec.web.sendError(404, null, null)</script>
+            </then><else>
+                <script>ec.web.sendResourceResponse(document.pdf, true)</script>
+            </else></if>
+        </actions>
+        <default-response type="none"/>
+    </transition>
+
+    <transition name="xml" read-only="true">
+        <parameter name="fiscalTaxDocumentId"/>
+        <actions>
+
+            <set field="extraPathNameList" from="sri.screenUrlInfo.extraPathNameList"/>
+
+
+            <if condition="extraPathNameList &amp;&amp; !fiscalTaxDocumentId">
+                <set field="fiscalTaxDocumentId" from="extraPathNameList[0]"/></if>
+            <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="document" cache="true">
+                <field-map field-name="fiscalTaxDocumentId"/></entity-find-one>
+
+            <if condition="document == null"><then>
+                <!-- NOTE: consider returning a default image instead of 404 -->
+                <script>ec.web.sendError(404, null, null)</script>
+            </then><else>
+                <script>ec.web.sendResourceResponse(document.xml, true)</script>
+            </else></if>
+        </actions>
+        <default-response type="none"/>
+    </transition>
+
+    <actions>
+
+        <entity-find entity-name="MoquiChile.AceptacionDte" list="dteList">
+            <search-form-inputs/>
+            <!--order-by field-name="tmstFirmaResp"/-->
+        </entity-find>
+
+    </actions>
+    <widgets>
+
+        <label text="Acuse Recibo DTE Enviados" type="h4"/>
+
+        <form-list name="DteForm" list="dteList" show-pdf-button="true" show-csv-button="true" header-dialog="true" saved-finds="true" multi="true">
+            <row-actions>
+                <!-- Se busca ubicación de XML y PDF -->
+                <service-call name="mchile.DTEServices.get#AceptacionFilename"
+                              in-map="[aceptacionDteId:aceptacionDteId, format:'pdf']" out-map="context"/>
+                <set field="pdfFilename" from="filename"/>
+            </row-actions>
+            <field name="_useRowSubmit"><default-field><hidden default-value="true"/></default-field></field>
+            <field name="fiscalTaxDocumentId"><default-field><hidden default-value="true"/></default-field></field>
+            <field name="fiscalTaxDocumentId">
+                <header-field title="Folio o Identificador" show-order-by="true"><text-line size="6"/></header-field>
+                <default-field>
+                    <display/>
+                </default-field>
+            </field>
+            <field name="rutEmisor">
+                <header-field show-order-by="true" title="Rut Emisor"><text-line size="6"/></header-field>
+                <default-field>
+                    <display/>
+                </default-field>
+            </field>
+            <field name="nmbEnvio">
+                <header-field show-order-by="true" title="Razón Social"><text-line size="6"/></header-field>
+                <default-field>
+                    <display/>
+                </default-field>
+            </field>
+            <field name="estadoRecepEnvEnumId">
+                <header-field show-order-by="true" title="Estado Recepción"><text-line size="6"/></header-field>
+                <default-field>
+                    <display/>
+                </default-field>
+            </field>
+            <field name="xml">
+                <default-field title=" ">
+                    <link url="xml/${xml}" parameter-map="[aceptacionDteId:aceptacionDteId]" text="XML" link-type="anchor"/>
+                </default-field>
+            </field>
+        </form-list>
+    </widgets>
+</screen>
