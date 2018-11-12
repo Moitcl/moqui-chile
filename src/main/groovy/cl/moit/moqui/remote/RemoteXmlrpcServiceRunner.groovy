@@ -84,7 +84,7 @@ public class RemoteXmlrpcServiceRunner implements ServiceRunner {
 
         SOAPResponse response = client.send(requestParams, msg.version, msg.toString())
 
-        Map<String, Object> xmlRpcResult = (Map<String, Object>) convertToMap(response.body)
+        Map<String, Object> xmlRpcResult = (Map<String, Object>) toMap(response.body)
 
         return xmlRpcResult
 
@@ -110,30 +110,49 @@ public class RemoteXmlrpcServiceRunner implements ServiceRunner {
         return sb.toString()
     }
 
-    Closure params(Map prms) {
-        prms.each { key, value ->
-            if (value instanceof String) {
-                return {"${key}"("${value}")}
-            }
-            if (value instanceof Map) {
-                return {"${key}"(params(value))}
-            }
+    Map<String, Object> toMap(Object node) {
+        if (node instanceof Closure) {
+            throw new IllegalArgumentException("Unsupported type for node: 'Closure'")
         }
+        if (!node instanceof GPathResult) {
+            throw new IllegalArgumentException("Unsupported type for node: '${node.class}'")
+        }
+        GPathResult gpr = (GPathResult)node
+        if (gpr.name() != "Body")
+            throw new IllegalArgumentException("Result body has name: '${gpr.name()}'")
+        GPathResult children = gpr.children()
+        if (children.isEmpty())
+            return [(gpr.name()):null]
+        else if (gpr.size() == 1)
+            gpr = children.getAt(0) // should always be the case, one single child
+        Object childRes = toMapInternal(gpr)
+        if (childRes instanceof Map<String,Object>)
+            return (Map<String, Object>)childRes
+        return [(gpr.name()):childRes]
     }
 
-    Map<String, Object> convertToMap(node) {
-        def children = node.childNodes()
-        if (children) {
-            List childrenList = new LinkedList()
-            children.each { childrenList.add(convertToMap(it)) }
-            def collectedEntries = childrenList.collectEntries()
-
-            if (collectedEntries.size() >= childrenList.size()) return collectedEntries
-            def newChildList = childrenList.groupBy {
-                collectedEntries.keySet().contains(it.keySet().iterator().next())
+    Object toMapInternal(GPathResult gpr) {
+        GPathResult children = gpr.children()
+        if (children.isEmpty())
+            return gpr.text()
+        Map<String, List<Object>> childMaps = new HashMap<String, List<Object>>()
+        children.each { child ->
+            List<Object> childNameList = childMaps.get(child.name())
+            if (childNameList == null) {
+                childNameList = new LinkedList<Object>()
+                childMaps.put(child.name(), childNameList)
             }
-            return [(node.name()): newChildList[true]]
-        } else return [(node.name()): node.text()]
+            childNameList.add(toMapInternal(child))
+        }
+        Map<String, Object> returnMap = new HashMap<String, Object>()
+        childMaps.each { key, value ->
+            List<Object> list = (List<Object>) value
+            if (list.size() > 1)
+                returnMap.put(key, list)
+            else
+                returnMap.put(key, list.get(0))
+        }
+        return returnMap
     }
 
     public void destroy() { }
