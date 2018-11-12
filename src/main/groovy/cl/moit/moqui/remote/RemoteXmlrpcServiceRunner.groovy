@@ -13,14 +13,8 @@
  */
 package cl.moit.moqui.remote
 
-//import groovy.transform.CompileStatic
 import groovy.util.slurpersupport.GPathResult
-import groovy.xml.MarkupBuilderHelper
-import groovy.xml.MarkupBuilder
 
-// import org.apache.xmlrpc.client.XmlRpcClientConfigImpl
-// import org.apache.xmlrpc.client.XmlRpcClient
-// import org.apache.xmlrpc.client.XmlRpcCommonsTransportFactory
 import wslite.soap.SOAPClient
 import wslite.soap.SOAPResponse
 import wslite.soap.SOAPMessageBuilder
@@ -32,7 +26,6 @@ import org.moqui.impl.service.ServiceRunner
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
-//@CompileStatic
 public class RemoteXmlrpcServiceRunner implements ServiceRunner {
     protected ServiceFacadeImpl sfi = null
     protected final static Logger logger = LoggerFactory.getLogger(RemoteXmlrpcServiceRunner.class)
@@ -94,16 +87,87 @@ public class RemoteXmlrpcServiceRunner implements ServiceRunner {
         return "<${method}>${createQueryXml(parameters)}</${method}>"
     }
 
+    Map<String, Object> stringToMap(String value) {
+        logger.warn("starting stringToMap('${value}')")
+        value = value.trim()
+        if (value.charAt(0) != '[')
+            throw new IllegalArgumentException("String does not start with '[', not a map")
+        if (value.charAt(value.length()-1) != ']')
+            throw new IllegalArgumentException("String does not end with ']', not a map")
+        int pos = 1
+        int parLevel = 0
+        int squareBrackLevel = 0
+        int keyStart = -1
+        int keyEnd = -1
+        int valueStart = -1
+        Map<String, Object> newMap = new HashMap<String, Object>()
+        while (pos < value.length()) {
+            switch(value.charAt(pos)) {
+                case '(':
+                    parLevel++
+                    break
+                case ')':
+                    parLevel++
+                    break
+                case '[':
+                    squareBrackLevel++
+                    break
+                case ':':
+                    if (parLevel == 0 && squareBrackLevel == 0) {
+                        keyEnd = pos
+                        valueStart = pos+1
+                    }
+                    break
+                case ']':
+                    logger.warn("found ']' at position ${pos} (length: ${value.length()})")
+                    if (pos < value.length()-1) {
+                        squareBrackLevel--
+                        break
+                    } // No break outside the if because ']' as last character marks end of value and should add to the
+                      // map, same case as if we found a ',' so just continue to the next
+                case ',':
+                    if (parLevel == 0 && squareBrackLevel == 0) {
+                        if (valueStart > 0 && valueStart < pos) {
+                            String key = value.substring(keyStart, keyEnd).trim()
+                            String val = value.substring(valueStart, pos).trim()
+                            if (val.startsWith('['))
+                                newMap.put(key, stringToMap(val))
+                            else
+                                newMap.put(key, val)
+                            keyStart = -1
+                            keyEnd = -1
+                            valueStart = -1
+                        }
+                    }
+                    break
+                default:
+                    if (parLevel == 0 && squareBrackLevel == 0) {
+                        if (keyStart == -1) {
+                            keyStart = pos
+                            valueStart = -1
+                        }
+                    }
+            }
+            pos++
+        }
+        return newMap
+    }
+
     String createQueryXml(Map<String, Object> parameters) {
         StringBuffer sb = new StringBuffer()
         parameters.each {key, value ->
             sb.append("<${key}>")
-            if (value.startsWith('['))
-                sb.append(createQueryXml(sfi.ecfi.resource.expression(value, null)))
-            else if (value instanceof Map) {
+            if (value instanceof Map) {
                 sb.append(createQueryXml(value))
+            } else if (value instanceof String) {
+                if (value.startsWith('[')) {
+                    Map<String, Object> valueMap = stringToMap(value)
+                    sb.append(createQueryXml(valueMap))
+                } else {
+                    sb.append(value)
+                }
             } else {
-                sb.append(value)
+                throw new IllegalArgumentException("Unsupported type for parameters")
             }
             sb.append("</${key}>\n")
         }

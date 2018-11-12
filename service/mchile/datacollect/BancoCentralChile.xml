@@ -42,39 +42,50 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="firstDate"/> <!-- String , YYYY-MM-DD -->
             <parameter name="lastDate"/>  <!-- String , YYYY-MM-DD -->
-            <parameter name="seriesId"/>
+            <parameter name="seriesIds"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="numUpdated" type="Integer"/>
+            <parameter name="numCreated" type="Integer"/>
             <parameter name="numDuplicated" type="Integer"/>
+            <parameter name="numErrors" type="Integer"/>
         </out-parameters>
         <actions>
             <set field="originPartyId" value="CHLBCENTRAL"/>
             <service-call name="mchile.datacollect.BancoCentralChile.get#SeriesData" in-map="context" out-map="context"/>
+            <log message="got: ${GetSeriesResult}"/>
             <set field="errorList" from="[]"/>
-            <set field="numUpdated" from="0"/>
+            <set field="numCreated" from="0"/>
             <set field="numDuplicated" from="0"/>
-            <iterate list="series" entry="serie">
+            <set field="numErrors" from="0"/>
+            <iterate list="GetSeriesResult.Series.fameSeries.obs" entry="serie">
                 <entity-find entity-name="mchile.datacollect.DataSeries" list="dataSeries">
                     <econdition field-name="originPartyId"/>
-                    <econdition field-name="originSeriesId" from="serie.originSeriesId"/>
+                    <econdition field-name="originSeriesId" from="serie.seriesKey.seriesId"/>
                 </entity-find>
                 <if condition="dataSeries">
                     <set field="dataSeriesId" from="dataSeries.first.dataSeriesId"/>
-                    <set field="date" from="serie.date"/>
+                    <set field="date" from="ec.l10n.parseDate(serie.indexDateString, 'dd-MM-yyyy')"/>
                     <entity-find entity-name="mchile.datacollect.DataSeriesValue" list="existingList">
                         <econdition field-name="dataSeriesId"/>
                         <econdition field-name="date"/>
                     </entity-find>
+                    <script><![CDATA[
+                        BigDecimal seriesValue = null
+                        try {
+                            seriesValue = new BigDecimal(serie.value)
+                        } catch (NumberFormatException e) {}
+                        ]]></script>
                     <if condition="existingList"><then>
-                        <if condition="existingList.first.value == serie.value"><then>
+                        <if condition="existingList.first.value.toString() == serie.value.toString()"><then>
                             <script>numDuplicated++</script>
                         </then><else>
-                            <script>ec.message.addError("Error adding value for date ${date}, dataSeriesId ${dataSeriesId}, received ${serie.value}, existing: ${existingList.first.value}")</script>
+                            <script>ec.message.addError("Error adding value for date ${date}, dataSeriesId ${dataSeriesId}, received ${serie.value}, existing: ${existingList.first.value}")
+                                numErrors++
+                            </script>
                         </else></if>
                     </then><else>
-                        <service-call name="create#mchile.datacollect.DataSeriesValue" in-map="[dataSeriesId:dataSeriesId, date:date, value:serie.value]"/>
-                        <script>numUpdated++</script>
+                        <service-call name="create#mchile.datacollect.DataSeriesValue" in-map="[dataSeriesId:dataSeriesId, date:date, value:seriesValue]"/>
+                        <script>numCreated++</script>
                     </else></if>
                 </if>
             </iterate>
@@ -93,54 +104,96 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="xmlRpcServiceParams" default="[debug:true]" type="Map"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="Codigo"/>
-            <parameter name="Descripcion"/>
-            <parameter name="Series"/>
-            <parameter name="SeriesInfos" type="List"/>
+            <parameter name="GetSeriesResult">
+                <parameter name="Codigo"/>
+                <parameter name="Descripcion"/>
+                <parameter name="Series"/>
+                <parameter name="SeriesInfos" type="List"/>
+            </parameter>
         </out-parameters>
+    </service>
+
+    <service verb="update" noun="AllSeriesLists">
+        <out-parameters>
+            <parameter name="seriesReceived" type="Integer"/>
+            <parameter name="seriesUpdated" type="Integer"/>
+            <parameter name="seriesCreated" type="Integer"/>
+        </out-parameters>
+        <actions>
+            <set field="seriesReceived" from="0"/>
+            <set field="seriesUpdated" from="0"/>
+            <set field="seriesCreated" from="0"/>
+            <iterate list="['DAILY', 'MONTHLY', 'QUARTERLY', 'ANNUAL']" entry="frequencyCode">
+                <log message="processing frequencyCode ${frequencyCode}"/>
+                <service-call name="mchile.datacollect.BancoCentralChile.update#SeriesList" in-map="[frequencyCode:frequencyCode]" out-map="seriesList"/>
+                <script>
+                    seriesReceived = seriesReceived + seriesList.seriesReceived
+                    seriesUpdated = seriesUpdated + seriesList.seriesUpdated
+                    seriesCreated = seriesCreated + seriesList.seriesCreated
+                </script>
+                <log message="received ${seriesReceived}, updated ${seriesUpdated}, created ${seriesCreated}"/>
+            </iterate>
+        </actions>
     </service>
 
     <service verb="update" noun="SeriesList">
         <in-parameters>
-            <parameter name="frequencyCodeList" default="['DAILY']" type="List"/>
+            <parameter name="frequencyCode" default-value="DAILY"/>
         </in-parameters>
+        <out-parameters>
+            <parameter name="seriesReceived" type="Integer"/>
+            <parameter name="seriesUpdated" type="Integer"/>
+            <parameter name="seriesCreated" type="Integer"/>
+        </out-parameters>
         <actions>
-            <iterate list="frequencyCodeList" entry="frequencyCode">
-                <service-call name="mchile.datacollect.BancoCentralChile.get#SeriesList" in-map="context" out-map="context"/>
-                <if condition="Codigo">
-                    <script>ec.message.addError(descripcion)</script>
-                </if>
-                <set field="originPartyId" value="CHLBCENTRAL"/>
-                <set field="frequencyByCode" from="[DAILY:'MchDsfDaily', MONTHLY:'MchDsfMonthly', QUARTERLY:'MchDsfQuarterly', ANNUAL:'MchDsfYearly']"/>
-                <iterate list="SeriesInfos" entry="searchSeries">
-                    <set field="frequencyEnumId" from="searchSeries.frequency?frequencyByCode[searchSeries.frequency]:null"/>
-                    <set field="firstItemDate" from="ec.l10n.parseDate(searchSeries.firstObservation, 'dd-MM-yyyy')"/>
-                    <set field="createdAt" from="ec.l10n.parseDate(searchSeries.createdAt, 'dd-MM-yyyy')"/>
-                    <set field="fromDate" from="createdAt &lt; firstItemDate? createdAt: firstItemDate"/>
-                    <set field="lastItemDate" from="ec.l10n.parseDate(searchSeries.lastObservation, 'dd-MM-yyyy')"/>
-                    <set field="lastSeriesUpdatedDate" from="ec.l10n.parseDate(searchSeries.updatedAt, 'dd-MM-yyyy')"/>
-                    <set field="seriesMap"
-                         from="[description:searchSeries.spanishTitle, frequencyEnumId:frequencyEnumId,
-                            originPartyId:originPartyId, originSeriesId:searchSeries.seriesId, fromDate:fromDate,
+            <set field="seriesCreated" from="0"/>
+            <set field="seriesUpdated" from="0"/>
+            <service-call name="mchile.datacollect.BancoCentralChile.get#SeriesList" in-map="context" out-map="context"/>
+            <if condition="SearchSeriesResult.Codigo != '0'">
+                <script>ec.message.addError(SearchSeriesResult.Descripcion)</script>
+                <return type="danger" message="Codigo: ${SearchSeriesResult.Codigo}, Descripcion: ${SearchSeriesResult.Descripcion}"/>
+            </if>
+            <if condition="SearchSeriesResult.SeriesInfos == ''">
+                <set field="seriesReceived" from="0"/>
+                <return/>
+            </if>
+            <set field="internetSeriesInfo" from="SearchSeriesResult.SeriesInfos.internetSeriesInfo"/>
+            <set field="originPartyId" value="CHLBCENTRAL"/>
+            <set field="frequencyByCode" from="[DAILY:'MchDsfDaily', MONTHLY:'MchDsfMonthly', QUARTERLY:'MchDsfQuarterly', ANNUAL:'MchDsfYearly']"/>
+            <set field="seriesReceived" from="internetSeriesInfo.size()"/>
+            <iterate list="internetSeriesInfo" entry="serie">
+                <set field="frequencyEnumId" from="serie.frequency?frequencyByCode[serie.frequency]:null"/>
+                <set field="firstItemDate" from="ec.l10n.parseDate(serie.firstObservation, 'dd-MM-yyyy')"/>
+                <set field="createdAt" from="ec.l10n.parseDate(serie.createdAt, 'dd-MM-yyyy')"/>
+                <set field="fromDate" from="createdAt &lt; firstItemDate? createdAt: firstItemDate"/>
+                <set field="lastItemDate" from="ec.l10n.parseDate(serie.lastObservation, 'dd-MM-yyyy')"/>
+                <set field="lastSeriesUpdatedDate" from="ec.l10n.parseDate(serie.updatedAt, 'dd-MM-yyyy')"/>
+                <set field="seriesMap"
+                        from="[description:serie.spanishTitle, frequencyEnumId:frequencyEnumId,
+                            originPartyId:originPartyId, originSeriesId:serie.seriesId, fromDate:fromDate,
                             firstItemDate:firstItemDate, lastItemDate:lastItemDate, lastSeriesUpdatedDate:lastSeriesUpdatedDate]"/>
-                    <entity-find entity-name="mchile.datacollect.DataSeries" list="existingSeries">
-                        <econdition field-name="originSeriesId" from="searchSeries.seriesId"/>
-                        <econdition field-name="originPartyId"/>
-                    </entity-find>
-                    <if condition="existingSeries"><then>
-                        <set field="existing" from="existingSeries.first"/>
-                        <set field="dataSeriesId" from="existing.dataSeriesId"/>
-                        <service-call name="update#mchile.datacollect.DataSeries" in-map="[dataSeriesId:dataSeriesId]+seriesMap"/>
-                    </then><else>
-                        <log message="Adding: ${seriesMap}"/>
+                <entity-find entity-name="mchile.datacollect.DataSeries" list="existingSeries">
+                    <econdition field-name="originSeriesId" from="serie.seriesId"/>
+                    <econdition field-name="originPartyId"/>
+                </entity-find>
+                <if condition="existingSeries"><then>
+                    <set field="existing" from="existingSeries.first"/>
+                    <set field="dataSeriesId" from="existing.dataSeriesId"/>
+                    <service-call name="update#mchile.datacollect.DataSeries" in-map="[dataSeriesId:dataSeriesId]+seriesMap"/>
+                </then><else>
+                    <log message="Adding: ${seriesMap}"/>
+                    <script>seriesCreated++</script>
                     <service-call name="create#mchile.datacollect.DataSeries"
-                                  in-map="seriesMap" out-map="context"/>
-                    </else></if>
-                    <service-call name="store#moqui.basic.LocalizedEntityField"
-                                  in-map="[entityName:'mchile.datacollect.DataSeries', fieldName:'description',
-                               locale:'en', pkValue:dataSeriesId, localized:searchSeries.englishTitle]"/>
-                </iterate>
-           </iterate>
+                            in-map="seriesMap" out-map="context"/>
+                </else></if>
+                <service-call name="store#moqui.basic.LocalizedEntityField"
+                        in-map="[entityName:'mchile.datacollect.DataSeries', fieldName:'description',
+                               locale:'en', pkValue:dataSeriesId, localized:serie.englishTitle]" out-map="storeRes"/>
+                <if condition="storeRes">
+                    <script>seriesUpdated++</script>
+                </if>
+            </iterate>
+            <message type="success">Código Frecuencia ${frequencyCode}, Recibidos: ${seriesReceived}, Creados: ${seriesCreated}, Actualizados: ${seriesUpdated}</message>
         </actions>
     </service>
 
@@ -153,10 +206,23 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="frequencyCode"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="Codigo"/>
-            <parameter name="Descripcion"/>
-            <parameter name="Series"/>
-            <parameter name="SeriesInfos" type="List"/>
+            <parameter name="SearchSeriesResult" type="Map">
+                <parameter name="Codigo"/>
+                <parameter name="Descripcion"/>
+                <parameter name="Series"/>
+                <parameter name="SeriesInfos" type="List">
+                    <parameter name="seriesId"/>
+                    <parameter name="frequency"/>
+                    <parameter name="frequencyCode"/>
+                    <parameter name="createdAt"/>
+                    <parameter name="updatedAt"/>
+                    <parameter name="firstObservation"/>
+                    <parameter name="lastObservation"/>
+                    <parameter name="spanishTitle"/>
+                    <parameter name="englishTitle"/>
+                    <parameter name="observed"/>
+                </parameter>
+            </parameter>
         </out-parameters>
     </service>
 
