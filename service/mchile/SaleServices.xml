@@ -1,0 +1,1351 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a 
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+    <service verb="new" noun="Sale">
+        <in-parameters>
+            <parameter name="tillShiftId" required="true"/>
+            <parameter name="customerPartyId" default-value="cliente0"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="orderId" required="true"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="tfpos.TillShift" value-field="tillShift"/>
+            <entity-find-one entity-name="mantle.product.store.ProductStore" value-field="productStore" auto-field-map="tillShift"/>
+            <service-call name="tfpos.TillServices.check#TillOpen" in-map="context"/>
+            <entity-find entity-name="mantle.facility.FacilityContactMech" list="contactMechs">
+                <econdition field-name="facilityId" from="productStore.inventoryFacilityId"/>
+                <econdition field-name="contactMechPurposeId" value="PostalPrimary"/>
+                <date-filter/>
+            </entity-find>
+            <service-call name="mantle.order.OrderServices.create#Order" in-map="[entryDate:ec.user.nowTimestamp,
+                    statusId:'OrderOpen', productStoreId:tillShift.productStoreId, customerPartyId:customerPartyId,
+                    tillShiftId:tillShiftId, shipmentMethodEnumId:'ShMthPickUp',
+                    postalContactMechId:contactMechs.first?.contactMechId]" out-map="context"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="CurrentSale">
+        <in-parameters>
+            <parameter name="tillShiftId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="orderId"/>
+        </out-parameters>
+        <actions>
+            <service-call name="tfpos.TillServices.check#TillOpen" in-map="context"/>
+            <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="context"/>
+            <entity-find entity-name="mantle.order.OrderHeaderAndPart" list="orders" limit="1">
+                <econdition field-name="tillShiftId" from="tillShiftId"/>
+                <econdition field-name="statusId" operator="in" from="['OrderOpen', 'OrderPlaced', 'OrderApproved', 'OrderClosed']"/>
+                <econdition field-name="vendorPartyId" operator="in" from="userOrgIds"/>
+                <order-by field-name="-entryDate"/>
+            </entity-find>
+            <if condition="orders">
+                <then>
+                    <set field="orderId" from="orders.get(0).orderId"/>
+                    <set field="orderPartSeqId" from="orders.get(0).orderPartSeqId"/>
+                </then>
+                <else>
+                    <service-call name="tfpos.SaleServices.new#Sale" in-map="[tillShiftId:tillShiftId]" out-map="context"/>
+                </else>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="add" noun="OrderItemByBarcode">
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+            <parameter name="barcode" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.product.ProductIdentification" value-field="pid"
+                             auto-field-map="[idValue:barcode]"/>
+            <if condition="pid == null">
+                <return message="No product found with barcode '${barcode}'."/>
+            </if>
+            <set field="productId" from="pid.productId"/>
+            <service-call name="mantle.order.OrderServices.add#OrderProductQuantity"
+                          in-map="[orderId:orderId, productId:productId]"/>
+        </actions>
+    </service>
+    
+    <service verb="check" noun="Sale">
+        <!-- TODO: replace this with a SECA on mantle.order.OrderInfoServices.check#OrderPreApprove -->
+        <in-parameters>
+            <parameter name="orderId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="salesWarnings"/>
+            <parameter name="salesErrors"/>
+        </out-parameters>
+        <actions>
+            <set field="salesWarnings" type="List" from="[]"/>
+            <set field="salesErrors" type="List" from="[]"/>
+            <entity-find entity-name="mantle.order.OrderHeaderAndPart" list="orderHP">
+                <econdition field-name="orderId" from="orderId"/>
+            </entity-find>
+            <if condition="!orderHP">
+                <script>salesErrors.add("No OrderHeaderAndPart for orderId ${orderId}")</script>
+                <return/>
+            </if>
+            <iterate list="orderHP" entry="ohp">
+                <entity-find entity-name="mantle.order.OrderItem" list="items">
+                    <econdition field-name="orderId" from="ohp.orderId"/>
+                    <econdition field-name="orderPartSeqId" from="ohp.orderPartSeqId"/>
+                </entity-find>
+                <iterate list="items" entry="item">
+                    <script><![CDATA[
+                        if (item.unitAmount <= 0) {
+                            salesWarnings.add("Price <= 0 for item ${item.orderPartSeqId}.${item.orderItemSeqId} ('${item.itemDescription}')")
+                        }
+                    ]]></script>
+                </iterate>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="place" noun="Order">
+        <in-parameters>
+            <parameter name="orderId"/>
+            <parameter name="orderPartSeqId"/>
+            <parameter name="statusId" default-value="InvoiceFinalized"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mantle.order.OrderServices.place#Order" in-map="context" out-map="context"/>
+            <service-call name="mantle.account.InvoiceServices.create#EntireOrderPartInvoice" in-map="context"/>
+        </actions>
+    </service>
+
+    <service verb="add" noun="Payment">
+        <in-parameters>
+            <auto-parameters entity-name="mantle.account.payment.Payment" include="nonpk"/>
+            <parameter name="bankPartyId"/>
+            <parameter name="checkDate" type="Timestamp"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="paymentId"/>
+        </out-parameters>
+        <actions>
+            <service-call name="mantle.order.OrderInfoServices.get#OrderDisplayInfo" in-map="[orderId:orderId]" out-map="context"/>
+            <if condition="invoiceIdSet.size() > 1">
+                <return error="true" message="Cannot handle more than 1 invoice per Order for order ${orderId}"/>
+            </if>
+        <set field="invoiceId" from="invoiceIdSet.first()"/>
+        <set field="orderPart" from="orderPartList.first"/>
+        <set field="orderPartInfo" from="orderPartInfoList.get(0)"/>
+        <set field="productStoreId" from="orderHeader.productStoreId"/>
+        <set field="tillShiftId" from="orderHeader.tillShiftId"/>
+        <service-call name="tfpos.TillServices.check#TillOpen" in-map="context"/>
+        <entity-find-one entity-name="tfpos.TillShift" value-field="tillShift"/>
+        <set field="finAccountId" from="tillShift.finAccountId"/>
+        <entity-find-one entity-name="mantle.account.financial.FinancialAccount" value-field="finAccount"/>
+        <entity-find-one entity-name="tfpos.ProductStorePaymentGlAccount" value-field="psglacc"
+                         auto-field-map="[productStoreId:orderHeader.productStoreId,
+                            paymentInstrumentEnumId:paymentInstrumentEnumId]"/>
+        <set field="paymentBaseMap"
+             from="[orderId:orderId, orderPartSeqId:orderPartSeqId, fromPartyId:orderPart.customerPartyId,
+                   toPartyId:orderPart.vendorPartyId, statusId:'PmntPromised',
+                   paymentInstrumentEnumId:paymentInstrumentEnumId, effectiveDate:ec.user.nowTimestamp,
+                   overrideGlAccountId:psglacc?.glAccountId, paymentRefNum:paymentRefNum,
+                   forInvoiceId:invoiceId]"/>
+
+        <if condition="psglacc?.voucherTaxReceiptType != null">
+            <if condition="!paymentRefNum">
+                <return error="true" message="Card Voucher Number is required."/>
+            </if>
+        </if>
+        <set field="tillShiftDocumentBaseMap"
+             from="[tillShiftId:tillShift.tillShiftId, documentRefNum:paymentRefNum, statusId:'TsdCollectedAtTill']"/>
+        <if condition="paymentInstrumentEnumId in ['PiPersonalCheck', 'PiCompanyCheck']">
+            <service-call name="tfpos.SaleServices.check#BankAccountForCheck" in-map="context" out-map="context"/>
+            <set field="paymentBaseMap.effectiveDate" from="checkDate"/>
+            <set field="paymentBaseMap.paymentMethodId" from="paymentMethodId"/>
+            <service-call name="create#tfpos.TillShiftDocument"
+                          in-map="tillShiftDocumentBaseMap + [documentTypeEnumId:'TsdtCheck']" out-map="context"/>
+        </if>
+        <if condition="paymentInstrumentEnumId in ['PiCreditCard', 'PiDebitCard']">
+            <service-call name="create#tfpos.FiscalTaxDocument"
+                          in-map="[invoiceId:invoiceId, fiscalTaxDocumentId:paymentRefNum,
+                               fiscalTaxDocumentTypeEnumId:'PvtRedcompra', amount:amount]"/>
+            <service-call name="create#tfpos.TillShiftDocument"
+                          in-map="tillShiftDocumentBaseMap + [documentTypeEnumId:'TsdtCardVoucher']" out-map="context"/>
+        </if>
+        <set field="paymentAmount" from="(amount >= orderPartInfo.partTotalUnpaid)? orderPartInfo.partTotalUnpaid: amount"/>
+        <set field="changeAmount" from="amount - paymentAmount"/>
+        <if condition="paymentInstrumentEnumId == 'PiCash'">
+            <then>
+                <service-call name="mantle.account.FinancialAccountServices.deposit#FinancialAccount"
+                              in-map="[finAccountId:finAccountId, reasonEnumId:'FatrCustomerPayment',
+                      orderId:orderId, performedByUserId:ec.user.userId, amount:amount,
+                      fromPartyId:orderPart.customerPartyId]" out-map="finTrans"/>
+                <script>paymentBaseMap += [finAccountId:finAccountId]</script>
+                <service-call name="mantle.order.OrderServices.add#OrderPartPayment"
+                              in-map="paymentBaseMap+[amount:paymentAmount, finAccountId:finAccountId,
+                                      finAccountTransId:finTrans.finAccountTransId]" out-map="context"/>
+            </then>
+            <else>
+                <service-call name="mantle.order.OrderServices.add#OrderPartPayment" in-map="paymentBaseMap+[amount:amount]" out-map="context"/>
+            </else>
+        </if>
+
+        <if condition="changeAmount > 0">
+            <if condition="psglacc?.allowsHandingCashChange == 'Y'">
+                <then>
+                    <service-call name="mantle.account.FinancialAccountServices.withdraw#FinancialAccount"
+                                  in-map="[finAccountId:finAccountId, reasonEnumId:'FatrCustomerChange',
+                              orderId:orderId, performedByUserId:ec.user.userId, amount:changeAmount,
+                              toPartyId:orderPart.customerPartyId]"/>
+                </then>
+                <else>
+                    <entity-find-one entity-name="moqui.basic.Enumeration" value-field="paymentInstrument" auto-field-map="[enumId:paymentInstrumentEnumId]"/>
+                    <return error="true" message="Cannot give change for paymentInstrument ${paymentInstrument.description}"/>
+                </else>
+            </if>
+        </if>
+        <if condition="tillShiftDocumentId">
+            <service-call name="update#tfpos.TillShiftDocument" in-map="[tillShiftDocumentId:tillShiftDocumentId,
+                                paymentId:paymentId]"/>
+        </if>
+        <if condition="paymentInstrumentEnumId in ['PiPersonalCheck', 'PiCompanyCheck']">
+            <service-call name="create#mantle.account.method.BankAccountCheck" in-map="[paymentMethodId:paymentMethodId, checkNumber:paymentRefNum, paymentId:paymentId]"/>
+        </if>
+        <!-- Status change triggers applying and posting payment (add Effective Date?) -->
+            <!--set field="effectiveDate" from="ec.user.nowTimestamp"/-->
+            <service-call name="update#mantle.account.payment.Payment" in-map="[paymentId:paymentId, statusId:'PmntDelivered']"/>
+            <service-call name="tfpos.SaleServices.check#OrderAutoApprove" in-map="[orderId:orderId]"/>
+        </actions>
+    </service>
+
+
+    <!-- Método para pago de abonos -->
+    <service verb="add" noun="PrePayment">
+        <in-parameters>
+            <auto-parameters entity-name="mantle.account.payment.Payment" include="nonpk"/>
+            <parameter name="bankPartyId"/>
+            <parameter name="checkDate" type="Timestamp"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mantle.order.OrderInfoServices.get#OrderDisplayInfo" in-map="[orderId:orderId]" out-map="context"/>
+
+            <set field="productStoreId" from="orderHeader.productStoreId"/>
+            <set field="tillShiftId" from="orderHeader.tillShiftId"/>
+            <service-call name="tfpos.TillServices.check#TillOpen" in-map="context"/>
+            <entity-find-one entity-name="tfpos.TillShift" value-field="tillShift"/>
+            <set field="finAccountId" from="tillShift.finAccountId"/>
+            <entity-find-one entity-name="mantle.account.financial.FinancialAccount" value-field="finAccount"/>
+            <entity-find-one entity-name="tfpos.ProductStorePaymentGlAccount" value-field="psglacc"
+                             auto-field-map="[productStoreId:orderHeader.productStoreId,
+                            paymentInstrumentEnumId:paymentInstrumentEnumId]"/>
+            <set field="paymentBaseMap"
+                 from="[orderId:orderId, orderPartSeqId:orderPartSeqId, statusId:'PmntPromised',
+                   paymentInstrumentEnumId:paymentInstrumentEnumId, effectiveDate:ec.user.nowTimestamp,
+                   overrideGlAccountId:psglacc?.glAccountId, paymentRefNum:paymentRefNum,
+                   forInvoiceId:invoiceId]"/>
+            <if condition="psglacc?.voucherTaxReceiptType != null">
+                <if condition="!paymentRefNum">
+                    <return error="true" message="Card Voucher Number is required."/>
+                </if>
+            </if>
+            <set field="tillShiftDocumentBaseMap"
+                 from="[tillShiftId:tillShift.tillShiftId, documentRefNum:paymentRefNum, statusId:'TsdCollectedAtTill']"/>
+            <if condition="paymentInstrumentEnumId in ['PiPersonalCheck', 'PiCompanyCheck']">
+                <service-call name="tfpos.SaleServices.check#BankAccountForCheck" in-map="context" out-map="context"/>
+                <set field="paymentBaseMap.effectiveDate" from="checkDate"/>
+                <set field="paymentBaseMap.paymentMethodId" from="paymentMethodId"/>
+                <service-call name="create#tfpos.TillShiftDocument"
+                              in-map="tillShiftDocumentBaseMap + [documentTypeEnumId:'TsdtCheck']" out-map="context"/>
+            </if>
+            <if condition="paymentInstrumentEnumId in ['PiCreditCard', 'PiDebitCard']">
+                <service-call name="create#tfpos.FiscalTaxDocument"
+                              in-map="[invoiceId:invoiceId, fiscalTaxDocumentId:paymentRefNum,
+                               fiscalTaxDocumentTypeEnumId:'PvtRedcompra', amount:amount]"/>
+                <service-call name="create#tfpos.TillShiftDocument"
+                              in-map="tillShiftDocumentBaseMap + [documentTypeEnumId:'TsdtCardVoucher']" out-map="context"/>
+            </if>
+            <!--set field="paymentAmount" from="(amount >= orderPartInfo.partTotalUnpaid)? orderPartInfo.partTotalUnpaid: amount"/>
+            <set field="changeAmount" from="amount - paymentAmount"/-->
+            <set field="paymentAmount" from="amount"/>
+            <if condition="paymentInstrumentEnumId == 'PiCash'">
+                <then>
+                    <service-call name="mantle.account.FinancialAccountServices.deposit#FinancialAccount"
+                                  in-map="[finAccountId:finAccountId, reasonEnumId:'FatrCustomerPayment',
+                      orderId:orderId, performedByUserId:ec.user.userId, amount:amount ]" out-map="finTrans"/>
+                    <script>paymentBaseMap += [finAccountId:finAccountId]</script>
+                    <service-call name="mantle.order.OrderServices.add#OrderPartPayment"
+                                  in-map="paymentBaseMap+[amount:paymentAmount, finAccountId:finAccountId,
+                                      finAccountTransId:finTrans.finAccountTransId]" out-map="context"/>
+                </then>
+                <else>
+                    <service-call name="mantle.order.OrderServices.add#OrderPartPayment" in-map="paymentBaseMap+[amount:amount]" out-map="context"/>
+                </else>
+            </if>
+
+            <if condition="changeAmount > 0">
+                <if condition="psglacc?.allowsHandingCashChange == 'Y'">
+                    <then>
+                        <service-call name="mantle.account.FinancialAccountServices.withdraw#FinancialAccount"
+                                      in-map="[finAccountId:finAccountId, reasonEnumId:'FatrCustomerChange',
+                              orderId:orderId, performedByUserId:ec.user.userId, amount:changeAmount]"/>
+                    </then>
+                    <else>
+                        <entity-find-one entity-name="moqui.basic.Enumeration" value-field="paymentInstrument" auto-field-map="[enumId:paymentInstrumentEnumId]"/>
+                        <return error="true" message="Cannot give change for paymentInstrument ${paymentInstrument.description}"/>
+                    </else>
+                </if>
+            </if>
+            <if condition="tillShiftDocumentId">
+                <service-call name="update#tfpos.TillShiftDocument" in-map="[tillShiftDocumentId:tillShiftDocumentId,
+                                paymentId:paymentId]"/>
+            </if>
+            <if condition="paymentInstrumentEnumId in ['PiPersonalCheck', 'PiCompanyCheck']">
+                <service-call name="create#mantle.account.method.BankAccountCheck" in-map="[paymentMethodId:paymentMethodId, checkNumber:paymentRefNum, paymentId:paymentId]"/>
+            </if>
+            <!-- Status change triggers applying and posting payment (add Effective Date?) -->
+            <!--set field="effectiveDate" from="ec.user.nowTimestamp"/-->
+            <service-call name="update#mantle.account.payment.Payment" in-map="[paymentId:paymentId, statusId:'PmntDelivered']"/>
+        </actions>
+    </service>
+
+    <service verb="check" noun="BankAccountForCheck">
+        <in-parameters>
+            <parameter name="checkDate" required="true"/>
+            <parameter name="paymentRefNum" required="true"/>
+            <parameter name="bankPartyId" required="true"/>
+            <parameter name="orderPart" type="Map"/>
+            <parameter name="customerPartyId" default-value="cliente0"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="paymentMethodId"/>
+        </out-parameters>
+        <actions>
+            <set field="custPartyId" value="none"/>
+            <if condition="!orderPart">
+                <then>
+                    <set field="custPartyId" from="customerPartyId"/>
+                    <entity-find entity-name="tfpos.BankAccountAndPaymentMethod" list="existingAccounts">
+                        <econdition field-name="ownerPartyId" from="customerPartyId"/>
+                        <econdition field-name="paymentMethodTypeEnumId" value="PmtBankAccount"/>
+                        <econdition field-name="bankPartyId" from="bankPartyId"/>
+                    </entity-find>
+                </then>
+                <else>
+                    <set field="custPartyId" from="orderPart.customerPartyId"/>
+                    <entity-find entity-name="tfpos.BankAccountAndPaymentMethod" list="existingAccounts">
+                        <econdition field-name="ownerPartyId" from="orderPart.customerPartyId"/>
+                        <econdition field-name="paymentMethodTypeEnumId" value="PmtBankAccount"/>
+                        <econdition field-name="bankPartyId" from="bankPartyId"/>
+                    </entity-find>
+                </else>
+            </if>
+
+
+            <if condition="!existingAccounts">
+                <then>
+                    <entity-find-one entity-name="mantle.party.Organization" value-field="bank"
+                                     auto-field-map="[partyId:bankPartyId]"/>
+                    <entity-find-one entity-name="mantle.party.Party" value-field="party"
+                                     auto-field-map="[partyId:custPartyId]"/>
+                    <set field="paymentMethodMap" from="[paymentMethodTypeEnumId:'PmtBankAccount',
+                                                             ownerPartyId:custPartyId, formDate:ec.user.nowTimestamp,
+                                                             currencyUomId:currencyUomId]"/>
+                    <if condition="party.partyTypeEnumId == 'PtyPerson'">
+                        <then>
+                            <entity-find-one entity-name="mantle.party.Person" value-field="person"
+                                             auto-field-map="[partyId:custPartyId]"/>
+                            <script><![CDATA[ paymentMethodMap += [firstNameOnAccount:person.firstName,
+                                    middleNameOnAccount:person.middleName, lastNameOnAccount:person.lastName,
+                                    titleOnAccount:person.personalTitle, suffixOnAccount:person.suffix] ]]></script>
+                        </then>
+                        <else>
+                            <entity-find-one entity-name="mantle.party.Organization" value-field="organization"/>
+                            <script><![CDATA[ paymentMethodMap += [companyNameOnAccount:organization.organizationName] ]]></script>
+                        </else>
+                    </if>
+                    <service-call name="create#mantle.account.method.PaymentMethod" in-map="paymentMethodMap" out-map="context"/>
+                    <service-call name="create#mantle.account.method.BankAccount"
+                                  in-map="[paymentMethodId:paymentMethodId, bankPartyId:bankPartyId, bankName:bank.organizationName]"/>
+                </then>
+                <else>
+                    <set field="paymentMethodId" from="existingAccounts.first.paymentMethodId"/>
+                </else>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="manuallyApprove" noun="Order">
+        <implements service="mantle.order.OrderServices.change#OrderStatusInterface"/>
+        <actions>
+            <service-call name="mantle.order.OrderServices.approve#Order" in-map="context" out-map="context"/>
+            <service-call name="tfpos.SaleServices.process#OrderApproval" in-map="context"/>
+        </actions>
+    </service>
+
+    <service verb="process" noun="OrderApproval">
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-count entity-name="mantle.product.issuance.AssetReservation" count-field="reservedItems">
+                <econdition field-name="orderId" from="orderId"/>
+            </entity-find-count>
+            <if condition="reservedItems > 0">
+                <then>
+                    <entity-find entity-name="mantle.order.OrderPart" list="orderParts">
+                        <econdition field-name="orderId" from="orderId"/>
+                    </entity-find>
+                    <iterate list="orderParts" entry="orderPart">
+                        <service-call name="mantle.shipment.ShipmentServices.ship#OrderPart" in-map="[orderId:orderId, orderPartSeqId:orderPart.orderPartSeqId]" out-map="context"/>
+                        <service-call name="update#mantle.shipment.Shipment" out-map="context" in-map="[shipmentId:shipmentId, statusId:'ShipDelivered']"/>
+                    </iterate>
+                </then>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="check" noun="OrderPreApprove">
+        <in-parameters><parameter name="orderId" required="true"/></in-parameters>
+        <out-parameters><parameter name="approveWarnings"/></out-parameters>
+        <actions>
+            <service-call name="mantle.order.OrderInfoServices.check#OrderPreApprove" in-map="[orderId:orderId]" out-map="context"/>
+            <!-- Ignore similar order warnings -->
+            <script>warningsToRemove = []</script>
+            <iterate list="approveWarnings" entry="warning">
+                <if condition="warning.startsWith('Found similar order ')">
+                    <script>warningsToRemove.add(warning)</script>
+                </if>
+            </iterate>
+            <script>approveWarnings.removeAll(warningsToRemove)</script>
+        </actions>
+    </service>
+
+    <service verb="check" noun="OrderAutoApprove">
+        <!-- This is based on but different to mantle.account.PaymentServices.authorize#OrderPayments:
+             * warnings regarding similar orders are ignored
+             * invoke process#OrderApproval for additional processing
+             -->
+        <in-parameters><parameter name="orderId" required="true"/></in-parameters>
+        <out-parameters><parameter name="approveWarnings"/></out-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.order.OrderHeader" value-field="orderHeader"/>
+            <entity-find entity-name="mantle.account.payment.Payment" list="paymentList">
+                <econdition field-name="orderId"/></entity-find>
+            <set field="totalAuthorized" from="0"/>
+            <iterate list="paymentList" entry="payment">
+                <if condition="payment.statusId in ['PmntAuthorized', 'PmntDelivered', 'PmntConfirmed']">
+                    <set field="totalAuthorized" from="totalAuthorized + (payment.amount ?: 0.0)"/>
+                    <continue/>
+                </if>
+            </iterate>
+            <if condition="totalAuthorized &gt;= orderHeader.grandTotal">
+                <service-call name="tfpos.SaleServices.check#OrderPreApprove" in-map="[orderId:orderId]" out-map="context"/>
+                <if condition="!approveWarnings">
+                    <service-call name="mantle.order.OrderServices.update#OrderStatus" in-map="[orderId:orderId, statusId:'OrderApproved']"/>
+                    <service-call name="tfpos.SaleServices.process#OrderApproval" in-map="[orderId:orderId]"/>
+                </if>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="finish" noun="Sale">
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+            <parameter name="orderPartSeqId" required="true"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mantle.order.OrderServices.complete#OrderPart" in-map="[orderId:orderId, orderPartSeqId:orderPartSeqId]"/>
+        </actions>
+    </service>
+
+    <service verb="update" noun="TaxDocument">
+        <in-parameters>
+            <parameter name="invoiceId" required="true"/>
+            <parameter name="amount"/>
+            <parameter name="fiscalTaxDocumentId"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="tfpos.FiscalTaxDocument" value-field="ftd" for-update="true"/>
+            <if condition="ftd == null">
+                <service-call name="create#tfpos.FiscalTaxDocument" in-map="[invoiceId:invoiceId,
+                                    fiscalTaxDocumentId:fiscalTaxDocumentId,
+                                    fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId,
+                                    amount:amount]"/>
+                <return/>
+            </if>
+            <if condition="fiscalTaxDocumentId">
+                <script>ftd.fiscalTaxDocumentId = fiscalTaxDocumentId</script>
+            </if>
+            <if condition="fiscalTaxDocumentTypeEnumId">
+                <script>ftd.fiscalTaxDocumentTypeEnumId = fiscalTaxDocumentTypeEnumId</script>
+            </if>
+            <if condition="amount">
+                <script>ftd.amount = amount</script>
+            </if>
+            <entity-update value-field="ftd"/>
+        </actions>
+    </service>
+
+    <service verb="park" noun="Sale">
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+            <parameter name="orderName" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.order.OrderHeader" value-field="orderHeader" for-update="true"/>
+            <if condition="orderHeader">
+                <service-call name="store#mantle.order.OrderHeader" in-map="[orderId:orderId, orderName:orderName]"/>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="get" noun="CustomerList">
+        <in-parameters>
+            <parameter name="term"/>
+        </in-parameters>
+        <actions>
+            <service-call name="tfpos.SaleServices.get#CounterpartList" in-map="context"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="CounterpartList">
+        <in-parameters>
+            <parameter name="term"/>
+            <parameter name="counterpartType" default-value="Customer"/>
+        </in-parameters>
+        <actions>
+            <set field="indexName" value="mantle"/>
+            <set field="documentType" value="MantleParty"/>
+            <log message="getting counterpartList for ${counterpartType}"/>
+            <script><![CDATA[
+                    StringBuilder termSb = new StringBuilder()
+                    termSb.append('( combinedName:').append(term).append('* OR identifications.idValue:').append(term).append('* )')
+                    termSb.append(' AND roles.roleTypeId:' + counterpartType)
+                    ]]>
+            </script>
+            <service-call name="org.moqui.search.SearchServices.search#DataDocuments" out-map="context"
+                          in-map="[queryString:termSb.toString(), indexName:indexName, documentType:documentType]"/>
+            <script>
+                def outList = []
+                for (def document in documentList) {
+                    label = document.combinedName + (document.idValue? (' (RUT ' + document.idValue + ')'):'')
+                    outList.add([value:document._id, label:label])
+                }
+                ec.web.sendJsonResponse(outList)
+            </script>
+        </actions>
+    </service>
+
+    <service verb="change" noun="Customer">
+        <implements service="tfpos.SaleServices.change#CounterpartInterface"/>
+        <actions>
+            <service-call name="tfpos.SaleServices.change#Counterpart" in-map="context+[counterpartType:'Customer']"/>
+        </actions>
+    </service>
+
+    <service verb="change" noun="CounterpartInterface" type="interface">
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+            <parameter name="orderPartSeqId" required="true"/>
+            <parameter name="counterpartType" required="true"/>
+            <parameter name="partyId"/>
+            <parameter name="organizationName"/>
+            <parameter name="firstName"/>
+            <parameter name="lastName"/>
+            <parameter name="rut" type="String"/>
+            <parameter name="run" type="String"/>
+            <parameter name="orgEmailAddress"/>
+            <parameter name="orgCountryCode" type="String"/>
+            <parameter name="orgContactNumber"/>
+            <parameter name="persEmailAddress"/>
+            <parameter name="persCountryCode" type="String"/>
+            <parameter name="persContactNumber"/>
+            <parameter name="postalContactMechPurposeId"/>
+            <parameter name="countryGeoId"/>
+            <parameter name="address1"/>
+            <parameter name="unitNumber"/>
+            <parameter name="address2"/>
+            <parameter name="stateProvinceGeoId"/>
+        </in-parameters>
+    </service>
+
+    <service verb="change" noun="Counterpart">
+        <implements service="tfpos.SaleServices.change#CounterpartInterface"/>
+        <actions>
+            <entity-find-one entity-name="mantle.order.OrderHeader" value-field="orderHeader"/>
+            <set field="tillShiftId" from="orderHeader.tillShiftId"/>
+            <if condition="tillShiftId"><service-call name="tfpos.TillServices.check#TillOpen" in-map="context"/></if>
+            <entity-find-one entity-name="mantle.order.OrderPart" value-field="orderPart"/>
+            <if condition="orderPart == null">
+                <return error="true" message="Could not find orderPart for orderId ${orderId}, orderPartSeqId ${orderPartSeqId}"/>
+            </if>
+            <if condition="!partyId">
+                <service-call name="tfpos.SaleServices.create#Counterpart" in-map="context" out-map="context"/>
+            </if>
+            <if condition="counterpartType == 'Customer'">
+                <then><set field="orderPart.customerPartyId" from="partyId"/></then>
+                <else><set field="orderPart.vendorPartyId" from="partyId"/></else>
+            </if>
+            <entity-update value-field="orderPart"/>
+        </actions>
+    </service>
+
+    <service verb="create" noun="Counterpart">
+        <in-parameters>
+            <parameter name="counterpartType" required="true"/>
+            <parameter name="organizationName"/>
+            <parameter name="firstName"/>
+            <parameter name="lastName"/>
+            <parameter name="rut" type="String"/>
+            <parameter name="run" type="String"/>
+            <parameter name="orgEmailAddress"></parameter>
+            <parameter name="orgCountryCode" type="String"/>
+            <parameter name="orgContactNumber"></parameter>
+            <parameter name="persEmailAddress"></parameter>
+            <parameter name="persCountryCode" type="String"/>
+            <parameter name="persContactNumber"></parameter>
+            <parameter name="postalContactMechPurposeId"/>
+            <parameter name="countryGeoId"/>
+            <parameter name="address1"/>
+            <parameter name="unitNumber"/>
+            <parameter name="address2"/>
+            <parameter name="stateProvinceGeoId"/>
+        </in-parameters>
+        <out-parameters><parameter name="partyId"/></out-parameters>
+        <actions>
+            <if condition="!counterpartType in ['Customer', 'Supplier']">
+                <return error="true" message="counterpartType has to be either Customer or Supplier"/>
+            </if>
+            <if condition="organizationName">
+                <then>
+                    <set field="emailAddress" from="orgEmailAddress"/>
+                    <set field="countryCode" from="orgCountryCode"/>
+                    <set field="contactNumber" from="orgContactNumber"/>
+                    <service-call name="mantle.party.PartyServices.create#Organization" in-map="context"
+                                  out-map="context"/>
+                </then>
+                <else-if condition="firstName || lastName">
+                    <set field="emailAddress" from="persEmailAddress"/>
+                    <set field="countryCode" from="persCountryCode"/>
+                    <set field="contactNumber" from="persContactNumber"/>
+                    <set field="rut" from="run"/>
+                    <service-call name="mantle.party.PartyServices.create#Person" in-map="context"
+                                  out-map="context"/>
+                </else-if>
+                <else>
+                    <return error="true" message="Please select existing Customer or provide name and RUT for new customer"/>
+                </else>
+            </if>
+            <service-call name="create#mantle.party.PartyRole" in-map="[partyId:partyId, roleTypeId:counterpartType]"/>
+            <if condition="emailAddress">
+                <set field="emailContactMechPurposeId" value="EmailPrimary"/>
+            </if>
+            <if condition="contactNumber">
+                <set field="telecomContactMechPurposeId" value="PhonePrimary"/>
+            </if>
+            <if condition="address1">
+                <service-call name="mantle.party.ContactServices.create#PostalAddress"
+                              in-map="[address1:address1, address2:address2, unitNumber:unitNumber,
+                                  stateProvinceGeoId:stateProvinceGeoId, countryGeoId:countryGeoId]"
+                              out-map="context"/>
+            </if>
+            <service-call name="mantle.party.ContactServices.store#PartyContactInfo" in-map="context"/>
+            <if condition="rut">
+                <service-call name="create#mantle.party.PartyIdentification"
+                              in-map="[partyId:partyId, partyIdTypeEnumId:'PtidNationalTaxId', idValue:rut]"/>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="set" noun="DefaultTillSeqId">
+        <in-parameters><parameter name="productStoreId"/></in-parameters>
+        <actions>
+            <log message="set#DefaultTillSeqId: productStoreId = ${productStoreId}"/>
+            <if condition="currentTillShiftId == null &amp;&amp; ec.web.sessionAttributes.get('TfPosTillShiftIdSelection') == null">
+                <entity-find entity-name="tfpos.TillShiftDetail" list="tillshifts">
+                    <econdition field-name="ownerPartyId" from="ec.user.userAccount.partyId"/>
+                    <econdition field-name="statusId" value="TillShiftOpen"/>
+                    <econdition field-name="productStoreId"/>
+                    <date-filter/>
+                </entity-find>
+                <if condition="tillshifts.size() == 1">
+                    <script>ec.web.sessionAttributes.put('TfPosTillShiftIdSelection', tillshifts.first.tillShiftId)</script>
+                </if>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="get" noun="TillDetail">
+        <in-parameters><parameter name="orderPartInfo" type="Map"/></in-parameters>
+        <out-parameters>
+            <parameter name="customerName"/>
+            <parameter name="orderPartSeqId"/>
+            <parameter name="tillChangeTotal"/>
+            <parameter name="tillPaymentsTotal"/>
+            <parameter name="pendingToInvoiceFiscal" type="BigDecimal"/>
+            <parameter name="partEditable"/>
+        </out-parameters>
+        <actions>
+            <set field="customerName" from="orderPartInfo.customerDetail.organizationName?:'' + (orderPartInfo.customerDetail.firstName?:'')+ (orderPartInfo.customerDetail.lastName ? ' ' + orderPartInfo.customerDetail.lastName : '')"/>
+            <set field="orderPartSeqId" from="orderPartInfo.orderPart.orderPartSeqId"/>
+            <!-- Calculate total paid and change based on financialAccount -->
+            <set field="payments" from="orderPartInfo.partPaymentList"/>
+            <set field="tillPaymentsTotal" value="0" type="BigDecimal"/>
+            <iterate entry="payment" list="payments">
+                <if condition="!payment.finAccountId">
+                    <set field="tillPaymentsTotal" from="tillPaymentsTotal+payment.amount"/>
+                </if>
+                <if condition="payment.forInvoiceId"><set field="invoiceId" from="payment.forInvoiceId"/></if>
+            </iterate>
+            <entity-find entity-name="mantle.account.financial.FinancialAccountTrans" list="finPayments">
+                <econdition field-name="orderId" from="orderPartInfo.orderPart.orderId"/>
+            </entity-find>
+            <set field="changeTotal" value="0" type="BigDecimal"/>
+            <iterate list="finPayments" entry="payment">
+                <if condition="payment.reasonEnumId == 'FatrCustomerChange'">
+                    <then><set field="tillChangeTotal" from="changeTotal - payment.amount"/></then>
+                    <else><set field="tillPaymentsTotal" from="tillPaymentsTotal + payment.amount"/></else>
+                </if>
+            </iterate>
+            <entity-find entity-name="tfpos.FiscalTaxDocument" list="fiscalInvoices">
+                <econdition field-name="invoiceId" from="invoiceId"/>
+            </entity-find>
+            <set field="invoicedTotal" from="0"/>
+            <iterate list="fiscalInvoices" entry="invoice">
+                <script>invoicedTotal += invoice?.amount?:0</script>
+            </iterate>
+            <set field="pendingToInvoiceFiscal" from="orderPartInfo.paymentsTotal - invoicedTotal"/>
+            <set field="partEditable" from="orderPartInfo.orderPart.statusId in ['OrderBeingChanged', 'OrderOpen', 'OrderWishList', 'OrderGiftRegistry', 'OrderAutoReorder']"/>
+        </actions>
+    </service>
+
+    <service verb="change" noun="OrderShift">
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+            <parameter name="tillShiftId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="oldTillShiftId"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.order.OrderHeader" value-field="order"/>
+            <set field="oldTillShiftId" from="order.tillShiftId"/>
+            <set field="order.tillShiftId" from="tillShiftId"/>
+            <entity-update value-field="order"/>
+        </actions>
+    </service>
+
+    <service verb="place" noun="WebOrder">
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+            <parameter name="partyId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="paymentInstrumentId" required="true"/>
+            <parameter name="statusId" default-value="InvoiceFinalized"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mantle.order.OrderItem" list="orderList">
+                <econdition field-name="orderId" value="${orderId}"/>
+            </entity-find>
+            <script>
+                int amount = 0
+            </script>
+            <iterate list="orderList" entry="order">
+                <set field="quantity" from="order.quantity" type="BigDecimal"/>
+                <set field="amountQuantity" from="order.unitAmount" type="BigDecimal"/>
+                <script>
+                    amount = (quantity*amountQuantity) + amount
+                </script>
+            </iterate>
+
+            <service-call name="mantle.order.OrderServices.place#Order" in-map="context" out-map="context"/>
+
+            <set field="updateMap" from="[paymentTypeEnumId:'PtInvoicePayment', fromPartyId:partyId, toPartyId:organizationPartyId, paymentInstrumentId:paymentInstrumentId,
+            statusId:'PmntPromised', amount:amount, reconcileStatusId:'PmtrNot', orderPartSeqId:'01', effectiveDate:ec.user.nowTimestamp,
+            orderId:orderId, paymentInstrumentEnumId:paymentInstrumentId, amountUomId:defaultCurrencyUomId]"/>
+            <service-call name="create#mantle.account.payment.Payment" out-map="context" in-map="updateMap"/>
+        </actions>
+    </service>
+
+
+    <!-- TODO: Order Cart Services -->
+    <service verb="add" noun="OrderProductQuantity">
+        <in-parameters>
+            <parameter name="orderId"/>
+            <parameter name="orderPartSeqId"/>
+            <!-- OrderHeader settings -->
+            <parameter name="productStoreId"/>
+            <parameter name="currencyUomId"/>
+            <parameter name="salesChannelEnumId"/>
+            <!-- OrderPart settings -->
+            <parameter name="customerPartyId"/>
+            <parameter name="carrierPartyId"/><parameter name="shipmentMethodEnumId"/>
+
+            <parameter name="productId" required="true"/>
+            <parameter name="description"/>
+            <parameter name="quantity" type="BigDecimal"><description>Defaults to 1 if addToQuantity=true (default)</description></parameter>
+            <parameter name="addToQuantity" type="Boolean" default="true">
+                <description>If true add to existing quantity, if false set quantity on current item</description></parameter>
+            <parameter name="updateExisting" type="Boolean" default="true">
+                <description>If true update existing item by productId, if false always create a new item</description></parameter>
+            <parameter name="itemTypeEnumId" default-value="ItemProduct"/>
+            <parameter name="unitAmount" type="BigDecimal"/>
+            <parameter name="standardCost" type="BigDecimal"/>
+            <parameter name="requiredByDate" type="Timestamp"/>
+            <parameter name="otherPartyProductId"/>
+            <parameter name="productFeatureId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="orderId" required="true"/>
+            <parameter name="orderPartSeqId" required="true"/>
+            <parameter name="orderItemSeqId" required="true"/>
+        </out-parameters>
+        <actions>
+            <set field="defaultOrderParameters" from="[orderId:cartOrderId, customerPartyId:customerPartyId, currencyUomId:currencyUomId,
+                productStoreId:productStoreId, salesChannelEnumId:'ScWeb']"/>
+            <!--service-call name="mantle.order.OrderServices.add#OrderProductQuantity" out-map="addOut"
+                          in-map="defaultOrderParameters + [productId:productId, quantity:quantity, productFeatureId:productFeatureId]"/-->
+            <if condition="quantity == null &amp;&amp; (addToQuantity || !updateExisting)"><set field="quantity" from="1.0"/></if>
+            <!-- handle explicit zero quantity -->
+            <if condition="(quantity == null || quantity &lt;= 0) &amp;&amp; updateExisting">
+                <!-- do nothing if add -->
+                <if condition="addToQuantity || !orderId"><return/></if>
+                <!-- in set mode remove the item -->
+                <entity-find entity-name="mantle.order.OrderItem" list="orderItemList">
+                    <econdition-object field="[orderId:orderId, orderPartSeqId:orderPartSeqId, productId:productId,
+                        productConfigSavedId:null, forAssetId:null, selectedAmount:null]"/>
+                </entity-find>
+                <if condition="orderItemList">
+                    <service-call name="mantle.order.OrderServices.delete#OrderItem"
+                                  in-map="[orderId:orderId, orderItemSeqId:orderItemList[0].orderItemSeqId]"/>
+                </if>
+                <return/>
+            </if>
+            <!-- lookup orderPartSeqId if not passed in -->
+            <if condition="!orderPartSeqId &amp;&amp; orderId">
+                <entity-find entity-name="mantle.order.OrderPart" list="orderPartList">
+                    <econdition field-name="orderId"/><order-by field-name="orderPartSeqId"/></entity-find>
+                <set field="orderPartSeqId" from="orderPartList?.first?.orderPartSeqId"/>
+            </if>
+
+            <entity-find-one entity-name="mantle.order.OrderHeader" value-field="orderHeader" for-update="true"/>
+            <entity-find-one entity-name="mantle.order.OrderPart" value-field="orderPart" for-update="true"/>
+
+            <set field="productStoreId" from="productStoreId ?: orderHeader?.productStoreId"/>
+
+            <entity-find-one entity-name="mantle.product.store.ProductStore" value-field="productStore"/>
+            <set field="vendorPartyId" from="orderPart?.vendorPartyId ?: productStore?.organizationPartyId"/>
+            <set field="currencyUomId" from="currencyUomId ?: productStore?.defaultCurrencyUomId"/>
+            <set field="salesChannelEnumId" from="salesChannelEnumId ?: productStore?.defaultSalesChannelEnumId"/>
+
+            <!-- have customerPartyId default to current user's partyId -->
+            <set field="customerPartyId" from="(customerPartyId ?: orderPart?.customerPartyId) ?: ec.user.userAccount?.partyId"/>
+
+            <if condition="!orderId">
+                <if condition="customerPartyId">
+                    <entity-find entity-name="mantle.order.OrderHeaderAndPart" list="existingOrderList">
+                        <econdition field-name="statusId" value="OrderOpen"/>
+                        <econdition field-name="customerPartyId"/>
+                        <econdition field-name="productStoreId" ignore-if-empty="true"/>
+                        <select-field field-name="orderId"/><select-field field-name="orderPartSeqId"/>
+                        <order-by field-name="-entryDate"/><!-- get most recent open order -->
+                    </entity-find>
+                    <if condition="existingOrderList">
+                        <set field="orderId" from="existingOrderList[0].orderId"/>
+                        <set field="orderPartSeqId" from="existingOrderList[0].orderPartSeqId"/>
+                    </if>
+                </if>
+                <!-- no existing open (cart) order found? create one -->
+                <if condition="!orderId">
+                    <service-call name="mantle.order.OrderServices.create#Order" out-map="createOrderOut"
+                                  in-map="[currencyUomId:currencyUomId, productStoreId:productStoreId, salesChannelEnumId:salesChannelEnumId,
+                                vendorPartyId:vendorPartyId, customerPartyId:customerPartyId, carrierPartyId:carrierPartyId,
+                                shipmentMethodEnumId:shipmentMethodEnumId]"/>
+                    <set field="orderId" from="createOrderOut.orderId"/>
+                    <set field="orderPartSeqId" from="createOrderOut.orderPartSeqId"/>
+                </if>
+            </if>
+
+            <!-- calculate the price based on quantity, etc, -->
+            <if condition="unitAmount == null"><then>
+                <service-call name="mantle.product.PriceServices.get#ProductPrice" out-map="priceMap"
+                              in-map="[productId:productId, quantity:quantity, priceUomId:currencyUomId,
+                         productStoreId:productStoreId, customerPartyId:customerPartyId, vendorPartyId:vendorPartyId]"/>
+
+                <set field="unitAmount" from="priceMap.price"/>
+                <set field="unitListPrice" from="priceMap.listPrice"/>
+                <set field="isModifiedPrice" value="N"/>
+            </then><else>
+                <set field="isModifiedPrice" value="Y"/>
+            </else></if>
+
+            <!-- look up otherPartyProductId if not specified -->
+            <if condition="!otherPartyProductId &amp;&amp; productId">
+                <entity-find-one entity-name="mantle.order.OrderPart" value-field="orderPart" for-update="true"/>
+                <entity-find-one entity-name="mantle.party.PartyRole" value-field="vendorOrgRole">
+                    <field-map field-name="partyId" from="orderPart.vendorPartyId"/>
+                    <field-map field-name="roleTypeId" value="OrgInternal"/>
+                </entity-find-one>
+                <if condition="vendorOrgRole != null &amp;&amp; orderPart.customerPartyId"><then>
+                    <entity-find entity-name="mantle.product.ProductPrice" list="otherPartyItemIdList">
+                        <date-filter/><econdition field-name="productId"/>
+                        <econdition field-name="customerPartyId" from="orderPart.customerPartyId"/>
+                        <econdition field-name="otherPartyItemId" operator="is-not-null"/>
+                    </entity-find>
+                    <if condition="otherPartyItemIdList">
+                        <set field="otherPartyProductId" from="otherPartyItemIdList[0].otherPartyItemId"/></if>
+                </then><else-if condition="vendorOrgRole != null &amp;&amp; orderPart.vendorPartyId">
+                    <entity-find entity-name="mantle.product.ProductPrice" list="otherPartyItemIdList">
+                        <date-filter/><econdition field-name="productId"/>
+                        <econdition field-name="vendorPartyId" from="orderPart.vendorPartyId"/>
+                        <econdition field-name="otherPartyItemId" operator="is-not-null"/>
+                    </entity-find>
+                    <if condition="otherPartyItemIdList">
+                        <set field="otherPartyProductId" from="otherPartyItemIdList[0].otherPartyItemId"/></if>
+                </else-if></if>
+            </if>
+
+            <!-- find an OrderItem for the productId and increment quantity if found, otherwise create OrderItem with quantity -->
+            <entity-find entity-name="mantle.order.OrderItem" list="orderItemList">
+                <econdition-object field="[orderId:orderId, orderPartSeqId:orderPartSeqId, productId:productId, productFeatureId:productFeatureId,
+                        productConfigSavedId:null, forAssetId:null, selectedAmount:null]"/>
+            </entity-find>
+
+            <if condition="orderItemList &amp;&amp; updateExisting"><then>
+                <set field="orderItem" from="orderItemList.first"/>
+                <set field="orderItemSeqId" from="orderItem.orderItemSeqId"/>
+                <set field="orderPartSeqId" from="orderItem.orderPartSeqId" set-if-empty="false"/>
+                <set field="unitAmount" from="unitAmount != null ? unitAmount : orderItem.unitAmount"/>
+                <set field="standardCost" from="standardCost != null ? standardCost : orderItem.standardCost"/>
+                <set field="quantity" from="addToQuantity ? quantity + orderItem.quantity : quantity"/>
+                <!-- if requiredByDate on orderItem is less than that passed in, make sure to use it instead of the new later one -->
+                <if condition="orderItem.requiredByDate &amp;&amp; requiredByDate &amp;&amp; orderItem.requiredByDate &lt; requiredByDate">
+                    <set field="requiredByDate" from="orderItem.requiredByDate"/></if>
+                <service-call name="mantle.order.OrderServices.update#OrderItem" in-map="context"/>
+            </then><else>
+                <service-call name="mantle.order.OrderServices.create#OrderItem" in-map="context" out-map="createOrderItemOut"/>
+                <set field="orderItemSeqId" from="createOrderItemOut.orderItemSeqId"/>
+            </else></if>
+        </actions>
+    </service>
+    <service verb="update" noun="OrderProductQuantity" authenticate="anonymous-all">
+        <!-- TODO had transaction="cache" but causing issues with updating single Payment amount and sometimes part/header total when there are multiple promotions active (ie New Customer and BOGO) -->
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+            <parameter name="orderItemSeqId" required="true"/>
+            <parameter name="quantity" type="BigDecimal" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.order.OrderHeader" value-field="orderHeader" for-update="true"/>
+            <if condition="quantity &lt;= 0">
+                <service-call name="mantle.order.OrderServices.delete#OrderItem"
+                              in-map="[orderId:orderId, orderItemSeqId:orderItemSeqId]"/>
+                <return/>
+            </if>
+
+            <service-call name="mantle.order.OrderServices.update#OrderItem"
+                          in-map="[orderId:orderId, orderItemSeqId:orderItemSeqId, quantity:quantity]"/>
+        </actions>
+    </service>
+    <service verb="merge" noun="OrderItems">
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+            <parameter name="fromOrderId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mantle.order.OrderItem" list="orderItemList">
+                <econdition field-name="orderId" from="fromOrderId"/></entity-find>
+            <entity-find entity-name="moqui.basic.EnumGroupMember" list="productItemTypeEgms" cache="true">
+                <econdition field-name="enumGroupEnumId" value="EngItemsProduct"/></entity-find>
+            <set field="productItemTypes" from="productItemTypeEgms*.enumId"/>
+            <iterate list="orderItemList" entry="orderItem">
+                <if condition="!orderItem.productId || !(orderItem.itemTypeEnumId in productItemTypes)"><continue/></if>
+                <service-call name="mantle.order.OrderServices.add#OrderProductQuantity"
+                              in-map="[orderId:orderId, productId:orderItem.productId, quantity:orderItem.quantity]"/>
+            </iterate>
+        </actions>
+    </service>
+
+
+    <service verb="get" noun="OrderDisplayInfo">
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="orderId"/>
+            <parameter name="orderHeader" type="Map"><auto-parameters entity-name="mantle.order.OrderHeader"/></parameter>
+            <parameter name="productStore" type="Map"/>
+            <parameter name="statusItem" type="Map"><auto-parameters entity-name="moqui.basic.StatusItem"/></parameter>
+            <parameter name="editableStatusIds" type="Set"><parameter name="statusId"/></parameter>
+            <parameter name="orderEditable" type="Boolean"/>
+            <parameter name="placeWarnings" type="List"><parameter name="placeWarning"/></parameter>
+
+            <parameter name="orderItemList" type="List"><parameter name="orderItem" type="Map">
+                <auto-parameters entity-name="mantle.order.OrderItem"/></parameter></parameter>
+            <parameter name="allItemsAuditLogList" type="List"><parameter name="orderItem" type="Map"/></parameter>
+            <parameter name="orderItemWithChildrenSet" type="Set"><parameter name="orderItemSeqId"/></parameter>
+
+            <parameter name="orderPromoCodeDetailList" type="List"><parameter name="orderPromoCode" type="Map"/></parameter>
+            <parameter name="paymentList" type="List"><parameter name="payment" type="Map">
+                <auto-parameters entity-name="mantle.account.payment.Payment"/></parameter></parameter>
+
+            <parameter name="shipmentItemSourceList" type="List"><parameter name="sis" type="Map">
+                <auto-parameters entity-name="mantle.shipment.ShipmentItemSource"/></parameter></parameter>
+            <parameter name="shipmentIdSet" type="Set"><parameter name="shipmentId"/></parameter>
+            <parameter name="quantityNotShippedByItem" type="Map">
+                <description>Key is orderItemSeqId, value is quantity not shipped for item.</description></parameter>
+            <parameter name="quantityNotShippedByPart" type="Map">
+                <description>Key is orderPartSeqId, value is quantity not shipped for all items in part.</description></parameter>
+
+            <parameter name="orderItemBillingList" type="List"><parameter name="oib" type="Map">
+                <auto-parameters entity-name="mantle.order.OrderItemBilling"/></parameter></parameter>
+            <parameter name="invoiceIdSet" type="Set"><parameter name="invoiceId"/></parameter>
+            <parameter name="quantityNotBilledByItem" type="Map">
+                <description>Key is orderItemSeqId, value is quantity not billed for item.</description></parameter>
+            <parameter name="quantityNotBilledByPart" type="Map">
+                <description>Key is orderPartSeqId, value is quantity not billed for all items in part.</description></parameter>
+
+            <parameter name="returnItemList" type="List"><parameter name="returnItem" type="Map">
+                <auto-parameters entity-name="mantle.order.return.ReturnItem"/></parameter></parameter>
+
+            <parameter name="requestItemOrderList" type="List"><parameter name="rio" type="Map">
+                <auto-parameters entity-name="mantle.request.RequestItemOrder"/></parameter></parameter>
+            <parameter name="requestIdSet" type="Set"><parameter name="requestId"/></parameter>
+
+            <parameter name="statusHistoryList" type="List"><parameter name="auditLog" type="Map">
+                <auto-parameters entity-name="moqui.entity.EntityAuditLog"/></parameter></parameter>
+            <parameter name="orderNoteList" type="List"><parameter name="orderNote" type="Map">
+                <auto-parameters entity-name="mantle.order.OrderNote"/></parameter></parameter>
+
+            <parameter name="orderPartList" type="List"><parameter name="orderPart" type="Map">
+                <auto-parameters entity-name="mantle.order.OrderPart"/></parameter></parameter>
+            <parameter name="firstPart" type="Map"/>
+            <parameter name="orderPartInfoList" type="List"><parameter name="orderPartInfo" type="Map">
+                <parameter name="orderPart" type="Map"><auto-parameters entity-name="mantle.order.OrderPart"/></parameter>
+                <parameter name="partEditable" type="Boolean"/>
+                <parameter name="partOrderItemList" type="List"><parameter name="partOrderItem" type="Map">
+                    <auto-parameters entity-name="mantle.order.OrderItem"/></parameter></parameter>
+                <parameter name="partNoParentOrderItemList" type="List"><parameter name="partOrderItem" type="Map">
+                    <auto-parameters entity-name="mantle.order.OrderItem"/></parameter></parameter>
+                <parameter name="hasShippableItems" type="Boolean"/>
+                <parameter name="singleLot" type="Boolean"/>
+                <parameter name="newerInventory" type="Boolean"/>
+                <parameter name="shipmentMethodEnum" type="Map">
+                    <auto-parameters entity-name="moqui.basic.Enumeration"/></parameter>
+                <parameter name="partPaymentList" type="List"><parameter name="partPayment" type="Map">
+                    <auto-parameters entity-name="mantle.account.payment.Payment"/></parameter></parameter>
+                <parameter name="partPaymentInfoList" type="List"><parameter name="partPaymentInfo" type="Map">
+                    <parameter name="partPayment" type="Map"><auto-parameters entity-name="mantle.account.payment.Payment"/></parameter>
+                    <parameter name="statusItem" type="Map"><auto-parameters entity-name="moqui.basic.StatusItem"/></parameter>
+                    <parameter name="paymentMethod" type="Map"><auto-parameters entity-name="mantle.account.method.PaymentMethod"/></parameter>
+                    <parameter name="creditCard" type="Map"><auto-parameters entity-name="mantle.account.method.CreditCard"/></parameter>
+                    <parameter name="creditCardTypeEnum" type="Map"><auto-parameters entity-name="moqui.basic.Enumeration"/></parameter>
+                    <parameter name="maskedCardNumber"/>
+                    <parameter name="postalAddress" type="Map"><auto-parameters entity-name="mantle.party.contact.PostalAddress"/></parameter>
+                    <parameter name="postalAddressStateGeo" type="Map"><auto-parameters entity-name="moqui.basic.Geo"/></parameter>
+                    <parameter name="telecomNumber" type="Map"><auto-parameters entity-name="mantle.party.contact.TelecomNumber"/></parameter>
+                    <parameter name="paymentMethodTypeEnum" type="Map"><auto-parameters entity-name="moqui.basic.Enumeration"/></parameter>
+                    <parameter name="paymentInstrumentEnum" type="Map"><auto-parameters entity-name="moqui.basic.Enumeration"/></parameter>
+                </parameter></parameter>
+                <parameter name="paymentsTotal" type="BigDecimal"/>
+                <parameter name="partTotalUnpaid" type="BigDecimal"/>
+                <parameter name="postalAddress" type="Map">
+                    <auto-parameters entity-name="mantle.party.contact.PostalAddress"/></parameter>
+                <parameter name="postalAddressStateGeo" type="Map">
+                    <auto-parameters entity-name="moqui.basic.Geo"/></parameter>
+                <parameter name="telecomNumber" type="Map">
+                    <auto-parameters entity-name="mantle.party.contact.TelecomNumber"/></parameter>
+                <parameter name="facility" type="Map">
+                    <auto-parameters entity-name="mantle.facility.Facility"/></parameter>
+                <parameter name="facilityContactInfo" type="Map">
+                    <parameter name="postalContactMechId"/>
+                    <parameter name="postalContactMechPurposeId"/>
+                    <parameter name="postalAddress" type="Map">
+                        <auto-parameters entity-name="mantle.party.contact.PostalAddress"/></parameter>
+                    <parameter name="postalAddressStateGeo" type="Map">
+                        <auto-parameters entity-name="moqui.basic.Geo"/></parameter>
+                    <parameter name="postalAddressGeoPoint" type="Map">
+                        <auto-parameters entity-name="moqui.basic.GeoPoint"/></parameter>
+                    <parameter name="telecomContactMechId"/>
+                    <parameter name="telecomContactMechPurposeId"/>
+                    <parameter name="telecomNumber" type="Map">
+                        <auto-parameters entity-name="mantle.party.contact.TelecomNumber"/></parameter>
+                </parameter>
+                <parameter name="customerDetail" type="Map"><auto-parameters entity-name="mantle.party.PartyDetail"/></parameter>
+                <parameter name="customerEmail"/>
+                <parameter name="vendorDetail" type="Map"><auto-parameters entity-name="mantle.party.PartyDetail"/></parameter>
+                <parameter name="isCustomerInternalOrg" type="Boolean"/>
+                <parameter name="isVendorInternalOrg" type="Boolean"/>
+                <parameter name="orderPartPartyList" type="List"><parameter name="orderPartParty">
+                    <auto-parameters entity-name="mantle.order.OrderPartPartyDetail"/></parameter></parameter>
+                <parameter name="customerShipToDetail" type="Map">
+                    <auto-parameters entity-name="mantle.order.OrderPartPartyDetail"/></parameter>
+                <parameter name="customerBillToDetail" type="Map">
+                    <auto-parameters entity-name="mantle.order.OrderPartPartyDetail"/></parameter>
+                <parameter name="partShipmentItemSourceList" type="List"><parameter name="partSis" type="Map">
+                    <auto-parameters entity-name="mantle.shipment.ShipmentItemSource"/></parameter></parameter>
+                <parameter name="partShipmentIdSet" type="Set"><parameter name="partShipmentId"/></parameter>
+            </parameter></parameter>
+        </out-parameters>
+        <actions>
+            <set field="placeWarnings" from="[]"/>
+
+            <entity-find-one entity-name="mantle.order.OrderHeader" value-field="orderHeader"/>
+            <if condition="orderHeader == null"><return error="true" message="Order not found with ID ${orderId}"/></if>
+            <!--
+            <set field="headerMaster" from="orderHeader.getMasterValueMap('default')"/>
+            <log message="======== Order Master:\n${groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(headerMaster))}"/>
+            -->
+
+            <set field="productStore" from="orderHeader.productStore"/>
+
+            <set field="statusItem" from="orderHeader.status"/>
+            <!-- NOTE: these statuses are fairly liberal, may want to restrict more in certain scenarios (such as customer changing an order) -->
+            <set field="editableStatusIds" from="new HashSet(['OrderBeingChanged', 'OrderOpen', 'OrderRequested',
+                'OrderProposed', 'OrderPlaced', 'OrderProcessing', 'OrderWishList', 'OrderGiftRegistry', 'OrderAutoReorder'])"/>
+            <set field="orderEditable" from="editableStatusIds.contains(orderHeader.statusId)"/>
+
+            <entity-find-related value-field="orderHeader" relationship-name="mantle.order.OrderItem"
+                                 list="orderItemList" order-by-list="['orderItemSeqId']"/>
+            <if condition="!orderItemList"><script>placeWarnings.add("Order has no items")</script></if>
+            <!-- put items with parentItemSeqId in the list after their parent -->
+            <script><![CDATA[
+                orderItemWithChildrenSet = new HashSet()
+                List reverseList = orderItemList.cloneList().orderByFields(["-orderItemSeqId"])
+                for (orderItem in reverseList) {
+                    if (orderItem.parentItemSeqId) {
+                        orderItemWithChildrenSet.add(orderItem.parentItemSeqId)
+                        orderItemList.move(orderItemList.indexMatching([orderItemSeqId:orderItem.orderItemSeqId]),
+                                orderItemList.indexMatching([orderItemSeqId:orderItem.parentItemSeqId])+1)
+                    }
+                }
+            ]]></script>
+            <entity-find entity-name="moqui.entity.EntityAuditLog" list="allItemsAuditLogList">
+                <econdition field-name="changedEntityName" value="mantle.order.OrderItem"/>
+                <econdition field-name="changedFieldName" operator="in" value="quantity,unitAmount"/>
+                <econdition field-name="pkPrimaryValue" from="orderId"/>
+                <select-field field-name="changedFieldName,pkSecondaryValue,newValueText,oldValueText,changeReason,changedByUserId,changedDate"/>
+                <order-by field-name="-changedDate"/>
+            </entity-find>
+
+            <!-- get orderPromoCodeDetailList -->
+            <entity-find entity-name="mantle.product.store.OrderPromoCodeDetail" list="orderPromoCodeDetailList">
+                <econdition field-name="orderId"/></entity-find>
+            <!-- get paymentList -->
+            <entity-find-related value-field="orderHeader" relationship-name="mantle.account.payment.Payment"
+                                 list="paymentList" order-by-list="['paymentId']"/>
+
+            <!-- get ShipmentItemSource list and derived data -->
+            <entity-find entity-name="mantle.shipment.ShipmentAndItemSource" list="shipmentItemSourceList">
+                <econdition field-name="orderId"/>
+                <econdition field-name="shipmentStatusId" operator="not-in" value="ShipRejected,ShipCancelled"/>
+                <econdition field-name="statusId" operator="not-equals" value="SisCancelled"/>
+            </entity-find>
+            <set field="shipmentIdSet" from="new TreeSet()"/>
+            <set field="quantityNotShippedByItem" from="[:]"/>
+            <set field="quantityNotShippedByPart" from="[:]"/>
+            <script>
+                for (orderItem in orderItemList) {
+                if (!(orderItem.product?.productTypeEnumId in ['PtAsset', 'PtDigitalAsset', 'PtAssetUse'])) continue
+                def orderItemQuantity = (orderItem.quantity ?: 1) * (orderItem.selectedAmount ?: 1)
+                addToBigDecimalInMap(orderItem.orderItemSeqId, orderItemQuantity, quantityNotShippedByItem)
+                addToBigDecimalInMap(orderItem.orderPartSeqId, orderItemQuantity, quantityNotShippedByPart)
+                }
+            </script>
+            <iterate list="shipmentItemSourceList" entry="shipmentItemSource"><script>
+                def curOrderItem = orderItemList.find({ it.orderItemSeqId == shipmentItemSource.orderItemSeqId })
+                shipmentIdSet.add(shipmentItemSource.shipmentId)
+                addToBigDecimalInMap(curOrderItem.orderItemSeqId, -shipmentItemSource.quantity, quantityNotShippedByItem)
+                addToBigDecimalInMap(curOrderItem.orderPartSeqId, -shipmentItemSource.quantity, quantityNotShippedByPart)
+            </script></iterate>
+
+            <!-- get OrderItemBilling list and derived data -->
+            <!-- TODO: exclude OrderItemBilling records for cancelled invoices -->
+            <entity-find entity-name="mantle.order.OrderItemBilling" list="orderItemBillingList">
+                <econdition field-name="orderId"/><order-by field-name="orderItemSeqId"/></entity-find>
+            <set field="invoiceIdSet" from="new TreeSet()"/>
+            <set field="quantityNotBilledByItem" from="[:]"/>
+            <set field="quantityNotBilledByPart" from="[:]"/>
+            <iterate list="orderItemList" entry="orderItem"><script>
+                def orderItemQuantity = (orderItem.quantity ?: 1) * (orderItem.selectedAmount ?: 1)
+                addToBigDecimalInMap(orderItem.orderItemSeqId, orderItemQuantity, quantityNotBilledByItem)
+                addToBigDecimalInMap(orderItem.orderPartSeqId, orderItemQuantity, quantityNotBilledByPart)
+            </script></iterate>
+            <iterate list="orderItemBillingList" entry="orderItemBilling"><script>
+                def curOrderItem = orderItemList.find({ it.orderItemSeqId == orderItemBilling.orderItemSeqId })
+                invoiceIdSet.add(orderItemBilling.invoiceId)
+                addToBigDecimalInMap(curOrderItem.orderItemSeqId, -orderItemBilling.quantity, quantityNotBilledByItem)
+                addToBigDecimalInMap(curOrderItem.orderPartSeqId, -orderItemBilling.quantity, quantityNotBilledByPart)
+            </script></iterate>
+
+            <!-- get ReturnItem list -->
+            <entity-find entity-name="mantle.order.return.ReturnItem" list="returnItemList">
+                <econdition field-name="orderId"/>
+                <econdition field-name="statusId" operator="not-equals" value="ReturnCancelled"/>
+                <order-by field-name="orderItemSeqId"/>
+            </entity-find>
+
+            <!-- get RequestItemOrder list and derived data -->
+            <entity-find entity-name="mantle.request.RequestItemOrder" list="requestItemOrderList">
+                <econdition field-name="orderId"/></entity-find>
+            <set field="requestIdSet" from="new TreeSet()"/>
+            <iterate list="requestItemOrderList" entry="requestItemOrder">
+                <script>requestIdSet.add(requestItemOrder.requestId)</script></iterate>
+
+            <!-- get order status history from EntityAuditLog -->
+            <entity-find entity-name="moqui.entity.EntityAuditLog" list="statusHistoryList">
+                <econdition field-name="changedEntityName" value="mantle.order.OrderHeader"/>
+                <econdition field-name="changedFieldName" value="statusId"/>
+                <econdition field-name="pkPrimaryValue" from="orderId"/>
+                <order-by field-name="changedDate"/>
+            </entity-find>
+
+            <entity-find entity-name="mantle.order.OrderNote" list="orderNoteList">
+                <econdition field-name="orderId"/><order-by field-name="-noteDate"/></entity-find>
+
+            <entity-find-related value-field="orderHeader" relationship-name="mantle.order.OrderPart" list="orderPartList"/>
+            <set field="firstPart" from="orderPartList ? orderPartList[0] : null"/>
+
+            <!-- get order info by part for more detailed display -->
+            <script><![CDATA[
+            import org.moqui.entity.EntityList
+            import org.moqui.entity.EntityValue
+            import org.moqui.context.ExecutionContext
+            ExecutionContext ec = context.ec
+
+            orderPartInfoList = []
+            for (EntityValue orderPart in orderPartList) {
+                EntityList partOrderItemList = orderItemList.findAll({ it.orderPartSeqId == orderPart.orderPartSeqId })
+                EntityList partNoParentOrderItemList = partOrderItemList.findAll({ it.parentItemSeqId == null })
+
+                EntityValue customerDetail = ec.entity.find("mantle.party.PartyDetail").condition("partyId", orderPart.customerPartyId).one()
+                EntityValue vendorDetail = ec.entity.find("mantle.party.PartyDetail").condition("partyId", orderPart.vendorPartyId).one()
+                boolean isCustomerInternalOrg = ec.entity.find("mantle.party.PartyRole")
+                        .condition("partyId", orderPart.customerPartyId).condition("roleTypeId", "OrgInternal").one() as boolean
+                boolean isVendorInternalOrg = ec.entity.find("mantle.party.PartyRole")
+                        .condition("partyId", orderPart.vendorPartyId).condition("roleTypeId", "OrgInternal").one() as boolean
+
+                String customerEmail = null
+                if (orderPart.customerPartyId) {
+                    customerEmail = ec.service.sync().name("mantle.party.ContactServices.get#PartyContactInfo")
+                            .parameter("partyId", orderPart.customerPartyId).parameter("emailContactMechPurposeId", "EmailOrder")
+                            .parameter("defaultToPrimaryPurpose", true).call()?.emailAddress
+                }
+
+                boolean hasShippableItems = orderItemList.find({ it.product?.productTypeEnumId in ['PtAsset', 'PtDigitalAsset', 'PtAssetUse'] }) != null
+                boolean singleLot = false
+                boolean newerInventory = false
+                if (hasShippableItems && orderPart.customerPartyId) {
+                    singleLot = "BlY".equals(ec.service.sync().name("mantle.party.PartyServices.get#PartySettingValue")
+                            .parameter("partySettingTypeId", "CustomerSingleLot").parameter("partyId", orderPart.customerPartyId).call()?.get("settingValue"))
+                    newerInventory = "BlY".equals(ec.service.sync().name("mantle.party.PartyServices.get#PartySettingValue")
+                            .parameter("partySettingTypeId", "CustomerNewerInventory").parameter("partyId", orderPart.customerPartyId).call()?.get("settingValue"))
+                }
+
+                def partPaymentList = paymentList.cloneList().filterByAnd([orderPartSeqId:orderPart.orderPartSeqId])
+                def partPaymentInfoList = []
+                BigDecimal paymentsTotal = 0
+                for (EntityValue partPayment in partPaymentList) {
+                    if (!(((String) partPayment.statusId) in ['PmntCancelled', 'PmntVoid', 'PmntDeclined']))
+                        paymentsTotal += (partPayment.amount ?: 0)
+                    Map partPaymentInfo = [partPayment:partPayment, statusItem:partPayment.status]
+                    EntityValue paymentMethod = (EntityValue) partPayment.method
+                    if (paymentMethod != null) {
+                        partPaymentInfo.paymentMethod = paymentMethod
+                        creditCard = paymentMethod.creditCard
+                        partPaymentInfo.creditCard = creditCard
+                        partPaymentInfo.creditCardTypeEnum = creditCard?.type
+                        cardNumber = creditCard?.cardNumber
+                        partPaymentInfo.maskedCardNumber = cardNumber ? '*'.padRight(cardNumber.length() - 4, '*') + cardNumber.substring(cardNumber.length() - 4, cardNumber.length()) : ''
+                        partPaymentInfo.postalAddress = paymentMethod.PostalAddress
+                        partPaymentInfo.postalAddressStateGeo = partPaymentInfo.postalAddress?."StateProvince#moqui.basic.Geo"
+                        partPaymentInfo.telecomNumber = paymentMethod.TelecomNumber
+                        partPaymentInfo.paymentMethodTypeEnum = paymentMethod.methodType
+                    }
+                    partPaymentInfo.paymentInstrumentEnum = partPayment.instrument
+                    partPaymentInfoList.add(partPaymentInfo)
+                }
+                BigDecimal partTotalUnpaid = (orderPart.partTotal ?: 0.0) - (paymentsTotal ?: 0.0)
+
+                if (!orderPart.vendorPartyId) placeWarnings.add("Part ${orderPart.orderPartSeqId} has no vendor")
+                if (!orderPart.customerPartyId) placeWarnings.add("Part ${orderPart.orderPartSeqId} has no customer")
+                if (paymentsTotal < (BigDecimal) orderPart.partTotal)
+                    placeWarnings.add("Part ${orderPart.orderPartSeqId} payments total (${ec.l10n.formatCurrency(paymentsTotal ?: 0.0, (String) orderHeader?.currencyUomId)}) is less than order part total (${ec.l10n.formatCurrency(orderPart.partTotal ?: 0.0, (String) orderHeader?.currencyUomId)})")
+                if (!isCustomerInternalOrg && !orderPart.postalContactMechId)
+                    placeWarnings.add("Part ${orderPart.orderPartSeqId} has no shipping address selected")
+                if (!isCustomerInternalOrg && !orderPart.shipmentMethodEnumId)
+                    placeWarnings.add("Part ${orderPart.orderPartSeqId} has no shipment method selected")
+
+                List orderItemSeqIdList = partOrderItemList.orderItemSeqId
+                List partShipmentItemSourceList = []
+                Set partShipmentIdSet = new TreeSet()
+                for (EntityValue sis in shipmentItemSourceList) if (sis.orderItemSeqId in orderItemSeqIdList) {
+                    partShipmentItemSourceList.add(sis)
+                    partShipmentIdSet.add(sis.shipmentId)
+                }
+
+                EntityValue telecomNumber = (EntityValue) orderPart.'mantle.party.contact.TelecomNumber'
+                EntityValue postalAddress = (EntityValue) orderPart.'mantle.party.contact.PostalAddress'
+                EntityValue postalAddressStateGeo = (EntityValue) postalAddress?."StateProvince#moqui.basic.Geo"
+                EntityValue facility = (EntityValue) orderPart.'mantle.facility.Facility'
+                Map facilityContactInfo = null
+                if (facility) {
+                    Map facShipOut = ec.service.sync().name("mantle.facility.ContactServices.get#FacilityDefaultShipDest")
+                            .parameter("facilityId", orderPart.facilityId).call()
+                    facilityContactInfo = ec.service.sync().name("mantle.facility.ContactServices.get#FacilityContactInfo")
+                            .parameters([facilityId:orderPart.facilityId, postalContactMechId:facShipOut.postalContactMechId,
+                                         telecomContactMechId:facShipOut.telecomContactMechId]).call()
+                }
+
+                EntityList orderPartPartyList = ec.entity.find("mantle.order.OrderPartPartyDetail")
+                        .condition([orderId:orderPart.orderId, orderPartSeqId:orderPart.orderPartSeqId]).orderBy("description").list()
+                EntityValue customerShipToDetail = orderPartPartyList.find({ it.roleTypeId == 'CustomerShipTo' })
+                EntityValue customerBillToDetail = orderPartPartyList.find({ it.roleTypeId == 'CustomerBillTo' })
+
+                // find duplicate orders by customerPartyId and otherPartyOrderId
+                def duplicateOrderPartList = null
+                if (!isCustomerInternalOrg && orderPart.otherPartyOrderId) {
+                    duplicateOrderPartList = ec.entity.find("mantle.order.OrderPart").condition("orderId", "!=", orderId)
+                            .condition("otherPartyOrderId", orderPart.otherPartyOrderId)
+                            .condition("customerPartyId", orderPart.customerPartyId).list()
+                }
+
+                // find applicable open returns
+                Map openReturnsResult = ec.service.sync().name("mantle.order.ReturnServices.find#OrderOpenReturns")
+                        .parameters([orderId:orderPart.orderId, orderPartSeqId:orderPart.orderPartSeqId]).call()
+
+                orderPartInfoList.add([orderPart:orderPart, partEditable:editableStatusIds.contains(orderPart.statusId),
+                        partOrderItemList:partOrderItemList, partNoParentOrderItemList:partNoParentOrderItemList,
+                        hasShippableItems:hasShippableItems, singleLot:singleLot, newerInventory:newerInventory,
+                        shipmentMethodEnum:orderPart."ShipmentMethod#moqui.basic.Enumeration",
+                        partPaymentList:partPaymentList, partPaymentInfoList:partPaymentInfoList,
+                        paymentsTotal:paymentsTotal, partTotalUnpaid:partTotalUnpaid,
+                        postalAddress:postalAddress, postalAddressStateGeo:postalAddressStateGeo,
+                        telecomNumber:telecomNumber, facility:facility,
+                        facilityContactInfo:facilityContactInfo, customerDetail:customerDetail, customerEmail:customerEmail,
+                        vendorDetail:vendorDetail, isCustomerInternalOrg:isCustomerInternalOrg, isVendorInternalOrg:isVendorInternalOrg,
+                        orderPartPartyList:orderPartPartyList, customerShipToDetail:customerShipToDetail,
+                        customerBillToDetail:customerBillToDetail, partShipmentItemSourceList:partShipmentItemSourceList,
+                        partShipmentIdSet:partShipmentIdSet, duplicateOrderPartList:duplicateOrderPartList,
+                        openReturnList:openReturnsResult.openReturnList])
+            }
+            ]]></script>
+            <log level="warn" message="======== OrderDisplayInfo orderPartInfoList: ${orderPartInfoList}"/>
+        </actions>
+    </service>
+
+</services>
