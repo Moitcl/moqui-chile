@@ -81,35 +81,23 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="get" noun="SeriesData">
+    <service verb="get" noun="SeriesData" type="remote-xml-rpc" location="https://si3.bcentral.cl/SieteWS/SieteWS.asmx" method="GetSeries">
         <in-parameters>
+            <parameter name="xmlRpcEnvelopeAttributes" default="[xmlns:'http://bancocentral.org/']" type="Map"/>
+            <parameter name="xmlRpcRequestParams" default="[SOAPAction:'http://bancocentral.org/GetSeries']" type="Map"/>
+            <parameter name="user" default="ec.user.getPreference('mchile.bcentral.ws.username')"/>
+            <parameter name="password" default="ec.user.getPreference('mchile.bcentral.ws.password')"/>
             <parameter name="firstDate"/> <!-- String , YYYY-MM-DD -->
             <parameter name="lastDate"/>  <!-- String , YYYY-MM-DD -->
-            <parameter name="seriesId"/>
+            <parameter name="seriesIds"/>
+            <parameter name="xmlRpcServiceParams" default="[debug:true]" type="Map"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="codigo"/>
-            <parameter name="descripcion"/>
-            <parameter name="series" type="Map">
-                <parameter name="codigo" type="BigInteger"/>
-                <parameter name="descripcion"/>
-                <parameter name="series" type="List">
-                    <parameter name="originSeriesId"/>
-                    <parameter name="date" type="Date"/>
-                    <parameter name="value" type="BigDecimal"/>
-                </parameter>
-            </parameter>
+            <parameter name="Codigo"/>
+            <parameter name="Descripcion"/>
+            <parameter name="Series"/>
+            <parameter name="SeriesInfos" type="List"/>
         </out-parameters>
-        <actions>
-            <set field="user" from="ec.user.getPreference('mchile.bcentral.ws.username')"/>
-            <set field="password" from="ec.user.getPreference('mchile.bcentral.ws.password')"/>
-            <script><![CDATA[
-                result = cl.moit.ws.bcentral.BancoCentralWSConsumer.getSeries(user, password, firstDate, lastDate, seriesId)
-                codigo = result.codigo
-                descricion = result.descripcion
-                series = result.series
-            ]]></script>
-        </actions>
     </service>
 
     <service verb="update" noun="SeriesList">
@@ -119,21 +107,22 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <iterate list="frequencyCodeList" entry="frequencyCode">
                 <service-call name="mchile.datacollect.BancoCentralChile.get#SeriesList" in-map="context" out-map="context"/>
-                <if condition="codigo">
+                <if condition="Codigo">
                     <script>ec.message.addError(descripcion)</script>
                 </if>
                 <set field="originPartyId" value="CHLBCENTRAL"/>
                 <set field="frequencyByCode" from="[DAILY:'MchDsfDaily', MONTHLY:'MchDsfMonthly', QUARTERLY:'MchDsfQuarterly', ANNUAL:'MchDsfYearly']"/>
-                <iterate list="searchSeriesResult" entry="searchSeries">
+                <iterate list="SeriesInfos" entry="searchSeries">
                     <set field="frequencyEnumId" from="searchSeries.frequency?frequencyByCode[searchSeries.frequency]:null"/>
-                    <set field="firstItemDate" from="searchSeries.firstObservation"/>
-                    <set field="fromDate"
-                         from="searchSeries.createdAt &lt; firstItemDate? searchSeries.createdAt: firstItemDate"/>
+                    <set field="firstItemDate" from="ec.l10n.parseDate(searchSeries.firstObservation, 'dd-MM-yyyy')"/>
+                    <set field="createdAt" from="ec.l10n.parseDate(searchSeries.createdAt, 'dd-MM-yyyy')"/>
+                    <set field="fromDate" from="createdAt &lt; firstItemDate? createdAt: firstItemDate"/>
+                    <set field="lastItemDate" from="ec.l10n.parseDate(searchSeries.lastObservation, 'dd-MM-yyyy')"/>
+                    <set field="lastSeriesUpdatedDate" from="ec.l10n.parseDate(searchSeries.updatedAt, 'dd-MM-yyyy')"/>
                     <set field="seriesMap"
                          from="[description:searchSeries.spanishTitle, frequencyEnumId:frequencyEnumId,
                             originPartyId:originPartyId, originSeriesId:searchSeries.seriesId, fromDate:fromDate,
-                            firstItemDate:firstItemDate, lastItemDate:searchSeries.lastObservation,
-                            lastSeriesUpdatedDate:searchSeries.updated]"/>
+                            firstItemDate:firstItemDate, lastItemDate:lastItemDate, lastSeriesUpdatedDate:lastSeriesUpdatedDate]"/>
                     <entity-find entity-name="mchile.datacollect.DataSeries" list="existingSeries">
                         <econdition field-name="originSeriesId" from="searchSeries.seriesId"/>
                         <econdition field-name="originPartyId"/>
@@ -155,53 +144,20 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="get" noun="SeriesList2" type="remote-xml-rpc" location="https://si3.bcentra.cl/SieteWS/SieteWS.asmx" method="SearchSeries">
+    <service verb="get" noun="SeriesList" type="remote-xml-rpc" location="https://si3.bcentral.cl/SieteWS/SieteWS.asmx" method="SearchSeries">
         <in-parameters>
-            <parameter name="envelopeAttributes" default="[xmlns:'http://bancocentral.org/']"/>
+            <parameter name="xmlRpcEnvelopeAttributes" default="[xmlns:'http://bancocentral.org/']" type="Map"/>
+            <parameter name="xmlRpcRequestParams" default="[SOAPAction:'http://bancocentral.org/SearchSeries']" type="Map"/>
             <parameter name="user" default="ec.user.getPreference('mchile.bcentral.ws.username')"/>
             <parameter name="password" default="ec.user.getPreference('mchile.bcentral.ws.password')"/>
+            <parameter name="frequencyCode"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="result"/>
+            <parameter name="Codigo"/>
+            <parameter name="Descripcion"/>
+            <parameter name="Series"/>
+            <parameter name="SeriesInfos" type="List"/>
         </out-parameters>
-    </service>
-
-    <service verb="get" noun="SeriesList">
-        <description>Gets available series from Banco Central for the defined frequencyCode.
-            Valid frequencyCodes are DAILY, MONTHLY, QUARTERLY, ANNUAL
-        </description>
-        <in-parameters>
-            <parameter name="frequencyCode" default-value="DAILY"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="codigo" type="BigInteger"/>
-            <parameter name="descripcion"/>
-            <parameter name="searchSeriesResult" type="List">
-                <parameter name="series" type="Map">
-                    <parameter name="seriesId" type="String"/>
-                    <parameter name="frequency" type="String"/>
-                    <parameter name="frequencyCode" type="String"/>
-                    <parameter name="observed" type="String"/>
-                    <parameter name="observedCode" type="String"/>
-                    <parameter name="spanishTitle" type="String"/>
-                    <parameter name="englishTitle" type="String"/>
-                    <parameter name="firstObservation" type="Date"/>
-                    <parameter name="lastObservation" type="Date"/>
-                    <parameter name="updated" type="Date"/>
-                    <parameter name="createdAt" type="Date"/>
-                </parameter>
-            </parameter>
-        </out-parameters>
-        <actions>
-            <set field="user" from="ec.user.getPreference('mchile.bcentral.ws.username')"/>
-            <set field="password" from="ec.user.getPreference('mchile.bcentral.ws.password')"/>
-            <script><![CDATA[
-                result = cl.moit.ws.bcentral.BancoCentralWSConsumer.searchSeries(user, password, frequencyCode)
-                searchSeriesResult = result.seriesInfoLists
-                codigo = result.codigo
-                descripcion = result.descripcion
-            ]]></script>
-        </actions>
     </service>
 
 </services>
