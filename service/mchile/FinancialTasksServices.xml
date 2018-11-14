@@ -1,0 +1,459 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+
+    <service verb="get" noun="AllTillClosingInfo">
+        <out-parameters>
+            <parameter name="tillShiftId"/>
+            <parameter name="tillShift"/>
+            <parameter name="tillShiftDocuments"/>
+            <parameter name="tsdCollectedChecks"/>
+            <parameter name="tsdCollectedVouchers"/>
+            <parameter name="tsdDeliveredChecks"/>
+            <parameter name="tsdDeliveredVouchers"/>
+            <parameter name="tsdMissingChecks"/>
+            <parameter name="tsdMissingVouchers"/>
+            <parameter name="tsdPendingChecks"/>
+            <parameter name="tsdPendingVouchers"/>
+            <parameter name="tillReadyToClose" type="Boolean"/>
+            <parameter name="tillWaitingToClose" type="Boolean"/>
+            <parameter name="tillActive" type="Boolean"/>
+            <parameter name="tillFinAccount"/>
+            <parameter name="closingConfirmation"/>
+        </out-parameters>
+        <actions>
+            <entity-find entity-name="mchile.TillShift" list="tillShift">
+                <econdition field-name="statusId" value="TillShiftClosed"/>
+            </entity-find>
+            <entity-find entity-name="mchile.TillShiftDocumentAndPaymentAndCheck" list="tillShiftDocuments">
+                <econdition field-name="tillShiftId" from="tillShift.tillShiftId"/>
+            </entity-find>
+            <script>
+                tsdCollectedChecks = 0
+                tsdCollectedVouchers = 0
+                tsdDeliveredChecks = 0
+                tsdDeliveredVouchers = 0
+                tsdMissingChecks = 0
+                tsdMissingVouchers = 0
+                tsdPendingChecks = 0
+                tsdPendingVouchers = 0
+                tillReadyToClose = true
+            </script>
+            <iterate list="tillShiftDocuments" entry="tsd">
+                <script><![CDATA[
+                        switch ("${tsd.statusId}-${tsd.documentTypeEnumId}") {
+                            case 'TsdDelivered-TsdtCheck':
+                                tsdDeliveredChecks++
+                                break
+                            case 'TsdDelivered-TsdtCardVoucher':
+                                tsdDeliveredVouchers++
+                                break
+                            case 'TsdCollectedAtTill-TsdtCheck':
+                                tsdCollectedChecks++
+                                tillReadyToClose = false
+                                break
+                            case 'TsdCollectedAtTill-TsdtCardVoucher':
+                                tsdCollectedVouchers++
+                                tillReadyToClose = false
+                                break
+                            case 'TsdMissing-TsdtCheck':
+                                tsdMissingChecks++
+                                break
+                            case 'TsdMissing-TsdtCardVoucher':
+                                tsdMissingVouchers++
+                                break
+                            case 'TsdPending-TsdtCheck':
+                                tsdPendingChecks++
+                                break
+                            case 'TsdPending-TsdtCardVoucher':
+                                tsdPendingVouchers++
+                                break
+                            default:
+                                ec.message.addError("unknown case: ${tsd.statusId}-${tsd.documentTypeEnumId}")
+                        }
+                ]]></script>
+            </iterate>
+            <script><![CDATA[
+                tillActive = tillShift.statusId == 'TillShiftOpen'
+                tillWaitingToClose = (tillShift.statusId in ['TillShiftClosing'])
+                tillReadyToClose = tillReadyToClose && tillWaitingToClose && tillShift.closeBalanceCounted != null
+                if (tillReadyToClose && tillShift.closeBalanceExpected != tillShift.closeBalanceCounted)
+                    closingConfirmation = ec.l10n.localize("Difference of ${tillShift.closeBalanceCounted-tillShift.closeBalanceExpected} will be registered.")
+            ]]></script>
+        </actions>
+    </service>
+
+    <service verb="get" noun="AllPayments">
+        <in-parameters>
+            <!-- PiDebitCard, PiCreditCard, PiCash, PiPersonalCheck, PiCompanyCheck -->
+            <parameter name="paymentType"/>
+            <parameter name="partyId" default-value="cvsport"/>
+        </in-parameters>
+        <out-parameters>
+           <auto-parameters entity-name="mantle.account.payment.Payment"/>
+        </out-parameters>
+        <actions>
+
+            <entity-find entity-name="mantle.account.payment.Payment" list="paymentList">
+                <!--econdition field-name="fromPartyId" from="invoice.toPartyId"/-->
+                <econdition field-name="toPartyId" value="${partyId}"/>
+                <!--econdition field-name="paymentTypeEnumId" operator="in" value="PtInvoicePayment,PtPrePayment,PtPrePaymentInventory"/-->
+                <!--econdition field-name="statusId" operator="in" value="PmntPromised,PmntAuthorized,PmntDelivered,PmntConfirmed"/-->
+                <!--econdition field-name="unappliedTotal" operator="greater" from="0.0"/-->
+                <econdition field-name="paymentInstrumentEnumId" value="${paymentType}"/>
+                <order-by field-name="effectiveDate,paymentId"/>
+            </entity-find>
+            <entity-find entity-name="mchile.TillShift" list="tillShift">
+                <econdition field-name="statusId" value="TillShiftClosed"/>
+            </entity-find>
+            <entity-find entity-name="mchile.TillShiftDocumentAndPaymentAndCheck" list="tillShiftDocuments">
+                <econdition field-name="tillShiftId" from="tillShift.tillShiftId"/>
+                <econdition field-name="transferDocId" operator="is-not-null"/>
+            </entity-find>
+            <script>
+                tsdCollectedChecks = 0
+                tsdCollectedVouchers = 0
+                tsdDeliveredChecks = 0
+                tsdDeliveredVouchers = 0
+                tsdMissingChecks = 0
+                tsdMissingVouchers = 0
+                tsdPendingChecks = 0
+                tsdPendingVouchers = 0
+                tillReadyToClose = true
+            </script>
+            <iterate list="tillShiftDocuments" entry="tsd">
+                <script><![CDATA[
+                        switch ("${tsd.statusId}-${tsd.documentTypeEnumId}") {
+                            case 'TsdDelivered-TsdtCheck':
+                                tsdDeliveredChecks++
+                                break
+                            case 'TsdDelivered-TsdtCardVoucher':
+                                tsdDeliveredVouchers++
+                                break
+                            case 'TsdCollectedAtTill-TsdtCheck':
+                                tsdCollectedChecks++
+                                tillReadyToClose = false
+                                break
+                            case 'TsdCollectedAtTill-TsdtCardVoucher':
+                                tsdCollectedVouchers++
+                                tillReadyToClose = false
+                                break
+                            case 'TsdMissing-TsdtCheck':
+                                tsdMissingChecks++
+                                break
+                            case 'TsdMissing-TsdtCardVoucher':
+                                tsdMissingVouchers++
+                                break
+                            case 'TsdPending-TsdtCheck':
+                                tsdPendingChecks++
+                                break
+                            case 'TsdPending-TsdtCardVoucher':
+                                tsdPendingVouchers++
+                                break
+                            default:
+                                ec.message.addError("unknown case: ${tsd.statusId}-${tsd.documentTypeEnumId}")
+                        }
+                ]]></script>
+            </iterate>
+            <script><![CDATA[
+                tillActive = tillShift.statusId == 'TillShiftOpen'
+                tillWaitingToClose = (tillShift.statusId in ['TillShiftClosing'])
+                tillReadyToClose = tillReadyToClose && tillWaitingToClose && tillShift.closeBalanceCounted != null
+                if (tillReadyToClose && tillShift.closeBalanceExpected != tillShift.closeBalanceCounted)
+                    closingConfirmation = ec.l10n.localize("Difference of ${tillShift.closeBalanceCounted-tillShift.closeBalanceExpected} will be registered.")
+            ]]></script>
+        </actions>
+    </service>
+
+    <service verb="addChecksAndCash" noun="Deposit">
+        <in-parameters>
+            <parameter name="paymentIds" required="true"/>
+            <parameter name="cashAmount" type="BigDecimal" default-value="0"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="transferDocId"/>
+        </out-parameters>
+        <actions>
+            <service-call name="create#mchile.TransferDocument" out-map="context"/>
+
+            <set field="checkNumberList" from="paymentIds instanceof List ? paymentIds : paymentIds.split(',') as List"/>
+
+            <!-- Monto en efectivo -->
+            <set field="totalAmount" from="cashAmount" type="BigDecimal"/>
+
+            <!-- Iteracion sobre lista de cheques -->
+
+            <iterate entry="checkPair" list="checkNumberList">
+                <set field="checkTemp" from="checkPair instanceof List ? checkPair : checkPair.split('-') as List"/>
+                <set field="checkNumber" from="checkTemp[0]"/>
+                <set field="paymentMethodId" from="checkTemp[1]"/>
+                <!-- Se asocia el cheque con el nuevo depósito -->
+                <entity-find-one value-field="checkForDeposit" entity-name="mantle.account.method.BankAccountCheck" for-update="true"/>
+                <set field="checkForDeposit.transferDocId" from="transferDocId"/>
+                <entity-update value-field="checkForDeposit"/>
+
+                <!-- Obtener monto de cheque en payment -->
+                <set field="paymentId" from="checkForDeposit.paymentId"/>
+                <entity-find-one entity-name="mantle.account.payment.Payment" value-field="checkAmount" for-update="false"/>
+                <script><![CDATA[
+                    totalAmount = totalAmount + checkAmount.amount
+                ]]></script>
+            </iterate>
+            <!-- Actualización depósito -->
+            <entity-find-one value-field="document" entity-name="mchile.TransferDocument" for-update="true"/>
+            <set field="document.createdDate" from="ec.user.nowTimestamp"/>
+            <set field="document.statusId" value="TdInProgress"/>
+            <!--set field="document.reconcileStatusId" value="TdNotReconciled"/-->
+            <set field="document.amount" from="totalAmount" type="BigDecimal"/>
+            <entity-update value-field="document"/>
+            <log message="transferDocID: $transferDocId" level="warn"/>
+        </actions>
+    </service>
+
+    <!-- Marcado de cheques como depositados -->
+    <service verb="deposit" noun="Checks">
+        <in-parameters>
+            <!-- Lista de depositos -->
+            <parameter name="depositIds"/>
+        </in-parameters>
+        <actions>
+            <!--service-call name="mchile.FinancialTasksServices.create#TransferDocument" in-map="context" out-map="context"/-->
+            <set field="depositList" from="depositIds instanceof List ? depositIds : depositIds.split(',') as List"/>
+
+            <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="context"/>
+            <if condition="activeOrgId == null &amp;&amp; userOrgIds.size() >= 1">
+                <set field="activeOrgId" from="userOrgIds.first()"/>
+            </if>
+            <set field="partyId" value="$activeOrgId"/>
+
+            <!-- Iteracion sobre lista de depositos -->
+            <iterate entry="deposit" list="depositList">
+                <!-- Se asocia el cheque con el nuevo depósito -->
+                <!-- Se marca el TransferDocument como TdComplete -->
+                <set field="transferDocId" from="deposit"/>
+                <entity-find-one value-field="depositEntry" entity-name="mchile.TransferDocument" for-update="true"/>
+                <set field="depositEntry.statusId" value="TdComplete"/>
+                <entity-update value-field="depositEntry"/>
+                <!-- Accounting Transaction para credito de cheques en cartera (GL 130102000) -->
+                <service-call name="create#mantle.ledger.transaction.AcctgTrans" out-map="context"/>
+                <entity-find-one entity-name="mantle.ledger.transaction.AcctgTrans" value-field="newacctgtrans" for-update="true"/>
+                <set field="newacctgtrans.acctgTransTypeEnumId" value="AttIncomingPayment"/>
+                <set field="newacctgtrans.organizationPartyId" value="${partyId}"/>
+                <set field="newacctgtrans.transactionDate" from="ec.user.nowTimestamp" type="Date"/>
+                <set field="newacctgtrans.glFiscalTypeEnumId" value="GLFT_ACTUAL"/>
+                <set field="newacctgtrans.amountUomId" value="CLP"/>
+                <set field="newacctgtrans.isPosted" value="Y"/>
+                <entity-update value-field="newacctgtrans"/>
+
+                <!-- Accounting Transaction Entry para referenciar GL -->
+                <set field="acctgTransId" from="newacctgtrans.acctgTransId"/>
+                <service-call name="create#mantle.ledger.transaction.AcctgTransEntry" in-map="context"/>
+                <entity-find-one entity-name="mantle.ledger.transaction.AcctgTransEntry" value-field="newacctgtransentry" for-update="true"/>
+                <set field="newacctgtransentry.debitCreditFlag" value="C"/>
+                <set field="newacctgtransentry.isSummary" value="N"/>
+                <set field="newacctgtransentry.amount" from="depositEntry.amount"/>
+                <set field="newacctgtransentry.description" value="Crédito por Cheque Depositado"/>
+                <set field="newacctgtransentry.glAccountId" value="130102000"/>
+                <set field="newacctgtransentry.reconcileStatusId" value="AterNot"/>
+                <entity-update value-field="newacctgtransentry"/>
+                <!-- ****************************************************************************-->
+                <!-- Accounting Transaction para débito deposito cuenta corriente (GL 110201000) -->
+                <service-call name="create#mantle.ledger.transaction.AcctgTrans" out-map="context"/>
+                <entity-find-one entity-name="mantle.ledger.transaction.AcctgTrans" value-field="newacctgtrans" for-update="true"/>
+                <set field="newacctgtrans.acctgTransTypeEnumId" value="AttPayment"/>
+                <set field="newacctgtrans.organizationPartyId" value="${partyId}"/>
+                <set field="newacctgtrans.transactionDate" from="ec.user.nowTimestamp" type="Date"/>
+                <set field="newacctgtrans.glFiscalTypeEnumId" value="GLFT_ACTUAL"/>
+                <set field="newacctgtrans.amountUomId" value="CLP"/>
+                <set field="newacctgtrans.isPosted" value="Y"/>
+                <entity-update value-field="newacctgtrans"/>
+
+                <!-- Accounting Transaction Entry para referenciar GL -->
+                <set field="acctgTransId" from="newacctgtrans.acctgTransId"/>
+                <service-call name="create#mantle.ledger.transaction.AcctgTransEntry" in-map="context"/>
+                <entity-find-one entity-name="mantle.ledger.transaction.AcctgTransEntry" value-field="newacctgtransentry" for-update="true"/>
+                <set field="newacctgtransentry.debitCreditFlag" value="D"/>
+                <set field="newacctgtransentry.isSummary" value="N"/>
+                <set field="newacctgtransentry.amount" from="depositEntry.amount"/>
+                <set field="newacctgtransentry.description" value="Débito por Cheque Depositado"/>
+                <set field="newacctgtransentry.glAccountId" value="110201000"/>
+                <set field="newacctgtransentry.reconcileStatusId" value="AterNot"/>
+                <entity-update value-field="newacctgtransentry"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="pair" noun="TbkVouchers">
+        <in-parameters>
+            <parameter name="voucherIds"/>
+            <parameter name="voucherTbk" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="transferDocId"/>
+        </out-parameters>
+        <actions>
+            <service-call name="create#mchile.TransferDocument" in-map="context" out-map="context"/>
+
+
+            <set field="voucherList" from="voucherIds instanceof List ? voucherIds : voucherIds.split(',') as List"/>
+
+            <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="context"/>
+            <if condition="activeOrgId == null &amp;&amp; userOrgIds.size() == 1">
+                <set field="activeOrgId" from="userOrgIds.first()"/>
+            </if>
+            <set field="partyId" value="$activeOrgId"/>
+
+            <set field="amount" value="0" type="BigDecimal"/>
+
+            <set field="externalDocumentId" value="${voucherTbk}"/>
+
+
+            <!-- Iteracion sobre lista de vouchers -->
+            <iterate entry="voucherPair" list="voucherList">
+                <set field="voucherTemp" from="voucherPair instanceof List ? voucherPair : voucherPair.split('-') as List"/>
+                <set field="documentRefNum" value="${voucherTemp[0]}"/>
+                <set field="paymentId" value="${voucherTemp[1]}"/>
+                <set field="amountTemp" value="${voucherTemp[2]}" type="BigDecimal"/>
+
+                <script><![CDATA[
+                    amount = amount + amountTemp
+                ]]></script>
+                <!-- Se asocia el voucher de venta con el voucher de TBK -->
+                <log message="Actualizando voucher $documentRefNum, transferDocId $transferDocId con TBK $voucherTbk, paymentId: $paymentId" level="warn"/>
+                <entity-find-one value-field="payment" entity-name="mchile.TillShiftDocument" for-update="true" auto-field-map="[documentRefNum:documentRefNum]"/>
+                <set field="payment.transferDocId" value="${transferDocId}"/>
+                <entity-update value-field="payment"/>
+            </iterate>
+
+            <!-- Actualización de TransferDocument -->
+            <entity-find-one value-field="document" entity-name="mchile.TransferDocument" for-update="true"/>
+            <set field="document.createdDate" from="ec.user.nowTimestamp"/>
+            <set field="document.statusId" value="TdInProgress"/>
+            <!--set field="document.reconcileStatusId" value="TdNotReconciled"/-->
+            <set field="document.externalDocumentId" value="$voucherTbk"/>
+            <set field="document.amount" value="${amount}" type="BigDecimal"/>
+            <entity-update value-field="document"/>
+
+            <!-- ************************************************************************ -->
+            <!-- Accounting Transaction para credito transbak (GL 130201000) -->
+            <!--service-call name="create#mantle.ledger.transaction.AcctgTrans" out-map="context"/>
+            <entity-find-one entity-name="mantle.ledger.transaction.AcctgTrans" value-field="newacctgtrans" for-update="true"/>
+            <set field="newacctgtrans.acctgTransTypeEnumId" value="AttIncomingPayment"/>
+            <set field="newacctgtrans.organizationPartyId" value="${partyId}"/>
+            <set field="newacctgtrans.transactionDate" from="ec.user.nowTimestamp" type="Date"/>
+            <set field="newacctgtrans.glFiscalTypeEnumId" value="GLFT_ACTUAL"/>
+            <set field="newacctgtrans.amountUomId" value="CLP"/>
+            <set field="newacctgtrans.isPosted" value="Y"/>
+            <entity-update value-field="newacctgtrans"/-->
+            <!-- Accounting Transaction Entry para referenciar GL -->
+            <!--set field="acctgTransId" from="newacctgtrans.acctgTransId"/>
+            <service-call name="create#mantle.ledger.transaction.AcctgTransEntry" in-map="context"/>
+            <entity-find-one entity-name="mantle.ledger.transaction.AcctgTransEntry" value-field="newacctgtransentry" for-update="true"/>
+            <set field="newacctgtransentry.debitCreditFlag" value="C"/>
+            <set field="newacctgtransentry.isSummary" value="N"/>
+            <set field="newacctgtransentry.amount" from="depositEntry.amount"/>
+            <set field="newacctgtransentry.description" value="Crédito por Transbank"/>
+            <set field="newacctgtransentry.glAccountId" value="130201000"/>
+            <set field="newacctgtransentry.reconcileStatusId" value="AterNot"/>
+            <entity-update value-field="newacctgtransentry"/-->
+
+
+            <!-- ****************************************************************************-->
+            <!-- Accounting Transaction para débito deposito cuenta corriente (GL 110201000) -->
+            <!--service-call name="create#mantle.ledger.transaction.AcctgTrans" out-map="context"/>
+            <entity-find-one entity-name="mantle.ledger.transaction.AcctgTrans" value-field="newacctgtrans" for-update="true"/>
+            <set field="newacctgtrans.acctgTransTypeEnumId" value="AttPayment"/>
+            <set field="newacctgtrans.organizationPartyId" from="${partyId}"/>
+            <set field="newacctgtrans.transactionDate" from="ec.user.nowTimestamp" type="Date"/>
+            <set field="newacctgtrans.glFiscalTypeEnumId" value="GLFT_ACTUAL"/>
+            <set field="newacctgtrans.amountUomId" value="CLP"/>
+            <set field="newacctgtrans.isPosted" value="Y"/>
+            <entity-update value-field="newacctgtrans"/-->
+            <!-- Accounting Transaction Entry para referenciar GL -->
+            <!--set field="acctgTransId" from="newacctgtrans.acctgTransId"/>
+            <service-call name="create#mantle.ledger.transaction.AcctgTransEntry" in-map="context"/>
+            <entity-find-one entity-name="mantle.ledger.transaction.AcctgTransEntry" value-field="newacctgtransentry" for-update="true"/>
+            <set field="newacctgtransentry.debitCreditFlag" value="D"/>
+            <set field="newacctgtransentry.isSummary" value="N"/>
+            <set field="newacctgtransentry.amount" from="depositEntry.amount"/>
+            <set field="newacctgtransentry.description" value="Débito por Transbank"/>
+            <set field="newacctgtransentry.glAccountId" value="130201000"/>
+            <set field="newacctgtransentry.reconcileStatusId" value="AterNot"/>
+            <entity-update value-field="newacctgtransentry"/-->
+        </actions>
+    </service>
+
+
+    <service verb="removeChecksFrom" noun="Deposit">
+        <in-parameters>
+            <parameter name="paymentIds" required="true"/>
+            <parameter name="transferDocId" required="true"/>
+            <!--parameter name="cashAmount" type="BigDecimal" default-value="0"/-->
+        </in-parameters>
+        <out-parameters>
+            <parameter name="transferDocId" required="true"/>
+        </out-parameters>
+        <actions>
+
+            <set field="checkNumberList" from="paymentIds instanceof List ? paymentIds : paymentIds.split(',') as List"/>
+            <!-- Monto en efectivo -->
+            <set field="totalAmount" value="0" type="BigDecimal"/>
+
+            <!-- Iteración sobre lista de cheques -->
+
+            <iterate entry="checkPair" list="checkNumberList">
+                <set field="checkTemp" from="checkPair instanceof List ? checkPair : checkPair.split('-') as List"/>
+                <set field="checkNumber" value="${checkTemp[0]}"/>
+                <set field="paymentMethodId" value="${checkTemp[1]}"/>
+
+                <!-- Se desmarca el cheque como perteneciente al deposito -->
+                <entity-find-one value-field="checkForDeposit" entity-name="mantle.account.method.BankAccountCheck" for-update="true"/>
+                <set field="paymentId" from="checkForDeposit.paymentId"/>
+                <entity-delete value-field="checkForDeposit"/>
+
+                <service-call name="create#mantle.account.method.BankAccountCheck" in-map="[paymentMethodId:paymentMethodId, checkNumber:checkNumber, paymentId:paymentId]"/>
+
+                <!-- Obtener monto de cheque en payment -->
+                <entity-find-one entity-name="mantle.account.payment.Payment" value-field="checkAmount" for-update="false"/>
+                <script><![CDATA[
+                    totalAmount = totalAmount + checkAmount.amount
+                ]]></script>
+            </iterate>
+
+            <!-- Se actualiza monto total de Transfer Document -->
+            <entity-find-one entity-name="mchile.TransferDocument" value-field="transferDoc" for-update="true"/>
+            <set field="oldAmount" from="transferDoc.amount" type="BigDecimal"/>
+            <script><![CDATA[
+                    totalAmount = oldAmount - totalAmount
+                ]]>
+            </script>
+            <set field="transferDoc.amount" value="$totalAmount" type="BigDecimal"/>
+            <entity-update value-field="transferDoc"/>
+
+            <!-- TODO: Revisar si se eliminan todos los cheques del depósito -->
+            <entity-find-one entity-name="mchile.TransferDocument" value-field="transferDoc" for-update="true"/>
+            <set field="oldAmount" from="transferDoc.amount" type="BigDecimal"/>
+            <if condition="oldAmount == 0">
+               <entity-delete value-field="transferDoc"/>
+            </if>
+
+        </actions>
+    </service>
+
+
+</services>
