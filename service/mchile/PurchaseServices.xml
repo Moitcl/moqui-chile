@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+    <service verb="create" noun="Purchase">
+        <in-parameters>
+            <parameter name="vendorPartyId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="orderId"/>
+            <parameter name="orderPartSeqId"/>
+        </out-parameters>
+        <actions>
+            <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="context"/>
+            <set field="customerPartyId" from="activeOrgId?:(userOrgList.first()?.partyId)"/>
+            <if condition="customerPartyId == null">
+                <return error="true" message="Could not find customer party id"/>
+            </if>
+            <service-call name="mantle.order.OrderServices.create#Order" in-map="[entryDate:ec.user.nowTimestamp,
+                     statusId:'OrderOpen', vendorPartyId:vendorPartyId, customerPartyId:customerPartyId,
+                     entryDate:ec.user.nowTimestamp]" out-map="context"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="SupplierList">
+        <in-parameters>
+            <parameter name="term"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mchile.SaleServices.get#CounterpartList" in-map="context+[counterpartType:'Supplier']"/>
+        </actions>
+    </service>
+
+    <service verb="change" noun="Supplier">
+        <implements service="mchile.SaleServices.change#CounterpartInterface"/>
+        <actions>
+            <service-call name="mchile.SaleServices.change#Counterpart" in-map="context+[counterpartType:'Supplier']"/>
+        </actions>
+    </service>
+
+    <service verb="place" noun="Order">
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+            <parameter name="orderPartSeqId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="shipmentId" required="true"/>
+        </out-parameters>
+        <actions>
+            <service-call name="mantle.order.OrderServices.place#Order" in-map="context" out-map="context"/>
+            <service-call name="mchile.SaleServices.manuallyApprove#Order" in-map="context"/>
+            <service-call name="mantle.order.OrderServices.update#OrderStatus" in-map="[orderId:orderId, statusId:'OrderApproved']"/>
+
+            <!-- Payment -->
+            <service-call name="mantle.order.OrderServices.add#OrderPartPayment"
+                          in-map="[orderId:orderId, orderPartSeqId:orderPartSeqId, effectiveDate:ec.user.nowTimestamp]"
+                          out-map="context"/>
+
+            <entity-find entity-name="mantle.order.OrderPart" list="orderParts">
+                <econdition field-name="orderId" from="orderId"/>
+            </entity-find>
+
+            <service-call name="mantle.order.OrderInfoServices.get#OrderDisplayInfo" in-map="[orderId:orderId]" out-map="context"/>
+            <!-- ******************** Purchase Order Part **************************** -->
+            <iterate list="orderPartInfoList" entry="orderPartInfo">
+                <set field="contactInfo" from="orderPartInfo.facilityContactInfo"/>
+                <set field="orderPart" from="orderPartInfo.orderPart"/>
+                <set field="orderPartSeqId" from="orderPart.orderPartSeqId"/>
+                <set field="customerPartyId" from="orderPart.customerPartyId"/>
+                <set field="customerShipToPartyId" from="orderPartInfo.customerShipToDetail?.partyId"/>
+                <set field="customerBillToPartyId" from="orderPartInfo.customerBillToDetail?.partyId"/>
+                <!-- limit parent items to product type items only (from no parent items for part) -->
+                <set field="applicableParentItems" from="orderPartInfo.partNoParentOrderItemList?.findAll({ it.itemTypeEnumId in productItemTypes })"/>
+
+                <!-- get shippingOptions for initial load (before drop-down dynamic call with rates which may be slow) -->
+                <service-call name="mantle.product.StoreServices.get#StoreShippingOptions" out-map="context"
+                              in-map="[productStoreId:orderHeader.productStoreId, orderId:orderId, orderPartSeqId:orderPartSeqId,
+                            postalContactMechId:orderPart.postalContactMechId, getRates:false]"/>
+
+                <!-- get addresses for customer, ship-to customer -->
+                <set field="shippingPostalAddressList" from="new ArrayList()"/>
+                <set field="customerShipPartyIdSet" from="new TreeSet()"/>
+                <script>if (customerPartyId) customerShipPartyIdSet.add(customerPartyId)</script>
+                <script>if (customerShipToPartyId) customerShipPartyIdSet.add(customerShipToPartyId)</script>
+
+                <iterate list="customerShipPartyIdSet" entry="curPartyId">
+                    <!-- addresses on profile -->
+                    <service-call name="mantle.party.ContactServices.get#PartyContactInfoList" out-map="customerShippingInfo"
+                                  in-map="[partyId:curPartyId, postalContactMechPurposeId:'PostalShippingDest']"/>
+                    <script>shippingPostalAddressList.addAll(customerShippingInfo.postalAddressList ?: [])</script>
+                    <!-- addresses on owned facilities -->
+                    <entity-find entity-name="mantle.facility.Facility" list="curFacList">
+                        <econdition field-name="ownerPartyId" from="curPartyId"/></entity-find>
+                    <iterate list="curFacList" entry="curFac">
+                        <service-call name="mantle.facility.ContactServices.get#FacilityContactInfo" out-map="facContactInfo" out-map-add-to-existing="false"
+                                      in-map="[facilityId:curFac.facilityId, postalContactMechPurposeId:'PostalPrimary',
+                                telecomContactMechPurposeId:'PhonePrimary', emailContactMechPurposeId:'EmailPrimary']"/>
+                        <if condition="facContactInfo.postalContactMech"><script>shippingPostalAddressList.add(facContactInfo)</script></if>
+                    </iterate>
+                </iterate>
+                <!-- if address set on OrderPart that isn't in list yet, add it (could be expired, etc) -->
+                <if condition="customerPartyId &amp;&amp; orderPart.postalContactMechId &amp;&amp; !(orderPart.postalContactMechId in shippingPostalAddressList*.postalContactMechId)">
+                    <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="curPaInfo"
+                                  in-map="[partyId:customerPartyId, postalContactMechId:orderPart.postalContactMechId]"/>
+                    <script>shippingPostalAddressList.add(0, curPaInfo)</script>
+                </if>
+
+                <!-- trim duplicates and replaced/valid from shippingPostalAddressList -->
+                <script><![CDATA[
+                Set replacedPostalIdSet = new HashSet()
+                for (int i=0; i < shippingPostalAddressList.size(); i++) {
+                    String replAddressId = shippingPostalAddressList.get(i).postalContactMech?.replacesContactMechId
+                    if (replAddressId) replacedPostalIdSet.add(replAddressId)
+                }
+                Set shippingPostalIdSet = new HashSet()
+                for (int i=0; i < shippingPostalAddressList.size(); ) {
+                    String curAddressId = shippingPostalAddressList.get(i).postalContactMechId
+                    if (shippingPostalIdSet.contains(curAddressId) || replacedPostalIdSet.contains(curAddressId)) { shippingPostalAddressList.remove(i) }
+                    else { shippingPostalIdSet.add(curAddressId); i++ }
+                }
+                ]]></script>
+
+                <set field="destinationFacilityId" from="orderPartInfo.orderPart.facilityId"/>
+                <if condition="destinationFacilityId == null">
+                    <entity-find entity-name="mantle.facility.Facility" list="facilityList">
+                        <econdition field-name="facilityTypeEnumId" value="FcTpWarehouse"/><order-by field-name="facilityName"/>
+                    </entity-find>
+                    <set field="destinationFacilityId" from="facilityList.first.facilityId"/>
+                </if>
+                <entity-find-related value-field="orderPart" relationship-name="mantle.order.OrderItem" list="orderItemList"
+                                     order-by-list="['orderItemSeqId']"/>
+                <if condition="orderItemList.find({ it.product?.productTypeEnumId in ['PtAsset', 'PtDigitalAsset', 'PtAssetUse'] })">
+                    <then>
+                        <service-call name="mantle.shipment.ShipmentServices.create#OrderPartShipment"
+                                      in-map="[orderId:orderId, orderPartSeqId:orderPart.orderPartSeqId, destinationFacilityId:destinationFacilityId]"
+                                      out-map="context"/>
+                    </then>
+                    <else>
+                        <service-call name="mantle.order.OrderServices.update#OrderStatus" in-map="[orderId:orderId, statusId:'OrderCompleted']"/>
+                    </else>
+                </if>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="receive" noun="Order">
+        <in-parameters>
+            <parameter name="orderId"/>
+            <parameter name="orderPartSeqId"/>
+            <!-- TODO: Usar facilityId -->
+            <parameter name="facilityId"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mantle.shipment.ShipmentItemSource" list="shipmentItemSourceList">
+                <econdition field-name="orderId"/></entity-find>
+            <set field="shipmentIdSet" from="new TreeSet()"/>
+            <iterate list="shipmentItemSourceList" entry="shipmentItemSource">
+                <script>shipmentIdSet.add(shipmentItemSource.shipmentId)</script>
+            </iterate>
+            <iterate list="shipmentIdSet" entry="shipmentId">
+                <service-call name="mantle.shipment.ShipmentServices.ship#Shipment"
+                              in-map="[shipmentId:shipmentId]"/>
+                <if condition="facilityId"><then>
+                    <service-call name="mantle.shipment.ShipmentServices.receive#EntireShipment"
+                              in-map="[shipmentId:shipmentId, statusId:'AstAvailable', facilityId:facilityId]"/>
+                </then><else>
+                    <service-call name="mantle.shipment.ShipmentServices.receive#EntireShipment"
+                                  in-map="[shipmentId:shipmentId, statusId:'AstAvailable']"/>
+                </else></if>
+            </iterate>
+        </actions>
+    </service>
+
+</services>

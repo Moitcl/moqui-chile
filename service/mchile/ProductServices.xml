@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+    <service verb="create" noun="Product">
+        <in-parameters>
+            <auto-parameters entity-name="mantle.product.Product"/>
+            <parameter name="barcodeIdValue"/>
+            <parameter name="barcodeType"/>
+            <parameter name="vatTaxable"/>
+            <parameter name="pricePartyId"/>
+            <parameter name="purchasePrice" type="Integer"/>
+            <parameter name="salePrice" type="Integer"/>
+            <parameter name="priceUomId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="productId"/>
+        </out-parameters>
+        <actions>
+            <if condition="vatTaxable">
+                <!--
+                <set field="taxable" value="Y"/>
+                <set field="taxCode" value="TCChlIva"/>
+                -->
+            </if>
+            <service-call name="create#mantle.product.Product" in-map="context" out-map="context"/>
+            <service-call name="create#mantle.product.category.ProductCategoryMember"
+                          in-map="[productCategoryId:'StoreProducts',productId:productId,fromDate:ec.user.nowTimestamp]"/>
+            <if condition="barcodeIdValue &amp;&amp; barcodeType">
+                <log message="Adding barcode"/>
+                <service-call name="tfpos.ProductServices.add#Barcode" in-map="[productId:productId, idValue:barcodeIdValue, type:barcodeType]"/>
+            </if>
+            <if condition="salePrice || purchasePrice">
+                <if condition="salePrice &lt; purchasePrice"><return error="true" message="Sale price is less than purchase price!"/></if>
+                <if condition="salePrice &lt;= 0 || salePrice == null"><return error="true" message="No sale price given."/></if>
+                <if condition="purchasePrice &lt;= 0 || purchasePrice == null"><return error="true" message="No purchase price given."/></if>
+                <if condition="priceUomId == null || priceUomId == ''">
+                    <set field="priceUomId" from="${ec.user.getPreference('CurrencyDefault') ?: 'USD'}"/>
+                </if>
+                <if condition="!pricePartyId">
+                    <return error="true" message="No pricePartyId defined!"/>
+                </if>
+                <set field="baseMap" from="[productId:productId, priceTypeEnumId:'PptList', pricePurposeEnumId:'PppPurchase', fromDate:ec.user.nowTimestamp, minQuantity:1, priceUomId:priceUomId]"/>
+                <service-call name="create#mantle.product.ProductPrice" in-map="baseMap+[vendorPartyId:pricePartyId, price:salePrice]"/>
+                <service-call name="create#mantle.product.ProductPrice" in-map="baseMap+[customerPartyId:pricePartyId, price:purchasePrice]"/>
+            </if>
+            <log message="created product, productId: ${productId}"/>
+        </actions>
+    </service>
+
+    <service verb="translate" noun="ZxingBarcodeType">
+        <in-parameters><parameter name="zxingType"/></in-parameters>
+        <out-parameters><parameter name="moquiType"/></out-parameters>
+        <actions>
+            <set field="typeTranslation" from="[EAN_13:'PidtEan', UPC_A:'PidtUpca', CODE_39:'PidtCode39']"/>
+            <set field="moquiType" from="typeTranslation[zxingType]"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="ProductIdByBarcode">
+        <in-parameters>
+            <parameter name="barcode" required="true"/>
+            <parameter name="type"/>
+        </in-parameters>
+        <out-parameters><parameter name="productId"/></out-parameters>
+        <actions>
+            <set field="searchMap" from="[idValue:barcode]"/>
+            <service-call name="tfpos.ProductServices.translate#ZxingBarcodeType" in-map="[zxingType:type]"
+                          out-map="result"/>
+            <if condition="type">
+                <set field="searchMap['productIdTypeEnumId']" from="result['moquiType']"/>
+            </if>
+            <entity-find-one entity-name="mantle.product.ProductIdentification" value-field="pid" auto-field-map="searchMap"/>
+            <if condition="pid">
+                <set field="productId" from="pid.productId"/>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="get" noun="ScanUrl">
+        <in-parameters>
+            <parameter name="transitionName"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="scanUrl"/>
+            <parameter name="scanUrlParameterMap"/>
+        </out-parameters>
+        <actions>
+            <script><![CDATA[
+                userAgent = ec.user.visit?.initialUserAgent?.toLowerCase()
+                if (userAgent == null) return
+                if (userAgent.matches(".*android.*")) scanUrl = 'http://zxing.appspot.com/scan'
+                else if (userAgent.matches('.*(ipad|iphone|ipod).*')) scanUrl = 'zxing://scan/'
+                else return
+                request = ec.web.request
+                StringBuilder requestUrl = new StringBuilder()
+                requestUrl.append(request.getScheme())
+                requestUrl.append("://" + request.getServerName())
+                if (request.getServerPort() != 80 && request.getServerPort() != 443) requestUrl.append(":" + request.getServerPort())
+                requestUrl.append(request.getRequestURI())
+                //ec.logger.info("transitionName: ${transitionName}")
+                if (transitionName) requestUrl.append('/' + transitionName)
+                queryString = request.getQueryString()
+                if (queryString) {
+                    queryString = queryString.replaceAll('(scannedBarcode|barcodeType)=[^&]+(&|)', '')
+                    if (queryString.endsWith('&')) queryString = queryString.substring(0,queryString.length()-1)
+                }
+                if (queryString && queryString.length() > 0) requestUrl.append("?" + queryString + "&scannedBarcode={CODE}&barcodeType={FORMAT}")
+                else requestUrl.append("?scannedBarcode={CODE}&barcodeType={FORMAT}")
+                //ec.logger.info("requestUrl: ${requestUrl}")
+                scanUrlParameterMap = [ret:requestUrl.toString()]
+            ]]></script>
+        </actions>
+    </service>
+
+    <service verb="add" noun="Barcode">
+        <in-parameters>
+            <parameter name="productId" required="true"/>
+            <parameter name="idValue" required="true"/>
+            <parameter name="type" default="'PidtEan'"/>
+        </in-parameters>
+        <actions>
+            <entity-make-value entity-name="mantle.product.ProductIdentification" value-field="pid"/>
+            <set field="pid.productId" from="productId"/>
+            <set field="pid.idValue" from="idValue"/>
+            <set field="pid.productIdTypeEnumId" from="type"/>
+            <entity-create or-update="true" value-field="pid"/>
+            <log message="Added barcode ${idValue} to productId ${productId}"/>
+        </actions>
+    </service>
+
+    <service verb="discontinue" noun="Product">
+        <in-parameters><parameter name="productId"/></in-parameters>
+        <actions>
+            <log message="discontinuing product ${productId}"/>
+            <entity-find-one entity-name="mantle.product.Product" value-field="product" for-update="true"/>
+            <set field="product.salesDiscontinuationDate" from="ec.user.nowTimestamp"/>
+            <entity-update value-field="product"/>
+        </actions>
+    </service>
+
+    <service verb="reactivate" noun="Product">
+        <in-parameters><parameter name="productId"/></in-parameters>
+        <actions>
+            <log message="reactivating product ${productId}"/>
+            <entity-find-one entity-name="mantle.product.Product" value-field="product" for-update="true"/>
+            <set field="product.salesDiscontinuationDate" from="null"/>
+            <if condition="salesIntroductionDate > ec.user.nowTimestamp">
+                <set field="product.salesIntroductionDate" from="ec.user.nowTimestamp"/>
+            </if>
+            <entity-update value-field="product"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="StoreCategoryList">
+        <in-parameters>
+            <parameter name="productStoreId" required="true"/>
+        </in-parameters>
+        <out-parameters><parameter name="resultList" type="List"/></out-parameters>
+        <actions>
+            <entity-find entity-name="tfpos.ProductStoreCategory" list="resultList">
+                <date-filter/><econdition field-name="productStoreId"/>
+                <econdition field-name="storeCategoryTypeEnumId" value="PsctHomePage"/>
+                <econdition field-name="productCategoryId" operator="not-equals" value="PopcHome"/>
+            </entity-find>
+        </actions>
+    </service>
+
+    <!-- TODO: Implementar filtro por fechas -->
+    <service verb="check" noun="ProductStoreCategory">
+        <description>
+            Método para chequear si un producto pertenece a una categoría y tienda.
+            Sin uso por el momento.
+        </description>
+        <in-parameters>
+            <parameter name="productId" required="true"/>
+            <parameter name="productCategoryId" required="true"/>
+            <parameter name="productStoreId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="hasCategory" default="false"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="tfpos.ProductStoreCategoryMember" value-field="resultField"/>
+
+            <if condition="resultField">
+                <set field="hasCategory" value="true"/>
+            </if>
+        </actions>
+    </service>
+
+</services>

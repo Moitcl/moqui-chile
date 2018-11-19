@@ -1,0 +1,456 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+    <service verb="create" noun="Till">
+        <in-parameters>
+            <parameter name="productStoreId" required="true"/>
+            <parameter name="sourceGlAccountId" default-value="110101001"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="productStoreId"/>
+            <parameter name="tillSeqId"/>
+        </out-parameters>
+        <actions>
+            <entity-make-value entity-name="mchile.Till" value-field="till" map="context"/>
+            <entity-sequenced-id-secondary value-field="till"/>
+            <entity-create value-field="till"/>
+        </actions>
+    </service>
+
+    <service verb="open" noun="Till">
+        <in-parameters>
+            <parameter name="productStoreId" required="true"/>
+            <parameter name="tillSeqId" required="true"/>
+            <parameter name="ownerPartyId" required="true"/>
+            <parameter name="initialDeposit" type="BigDecimal"/>
+        </in-parameters>
+        <out-parameters>
+            <auto-parameters entity-name="mchile.TillShift"/>
+        </out-parameters>
+        <actions>
+            <entity-find entity-name="mchile.TillShift" list="existingOpenShifts">
+                <econdition field-name="productStoreId" from="productStoreId"/>
+                <econdition field-name="tillSeqId" from="tillSeqId"/>
+                <econdition field-name="statusId" value="TillShiftOpen"/>
+            </entity-find>
+            <if condition="existingOpenShifts.size() > 0">
+                <return error="true" message="Till ${productStoreId}-${tillSeqId} is already open, cannot open again"/>
+            </if>
+            <entity-find-one entity-name="mchile.Till" value-field="till"/>
+            <entity-find-one entity-name="mantle.product.store.ProductStore" value-field="productStore"/>
+            <set field="finAccountName" value="Caja ${tillSeqId}"/>
+            <entity-find entity-name="mchile.ProductStorePaymentGlAccount" list="pspglaList">
+                <econdition field-name="productStoreId" from="productStoreId"/>
+                <econdition field-name="paymentInstrumentEnumId" value="PiCash"/>
+            </entity-find>
+            <if condition="pspglaList.size() &lt; 1">
+                <return error="true" message="Could not find ProductStorePaymentGlAccount for setting up GlAccount Id to post"/>
+            </if>
+            <service-call name="create#mantle.account.financial.FinancialAccount"
+                          in-map="[finAccountTypeId:'TillAccount', statusId:'FaActive', fromDate:ec.user.nowTimestamp,
+                                   finAccountName:finAccountName, ownerPartyId:ownerPartyId, postToGlAccountId:pspglaList.first.glAccountId, currencyUomId:productStore.defaultCurrencyUomId]" out-map="context"/>
+            <entity-find-one entity-name="mchile.ProductStorePaymentGlAccount" value-field="psgla" auto-field-map="[productStoreId:productStoreId, paymentInstrumentEnumId:'PiCash']"/>
+            <if condition="psgla == null || psgla.glAccountId == null">
+                <return error="true" message="Undefined ProductStorePaymentGlAccount for productStore ${productStoreId} and payment instrument PiCash"/>
+            </if>
+            <service-call name="create#mchile.TillShift" in-map="context+ [openBalance:initialDeposit, fromDate:ec.user.nowTimestamp, statusId:'TillShiftOpen', finAccountId:finAccountId]" out-map="context"/>
+            <service-call name="mchile.TillServices.post#TillTransaction"
+                          in-map="context+[amount:initialDeposit, direction:'D', description:ec.l10n.localize('Opening Till')]"/>
+            <service-call name="update#mantle.account.financial.FinancialAccount"
+                          in-map="[finAccountId:finAccountId, statusId:'FaActive']"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="LastTillShift">
+        <in-parameters>
+            <parameter name="productStoreId"/>
+            <parameter name="tillSeqId"/>
+            <parameter name="tillShiftId"/>
+            <parameter name="forceCurrent" type="Boolean" default="false"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="tillShift"/>
+            <parameter name="tillFinAccount"/>
+        </out-parameters>
+        <actions>
+            <if condition="tillShiftId != null">
+                <entity-find-one entity-name="mchile.TillShiftDetail" value-field="tillShift"/>
+                <if condition="tillShift == null">
+                    <return error="true" message="Cannot find tillShift ${tillShiftId}"/>
+                </if>
+            </if>
+            <entity-find entity-name="mchile.TillShiftDetail" list="tillShifts" limit="1">
+                <econdition field-name="productStoreId" from="productStoreId"/>
+                <econdition field-name="tillSeqId" from="tillSeqId"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <if condition="tillShifts.size() &lt; 1">
+                <return error="true" message="Found no Till Shift for till ${productStoreId}-${tillSeqId}"/>
+            </if>
+            <set field="tillShift" from="tillShifts.first"/>
+            <if condition="forceCurrent &amp;&amp; tillShift.thruDate != null &amp;&amp; tillShift.thruDate &lt; ec.user.nowTimestamp">
+                <set field="tillShift" from="null"/>
+            </if>
+            <if condition="tillShift != null">
+                <entity-find-one entity-name="mantle.account.financial.FinancialAccount" auto-field-map="[finAccountId:tillShift.finAccountId]" value-field="tillFinAccount"/>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="close" noun="Till">
+        <in-parameters>
+            <parameter name="tillShiftId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.TillShift" value-field="tillShift" for-update="true"/>
+            <if condition="tillShift == null">
+                <return error="true" message="TillShift ${tillShiftId} not found"/>
+            </if>
+            <if condition="tillShift.statusId != 'TillShiftClosing'">
+                <return error="true" message="Cannot close TillShift ${tillShiftId} in status ${tillShift.statusId}"/>
+            </if>
+            <set field="productStoreId" from="tillShift.productStoreId"/>
+            <entity-find-one entity-name="mantle.product.store.ProductStore" value-field="ps"/>
+            <set field="tillSeqId" from="tillShift.tillSeqId"/>
+            <entity-find-one entity-name="mchile.Till" value-field="till"/>
+            <set field="finAccountId" from="tillShift.finAccountId"/>
+            <entity-find-one value-field="fa" entity-name="mantle.account.financial.FinancialAccount"/>
+            <if condition="fa.actualBalance != tillShift.closeBalanceExpected">
+                <return error="true" message="Error: Balance changed in FinancialAccount after stopping Shift ${tillShiftId}"/>
+            </if>
+            <set field="difference" from="tillShift.closeBalanceCounted-tillShift.closeBalanceExpected"/>
+            <if condition="difference != 0">
+                <service-call name="mantle.ledger.LedgerServices.create#AcctgTrans" in-map="[acctgTransTypeEnumId:(difference > 0? 'AttFinancialWithdrawal': 'AttFinancialDeposit'), organizationPartyId:ps.organizationPartyId]" out-map="context"/>
+                <set field="diffAcctBM" from="[acctgTransId:acctgTransId, amount:difference.abs(), comment:ec.l10n.localize('Difference upon closing')]"/>
+                <service-call name="mantle.ledger.LedgerServices.create#AcctgTransEntry"
+                              in-map="diffAcctBM+[debitCreditFlag:(difference > 0?'D':'C'), glAccountId:'730300000']"/>
+                <service-call name="mantle.ledger.LedgerServices.create#AcctgTransEntry"
+                              in-map="diffAcctBM+[debitCreditFlag:(difference > 0?'C':'D'), glAccountId:till.sourceGlAccountId]"/>
+                <service-call name="mantle.ledger.LedgerServices.post#AcctgTrans" in-map="context"/>
+            </if>
+            <if condition="tillShift.openBalance > 0">
+                <service-call name="mchile.TillServices.post#TillTransaction"
+                              in-map="context+[amount:tillShift.openBalance, direction:'W', description:ec.l10n.localize('Return of opening balance')]"/>
+            </if>
+            <service-call name="mchile.TillServices.post#TillTransaction"
+                          in-map="context+[amount:tillShift.closeBalanceExpected-tillShift.openBalance, direction:'W', description:ec.l10n.localize('Income during shift'), otherGlAccountId:'130101000']"/>
+            <!--
+            <entity-find entity-name="mantle.account.payment.Payment" list="payments">
+                <econdition field-name="finAccountId" from="till.finAccountId"/>
+                <econdition field-name="effectiveDate" operator="greater-equals" from="tillShift.fromDate"/>
+                <econdition field-name="effectiveDate" operator="less-equals" from="tillShift.thruDate"/>
+            </entity-find>
+            -->
+            <set field="tillShift.statusId" value="TillShiftClosed"/>
+            <entity-update value-field="tillShift"/>
+            <service-call name="update#mantle.account.financial.FinancialAccount"
+                          in-map="[finAccountId:tillShift.finAccountId, thruDate:ec.user.nowTimestamp, statusId:'FaInactive']"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="TillClosingInfo">
+        <in-parameters>
+            <parameter name="tillShiftId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="tillShift"/>
+            <parameter name="tillShiftDocuments"/>
+            <parameter name="tsdCollectedChecks"/>
+            <parameter name="tsdCollectedVouchers"/>
+            <parameter name="tsdDeliveredChecks"/>
+            <parameter name="tsdDeliveredVouchers"/>
+            <parameter name="tsdMissingChecks"/>
+            <parameter name="tsdMissingVouchers"/>
+            <parameter name="tsdPendingChecks"/>
+            <parameter name="tsdPendingVouchers"/>
+            <parameter name="tillReadyToClose" type="Boolean"/>
+            <parameter name="tillWaitingToClose" type="Boolean"/>
+            <parameter name="tillActive" type="Boolean"/>
+            <parameter name="tillFinAccount"/>
+            <parameter name="closingConfirmation"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.TillShift" value-field="tillShift"/>
+            <entity-find-one entity-name="mantle.account.financial.FinancialAccount" value-field="tillFinAccount" auto-field-map="tillShift"/>
+            <entity-find entity-name="mchile.TillShiftDocument" list="tillShiftDocuments">
+                <econdition field-name="tillShiftId" from="tillShift.tillShiftId"/>
+            </entity-find>
+            <script>
+                tsdCollectedChecks = 0
+                tsdCollectedVouchers = 0
+                tsdDeliveredChecks = 0
+                tsdDeliveredVouchers = 0
+                tsdMissingChecks = 0
+                tsdMissingVouchers = 0
+                tsdPendingChecks = 0
+                tsdPendingVouchers = 0
+                tillReadyToClose = true
+            </script>
+            <iterate list="tillShiftDocuments" entry="tsd">
+                <script><![CDATA[
+                        switch ("${tsd.statusId}-${tsd.documentTypeEnumId}") {
+                            case 'TsdDelivered-TsdtCheck':
+                                tsdDeliveredChecks++
+                                break
+                            case 'TsdDelivered-TsdtCardVoucher':
+                                tsdDeliveredVouchers++
+                                break
+                            case 'TsdCollectedAtTill-TsdtCheck':
+                                tsdCollectedChecks++
+                                tillReadyToClose = false
+                                break
+                            case 'TsdCollectedAtTill-TsdtCardVoucher':
+                                tsdCollectedVouchers++
+                                tillReadyToClose = false
+                                break
+                            case 'TsdMissing-TsdtCheck':
+                                tsdMissingChecks++
+                                break
+                            case 'TsdMissing-TsdtCardVoucher':
+                                tsdMissingVouchers++
+                                break
+                            case 'TsdPending-TsdtCheck':
+                                tsdPendingChecks++
+                                break
+                            case 'TsdPending-TsdtCardVoucher':
+                                tsdPendingVouchers++
+                                break
+                            default:
+                                ec.message.addError("unknown case: ${tsd.statusId}-${tsd.documentTypeEnumId}")
+                        }
+                ]]></script>
+            </iterate>
+            <script><![CDATA[
+                tillActive = tillShift.statusId == 'TillShiftOpen'
+                tillWaitingToClose = (tillShift.statusId in ['TillShiftClosing'])
+                tillReadyToClose = tillReadyToClose && tillWaitingToClose && tillShift.closeBalanceCounted != null
+                if (tillReadyToClose && tillShift.closeBalanceExpected != tillShift.closeBalanceCounted)
+                    closingConfirmation = ec.l10n.localize("Difference of ${tillShift.closeBalanceCounted-tillShift.closeBalanceExpected} will be registered.")
+            ]]></script>
+        </actions>
+    </service>
+
+    <service verb="post" noun="TillTransaction">
+        <in-parameters>
+            <parameter name="tillShiftId"/>
+            <parameter name="amount" type="BigDecimal"/>
+            <parameter name="direction" required="true"/>
+            <parameter name="description"/>
+            <parameter name="otherGlAccountId" default-value="130304000"/>
+        </in-parameters>
+        <out-parameters></out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.TillShift" value-field="tillShift"/>
+            <entity-find-one entity-name="mchile.Till" value-field="till" auto-field-map="tillShift"/>
+            <set field="finAccountId" from="tillShift.finAccountId"/>
+            <entity-find-one entity-name="mantle.account.financial.FinancialAccount" value-field="fa"/>
+            <entity-find-one entity-name="mantle.product.store.ProductStore" value-field="ps" auto-field-map="tillShift"/>
+            <set field="comment" from="description"/>
+            <set field="fromPartyId" from="ps.organizationPartyId"/>
+            <set field="toPartyId" from="fa.ownerPartyId"/>
+            <if condition="amount &lt; 0">
+                <set field="amount" from="-amount"/>
+                <if condition="direction == 'D'">
+                    <then><set field="direction" value="W"/></then>
+                    <else-if condition="direction == 'W'"><set field="direction" value="D"/></else-if>
+                    <else><return error="true" message="Unknown Direction: ${direction}"/></else>
+                </if>
+            </if>
+            <if condition="direction == 'D'">
+                <then>
+                    <service-call name="mantle.account.FinancialAccountServices.deposit#FinancialAccount"
+                                  in-map="context" out-map="context"/>
+                    <set field="acctgTransTypeEnumId" value="AttFinancialDeposit"/>
+                </then>
+                <else-if condition="direction == 'W'">
+                    <service-call name="mantle.account.FinancialAccountServices.withdraw#FinancialAccount"
+                                  in-map="context" out-map="context"/>
+                    <if condition="responseCode != 'success'">
+                        <return error="true" message="Failed withdraw#FinancialAccount: ${responseMessage}"/>
+                    </if>
+                    <set field="acctgTransTypeEnumId" value="AttFinancialWithdrawal"/>
+                </else-if>
+                <else><return error="true" message="Unknown Direction: ${direction}"/></else>
+            </if>
+            <set field="amountUomId" from="fa.currencyUomId"/>
+            <set field="organizationPartyId" from="ps.organizationPartyId"/>
+            <service-call name="mantle.ledger.LedgerServices.create#AcctgTrans" in-map="context" out-map="context"/>
+            <service-call name="mantle.ledger.LedgerServices.create#AcctgTransEntry"
+                          in-map="context+[debitCreditFlag:(direction == 'D'?'D':'C'), glAccountId:otherGlAccountId]"/>
+            <service-call name="mantle.ledger.LedgerServices.create#AcctgTransEntry"
+                          in-map="context+[debitCreditFlag:(direction == 'D'?'C':'D'), glAccountId:till.sourceGlAccountId]"/>
+            <service-call name="mantle.account.FinancialAccountServices.calculate#FinancialAccountTotals"
+                          in-map="context" out-map="totals"/>
+            <service-call name="mantle.ledger.LedgerServices.post#AcctgTrans" in-map="context"/>
+        </actions>
+    </service>
+
+    <service verb="update" noun="DocumentStatusBulk">
+        <in-parameters>
+            <parameter name="tillShiftId" required="true"/>
+            <parameter name="documentTypeEnumId" required="true"/>
+            <parameter name="fromStatusId" required="true" type="Object"/>
+            <parameter name="toStatusId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="tillShiftId"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.TillShift" value-field="tillShift"/>
+            <if condition="tillShift == null">
+                <return error="true" message="Could not find tillShift ${tillShiftId}"/>
+            </if>
+            <set field="productStoreId" from="tillShift.productStoreId"/>
+            <set field="tillSeqId" from="tillShift.tillSeqId"/>
+            <script><![CDATA[
+                if (fromStatusId == 'anyStatus' || 'anyStatus' in fromStatusId)
+                    statusCondition = ec.entity.conditionFactory.makeCondition('statusId',
+                        org.moqui.entity.EntityCondition.IN,
+                        ['TsdCollectedAtTill', 'TsdDelivered', 'TsdMissing', 'TsdPending'])
+                else
+                    if (fromStatusId instanceof List)
+                        statusCondition = ec.entity.conditionFactory.makeCondition('statusId',
+                            org.moqui.entity.EntityCondition.IN,
+                            fromStatusId)
+                    else
+                        statusCondition = [statusId:fromStatusId]
+            ]]></script>
+            <entity-find entity-name="mchile.TillShiftDocument" for-update="true" list="tsds">
+                <econdition field-name="tillShiftId" from="tillShiftId"/>
+                <econdition field-name="documentTypeEnumId" from="documentTypeEnumId"/>
+                <econdition-object field="statusCondition"/>
+            </entity-find>
+            <iterate entry="tsd" list="tsds">
+                <set field="tsd.statusId" from="toStatusId"/>
+                <entity-update value-field="tsd"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="update" noun="DocumentStatus">
+        <in-parameters>
+            <parameter name="tillShiftId"/>
+            <parameter name="tillShiftDocumentId"/>
+            <parameter name="statusId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="tillShiftId"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one value-field="tsd" entity-name="mchile.TillShiftDocument" for-update="true"/>
+            <set field="tsd.statusId" from="statusId"/>
+            <entity-update value-field="tsd"/>
+        </actions>
+    </service>
+
+    <service verb="update" noun="CountedBalance">
+        <in-parameters>
+            <parameter name="tillShiftId" required="true"/>
+            <parameter name="closeBalanceCounted" required="true" type="BigDecimal"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="tillShiftId"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.TillShift" value-field="tillShift" for-update="true"/>
+            <set field="productStoreId" from="tillShift.productStoreId"/>
+            <set field="tillSeqId" from="tillShift.tillSeqId"/>
+            <if condition="tillShift.statusId == 'TillShiftClosed'">
+                <return error="true" message="Not updating CountedBalance on closed tillShift ${tillShiftId}"/>
+            </if>
+            <set field="tillShift.closeBalanceCounted" from="closeBalanceCounted"/>
+            <entity-update value-field="tillShift"/>
+        </actions>
+    </service>
+    
+    <service verb="check" noun="TillOpen">
+        <in-parameters>
+            <parameter name="tillShiftId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.TillShift" value-field="tillShift"/>
+            <if condition="tillShift == null">
+                <return error="true" message="Till shift ${tillShiftId} was not found"/>
+            </if>
+            <if condition="tillShift.statusId != 'TillShiftOpen'">
+                <return error="true" message="Shift ${tillShiftId} for till ${tillShift.productStoreId}-${tillShift.tillSeqId} is Closed!"/>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="stop" noun="Shift">
+        <in-parameters>
+            <parameter name="tillShiftId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="productStoreId"/>
+            <parameter name="tillSeqId"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one value-field="tillShift" entity-name="mchile.TillShift" for-update="true"/>
+            <entity-find-one value-field="fa" entity-name="mantle.account.financial.FinancialAccount" for-update="true" auto-field-map="tillShift"/>
+            <if condition="tillShift.statusId != 'TillShiftOpen'">
+                <return error="true" message="Cannot stop till shift ${tillShiftId} in status ${tillShift.statusId}"/>
+            </if>
+            <set field="productStoreId" from="tillShift.productStoreId"/>
+            <set field="tillSeqId" from="tillShift.tillSeqId"/>
+            <entity-find-one value-field="till" entity-name="mchile.TillShiftDetail"/>
+            <set field="tillShift.statusId" value="TillShiftClosing"/>
+            <set field="tillShift.closeBalanceExpected" from="till.actualBalance"/>
+            <entity-update value-field="tillShift"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="TillInfoList">
+        <in-parameters>
+            <parameter name="productStoreId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="tillInfoList" type="List"><parameter name="tillInfo" type="Map">
+                <auto-parameters entity-name="mchile.Till"/>
+                <auto-parameters entity-name="mchile.TillShift">
+                    <exclude field-name="productStoreId"/>
+                    <exclude field-name="tillSeqId"/>
+                </auto-parameters>
+            </parameter></parameter>
+        </out-parameters>
+        <actions>
+            <set field="tillInfoList" from="[]"/>
+            <entity-find entity-name="mchile.Till" list="tills">
+                <econdition field-name="productStoreId" ignore-if-empty="true"/>
+            </entity-find>
+            <iterate list="tills" entry="till">
+                <entity-find entity-name="mchile.TillShiftDetail" limit="1" list="shifts">
+                    <econdition field-name="productStoreId"/>
+                    <econdition field-name="tillSeqId" from="till.tillSeqId"/>
+                    <econdition field-name="statusId" value="TillShiftOpen"/>
+                    <order-by field-name="-fromDate"/>
+                </entity-find>
+                <script><![CDATA[
+                    tillInfo = [:]
+                    if (shifts)
+                        tillInfo = shifts.first.getMap()
+                    else
+                        tillInfo = till.getMap()
+                    tillInfoList.add(tillInfo)
+                ]]></script>
+            </iterate>
+        </actions>
+    </service>
+
+</services>
