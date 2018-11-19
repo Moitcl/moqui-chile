@@ -28,9 +28,9 @@ import org.slf4j.LoggerFactory
 
 public class RemoteXmlsoapServiceRunner implements ServiceRunner {
     protected ServiceFacadeImpl sfi = null
-    protected final static Logger logger = LoggerFactory.getLogger(RemoteXmlrpcServiceRunner.class)
+    protected final static Logger logger = LoggerFactory.getLogger(RemoteXmlsoapServiceRunner.class)
 
-    RemoteXmlrpcServiceRunner() {}
+    RemoteXmlsoapServiceRunner() {}
 
     public ServiceRunner init(ServiceFacadeImpl sfi) { this.sfi = sfi; return this }
 
