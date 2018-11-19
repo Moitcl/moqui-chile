@@ -26,7 +26,7 @@ import org.moqui.impl.service.ServiceRunner
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
-public class RemoteXmlrpcServiceRunner implements ServiceRunner {
+public class RemoteXmlsoapServiceRunner implements ServiceRunner {
     protected ServiceFacadeImpl sfi = null
     protected final static Logger logger = LoggerFactory.getLogger(RemoteXmlrpcServiceRunner.class)
 
