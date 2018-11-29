@@ -6,7 +6,7 @@
 
     <transition name="genNotaCredito">
         <!--parameter name="genReturnId" from="genReturnId"/-->
-        <service-call name="mchile.DTEServices.generar#NotaCredito" in-map="[returnId:returnId, fiscalTaxDocumentTypeCode:'Ftdt-61', invoiceId:invoiceId, activeOrgId:activeOrgId]"/>
+        <service-call name="mchile.DTEServices.generar#NotaCredito" in-map="[returnId:returnId, fiscalTaxDocumentTypeEnumId:'Ftdt-61', invoiceId:invoiceId, activeOrgId:activeOrgId]"/>
         <default-response url="."/>
     </transition>
 
@@ -57,8 +57,7 @@
         <entity-find entity-name="mantle.order.return.ReturnHeaderDetail" list="returnHeaderList">
             <search-form-inputs/><select-field field-name="returnId,statusId,entryDate,facilityId,vendorPartyId,customerPartyId"/>
             <econditions combine="or">
-                <!--econdition field-name="vendorPartyId" value="cvsport"/-->
-                <!--econdition field-name="customerPartyId" value="cvsport"/-->
+                <econdition field-name="vendorPartyId" from="activeOrgId"/>
             </econditions>
         </entity-find>
 
@@ -82,6 +81,13 @@
                 <!-- Encontrar invoiceId -->
                 <service-call name="mchile.DTEServices.get#InvoiceFromReturn" in-map="[returnId:returnId]" out-map="outMap"/>
                 <set field="invoiceId" from="outMap.invoiceId"/>
+                <!-- rut receptor -->
+                <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+                <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyField">
+                    <field-map field-name="partyId" from="customerPartyId"/>
+                </entity-find-one>
+                <set field="rutReceptor" from="partyField.idValue"/>
+
             </row-actions>
             <field name="returnId">
                 <header-field show-order-by="case-insensitive" title="Devolución"><text-find hide-options="true" size="10"/></header-field>
@@ -110,11 +116,6 @@
                 </header-field>
                 <default-field><link url="editParty" entity-name="mantle.party.PartyDetail" text="PartyNameTemplate" link-type="anchor"/></default-field>
             </field>
-            <field name="facilityId">
-                <header-field title="Warehouse"><drop-down allow-empty="true"><dynamic-options transition="getFacilityList" server-search="true" min-length="0"
-                                                                                               parameter-map="[facilityTypeEnumId:'FcTpWarehouse']"/></drop-down></header-field>
-                <default-field><link url="editFacility" entity-name="mantle.facility.Facility" text="FacilityNameTemplate" link-type="anchor"/></default-field>
-            </field>
 
             <field name="genNotaCreditoForm">
                 <default-field title="">
@@ -122,10 +123,12 @@
                         <form-single name="AgregarReferenciaForm" transition="agregarReferencia">
                             <field name="returnId"><default-field><hidden/></default-field></field>
                             <field name="activeOrgId"><default-field><hidden/></default-field></field>
+
                             <field name="fiscalTaxDocumentTypeEnumId"><default-field title="Tipo DTE Referencia">
                                 <drop-down><entity-options key="${enumId}" text="">
                                     <entity-find entity-name="moqui.basic.Enumeration">
-                                        <econdition field-name="enumTypeId" value="FiscalTaxDocumentType"/>
+                                        <!--econdition field-name="enumTypeId" value="FiscalTaxDocumentType"/-->
+                                        <econdition field-name="parentEnumId" operator="in" value="Ftdt-DTE,Ftdt-DT"/>
                                     </entity-find>
                                 </entity-options></drop-down>
                             </default-field></field>
@@ -134,7 +137,7 @@
                                 <default-field title="Folio Referencia"><text-line size="10"/></default-field>
                             </field>
                             <field name="rutOtroContribuyente">
-                                <default-field title="RUT Otro Contribuyente"><text-line size="15"/></default-field>
+                                <default-field title="RUT Otro Contribuyente"><text-line size="15" default-value="${rutReceptor}"/></default-field>
                             </field>
                             <field name="idAdicional">
                                 <default-field title="ID Adicional Otro Contribuyente"><text-line size="15"/></default-field>

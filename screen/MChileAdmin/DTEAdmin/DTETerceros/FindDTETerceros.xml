@@ -1,30 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd"
-        menu-image="glyphicon glyphicon-shopping-cart" menu-image-type="icon" default-menu-title="Envío DTE a SII"
+        menu-image="glyphicon glyphicon-shopping-cart" menu-image-type="icon" default-menu-title="Facturas Cargadas"
         default-menu-index="2">
+
+    <transition-include name="searchPartyList" location="component://SimpleScreens/template/party/PartyForms.xml"/>
+    <transition-include name="getGlAccountListPaginated" location="component://SimpleScreens/template/account/AccountTransitions.xml"/>
+
 
     <transition name="editInvoice">
         <default-response url="/vapps/PopcAdmin/Accounting/Invoice/EditInvoice"/>
-    </transition>
-
-    <transition name="envioSII">
-        <parameter name="activeOrgId" from="activeOrgId"/>
-        <actions>
-            <script><![CDATA[
-                    documentIds = new StringBuilder()
-                    for (int i = 0; ; i++) {
-                        if ((context.get("_useRowSubmit") == "true" || context.get("_useRowSubmit_" + i) == "true")
-                                && context.get("_rowSubmit_" + i) != "true") continue
-                        String curKey = "fiscalTaxDocumentId_" + i
-                        if (context.containsKey(curKey))  {
-                                if (documentIds.length() > 0) documentIds.append(",")
-                                    documentIds.append(context.get(curKey))
-                        } else { break }
-                    }
-            ]]></script>
-            <service-call name="mchile.DTEServices.preparaEnvio#Documentos" in-map="context"/>
-        </actions>
-        <default-response url="."/>
     </transition>
 
     <transition name="verificarEnSII">
@@ -38,17 +22,32 @@
                 <return error="false" message="${verifyOut.salida}"/>
             </if>
             <if condition="verifyOut.statusSii != '0'">
-                <return error="true" message="ERROR: ${verifyOut.salida}"/>
+                <return error="true" message="${verifyOut.salida}"/>
             </if>
+
         </actions>
         <default-response url="."/>
     </transition>
 
-    <transition name="eliminarDTE">
+    <!-- TODO: Enviar aceptación a tercero -->
+    <transition name="enviarAceptacion">
         <parameter name="fiscalTaxDocumentId"/>
+        <parameter name="fiscalTaxDocumentTypeEnumId"/>
+        <parameter name="fiscalTaxDocumentNumber"/>
+        <parameter name="activeOrgId"/>
+        <actions>
+            <service-call name="mchile.DTEServices.enviar#Aceptacion"
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, activeOrgId:activeOrgId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber ]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="eliminarDTETercero">
+        <parameter name="fiscalTaxDocumentId"/>
+        <parameter name="activeOrgId"/>
         <actions>
             <service-call name="mchile.DTEServices.eliminar#DTE"
-                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]"/>
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, activeOrgId:activeOrgId]"/>
         </actions>
         <default-response url="."/>
     </transition>
@@ -97,8 +96,6 @@
         <default-response type="none"/>
     </transition>
 
-    <transition-include name="searchPartyList" location="component://SimpleScreens/template/party/PartyForms.xml"/>
-
     <pre-actions>
         <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="userOrgList"/>
         <set field="activeOrgId" from="userOrgList.activeOrgId"/>
@@ -107,45 +104,33 @@
         <entity-find entity-name="mch.dte.FiscalTaxDocument" list="dteList">
             <search-form-inputs/>
             <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in"
-                        from="['Ftdt-33','Ftdt-34','Ftdt-61','Ftdt-56','Ftdt-52','Ftdt-110','Ftdt-112']"/>
-            <econdition field-name="issuerPartyId" operator="equals" value="${activeOrgId}"/>
-            <!--econdition field-name="envio" operator="is-null"/>
-            <econdition field-name="xml" operator="is-not-null"/-->
-            <econdition field-name="fiscalTaxDocumentStatusEnumId" operator="equals" value="Ftdt-Issued"/>
-            <econdition field-name="fiscalTaxDocumentSentStatusEnumId" operator="equals" value="Ftdt-NotSent"/>
-            <order-by field-name="lastUpdatedStamp"/>
+                        from="['Ftdt-30','Ftdt-32','Ftdt-33','Ftdt-34','Ftdt-60','Ftdt-61','Ftdt-56','Ftdt-52','Ftdt-39','PvtBoleta']"/>
+            <econdition field-name="receiverPartyId" operator="equals" from="activeOrgId"/>
         </entity-find>
-
     </actions>
     <widgets>
 
-        <label text="DTE listas para ser enviadas al SII" type="h4"/>
+        <label text="Carga y Listado de Documentos Tributarios recibidos de terceros (proveedores)" type="h4"/>
 
-        <form-list name="DteForm" list="dteList" show-pdf-button="true" show-csv-button="true" header-dialog="true" saved-finds="true" multi="true" transition="envioSII">
+
+        <form-list name="DteForm" list="dteList" show-pdf-button="true" show-csv-button="true" header-dialog="true" saved-finds="true" multi="true">
             <row-actions>
                 <!-- Se busca ubicación de XML y PDF -->
+                <!-- Se busca ubicación de XML y PDF -->
                 <service-call name="mchile.DTEServices.get#DteContent"
-                              in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
-                <set field="xmlFilename" from="content"/>
+                              in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="xmlContext"/>
+                <set field="xmlFilename" from="xmlContext.content"/>
 
                 <service-call name="mchile.DTEServices.get#DteContent"
-                              in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf']" out-map="context"/>
-                <set field="pdfFilename" from="content"/>
-
+                              in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf']" out-map="pdfContext"/>
+                <set field="pdfFilename" from="pdfContext.content"/>
             </row-actions>
             <field name="_useRowSubmit"><default-field><hidden default-value="true"/></default-field></field>
             <field name="fiscalTaxDocumentId"><default-field><hidden default-value="true"/></default-field></field>
-            <field name="activeOrgId"><default-field><hidden default-value="true"/></default-field></field>
-            <field name="fiscalTaxDocumentId">
-                <header-field show-order-by="true"><text-line size="6"/></header-field>
-                <default-field>
-                    <display/>
-                </default-field>
-            </field>
             <field name="fiscalTaxDocumentNumber">
-                <header-field show-order-by="true" title="Folio"><text-line size="6"/></header-field>
+                <header-field title="Folio o Identificador" show-order-by="true"><text-line size="6"/></header-field>
                 <default-field>
-                    <display/>
+                    <display format="########"/>
                 </default-field>
             </field>
             <field name="fiscalTaxDocumentTypeEnumId">
@@ -162,53 +147,65 @@
                     <display-entity entity-name="moqui.basic.Enumeration"/>
                 </default-field>
             </field>
-
-            <field name="receiverPartyId">
-                <header-field title="Receptor">
+            <!--field name="emisor">
+                <header-field show-order-by="true" title="Rut Emisor"><text-line size="6"/></header-field>
+                <default-field>
+                    <display/>
+                </default-field>
+            </field-->
+            <field name="issuerPartyId">
+                <header-field title="Emisor">
                     <drop-down allow-empty="true"><dynamic-options transition="searchPartyList" server-search="true" min-length="2"
                                                                    parameter-map="[roleTypeId:'Customer,OrgInternal']"/></drop-down>
                 </header-field>
                 <default-field><link url="editParty" entity-name="mantle.party.PartyDetail" text="PartyNameTemplate" link-type="anchor"/></default-field>
             </field>
+
             <field name="invoiceId">
-                <header-field title="Invoice ID" show-order-by="true"><text-find/></header-field>
+                <header-field title="Invoice" show-order-by="true"><text-find/></header-field>
                 <default-field><link url="editInvoice" text="${invoiceId}" link-type="anchor" parameter-map="[invoiceId:invoiceId]"/>
                 </default-field>
             </field>
-            <field name="amount">
+
+            <field name="date">
+                <header-field show-order-by="true" title="Fecha Emisión"><text-find/></header-field>
+                <default-field><display/> </default-field>
+            </field>
+
+            <!--field name="amount">
                 <header-field show-order-by="true"><text-line size="6"/></header-field>
                 <default-field>
                     <display/>
                 </default-field>
-            </field>
+            </field-->
             <field name="xml">
                 <default-field title=" ">
-                    <link url="xml/${xmlFilename}" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="XML" link-type="anchor"/>
+                    <link url="xml/${xmlFilename}" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="XML" link-type="anchor" condition="xmlFilename != null"/>
                 </default-field>
             </field>
             <field name="pdf">
-                   <default-field title=" ">
-                    <link url="pdf/${pdfFilename}" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="PDF" link-type="anchor"/>
-                   </default-field>
+                <default-field title=" ">
+                    <link url="pdf/${pdfFilename}" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="PDF" link-type="anchor" condition="pdfFilename != null"/>
+                </default-field>
             </field>
-
-            <field name="verificarEnSII">
+            <!--field name="verificarEnSII">
                 <default-field title=" ">
                     <link url="verificarEnSII" tooltip="Verificar Estado en SII"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" text="Verificar en SII"/>
                 </default-field>
-            </field>
+            </field-->
 
-            <field name="eliminar">
+            <field name="eliminarDTETercero">
                 <default-field title=" ">
-                    <link url="eliminarDTE" tooltip="Eliminar DTE"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="Eliminar DTE"/>
+                    <link url="eliminarDTETercero" tooltip="Eliminar"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="Eliminar"/>
                 </default-field>
             </field>
 
-            <field name="_rowSubmit"><default-field title="Enviar a SII">
-                <check no-current-selected-key="false"><option key="true" text=" "/></check></default-field>
+            <!-- Movido a Dialog -->
+            <field name="enviarAceptacion">
+                <default-field title=" ">
+                    <link url="enviarAceptacion" tooltip="Enviar Aceptación"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, emisor:emisor, xml:xml]" text="Enviar Aceptación"/>
+                </default-field>
             </field>
-            <field name="envioSII"><default-field title="Enviar a SII"><submit/></default-field></field>
-
         </form-list>
     </widgets>
 </screen>
