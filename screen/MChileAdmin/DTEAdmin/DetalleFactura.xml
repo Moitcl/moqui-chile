@@ -3,12 +3,13 @@
         xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd"
         default-menu-include="false">
 
-    <parameter name="fiscalTaxDocumentId" required="true"/>
+    <parameter name="invoiceId" required="true"/>
 
-    <transition name="genNotaDebito">
-        <parameter name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+    <transition name="genFactura">
+        <parameter name="invoiceId" from="invoiceId"/>
+        <parameter name="activeOrgId" from="activeOrgId"/>
         <actions>
-        <script><![CDATA[
+            <script><![CDATA[
                     items = new StringBuilder()
                     for (int i = 0; ; i++) {
                         if ((context.get("_useRowSubmit") == "true" || context.get("_useRowSubmit_" + i) == "true")
@@ -16,28 +17,36 @@
                         String curKey = "invoiceItemSeqId_" + i
                         String quantity = "quantity_" + i
                         String amount = "amount_" + i
-                        String productId = "productId_" + i
+                        String pctDiscount = "pctDiscount_" + i
+                        String description = "description_" + i
                         if (context.containsKey(curKey))  {
                             if (items.length() > 0) items.append(",")
-                            items.append(context.get(curKey)+"-"+context.get(quantity)+"-"+context.get(amount)+"-"+context.get(productId))
+                            items.append(context.get(curKey)+"-"+context.get(quantity)+"-"+context.get(amount)+"-"+ context.get(pctDiscount)+"-"+context.get(description) )
                         } else { break }
                     }
             ]]></script>
-            <service-call name="mchile.DTEServices.generar#NotaDebito" in-map="context + [fiscalTaxDocumentId:fiscalTaxDocumentId, invoiceId:invoiceId]"/>
+            <service-call name="mchile.DTEServices.facturar#Invoice" in-map="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId, items:items]"/>
         </actions>
-        <default-response url="./FindDTE"/>
+        <default-response url="../Facturacion"/>
     </transition>
 
+    <transition name="updateGlobalDiscount">
+        <parameter name="invoiceId" from="invoiceId"/>
+        <parameter name="activeOrgId" from="activeOrgId"/>
+        <parameter name="globalDiscount" from="globalDiscount"/>
+        <parameter name="glosaDr" from="glosaDr"/>
+        <actions>
+            <service-call name="mchile.DTEServices.update#InvoiceGlobalDiscount" in-map="[invoiceId:invoiceId,activeOrgId:activeOrgId, globalDiscount:globalDiscount, glosaDr:glosaDr]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <pre-actions>
+        <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="userOrgList"/>
+        <set field="activeOrgId" from="userOrgList.activeOrgId"/>
+    </pre-actions>
 
     <actions>
-        <!-- Se busca invoiceId asociado a fiscalTaxDocumentId -->
-
-        <entity-find-one entity-name="mch.dte.FiscalTaxDocument" value-field="facturaField"/>
-        <if condition="!facturaField">
-            <return error="true" message="No existe factura especificada"/>
-        </if>
-        <set field="invoiceId" from="facturaField.invoiceId"/>
-
         <!-- Se busca detalle de invoice -->
 
         <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
@@ -96,77 +105,38 @@
         <container-row>
             <row-col>
                 <container>
-                    <form-single name="EditInvoice" skip-start="true">
-                        <field name="invoiceId"><default-field><display/></default-field></field>
-                        <field name="fromPartyId"><default-field title="From">
-                            <link url="editParty" entity-name="mantle.party.PartyDetail" text="PartyNameTemplate" link-type="anchor"
-                                  parameter-map="[partyId:fromPartyId]"/>
-                        </default-field></field>
-                        <field name="toPartyId"><default-field title="To">
-                            <link url="editParty" entity-name="mantle.party.PartyDetail" text="PartyNameTemplate" link-type="anchor"
-                                  parameter-map="[partyId:toPartyId]"/>
-                        </default-field></field>
-                        <field name="invoiceTypeEnumId">
-                            <conditional-field title="Type" condition="invoiceEditable">
-                                <widget-template-include location="component://webroot/template/screen/BasicWidgetTemplates.xml#enumDropDown">
-                                    <set field="enumTypeId" value="InvoiceType"/></widget-template-include>
-                            </conditional-field>
-                            <default-field title="Type"><display-entity entity-name="moqui.basic.Enumeration"/></default-field>
-                        </field>
-                        <field name="productStoreId">
-                            <conditional-field title="Store" condition="invoiceEditable">
-                                <drop-down allow-empty="true"><entity-options key="${productStoreId}" text="${productStoreId}: ${storeName}">
-                                    <entity-find entity-name="mantle.product.store.ProductStore">
-                                        <order-by field-name="storeName"/></entity-find></entity-options>
-                                </drop-down>
-                            </conditional-field>
-                            <conditional-field title="Store" condition="invoice.productStoreId">
-                                <display-entity entity-name="mantle.product.store.ProductStore" text="${productStoreId}: ${storeName}"/>
-                            </conditional-field>
-                            <default-field><ignored/></default-field>
-                        </field>
-                        <field name="invoiceDate">
-                            <conditional-field condition="invoiceEditable"><date-time/></conditional-field>
-                            <default-field title="Date"><display also-hidden="false"/></default-field>
-                        </field>
+                    <form-single name="EditInvoiceForm" transition="updateGlobalDiscount" map="fieldValues">
+                        <field name="invoiceId"><default-field title="Invoice"><display/></default-field></field>
                         <field name="invoiceTotal"><default-field title="Total"><display currency-unit-field="invoice.currencyUomId"/></default-field></field>
-
-                        <field-layout>
-                            <field-row><field-ref name="invoiceId"/><field-ref name="invoiceTypeEnumId"/></field-row>
-                            <field-row><field-ref name="invoiceDate"/><field-ref name="invoiceTotal"/></field-row>
-                            <fields-not-referenced/>
-                        </field-layout>
+                        <field name="globalDiscount" from="invoice.globalDiscount"><default-field title="Global Discount"><text-line size="4"/></default-field></field>
+                        <!--field name="glosaDr"><default-field title="Glosa Descuento"><text-line size="10" default-value="${invoice.glosaDr}"/></default-field></field-->
+                        <field name="glosaDr" from="invoice.glosaDr"><default-field title="Glosa Descuento"><text-line size="10"/></default-field></field>
+                        <field name="submitButton"><default-field title="Update"><submit/></default-field></field>
                     </form-single>
 
-
-                    <form-list name="EditInvoiceItems" list="invoiceItemList" transition="genNotaDebito" multi="true">
-                        <hidden-parameters><parameter name="invoiceId"/></hidden-parameters>
+                    <form-list name="InvoiceItems" list="invoiceItemList" transition="genFactura" multi="true" map-first-row="pruebaMap">
+                        <hidden-parameters>
+                            <parameter name="invoiceId"/>
+                            <parameter name="activeOrgId"/>
+                        </hidden-parameters>
                         <field name="_useRowSubmit"><default-field><hidden default-value="true"/></default-field></field>
                         <field name="invoiceItemSeqId"><default-field title="Item"><display/></default-field></field>
-                        <field name="productId">
-                            <default-field title="Product"><display text=" "/>
-                                <link url="editProduct" text="ProductNameTemplate" entity-name="mantle.product.Product" link-type="anchor" condition="productId"/>
-                            </default-field>
-                        </field>
-                        <field name="itemTypeEnumId">
-                            <conditional-field condition="invoiceEditable">
-                                <drop-down><list-options list="itemTypeEnumList" key="${enumId}" text="${description}"/></drop-down></conditional-field>
-                            <default-field title="Type"><display-entity entity-name="moqui.basic.Enumeration"/></default-field>
-                        </field>
-                        <field name="quantity"><default-field><text-line size="4"/></default-field></field>
-                        <field name="amount"><default-field><text-line size="8"/></default-field></field>
-                        <field name="itemDate"><default-field><display/></default-field></field>
+                        <field name="description"><default-field><display/></default-field></field>
+                        <field name="productId"><default-field><hidden/></default-field></field>
+                        <field name="quantity"><default-field><display/></default-field></field>
+                        <field name="amount"><default-field><display/></default-field></field>
                         <field name="total" from="((quantity != null ? quantity : 1.0) * (amount ?: 0.0))">
                             <default-field><display currency-unit-field="invoice.currencyUomId"/></default-field></field>
-                        <field name="deleteButton"><default-field title="">
-                            <link url="deleteInvoiceItem" text="Delete" condition="invoiceEditable" confirmation="Delete this item?"
-                                  parameter-map="[invoiceId:invoiceId, invoiceItemSeqId:invoiceItemSeqId]"/>
-                        </default-field></field>
-                        <field name="_rowSubmit"><default-field title="Corregir">
+                        <field name="pctDiscount"><default-field title="% Descuento"><text-line size="4" default-value="0"/></default-field></field>
+                        <!--field name="_rowSubmit"><default-field title="Corregir">
                             <check no-current-selected-key="false"><option key="true" text=" "/></check></default-field>
+                        </field-->
+                        <field name="_rowSubmit"><default-field title="Corregir"><hidden default-value="true"/>
+                            </default-field>
                         </field>
-                        <field name="submitButton"><default-field title="Generar Nota de Débito"><submit/></default-field></field>
-
+                        <field name="submitButton"><default-field title="Generar Factura"><submit/>
+                            <!--link url="anularNotaCredito" text="Anular Nota de Crédito" url-type="plain" link-type="auto" parameter-map="[returnId:returnId]"/-->
+                        </default-field></field>
                     </form-list>
                 </container>
             </row-col>
