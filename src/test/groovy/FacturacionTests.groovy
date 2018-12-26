@@ -71,13 +71,13 @@ class FacturacionTests extends Specification {
               .parameters([invoiceId:invoiceId, productId:productId, quantity:5, amount:500000, description:'HORAS PROGRAMADOR'])
               .call()
       Map factOut = ec.service.sync().name("mchile.DTEServices.facturar#Invoice")
-              .parameters([invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dteType, activeOrgId:'MOIT'])
+              .parameters([invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dteType, activeOrgId:partyId])
               .call()
       String fiscalTaxDocumentId = factOut.fiscalTaxDocumentId
 
       List<String> dataCheckErrors = []
       long fieldsChecked = ec.entity.makeDataLoader().xmlText("""<entity-facade-xml>
-            <mch.dte.FiscalTaxDocument fiscalTaxDocumentId="${fiscalTaxDocumentId}"  fiscalTaxDocumentTypeEnumId="Ftdt-34" />
+            <mch.dte.FiscalTaxDocument fiscalTaxDocumentId="${fiscalTaxDocumentId}"  fiscalTaxDocumentTypeEnumId="${dteType}" />
 
         </entity-facade-xml>""").check(dataCheckErrors)
       totalFieldsChecked += fieldsChecked

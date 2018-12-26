@@ -25,11 +25,11 @@ import java.sql.Timestamp
    Or to quick run with saved DB copy use "gradle loadSave" once then each time "gradle reloadSave runtime/mantle/mantle-usl:test"
  */
 
-class FacturacionTests extends Specification {
-   @Shared protected final static Logger logger = LoggerFactory.getLogger(FacturacionTests.class)
+class FacturacionAfectaTests extends Specification {
+   @Shared protected final static Logger logger = LoggerFactory.getLogger(FacturacionAfectaTests.class)
    @Shared ExecutionContext ec
-   @Shared String partyId = 'MOIT'
-   @Shared String dteType = 'Ftdt-34', productId = '100105'
+   @Shared String partyId = 'INVCJ'
+   @Shared String dteType = 'Ftdt-33', productId = '100211'
    @Shared String rutEmisor = '76514104-4'
    @Shared long effectiveTime = System.currentTimeMillis()
    @Shared long totalFieldsChecked = 0
@@ -68,16 +68,16 @@ class FacturacionTests extends Specification {
       String invoiceId = invoiceOut.invoiceId
       // Adición de productos
       Map productOut = ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem")
-              .parameters([invoiceId:invoiceId, productId:productId, quantity:5, amount:500000, description:'HORAS PROGRAMADOR'])
+              .parameters([invoiceId:invoiceId, productId:productId, quantity:5, amount:500000, description:'Item Afecto'])
               .call()
       Map factOut = ec.service.sync().name("mchile.DTEServices.facturar#Invoice")
-              .parameters([invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dteType, activeOrgId:'MOIT'])
+              .parameters([invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dteType, activeOrgId:partyId])
               .call()
       String fiscalTaxDocumentId = factOut.fiscalTaxDocumentId
 
       List<String> dataCheckErrors = []
       long fieldsChecked = ec.entity.makeDataLoader().xmlText("""<entity-facade-xml>
-            <mch.dte.FiscalTaxDocument fiscalTaxDocumentId="${fiscalTaxDocumentId}"  fiscalTaxDocumentTypeEnumId="Ftdt-34" />
+            <mch.dte.FiscalTaxDocument fiscalTaxDocumentId="${fiscalTaxDocumentId}"  fiscalTaxDocumentTypeEnumId="${dteType}" />
 
         </entity-facade-xml>""").check(dataCheckErrors)
       totalFieldsChecked += fieldsChecked

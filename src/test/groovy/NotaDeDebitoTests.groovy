@@ -28,7 +28,7 @@ import java.sql.Timestamp
 class NotaDeDebitoTests extends Specification {
    @Shared protected final static Logger logger = LoggerFactory.getLogger(NotaDeDebitoTests.class)
    @Shared ExecutionContext ec
-   @Shared String partyId = 'MOIT'
+   @Shared String partyId = 'INVCJ'
    @Shared String dteType = '34', productId = '100105'
    @Shared long effectiveTime = System.currentTimeMillis()
    @Shared long totalFieldsChecked = 0
@@ -87,7 +87,7 @@ class NotaDeDebitoTests extends Specification {
               .call()
 
       ec.service.sync().name("mantle.order.OrderServices.update#OrderPart")
-              .parameters([orderId:orderId, orderPartSeqId:orderPartSeqId, vendorPartyId:'MOIT', customerPartyId:'100204' ])
+              .parameters([orderId:orderId, orderPartSeqId:orderPartSeqId, vendorPartyId:partyId, customerPartyId:'100204' ])
               .call()
 
       // Se cierra la orden
@@ -106,29 +106,33 @@ class NotaDeDebitoTests extends Specification {
 
       // Se crea devolucion
       Map returnOut = ec.service.sync().name("mantle.order.ReturnServices.create#Return")
-              .parameters([orderId:orderId, orderPartSeqId:orderPartSeqId, vendorPartyId:'MOIT', customerPartyId:'100204'])
+              .parameters([orderId:orderId, orderPartSeqId:orderPartSeqId, vendorPartyId:partyId, customerPartyId:'100204'])
               .call()
       String returnId = returnOut.returnId
 
       // Adición de items
       ec.service.sync().name("mantle.order.ReturnServices.add#OrderItemToReturn")
-              .parameters([returnId:returnId, orderId:orderId, orderPartSeqId:orderPartSeqId, vendorPartyId:'MOIT', customerPartyId:'100204',
+              .parameters([returnId:returnId, orderId:orderId, orderPartSeqId:orderPartSeqId, vendorPartyId:partyId, customerPartyId:'100204',
                            orderItemSeqId:'01', returnReasonEnumId:'RrsnDefective', returnResponseEnumId:'RrspRefund', returnQuantity:5, returnPrice:500000])
               .call()
-
+// Lista de items
+      //List items = [['01-1-10000-0-HORAS PROGRAMADOR']]
+      List<String> items = new ArrayList<>()
+      items.add('01-1-10000-0-HORAS PROGRAMADOR')
       // Creacion de Nota de Credito
       Map factOut = ec.service.sync().name("mchile.DTEServices.generar#NotaCredito")
-              .parameters([returnId:returnId, invoiceId:invoiceId, activeOrgId:'MOIT', fiscalTaxDocumentTypeEnumId:'Ftdt-61'])
+              .parameters([returnId:returnId, invoiceId:invoiceId, activeOrgId:partyId, fiscalTaxDocumentTypeEnumId:'Ftdt-61', items:items])
               .call()
       String fiscalTaxDocumentId = factOut.fiscalTaxDocumentId
       logger.warn("Nota de crédito generada: "+fiscalTaxDocumentId)
 
       // Simulación de items que irán en Nota de Débito
-      String items = "01-4-3.351-HORAS PROGRAMADOR"
+      List<String> itemsNd = new ArrayList<>()
+      itemsNd.add('01-4-3.351-HORAS PROGRAMADOR')
 
       // Se toma nota de crédito anterior para generar nota de débito
       Map notadebOut = ec.service.sync().name("mchile.DTEServices.generar#NotaDebito")
-              .parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, invoiceId:invoiceId, activeOrgId:'MOIT', fiscalTaxDocumentTypeEnumId:'Ftdt-56', items:items])
+              .parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, invoiceId:invoiceId, activeOrgId:partyId, fiscalTaxDocumentTypeEnumId:'Ftdt-56', items:itemsNd])
               .call()
       String fiscalTaxDocumentIdNotaDeb = notadebOut.fiscalTaxDocumentIdNotaDebito
 
