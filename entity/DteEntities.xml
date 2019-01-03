@@ -6,9 +6,11 @@
         <field name="issuerPartyId" type="id" not-null="true"/>
         <field name="issuerPartyIdTypeEnumId" type="id" not-null="true" default="PtidNationalTaxId"/>
         <field name="fiscalTaxDocumentTypeEnumId" type="id" not-null="true"/>
-        <field name="fiscalTaxDocumentNumber" type="id" not-null="true"/>
+        <field name="fiscalTaxDocumentNumber" type="number-integer" not-null="true"/>
+        <field name="fiscalTaxDocumentStatusEnumId" type="id" not-null="false"/>
+        <field name="fiscalTaxDocumentSentStatusEnumId" type="id" not-null="false"/>
         <field name="receiverPartyId" type="id"/>
-        <field name="receiverPartyIdTypeEnumId" type="id" not-null="true" default="PtidNationalTaxId"/>
+        <field name="receiverPartyIdTypeEnumId" type="id" not-null="false" default="PtidNationalTaxId"/>
         <field name="invoiceId" type="id"/>
         <field name="date" type="date-time" default="ec.user.nowTimestamp"/>
         <relationship type="one" related="mantle.party.PartyIdentification">
@@ -22,6 +24,9 @@
         <relationship type="one" related="moqui.basic.Enumeration" title="FiscalTaxDocumentType">
             <key-map field-name="fiscalTaxDocumentTypeEnumId"/>
         </relationship>
+        <relationship type="one" related="moqui.basic.Enumeration" title="FiscalTaxDocumentStatus">
+            <key-map field-name="fiscalTaxDocumentStatusEnumId"/>
+        </relationship>
         <relationship type="one" related="mantle.account.invoice.Invoice">
             <key-map field-name="invoiceId"/>
         </relationship>
@@ -32,6 +37,18 @@
         </index>
 
         <seed-data>
+            <moqui.basic.EnumerationType enumTypeId="FiscalTaxDocumentSentStatus" description="Fiscal Tax Document Sent to Tax Authority"/>
+            <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentSentStatus" enumId="Ftdt-Sent" enumCode="1" description="DTE already sent"/>
+            <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentSentStatus" enumId="Ftdt-NotSent" enumCode="0" description="DTE not sent"/>
+
+            <moqui.basic.EnumerationType enumTypeId="FiscalTaxDocumentStatus" description="Fiscal Tax Document Status"/>
+            <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentStatus" enumId="Ftdt-Issued" enumCode="1" description="DTE already issued"/>
+            <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentStatus" enumId="Ftdt-NotIssued" enumCode="0" description="DTE not issued"/>
+
+            <moqui.basic.EnumerationType enumTypeId="FiscalTaxDocumentAggr" description="Fiscal Tax Documents"/>
+            <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentAggr" enumId="Ftdt-Facturas" description="Facturas"/>
+            <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentAggr" enumId="Ftdt-Boletas" description="Boletas"/>
+
             <moqui.basic.EnumerationType enumTypeId="FiscalTaxDocumentType" description="Fiscal Tax Documents"/>
             <!-- Source: http://www.sii.cl/factura_electronica/formato_iecv.pdf, http://www.sii.cl/factura_electronica/formato_dte.pdf
              -->
@@ -135,8 +152,12 @@
         <field name="fechaAutorizacion" type="date"/>
         <field name="rut" type="text-medium"/>
         <field name="ultimoFolio" type="number-integer"/>
+        <field name="issuerPartyId" type="text-short"/>
         <relationship type="one" related="moqui.basic.Enumeration" title="FiscalTaxDocumentType">
             <key-map field-name="fiscalTaxDocumentTypeEnumId"/>
+        </relationship>
+        <relationship type="one" related="mantle.party.Party">
+            <key-map field-name="issuerPartyId" related="partyId"/>
         </relationship>
     </entity>
 
@@ -171,7 +192,7 @@
 
     <view-entity entity-name="ReferenciaReturnAndFiscalCode" package="mch.dte">
         <member-entity entity-alias="REFRET" entity-name="mch.dte.ReferenciaReturn"/>
-        <member-entity entity-alias="ENUMERATION" entity-name="moqui.basic.Enumeration">
+        <member-entity entity-alias="ENUMERATION" entity-name="moqui.basic.Enumeration" join-from-alias="REFRET">
             <key-map field-name="fiscalTaxDocumentTypeEnumId" related="enumId"/>
         </member-entity>
         <alias-all entity-alias="REFRET"/>
@@ -202,14 +223,14 @@
 
     <view-entity entity-name="ReferenciaInvoiceAndFiscalCode" package="mch.dte">
         <member-entity entity-alias="REFINV" entity-name="mch.dte.ReferenciaInvoice"/>
-        <member-entity entity-alias="ENUMERATION" entity-name="moqui.basic.Enumeration">
+        <member-entity entity-alias="ENUMERATION" entity-name="moqui.basic.Enumeration" join-from-alias="REFINV">
             <key-map field-name="fiscalTaxDocumentTypeEnumId" related="enumId"/>
         </member-entity>
         <alias-all entity-alias="REFINV"/>
         <alias name="fiscalTaxDocumentTypeCode" field="enumCode" entity-alias="ENUMERATION"/>
     </view-entity>
 
-    <!-- Entidad para guardar referencias de facturas -->
+    <!-- Entidad para guardar referencias a facturas, usadas para generar notas de crédito -->
     <entity entity-name="ReferenciaFactura" package="mch.dte" cache="never" >
         <field name="referenciaFacturaId" type="id" is-pk="true"/>
         <field name="fiscalTaxDocumentId" type="id"/>
@@ -231,16 +252,29 @@
         </relationship>
     </entity>
 
-    <!-- Entidad para guardar referencias a facturas, usadas para generar Notas de Débito -->
+    <view-entity entity-name="ReferenciaFacturaAndFiscalCode" package="mch.dte">
+        <member-entity entity-alias="REFFAC" entity-name="mch.dte.ReferenciaFactura"/>
+        <member-entity entity-alias="ENUMERATION" entity-name="moqui.basic.Enumeration" join-from-alias="REFFAC">
+            <key-map field-name="fiscalTaxDocumentTypeEnumId" related="enumId"/>
+        </member-entity>
+        <alias-all entity-alias="REFFAC"/>
+        <alias name="fiscalTaxDocumentTypeCode" field="enumCode" entity-alias="ENUMERATION"/>
+    </view-entity>
+
+    <!-- Entidad para guardar referencias a facturas/notas de crédito, usadas para generar Notas de Débito -->
     <entity entity-name="ReferenciaNotaDebito" package="mch.dte" cache="never" >
         <field name="referenciaNotaDebitoId" type="id" is-pk="true"/>
         <field name="fiscalTaxDocumentId" type="id"/>
         <field name="codigoReferenciaEnumId" type="text-short"/>
+        <field name="fiscalTaxDocumentTypeEnumId" type="id"/>
         <field name="razonReferencia" type="text-medium"/>
         <field name="fecha" type="date"/>
         <field name="rut" type="text-medium"/>
         <field name="idAdicional" type="text-medium"/>
         <field name="folio" type="text-short"/>
+        <relationship type="one" related="moqui.basic.Enumeration" title="FiscalTaxDocumentType">
+            <key-map field-name="fiscalTaxDocumentTypeEnumId"/>
+        </relationship>
         <relationship type="one" related="moqui.basic.Enumeration" title="CodigoReferencia">
             <key-map field-name="codigoReferenciaEnumId"/>
         </relationship>
@@ -257,6 +291,28 @@
         <alias-all entity-alias="REFNOTDEB"/>
         <alias name="fiscalTaxDocumentTypeCode" field="enumCode" entity-alias="ENUMERATION"/>
     </view-entity>
+
+    <!-- Entidad para guardar referencias asociadas a Shipments, usadas para generar guías de despacho -->
+    <entity entity-name="ReferenciaShipment" package="mch.dte" cache="never" >
+        <field name="referenciaShipmentId" type="id" is-pk="true"/>
+        <field name="shipmentId" type="id"/>
+        <field name="fiscalTaxDocumentTypeEnumId" type="text-short"/>
+        <field name="codigoReferenciaEnumId" type="text-short"/>
+        <field name="razonReferencia" type="text-medium"/>
+        <field name="fecha" type="date"/>
+        <field name="rut" type="text-medium"/>
+        <field name="idAdicional" type="text-medium"/>
+        <field name="folio" type="text-short"/>
+        <relationship type="one" related="moqui.basic.Enumeration" title="FiscalTaxDocumentType">
+            <key-map field-name="fiscalTaxDocumentTypeEnumId"/>
+        </relationship>
+        <relationship type="one" related="moqui.basic.Enumeration" title="CodigoReferencia">
+            <key-map field-name="codigoReferenciaEnumId"/>
+        </relationship>
+        <relationship type="one" related="mantle.shipment.Shipment" title="ShipmentId">
+            <key-map field-name="shipmentId"/>
+        </relationship>
+    </entity>
 
     <!-- Entidad para guardar respuestas a DTE terceros, implementado uno a uno -->
     <entity entity-name="AceptacionDte" package="mch.dte" cache="never" >
@@ -276,7 +332,40 @@
         <field name="rutReceptor" type="text-medium"/>
         <field name="estadoRecepEnvEnumId" type="text-medium"/>
         <field name="xml" type="text-medium"/>
+        <field name="issuerPartyId" type="text-short"/>
+        <relationship type="one" related="mantle.party.Party">
+            <key-map field-name="issuerPartyId" related="partyId"/>
+        </relationship>
+        <relationship type="one" related="mch.dte.FiscalTaxDocument" title="FiscalTaxDocumentId">
+            <key-map field-name="fiscalTaxDocumentId"/>
+        </relationship>
+    </entity>
 
+    <entity entity-name="FiscalTaxDocumentAttributes" package="mch.dte">
+        <field name="fiscalTaxDocumentId" type="id" is-pk="true"/>
+        <field name="date" type="date-time" default="ec.user.nowTimestamp"/>
+        <field name="amount" type="number-decimal"/>
+        <field name="emailEmisor" type="text-medium"/>
+        <field name="montoNeto" type="number-decimal"/>
+        <field name="tasaImpuesto" type="number-decimal"/>
+        <field name="tipoImpuesto" type="number-decimal"/>
+        <field name="razonSocial" type="text-medium"/>
+        <field name="fechaEmision" type="text-medium"/>
+        <field name="documentoAnulado" type="text-medium"/>
+        <field name="montoExento" type="number-decimal"/>
+        <field name="montoIVARecuperable" type="number-decimal"/>
+        <field name="codigoIVANoRecuperable" type="text-short"/>
+        <field name="montoIVANoRecuperable" type="number-decimal"/>
+        <field name="montoIVAUsoComun" type="number-decimal"/>
+        <field name="codigoOtroImpuestoORetencion" type="text-medium"/>
+        <field name="tasaOtroImpuestoORetencion" type="number-decimal"/>
+        <field name="montoOtroImpuestoORetencionConCredito" type="number-decimal"/>
+        <field name="montoOtroImpuestoORetencionSinCredito" type="number-decimal"/>
+        <field name="montoNetoActivoFijo" type="number-decimal"/>
+        <field name="montoIVAActivoFijo" type="number-decimal"/>
+        <field name="montoIVANoRetenido" type="number-decimal"/>
+        <field name="codigoSucursal" type="text-medium"/>
+        <field name="notasDebitoCreditoFacturasCompra" type="text-medium"/>
         <relationship type="one" related="mch.dte.FiscalTaxDocument" title="FiscalTaxDocumentId">
             <key-map field-name="fiscalTaxDocumentId"/>
         </relationship>

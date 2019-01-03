@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns=""
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd"
+        default-menu-include="false">
+
+    <parameter name="shipmentId" required="true"/>
+
+    <transition name="genGuiaDespacho">
+        <parameter name="shipmentId" from="shipmentId"/>
+        <parameter name="indTrasladoEnumId" from="indTrasladoEnumId"/>
+        <parameter name="tipoDespachoEnumId" from="tipoDespachoEnumId"/>
+        <actions>
+            <service-call name="mchile.DTEServices.generar#GuiaDespacho" in-map="[shipmentId:shipmentId, activeOrgId:activeOrgId, indTrasladoEnumId:indTrasladoEnumId,
+                        tipoDespachoEnumId:tipoDespachoEnumId]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="updateIndTraslado">
+        <parameter name="shipmentId" from="shipmentId"/>
+        <parameter name="activeOrgId" from="activeOrgId"/>
+        <parameter name="priceInclude" from="priceInclude"/>
+        <parameter name="indTrasladoEnumId" from="indTrasladoEnumId"/>
+        <parameter name="tipoDespachoEnumId" from="tipoDespachoEnumId"/>
+        <actions>
+            <service-call name="mchile.DTEServices.update#ShipmentIndTraslado" in-map="[shipmentId:shipmentId, activeOrgId:activeOrgId, priceInclude:priceInclude,
+                    indTrasladoEnumId:indTrasladoEnumId, tipoDespachoEnumId:tipoDespachoEnumId ]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <pre-actions>
+        <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="userOrgList"/>
+        <set field="activeOrgId" from="userOrgList.activeOrgId"/>
+    </pre-actions>
+
+    <actions>
+
+        <entity-find-one entity-name="mantle.shipment.Shipment" value-field="shipmentField"/>
+        <set field="indTrasladoEnumId" from="shipmentField.indTrasladoEnumId"/>
+        <set field="tipoDespachoEnumId" from="shipmentField.tipoDespachoEnumId"/>
+        <!-- Se busca detalle de items -->
+        <entity-find entity-name="mantle.shipment.ShipmentItem" list="shipmentItemList">
+            <econdition field-name="shipmentId"/></entity-find>
+
+    </actions>
+
+    <widgets>
+        <container-row>
+            <row-col>
+                <container>
+                    <form-single name="EditIndTrasladoForm" transition="updateIndTraslado">
+                        <field name="shipmentId"><default-field title="Shipment"><display/></default-field></field>
+                        <field name="indTrasladoEnumId">
+                            <default-field title="Indicador Traslado">
+                                <widget-template-include location="component://webroot/template/screen/BasicWidgetTemplates.xml#enumDropDown">
+                                    <set field="enumTypeId" value="IndTraslado"/><set field="allowEmpty" value="false"/>
+                                    </widget-template-include>
+                            <!--display-entity entity-name="moqui.basic.Enumeration"/--></default-field>
+                        </field>
+
+                        <field name="tipoDespachoEnumId"><default-field title="Tipo Despacho">
+                            <widget-template-include location="component://webroot/template/screen/BasicWidgetTemplates.xml#enumDropDown">
+                                <set field="enumTypeId" value="TipoDespacho"/><set field="allowEmpty" value="true"/></widget-template-include>
+                        </default-field>
+                        </field>
+
+                        <field name="submitButton"><default-field title="Update"><submit/></default-field></field>
+                    </form-single>
+                </container>
+            </row-col>
+            <row-col>
+                <container>
+
+                    <form-list name="ShipmentItemsForm" list="shipmentItemList" transition="genGuiaDespacho" multi="true">
+                        <row-actions>
+                            <!-- Recuperación de nombre de producto -->
+                            <entity-find-one entity-name="mantle.product.Product" value-field="productField" cache="false">
+                                <field-map field-name="productId" from="productId"/></entity-find-one>
+                            <set field="description" from="productField.productName"/>
+
+                            <!-- Recuperación de precio -->
+                            <entity-find-one entity-name="mantle.product.ProductPrice" value-field="productPriceField" cache="false">
+                                <field-map field-name="productId" from="productId"/>
+                            </entity-find-one>
+
+                            <if condition="productPriceField">
+                                <set field="price" from="productPriceField.price"/>
+                            </if>
+
+                        </row-actions>
+                        <hidden-parameters><parameter name="shipmentId"/><parameter name="activeOrgId"/></hidden-parameters>
+                        <field name="_useRowSubmit"><default-field><hidden default-value="true"/></default-field></field>
+                        <field name="indTrasladoEnumId"><default-field><hidden/></default-field></field>
+                        <field name="tipoDespachoEnumId"><default-field><hidden/></default-field></field>
+                        <field name="productId"><default-field title="Item"><display/></default-field></field>
+                        <field name="description"><default-field><display/></default-field></field>
+                        <field name="quantity"><default-field><display/></default-field></field>
+                        <field name="price"><default-field><display/></default-field></field>
+                        <field name="submitButton"><default-field title="Generar Guía de Despacho"><submit/></default-field></field>
+                    </form-list>
+                </container>
+            </row-col>
+        </container-row>
+    </widgets>
+</screen>
