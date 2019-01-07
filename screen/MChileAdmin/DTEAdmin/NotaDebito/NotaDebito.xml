@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns=""
         xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd"
-        menu-image="glyphicon glyphicon-shopping-cart" menu-image-type="icon" default-menu-title="Nota de Débito Exportación"
-        default-menu-index="30" default-menu-include="false">
+        menu-image="glyphicon glyphicon-shopping-cart" menu-image-type="icon" default-menu-title="Nota de Débito"
+        default-menu-index="30">
 
     <transition name="genNotaDebito"><default-response url="../DetalleFacturaNotaDebito"/></transition>
 
     <transition name="agregarRefNotaDebito">
-        <service-call name="mchile.DTEServices.agregar#RefNotaDebito" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fecha:fecha,
-            rutOtroContribuyente:rutOtroContribuyente, codigoReferenciaEnumId:codigoReferenciaEnumId, razonReferencia:razonReferencia, idAdicional:idAdicional, folio:folio]"/>
+        <service-call name="mchile.DTEServices.agregar#RefNotaDebito" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fecha:fecha,
+            rutOtroContribuyente:rutOtroContribuyente, codigoReferenciaEnumId:codigoReferenciaEnumId, razonReferencia:razonReferencia,
+            idAdicional:idAdicional, folio:folio, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"/>
         <default-response url="." save-current-screen="true"/>
     </transition>
 
@@ -29,30 +30,42 @@
         </actions>
         <default-response url="." save-current-screen="true"/>
     </transition>
-
+    <pre-actions>
+        <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="userOrgList"/>
+        <set field="activeOrgId" from="userOrgList.activeOrgId"/>
+    </pre-actions>
     <actions>
         <entity-find entity-name="mch.dte.FiscalTaxDocument" list="dteList">
+            <search-form-inputs/>
             <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in"
-                        from="['Ftdt-112']"/>
-            <econdition field-name="envio" operator="is-null"/>
-            <econdition field-name="invoiceId" operator="is-not-null"/>
+                        from="['Ftdt-61']"/>
+            <econdition field-name="issuerPartyId" from="activeOrgId"/>
+            <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
         </entity-find>
-
     </actions>
 
     <widgets>
 
         <label text="Notas de Crédito a corregir con emisión de Nota de Débito" type="h4"/>
+        <form-list name="DteForm" list="dteList" show-pdf-button="true" show-csv-button="false" header-dialog="true" saved-finds="true" skip-form="true">
 
-        <form-list name="DteForm" list="dteList" show-pdf-button="true" show-csv-button="true" header-dialog="true" saved-finds="true" skip-form="true">
+            <row-actions>
+                <!-- rut receptor -->
+                <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+                <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyField">
+                    <field-map field-name="partyId" from="receiverPartyId"/>
+                </entity-find-one>
+                <set field="rutReceptor" from="partyField.idValue"/>
+            </row-actions>
+
             <field name="fiscalTaxDocumentId">
                 <header-field show-order-by="true"><text-line size="6"/></header-field>
                 <default-field>
                     <display/>
                 </default-field>
             </field>
-            <field name="folio">
-                <header-field show-order-by="true"><text-line size="6"/></header-field>
+            <field name="fiscalTaxDocumentNumber">
+                <header-field show-order-by="true" title="Folio"><text-line size="6"/></header-field>
                 <default-field>
                     <display/>
                 </default-field>
@@ -71,13 +84,15 @@
                     <display-entity entity-name="moqui.basic.Enumeration"/>
                 </default-field>
             </field>
-            <field name="receptor">
-                <header-field show-order-by="true"><text-line size="6"/></header-field>
-                <default-field>
-                    <display/>
-                </default-field>
+            <field name="receiverPartyId">
+                <header-field title="Receptor">
+                    <drop-down allow-empty="true"><dynamic-options transition="searchPartyList" server-search="true" min-length="2"
+                                                                   parameter-map="[roleTypeId:'Customer,OrgInternal']"/></drop-down>
+                </header-field>
+                <default-field><link url="editParty" entity-name="mantle.party.PartyDetail" text="PartyNameTemplate" link-type="anchor"/></default-field>
             </field>
-            <field name="amount">
+
+            <field name="date">
                 <header-field show-order-by="true"><text-line size="6"/></header-field>
                 <default-field>
                     <display/>
@@ -85,23 +100,23 @@
             </field>
             <field name="referenciasField">
                 <default-field title="">
-                    <!--container-dialog id="AgregarReferenciaDialog" button-text="Agregar Referencia">
+                    <container-dialog id="AgregarReferenciaDialog" button-text="Agregar Referencia">
                         <form-single name="AgregarReferenciaForm" transition="agregarRefNotaDebito">
                             <field name="fiscalTaxDocumentId"><default-field><hidden/></default-field>
                             </field>
-                            <field name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"><default-field title="Tipo DTE Referencia">
+                            <field name="fiscalTaxDocumentTypeEnumId"><default-field title="Tipo DTE Referencia">
                                 <drop-down><entity-options key="${enumId}" text="">
                                     <entity-find entity-name="moqui.basic.Enumeration">
-                                        <econdition field-name="enumTypeId" value="FiscalTaxDocumentType"/>
+                                        <econdition field-name="parentEnumId" operator="in" value="Ftdt-DTE,Ftdt-DT"/>
                                     </entity-find>
                                 </entity-options></drop-down>
                             </default-field></field>
 
                             <field name="folio">
-                                <default-field title="Folio Referencia"><text-line size="10" default-value="${folio}"/></default-field>
+                                <default-field title="Folio Referencia"><text-line size="10" default-value="${fiscalTaxDocumentNumber}"/></default-field>
                             </field>
                             <field name="rutOtroContribuyente">
-                                <default-field title="RUT Otro Contribuyente"><text-line size="15" default-value="${receptor}"/></default-field>
+                                <default-field title="RUT Otro Contribuyente"><text-line size="15" default-value="${rutReceptor}"/></default-field>
                             </field>
                             <field name="idAdicional">
                                 <default-field title="ID Adicional Otro Contribuyente"><text-line size="15"/></default-field>
@@ -121,9 +136,9 @@
                             </field>
                             <field name="submitButton"><default-field title="Añadir"><submit/></default-field></field>
                         </form-single>
-                    </container-dialog-->
-                    <!--link url="VerRefNotaDebito" text="Ver Referencias" url-type="plain" link-type="auto" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]"/-->
-                    <link url="genNotaDebito" text="Seleccionar Items" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" link-type="auto"/>
+                    </container-dialog>
+                    <link url="VerRefNotaDebito" text="Ver Referencias" url-type="plain" link-type="auto" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]"/>
+                    <link url="genNotaDebito" text="Generar Nota Débito" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" link-type="auto"/>
                 </default-field>
             </field>
         </form-list>
