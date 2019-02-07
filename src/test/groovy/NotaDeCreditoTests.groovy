@@ -120,7 +120,7 @@ class NotaDeCreditoTests extends Specification {
 
       List<String> dataCheckErrors = []
       long fieldsChecked = ec.entity.makeDataLoader().xmlText("""<entity-facade-xml>
-            <mch.dte.FiscalTaxDocument fiscalTaxDocumentId="${fiscalTaxDocumentId}" fiscalTaxDocumentTypeEnumId="Ftdt-61" />
+            <mchile.dte.FiscalTaxDocument fiscalTaxDocumentId="${fiscalTaxDocumentId}" fiscalTaxDocumentTypeEnumId="Ftdt-61" />
         </entity-facade-xml>""").check(dataCheckErrors)
       totalFieldsChecked += fieldsChecked
       logger.info("Checked ${fieldsChecked} fields")

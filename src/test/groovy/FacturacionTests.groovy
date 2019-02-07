@@ -77,7 +77,7 @@ class FacturacionTests extends Specification {
 
       List<String> dataCheckErrors = []
       long fieldsChecked = ec.entity.makeDataLoader().xmlText("""<entity-facade-xml>
-            <mch.dte.FiscalTaxDocument fiscalTaxDocumentId="${fiscalTaxDocumentId}"  fiscalTaxDocumentTypeEnumId="${dteType}" />
+            <mchile.dte.FiscalTaxDocument fiscalTaxDocumentId="${fiscalTaxDocumentId}"  fiscalTaxDocumentTypeEnumId="${dteType}" />
 
         </entity-facade-xml>""").check(dataCheckErrors)
       totalFieldsChecked += fieldsChecked
