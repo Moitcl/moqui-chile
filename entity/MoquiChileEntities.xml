@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<entities xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/entity-definition-2.1.xsd">
+
+
+
+    <entity entity-name="Till" package="mchile">
+        <field name="productStoreId" type="id" is-pk="true"/>
+        <field name="tillSeqId" type="id" is-pk="true"/>
+        <field name="sourceGlAccountId" type="id"/>
+        <relationship type="one" related="mantle.product.store.ProductStore">
+            <key-map field-name="productStoreId"/>
+        </relationship>
+        <relationship type="one" related="mantle.ledger.account.GlAccount">
+            <key-map field-name="sourceGlAccountId" related="glAccountId"/>
+        </relationship>
+        <seed-data>
+            <mantle.account.financial.FinancialAccountType description="Till Account" finAccountTypeId="TillAccount"
+                                                           replenishTypeEnumId="FarpManual" isRefundable="N"/>
+            <moqui.basic.Enumeration enumTypeId="FinancialAccountTransReason" enumId="FatrCustomerPayment"
+                                     description="Payment received from Customer"/>
+            <moqui.basic.Enumeration enumTypeId="FinancialAccountTransReason" enumId="FatrOrderPayment"
+                                     description="Payment associated to Order"/>
+            <moqui.basic.Enumeration enumTypeId="FinancialAccountTransReason" enumId="FatrCustomerChange"
+                                     description="Change to give back to Customer"/>
+        </seed-data>
+    </entity>
+
+    <extend-entity entity-name="OrderHeader" package="mantle.order">
+        <field name="tillShiftId" type="id"/>
+        <relationship type="one" related="mchile.TillShift">
+            <key-map field-name="tillShiftId"/>
+        </relationship>
+    </extend-entity>
+
+    <entity entity-name="ProductStorePaymentGlAccount" package="mchile">
+        <field name="productStoreId" type="id" is-pk="true"/>
+        <field name="paymentInstrumentEnumId" type="id" is-pk="true"/>
+        <field name="glAccountId" type="id"/>
+        <field name="defaultFullPayment" type="text-indicator" default="'Y'">
+            <description>Defines whether generally the payment is for the full amount (no change required).</description></field>
+        <field name="voucherTaxReceiptType" type="id">
+            <description>If , the payment amount is valid as tax receipt. If null, an external TaxDocument should be issued for the payment.</description></field>
+        <field name="allowsHandingCashChange" type="text-indicator" default="'Y'"/>
+        <relationship type="one" title="PaymentInstrument" related="moqui.basic.Enumeration">
+            <key-map field-name="paymentInstrumentEnumId" related="enumId"/>
+        </relationship>
+        <relationship type="one" related="mantle.product.store.ProductStore"/>
+        <relationship type="one" related="mantle.ledger.account.GlAccount"/>
+    </entity>
+
+    <entity entity-name="TillShift" package="mchile">
+        <field name="tillShiftId" type="id" is-pk="true"/>
+        <field name="productStoreId" type="id"/>
+        <field name="tillSeqId" type="id"/>
+        <field name="statusId" type="id"/>
+        <field name="openBalance" type="number-decimal"/>
+        <field name="finAccountId" type="id"/>
+        <field name="closeBalanceExpected" type="number-decimal"/>
+        <field name="closeBalanceCounted" type="number-decimal" enable-audit-log="true"/>
+        <relationship type="one" related="mantle.account.financial.FinancialAccount">
+            <key-map field-name="finAccountId"/>
+        </relationship>
+        <relationship type="one" related="mantle.product.store.ProductStore"/>
+        <relationship type="one" related="mchile.Till"/>
+        <relationship type="one" related="moqui.basic.StatusItem" title="TillShift"/>
+        <seed-data>
+            <moqui.basic.StatusType statusTypeId="TillShift" description="Status of a single till shift"/>
+            <moqui.basic.StatusItem statusTypeId="TillShift" statusId="TillShiftPlanned" sequenceNum="10" description="Till Shift Planned"/>
+            <moqui.basic.StatusItem statusTypeId="TillShift" statusId="TillShiftOpen" sequenceNum="20" description="Till Open"/>
+            <moqui.basic.StatusItem statusTypeId="TillShift" statusId="TillShiftClosing" sequenceNum="30" description="Till Closing"/>
+            <moqui.basic.StatusItem statusTypeId="TillShift" statusId="TillShiftClosed" sequenceNum="40" description="Till Shift Closed"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="TillShiftPlanned" toStatusId="TillShiftOpen" transitionName="Open"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="TillShiftOpen" toStatusId="TillShiftClosing" transitionName="Stop"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="TillShiftClosing" toStatusId="TillShiftClosed" transitionName="Close"/>
+        </seed-data>
+    </entity>
+
+    <entity entity-name="TillShiftDocument" package="mchile">
+        <field name="tillShiftDocumentId" type="id" is-pk="true"/>
+        <field name="tillShiftId" type="id"/>
+        <field name="documentTypeEnumId" type="id"/>
+        <field name="documentRefNum" type="id"/>
+        <field name="statusId" type="id" enable-audit-log="true"/>
+        <field name="paymentId" type="id"/>
+        <field name="transferDocId" type="id"/>
+        <relationship type="one" related="mchile.TillShift"/>
+        <relationship type="one" related="moqui.basic.Enumeration" title="TillShiftDocumentType">
+            <key-map field-name="documentTypeEnumId" related="enumId"/>
+        </relationship>
+        <relationship type="one" related="mantle.account.payment.Payment"/>
+        <relationship type="one" related="moqui.basic.StatusItem" title="TillShiftDocument"/>
+        <relationship type="one" related="mchile.TransferDocument"/>
+        <seed-data>
+            <moqui.basic.EnumerationType enumTypeId="TillShiftDocumentType" description="Document held at tills and
+            cash registers until closing"/>
+            <moqui.basic.Enumeration enumTypeId="TillShiftDocumentType" enumId="TsdtCardVoucher" description="Credit/Debit card voucher"/>
+            <moqui.basic.Enumeration enumTypeId="TillShiftDocumentType" enumId="TsdtCheck" description="Check"/>
+            <moqui.basic.StatusType statusTypeId="TillShiftDocument" description="Documents collected during a till shift at a POS"/>
+            <moqui.basic.StatusItem statusTypeId="TillShiftDocument" statusId="TsdCollectedAtTill" sequenceNum="01" description="Collected at till"/>
+            <moqui.basic.StatusItem statusTypeId="TillShiftDocument" statusId="TsdDelivered" sequenceNum="02" description="Delivered"/>
+            <moqui.basic.StatusItem statusTypeId="TillShiftDocument" statusId="TsdPending" sequenceNum="03" description="Delivery not verified"/>
+            <moqui.basic.StatusItem statusTypeId="TillShiftDocument" statusId="TsdMissing" sequenceNum="04" description="Missing"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="TsdCollectedAtTill" toStatusId="TsdDelivered" transitionName="Deliver"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="TsdCollectedAtTill" toStatusId="TsdPending" transitionName="Defer Delivery"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="TsdCollectedAtTill" toStatusId="TsdMissing" transitionName="Lose"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="TsdDelivered" toStatusId="TsdMissing" transitionName="Lose"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="TsdDelivered" toStatusId="TsdPending" transitionName="Undeliver"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="TsdPending" toStatusId="TsdDelivered" transitionName="Deliver"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="TsdPending" toStatusId="TsdMissing" transitionName="Lose"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="TsdMissing" toStatusId="TsdPending" transitionName="Unlose"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="TsdMissing" toStatusId="TsdDelivered" transitionName="Find"/>
+        </seed-data>
+    </entity>
+    <!-- Entidad usable para depósitos -->
+    <entity entity-name="TransferDocument" package="mchile">
+        <field name="transferDocId" type="id" is-pk="true"/>
+        <field name="transferDocTypeId" type="id"/>
+        <field name="transferDocStatusId" type="id"/>
+        <field name="statusId" type="id" enable-audit-log="true"/>
+        <field name="externalDocumentId" type="id"/>
+        <field name="createdDate" type="date-time"/>
+        <field name="effectiveDate" type="date-time"/>
+        <field name="toPaymentMethodId" type="id"/>
+        <field name="amount" type="number-decimal"/>
+        <field name="currencyUomId" type="id"/>
+        <relationship type="one" related="moqui.basic.Enumeration" title="TransferDocumentType">
+            <key-map field-name="transferDocTypeId" related="enumId"/>
+        </relationship>
+        <relationship type="one" related="moqui.basic.StatusItem" title="TillShiftDocument"/>
+        <relationship type="one" related="mantle.account.method.PaymentMethod">
+            <key-map field-name="toPaymentMethodId" related="paymentMethodId"/>
+        </relationship>
+        <relationship type="one" related="moqui.basic.Uom" title="Currency">
+            <key-map field-name="currencyUomId" related="uomId"/>
+        </relationship>
+        <!--relationship type="many" related="mantle.account.method.BankAccountCheck" title="Check">
+            <key-map field-name="transferDocId" related="transferDocId"/>
+        </relationship-->
+        <seed-data>
+            <moqui.basic.EnumerationType enumTypeId="TransferDocumentType" description="Type of money transfer, like a bank deposit."/>
+            <moqui.basic.Enumeration enumTypeId="TransferDocumentType" enumId="TdtBankDeposit" description="Deposit to a Bank Account"/>
+            <moqui.basic.StatusType statusTypeId="TransferDocument" description="mchile.TransferDocument status type."/>
+            <moqui.basic.StatusItem statusTypeId="TransferDocument" statusId="TdInPlanning" sequenceNum="01" description="In Planning"/>
+            <moqui.basic.StatusItem statusTypeId="TransferDocument" statusId="TdInProgress" sequenceNum="02" description="In Progress"/>
+            <moqui.basic.StatusItem statusTypeId="TransferDocument" statusId="TdComplete" sequenceNum="03" description="Complete"/>
+            <moqui.basic.StatusItem statusTypeId="TransferDocument" statusId="TdReconciled" sequenceNum="04" description="Reconciled"/>
+        </seed-data>
+    </entity>
+
+    <entity entity-name="TransferDocumentItem" package="mchile">
+        <field name="transferDocId" type="id" is-pk="true"/>
+        <field name="itemSeqId" type="id" is-pk="true"/>
+        <field name="amount" type="number-decimal"/>
+        <field name="fromPaymentMethodId" type="id"/>
+        <field name="fromGlAccountId" type="id"/>
+        <relationship type="one" related="mantle.account.method.PaymentMethod">
+            <key-map field-name="fromPaymentMethodId" related="paymentMethodId"/>
+        </relationship>
+    </entity>
+
+    <entity entity-name="PhysicalInventoryGroup" package="mchile">
+        <field name="physicalInventoryGroupId" type="id" is-pk="true"/>
+        <field name="fromDate" type="date-time" default="ec.user.nowTimestamp"/>
+        <field name="statusId" type="id"/>
+        <field name="thruDate" type="date-time"/>
+        <relationship type="one" related="moqui.basic.StatusItem" title="PhysicalInventoryGroup"/>
+        <seed-data>
+            <moqui.basic.StatusType statusTypeId="PhysicalInventoryGroup"/>
+            <moqui.basic.StatusItem statusTypeId="PhysicalInventoryGroup" statusId="TFPPIGInPlanning" description="In Planning"/>
+            <moqui.basic.StatusItem statusTypeId="PhysicalInventoryGroup" statusId="TFPPIGInProgress" description="In Progress"/>
+            <moqui.basic.StatusItem statusTypeId="PhysicalInventoryGroup" statusId="TFPPIGInValidation" description="In Validation"/>
+            <moqui.basic.StatusItem statusTypeId="PhysicalInventoryGroup" statusId="TFPPIGComplete" description="Complete"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="TFPPIGInPlanning" toStatusId="TFPPIGInProgress"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="TFPPIGInProgress" toStatusId="TFPPIGInValidation"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="TFPPIGInValidation" toStatusId="TFPPIGComplete"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="PIInPlanning" toStatusId="PIInProgress"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="PIInProgress" toStatusId="PIInValidation"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="PIInValidation" toStatusId="PIComplete"/>
+        </seed-data>
+    </entity>
+
+    <entity entity-name="PhysicalInventoryGroupMember" package="mchile">
+        <field name="physicalInventoryGroupId" type="id" is-pk="true"/>
+        <field name="physicalInventoryId" type="id" is-pk="true"/>
+    </entity>
+
+    <extend-entity entity-name="BankAccountCheck" package="mantle.account.method" cache="never">
+        <field name="transferDocId" type="id"/>
+        <relationship type="one" related="mchile.TransferDocument"/>
+    </extend-entity>
+
+    <extend-entity entity-name="Payment" package="mantle.account.payment" cache="never">
+        <field name="tbkAuthorizationCode" type="id"/>
+        <field name="tbkAuthorizedAmount" type="currency-amount"/>
+    </extend-entity>
+
+</entities>
