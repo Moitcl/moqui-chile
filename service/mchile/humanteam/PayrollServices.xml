@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+    <service verb="get" noun="CurrentPeriod">
+        <in-parameters>
+            <parameter name="activeOrgId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="currentPayrollTimePeriodId"/>
+            <parameter name="currentPayrollTimePeriod"/>
+            <parameter name="previousPayrollTimePeriodId"/>
+            <parameter name="previousPayrollTimePeriod"/>
+        </out-parameters>
+        <actions>
+            <log message="Searching for current period, activeOrgId: ${activeOrgId}"/>
+            <entity-find entity-name="mantle.party.time.TimePeriod" list="periods">
+                <econdition field-name="timePeriodTypeId" value="PayrollMonth"/>
+                <econdition field-name="partyId" from="activeOrgId"/>
+                <econdition field-name="isClosed" value="N" or-null="true"/>
+                <date-filter/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <log message="periods: ${periods}"/>
+            <set field="currentPayrollTimePeriod" from="periods.first"/>
+            <if condition="periods.size() > 1">
+                <set field="previousPayrollTimePeriod" from="period.get(1)"/>
+                <set field="previousPayrollTimePeriodId" from="previousPayrollTimePeriod.timePeriodId"/>
+            </if>
+            <set field="currentPayrollTimePeriodId" from="timePeriod?.timePeriodId"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="PeriodParameters">
+        <in-parameters>
+            <parameter name="activeOrgId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="currentPeriodEnd" type="Date"/>
+            <parameter name="previousPeriodEnd" type="Date"/>
+        </out-parameters>
+        <actions>
+            <service-call name="mchile.humanteam.PayrollServices.get#CurrentPeriod" in-map="context" out-map="context"/>
+            <entity-find entity-name="mchile.datacollect.DataSeriesValue" list="ufValues">
+                <econdition field-name="dataSeriesId" value="100504"/>
+                <econdition field-name="date" operator="greater-equals" from="currentPayrollTimePeriod.thruDate-1"/>
+                <econdition field-name="date" operator="less-equals" from="currentPayrollTimePeriod.thruDate"/>
+            </entity-find>
+            <set field="thruDate" from="currentPayrollTimePeriod.thruDate"/>
+            <log message="thruDate: ${thruDate.class}: ${thruDate}"/>
+            <log message="thruDate: ${thruDate.class}: ${thruDate-1}"/>
+            <log message="ufValues: ${ufValues}"/>
+            <entity-find-one entity-name="mchile.datacollect.DataSeriesValue" value-field="currentPeriodUFValue" auto-field-map="[dataSeriesId:100504, date:currentPayrollTimePeriod?.thruDate]"/>
+            <entity-find-one entity-name="mchile.datacollect.DataSeriesValue" value-field="previousPeriodUFValue" auto-field-map="[dataSeriesId:100504, date:previousPayrollTimePeriod?.thruDate]"/>
+            <set field="currentPeriodEnd" from="currentPayrollTimePeriod?.thruDate"/>
+            <log message="currentPeriodEnd: ${currentPeriodEnd}"/>
+            <log message="previousPeriodUFValue: ${previousPeriodUFValue}"/>
+            <log message="currentPeriodUFValue: ${currentPeriodUFValue}"/>
+        </actions>
+    </service>
+
+</services>
