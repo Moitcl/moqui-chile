@@ -26,6 +26,8 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
             <service-call name="mchile.CurrencyServices.get#LatestAvailableUfDate" out-map="context"/>
+            <set field="fromCurrencyUomId" value="CLF"/>
+            <set field="toCurrencyUomId" value="CLP"/>
             <if condition="date > lastAvailableUfPeriodThruDate"><return error="true" message="No se puede obtener un valor para la UF en la fecha ${date} en estos momentos"/></if>
             <entity-find entity-name="mchile.currency.Exchangerate" list="foundRate">
                 <econdition field-name="fromCurrencyUomId" value="CLF"/>
@@ -34,13 +36,30 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <if condition="!foundRate">
                 <log message="No exchangeRate found, try upstream"/>
-                <service-call name="mchile.CurrencyServices.fetch#UFValues" in-map="[fromDate:date, thruDate:date]"/>
+                <script>
+                    Calendar cal = Calendar.instance
+                    cal.setTimeInMillis(date.time)
+                    cal.set(Calendar.MILLISECOND, 0)
+                    cal.set(Calendar.SECOND, 0)
+                    cal.set(Calendar.MINUTE, 0)
+                    cal.set(Calendar.HOUR_OF_DAY, 0)
+                    fromDate = cal.time
+                    cal.add(Calendar.DAY_OF_MONTH, 1)
+                    cal.add(Calendar.MILLISECOND, -1)
+                    thruDate = cal.time
+                </script>
+                <service-call name="mchile.CurrencyServices.fetch#UFValues" in-map="[fromDate:fromDate, thruDate:thruDate]"/>
                 <entity-find entity-name="mchile.currency.Exchangerate" list="foundRate">
                     <econdition field-name="fromCurrencyUomId" value="CLF"/>
                     <econdition field-name="toCurrencyUomId" value="CLP"/>
                     <date-filter valid-date="date"/>
                 </entity-find>
             </if>
+            <entity-find entity-name="mchile.currency.Exchangerate" list="foundRate">
+                <econdition field-name="fromCurrencyUomId" value="CLF"/>
+                <econdition field-name="toCurrencyUomId" value="CLP"/>
+                <date-filter valid-date="date"/>
+            </entity-find>
             <if condition="!foundRate">
                 <return error="true" message="No se encontró valor para UF en fecha ${date}"/>
             </if>
@@ -52,8 +71,8 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="set" noun="UFValue">
         <in-parameters>
-            <parameter name="ufValue"/>
-            <parameter name="date"/>
+            <parameter name="ufValue" type="BigDecimal"/>
+            <parameter name="date" type="Date"/>
             <parameter name="force" type="Boolean" default="false"/>
         </in-parameters>
         <actions>
@@ -69,14 +88,14 @@ along with this software (see the LICENSE.md file). If not, see
                 cal.add(Calendar.MILLISECOND, -1)
                 thruDate = cal.time
             </script>
-            <log message="Set UFValue, from: ${fromDate}, thru: ${thruDate}"/>
+            <service-call name="store#mchile.currency.Exchangerate" in-map="[fromCurrencyUomId:'CLF', toCurrencyUomId:'CLP', fromDate:fromDate, thruDate:thruDate, factor:ufValue, exchangerateTypeEnumId:'MchXrtDefault']"/>
         </actions>
     </service>
 
     <service verb="fetch" noun="UFValues">
         <in-parameters>
-            <parameter name="fromDate" type="Timestamp"/>
-            <parameter name="thruDate" type="Timestamp"/>
+            <parameter name="fromDate" type="java.util.Date"/>
+            <parameter name="thruDate" type="java.util.Date"/>
         </in-parameters>
         <actions>
             <if condition="fromDate == null &amp;&amp; thruDate == null">
@@ -97,8 +116,8 @@ along with this software (see the LICENSE.md file). If not, see
                     <if condition="previousDataValue.date.time - ufDataValue.date.time > 1000*60*60*24">
                         <set field="fetchFromSource" from="true"/>
                     </if>
-                    <service-call name="mchile.CurrencyServices.set#UfValue" in-map="[date:ufDataValue.date, ufValue:ufDataValue.value]"/>
                 </if>
+                <service-call name="mchile.CurrencyServices.set#UFValue" in-map="[date:ufDataValue.date, ufValue:ufDataValue.value]"/>
                 <set field="previousDataValue" from="ufDataValue"/>
             </iterate>
             <!-- fetch missing values -->
