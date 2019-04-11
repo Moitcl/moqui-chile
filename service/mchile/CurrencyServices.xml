@@ -91,7 +91,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="date" operator="greater-equals" from="fromDate"/>
                 <econdition field-name="date" operator="less-equals" from="thruDate"/>
             </entity-find>
-            <set field="fetchFromSource" from="ufDataSeriesValues.size() > 0"/>
+            <set field="fetchFromSource" from="!ufDataSeriesValues"/>
             <iterate list="ufDataSeriesValues" entry="ufDataValue">
                 <if condition="previousDataValue">
                     <if condition="previousDataValue.date.time - ufDataValue.date.time > 1000*60*60*24">
@@ -111,17 +111,16 @@ along with this software (see the LICENSE.md file). If not, see
                     cal.set(Calendar.MINUTE, 0)
                     cal.set(Calendar.SECOND, 0)
                     cal.set(Calendar.MILLISECOND, 0)
-                    fromDate = cal.time
-                    fromDate = new java.sql.Date(2019,05,10)
+                    fromDateS = new java.sql.Date(cal.time.time)
                     cal.setTimeInMillis(thruDate.time)
                     cal.set(Calendar.DAY_OF_MONTH, 10)
                     cal.set(Calendar.HOUR_OF_DAY, 0)
                     cal.set(Calendar.MINUTE, 0)
                     cal.set(Calendar.SECOND, 0)
                     cal.set(Calendar.MILLISECOND, 0)
+                    cal.add(Calendar.MONTH, 1)
                     cal.add(Calendar.MILLISECOND, -1)
-                    thruDate = cal.time
-                    thruDate = new java.sql.Date(2019,06,9)
+                    thruDateS = new java.sql.Date(cal.time.time)
                 </script>
                 <entity-find entity-name="mchile.datacollect.DataSeriesFetchAction" list="previousAttempts">
                     <econdition field-name="dataSeriesId"/>
@@ -137,8 +136,7 @@ along with this software (see the LICENSE.md file). If not, see
                         <return/>
                     </if>
                 </if>
-                <log message="fetching from source between ${fromDate} and ${thruDate}"/>
-                <service-call name="mchile.CurrencyServices.fetch#UFValuesFromBCentral" in-map="[fromDate:fromDate, thruDate:thruDate]"/>
+                <service-call name="mchile.CurrencyServices.fetch#UFValuesFromBCentral" in-map="[fromDate:fromDateS, thruDate:thruDateS]"/>
             </if>
         </actions>
     </service>
@@ -163,10 +161,10 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <service-call name="mchile.CurrencyServices.get#LatestAvailableUfDate" out-map="context"/>
             <if condition="thruDate == null || lastAvailableUfPeriodThruDate &lt; thruDate">
-                <set field="thruDate" from="lastAvailableUfPeriodThruDate"/>
+                <set field="thruDate" from="new java.sql.Date(lastAvailableUfPeriodThruDate.time)"/>
             </if>
             <if condition="fromDate == null">
-                <set field="fromDate" from="lastAvailableUfPeriodFromDate"/>
+                <set field="fromDate" from="new java.sql.Date(lastAvailableUfPeriodFromDate.time)"/>
             </if>
             <!--<if condition="fromDate > thruDate"><return/></if>-->
             <service-call name="mchile.CurrencyServices.get#UfDataSeriesDetail" out-map="context"/>
