@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+    <service verb="get" noun="UFValue">
+        <in-parameters>
+            <parameter name="date" type="Timestamp"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="ufValue" type="BigDecimal"/>
+            <parameter name="fromDate"/>
+            <parameter name="thruDate"/>
+        </out-parameters>
+        <actions>
+            <service-call name="mchile.CurrencyServices.get#LatestAvailableUfDate" out-map="context"/>
+            <if condition="date > lastAvailableUfPeriodThruDate"><return error="true" message="No se puede obtener un valor para la UF en la fecha ${date} en estos momentos"/></if>
+            <entity-find entity-name="mchile.currency.Exchangerate" list="foundRate">
+                <econdition field-name="fromCurrencyUomId" value="CLF"/>
+                <econdition field-name="toCurrencyUomId" value="CLP"/>
+                <date-filter valid-date="date"/>
+            </entity-find>
+            <if condition="!foundRate">
+                <log message="No exchangeRate found, try upstream"/>
+                <service-call name="mchile.CurrencyServices.fetch#UFValues" in-map="[fromDate:date, thruDate:date]"/>
+                <entity-find entity-name="mchile.currency.Exchangerate" list="foundRate">
+                    <econdition field-name="fromCurrencyUomId" value="CLF"/>
+                    <econdition field-name="toCurrencyUomId" value="CLP"/>
+                    <date-filter valid-date="date"/>
+                </entity-find>
+            </if>
+            <if condition="!foundRate">
+                <return error="true" message="No se encontró valor para UF en fecha ${date}"/>
+            </if>
+            <set field="fromDate" from="foundRate.fromDate"/>
+            <set field="thruDate" from="foundRate.thruDate"/>
+            <set field="ufValue" from="foundRate.factor"/>
+        </actions>
+    </service>
+
+    <service verb="set" noun="UFValue">
+        <in-parameters>
+            <parameter name="ufValue"/>
+            <parameter name="date"/>
+            <parameter name="force" type="Boolean" default="false"/>
+        </in-parameters>
+        <actions>
+            <script>
+                def Calendar cal = Calendar.instance
+                cal.setTime(date)
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                fromDate = cal.time
+                cal.add(Calendar.DAY_OF_MONTH, 1)
+                cal.add(Calendar.MILLISECOND, -1)
+                thruDate = cal.time
+            </script>
+            <log message="Set UFValue, from: ${fromDate}, thru: ${thruDate}"/>
+        </actions>
+    </service>
+
+    <service verb="fetch" noun="UFValues">
+        <in-parameters>
+            <parameter name="fromDate" type="Timestamp"/>
+            <parameter name="thruDate" type="Timestamp"/>
+        </in-parameters>
+        <actions>
+            <if condition="fromDate == null &amp;&amp; thruDate == null">
+                <service-call name="mchile.CurrencyServices.get#LatestAvailableUfDate" out-map="context"/>
+                <set field="fromDate" from="lastAvailableUfPeriodFromDate"/>
+                <set field="thruDate" from="lastAvailableUfPeriodThruDate"/>
+            </if>
+            <service-call name="mchile.CurrencyServices.get#UfDataSeriesDetail" out-map="context"/>
+            <!-- get from existing dataseries values -->
+            <entity-find entity-name="mchile.datacollect.DataSeriesValue" list="ufDataSeriesValues">
+                <econdition field-name="dataSeriesId"/>
+                <econdition field-name="date" operator="greater-equals" from="fromDate"/>
+                <econdition field-name="date" operator="less-equals" from="thruDate"/>
+            </entity-find>
+            <set field="fetchFromSource" from="ufDataSeriesValues.size() > 0"/>
+            <iterate list="ufDataSeriesValues" entry="ufDataValue">
+                <if condition="previousDataValue">
+                    <if condition="previousDataValue.date.time - ufDataValue.date.time > 1000*60*60*24">
+                        <set field="fetchFromSource" from="true"/>
+                    </if>
+                    <service-call name="mchile.CurrencyServices.set#UfValue" in-map="[date:ufDataValue.date, ufValue:ufDataValue.value]"/>
+                </if>
+                <set field="previousDataValue" from="ufDataValue"/>
+            </iterate>
+            <!-- fetch missing values -->
+            <if condition="fetchFromSource">
+                <script>
+                    def Calendar cal = Calendar.instance
+                    cal.setTimeInMillis(fromDate.time)
+                    cal.set(Calendar.DAY_OF_MONTH, 10)
+                    cal.set(Calendar.HOUR_OF_DAY, 0)
+                    cal.set(Calendar.MINUTE, 0)
+                    cal.set(Calendar.SECOND, 0)
+                    cal.set(Calendar.MILLISECOND, 0)
+                    fromDate = cal.time
+                    fromDate = new java.sql.Date(2019,05,10)
+                    cal.setTimeInMillis(thruDate.time)
+                    cal.set(Calendar.DAY_OF_MONTH, 10)
+                    cal.set(Calendar.HOUR_OF_DAY, 0)
+                    cal.set(Calendar.MINUTE, 0)
+                    cal.set(Calendar.SECOND, 0)
+                    cal.set(Calendar.MILLISECOND, 0)
+                    cal.add(Calendar.MILLISECOND, -1)
+                    thruDate = cal.time
+                    thruDate = new java.sql.Date(2019,06,9)
+                </script>
+                <entity-find entity-name="mchile.datacollect.DataSeriesFetchAction" list="previousAttempts">
+                    <econdition field-name="dataSeriesId"/>
+                    <econdition field-name="fromDate"/>
+                    <econdition field-name="thruDate"/>
+                    <order-by field-name="-fetchDate"/>
+                </entity-find>
+                <if condition="previousAttempts">
+                    <set field="lastAttempt" from="previousAttempts.first"/>
+                    <set field="timeSinceLastAttempt" from="lastAttempt.fetchDate - ec.user.nowTimestamp"/>
+                    <if condition="timeSinceLastAttempt &lt; 1000*60*60">
+                        <log level="warn" message="Last attempt less than 1 hour ago, not attempting again"/>
+                        <return/>
+                    </if>
+                </if>
+                <log message="fetching from source between ${fromDate} and ${thruDate}"/>
+                <service-call name="mchile.CurrencyServices.fetch#UFValuesFromBCentral" in-map="[fromDate:fromDate, thruDate:thruDate]"/>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="get" noun="UfDataSeriesDetail">
+        <out-parameters>
+            <parameter name="ufDataSeries"/>
+            <parameter name="dataSeriesId"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one value-field="ufDataSeries" entity-name="mchile.datacollect.DataSeries" auto-field-map="[originSeriesId:'F073.UFF.PRE.Z.D', originPartyId:'CHLBCENTRAL', frequencyEnumId:'MchDsfDaily']"/>
+            <if condition="!ufDataSeries"><return error="true" message="Error: did not find UF data series!"/></if>
+            <set field="dataSeriesId" from="ufDataSeries.dataSeriesId"/>
+        </actions>
+    </service>
+
+    <service verb="fetch" noun="UFValuesFromBCentral">
+        <in-parameters>
+            <parameter name="fromDate" type="Date"/>
+            <parameter name="thruDate" type="Date"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mchile.CurrencyServices.get#LatestAvailableUfDate" out-map="context"/>
+            <if condition="thruDate == null || lastAvailableUfPeriodThruDate &lt; thruDate">
+                <set field="thruDate" from="lastAvailableUfPeriodThruDate"/>
+            </if>
+            <if condition="fromDate == null">
+                <set field="fromDate" from="lastAvailableUfPeriodFromDate"/>
+            </if>
+            <!--<if condition="fromDate > thruDate"><return/></if>-->
+            <service-call name="mchile.CurrencyServices.get#UfDataSeriesDetail" out-map="context"/>
+            <service-call name="mchile.datacollect.DataCollectServices.update#SeriesData" in-map="[fetchFromDate:fromDate, fetchThruDate:thruDate, dataSeriesId:dataSeriesId]"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="LatestAvailableUfDate">
+        <out-parameters>
+            <parameter name="lastAvailableUfPeriodFromDate" type="java.util.Date"/>
+            <parameter name="lastAvailableUfPeriodThruDate" type="java.util.Date"/>
+        </out-parameters>
+        <actions>
+            <script><![CDATA[
+                cal = Calendar.instance
+                if (cal.get(Calendar.DAY_OF_MONTH) > 9) {
+                    cal.add(Calendar.MONTH, 1)
+                }
+                cal.set(Calendar.DAY_OF_MONTH, 9)
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                lastAvailableUfPeriodThruDate = cal.time
+                cal.add(Calendar.MONTH, -1)
+                cal.add(Calendar.DAY_OF_MONTH, 1)
+                lastAvailableUfPeriodFromDate = cal.time
+            ]]></script>
+        </actions>
+    </service>
+
+</services>
