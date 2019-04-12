@@ -49,8 +49,22 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="activeOrgId"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="currentPeriodEnd" type="Date"/>
-            <parameter name="previousPeriodEnd" type="Date"/>
+            <parameter name="currentFromDate" type="Date"/>
+            <parameter name="currentThruDate" type="Date"/>
+            <parameter name="previousFromDate" type="Date"/>
+            <parameter name="previousThruDate" type="Date"/>
+            <parameter name="currentUfValue" type="BigDecimal"/>
+            <parameter name="currentUfTitle"/>
+            <parameter name="previousUfValue" type="BigDecimal"/>
+            <parameter name="previousUfTitle"/>
+            <parameter name="currentUtmValue" type="BigDecimal"/>
+            <parameter name="currentUtaValue" type="BigDecimal"/>
+            <parameter name="topeImponibleAfpUf" type="BigDecimal"/>
+            <parameter name="topeImponibleAfp" type="BigDecimal"/>
+            <parameter name="topeImponibleIpsUf" type="BigDecimal"/>
+            <parameter name="topeImponibleIps" type="BigDecimal"/>
+            <parameter name="topeImponibleAfcUf" type="BigDecimal"/>
+            <parameter name="topeImponibleAfc" type="BigDecimal"/>
         </out-parameters>
         <actions>
             <service-call name="mchile.humanteam.PayrollServices.get#CurrentPeriod" in-map="context" out-map="context"/>
@@ -59,16 +73,24 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="date" operator="greater-equals" from="currentPayrollTimePeriod.thruDate-1"/>
                 <econdition field-name="date" operator="less-equals" from="currentPayrollTimePeriod.thruDate"/>
             </entity-find>
-            <set field="thruDate" from="currentPayrollTimePeriod.thruDate"/>
-            <log message="thruDate: ${thruDate.class}: ${thruDate}"/>
-            <log message="thruDate: ${thruDate.class}: ${thruDate-1}"/>
-            <log message="ufValues: ${ufValues}"/>
-            <entity-find-one entity-name="mchile.datacollect.DataSeriesValue" value-field="currentPeriodUFValue" auto-field-map="[dataSeriesId:100504, date:currentPayrollTimePeriod?.thruDate]"/>
-            <entity-find-one entity-name="mchile.datacollect.DataSeriesValue" value-field="previousPeriodUFValue" auto-field-map="[dataSeriesId:100504, date:previousPayrollTimePeriod?.thruDate]"/>
-            <set field="currentPeriodEnd" from="currentPayrollTimePeriod?.thruDate"/>
-            <log message="currentPeriodEnd: ${currentPeriodEnd}"/>
-            <log message="previousPeriodUFValue: ${previousPeriodUFValue}"/>
-            <log message="currentPeriodUFValue: ${currentPeriodUFValue}"/>
+            <if condition="currentPayrollTimePeriod">
+                <set field="currentFromDate" from="currentPayrollTimePeriod?.fromDate"/>
+                <set field="currentThruDate" from="currentPayrollTimePeriod?.thruDate"/>
+                <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CLF', date:currentThruDate]" out-map="currentUf"/>
+                <set field="currentUfValue" from="currentUf.value"/>
+                <set field="currentUfTitle" from="ec.l10n.format(currentThruDate, '\'al\' dd \'de\' MMMM yyyy')"/>
+                <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CL_UTM', date:currentThruDate]" out-map="currentUtm"/>
+                <set field="currentUtmValue" from="currentUtm.value"/>
+                <set field="currentUtaValue" from="currentUtmValue*12"/>
+            </if>
+            <if condition="previousPayrollTimePeriod">
+                <set field="previousFromDate" from="previousPayrollTimePeriod.fromDate"/>
+                <set field="previousThruDate" from="previousPayrollTimePeriod.thruDate"/>
+                <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CLF', date:previousThruDate]" out-map="previousUf"/>
+                <set field="previousUfValue" from="previousUf.value"/>
+                <set field="previousUfTitle" from="ec.l10n.format(previousThruDate, '\'al\' dd \'de\' MMMM yyyy')"/>
+            </if>
+            <entity-find-one value-field="topeImponibleAfpUf" entity-name="mchile.humanteam.payroll.PayrollParameter" list=""
         </actions>
     </service>
 
