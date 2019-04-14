@@ -15,6 +15,62 @@ along with this software (see the LICENSE.md file). If not, see
 <services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
 
+    <service verb="create" noun="PayrollPeriod">
+        <in-parameters>
+            <parameter name="timePeriodTypeId"/>
+            <parameter name="date" type="Timestamp"/>
+            <parameter name="partyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="timePeriodId"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.party.time.TimePeriodType" value-field="timePeriodType"/>
+            <if condition="timePeriodType == null"><return error="true" message="Could not find time period type ${timePeriodTypeId}"/></if>
+            <!-- find existing time period -->
+            <entity-find entity-name="mantle.party.time.TimePeriod" list="existingList">
+                <econdition field-name="timePeriodTypeId" from="timePeriodTypeId"/>
+                <date-filter valid-date="date"/>
+            </entity-find>
+            <if condition="existingList">
+                <return error="true" message="Error creating Payroll Period of type ${timePeriodTypeId}, existing period for same date (${date}): ${existingList.first.timePeriodId}"/>
+            </if>
+            <!-- find from and thru dates -->
+            <script>
+                Calendar cal = Calendar.instance
+                cal.setTimeInMillis(date.time)
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.HOUR, 0)
+                if (timePeriodType.lengthUomId == 'TF_mon') {
+                    cal.set(Calendar.DAY_OF_MONTH, 1)
+                } else {
+                    ec.message.addError("Unhandled Uom: ${timePeriodType.lengthUomId}")
+                }
+                fromDate = new java.sql.Timestamp(cal.time.time)
+                cal.add(Calendar.MILLISECOND, -1)
+                previousThruDate = new java.sql.Timestamp(cal.time.time)
+                if (timePeriodType.lengthUomId == 'TF_mon') {
+                    cal.add(Calendar.MONTH, 1)
+                }
+                thruDate = cal.time
+            </script>
+            <!-- find previous by dates -->
+            <entity-find entity-name="mantle.party.time.TimePeriod" list="previousList">
+                <econdition field-name="timePeriodTypeId" from="timePeriodTypeId"/>
+                <date-filter valid-date="previousThruDate"/>
+            </entity-find>
+            <if condition="previousList"><then>
+                <log message="got previous: ${previousList}"/>
+                <service-call name="mantle.party.TimeServices.create#TimePeriod" in-map="[previousPeriodId:previousList.first.timePeriodId]"/>
+            </then><else>
+                <log message="no previous, fromDate: ${fromDate}, timePeriodTypeId: ${timePeriodTypeId}"/>
+                <service-call name="mantle.party.TimeServices.create#TimePeriod" in-map="[partyId:partyId, timePeriodTypeId:timePeriodTypeId, fromDate:fromDate]"/>
+            </else></if>
+        </actions>
+    </service>
+
     <service verb="get" noun="CurrentPeriod">
         <in-parameters>
             <parameter name="activeOrgId"/>
@@ -77,8 +133,8 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="date" operator="less-equals" from="currentPayrollTimePeriod.thruDate"/>
             </entity-find>
             <if condition="currentPayrollTimePeriod">
-                <set field="currentFromDate" from="currentPayrollTimePeriod?.fromDate"/>
-                <set field="currentThruDate" from="currentPayrollTimePeriod?.thruDate"/>
+                <set field="currentFromDate" from="new java.sql.Timestamp(currentPayrollTimePeriod.fromDate.time)"/>
+                <set field="currentThruDate" from="new java.sql.Timestamp(currentPayrollTimePeriod.thruDate.time)"/>
                 <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CLF', date:currentThruDate]" out-map="currentUf"/>
                 <set field="currentUfValue" from="currentUf.value"/>
                 <set field="currentUfTitle" from="ec.l10n.format(currentThruDate, '\'al\' dd \'de\' MMMM yyyy')"/>
@@ -86,14 +142,40 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="currentUtmValue" from="currentUtm.value"/>
                 <set field="currentUtaValue" from="currentUtmValue*12"/>
             </if>
-            <if condition="previousPayrollTimePeriod">
+            <if condition="previousPayrollTimePeriod"><then>
                 <set field="previousFromDate" from="previousPayrollTimePeriod.fromDate"/>
                 <set field="previousThruDate" from="previousPayrollTimePeriod.thruDate"/>
                 <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CLF', date:previousThruDate]" out-map="previousUf"/>
                 <set field="previousUfValue" from="previousUf.value"/>
                 <set field="previousUfTitle" from="ec.l10n.format(previousThruDate, '\'al\' dd \'de\' MMMM yyyy')"/>
-            </if>
-            <entity-find-one value-field="topeImponibleAfpUf" entity-name="mchile.humanteam.payroll.PayrollParameter" list=""
+            </then><else>
+                <set field="previousUfTitle" value=""/>
+            </else></if>
+
+            <entity-find entity-name="mchile.humanteam.payroll.PayrollParameter" list="parameterList">
+                <econdition field-name="payrollParameterTypeEnumId" value="MchPptTopeImponibleAfp"/>
+                <date-filter valid-date="currentFromDate"/>
+            </entity-find>
+            <if condition="parameterList">
+                <set field="topeImponibleAfpUf" from="parameterList.first.value"/>
+                <set field="topeImponibleAfp" from="topeImponibleAfpUf*currentUfValue"/></if>
+
+            <entity-find entity-name="mchile.humanteam.payroll.PayrollParameter" list="parameterList">
+                <econdition field-name="payrollParameterTypeEnumId" value="MchPptTopeImponibleIps"/>
+                <date-filter valid-date="currentFromDate"/>
+            </entity-find>
+            <if condition="parameterList">
+                <set field="topeImponibleIpsUf" from="parameterList.first.value"/>
+                <set field="topeImponibleIps" from="topeImponibleIpsUf*currentUfValue"/></if>
+
+            <entity-find entity-name="mchile.humanteam.payroll.PayrollParameter" list="parameterList">
+                <econdition field-name="payrollParameterTypeEnumId" value="MchPptTopeImponibleAfc"/>
+                <date-filter valid-date="currentFromDate"/>
+            </entity-find>
+            <if condition="parameterList">
+                <set field="topeImponibleAfcUf" from="parameterList.first.value"/>
+                <set field="topeImponibleAfc" from="topeImponibleAfcUf*currentUfValue"/></if>
+
         </actions>
     </service>
 
