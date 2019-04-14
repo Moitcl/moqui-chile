@@ -71,50 +71,41 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="get" noun="CurrentPeriod">
+    <service verb="get" noun="TimePeriod">
         <in-parameters>
             <parameter name="activeOrgId"/>
+            <parameter name="timePeriodId"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="currentPayrollTimePeriodId"/>
-            <parameter name="currentPayrollTimePeriod"/>
-            <parameter name="previousPayrollTimePeriodId"/>
-            <parameter name="previousPayrollTimePeriod"/>
+            <parameter name="payrollTimePeriodId"/>
+            <parameter name="payrollTimePeriod"/>
         </out-parameters>
         <actions>
-            <log message="Searching for current period, activeOrgId: ${activeOrgId}"/>
-            <entity-find entity-name="mantle.party.time.TimePeriod" list="periods">
+            <entity-find entity-name="mantle.party.time.TimePeriod" list="periods" limit="1">
+                <econdition field-name="timePeriodId" ignore-if-empty="true"/>
                 <econdition field-name="timePeriodTypeId" value="PayrollMonth"/>
                 <econdition field-name="partyId" from="activeOrgId"/>
-                <econdition field-name="isClosed" value="N" or-null="true"/>
-                <date-filter/>
                 <order-by field-name="-fromDate"/>
             </entity-find>
-            <log message="periods: ${periods}"/>
-            <set field="currentPayrollTimePeriod" from="periods.first"/>
-            <if condition="periods.size() > 1">
-                <set field="previousPayrollTimePeriod" from="period.get(1)"/>
-                <set field="previousPayrollTimePeriodId" from="previousPayrollTimePeriod.timePeriodId"/>
-            </if>
-            <set field="currentPayrollTimePeriodId" from="timePeriod?.timePeriodId"/>
+            <set field="payrollTimePeriod" from="periods.first"/>
+            <set field="payrollTimePeriodId" from="timePeriod?.timePeriodId"/>
         </actions>
     </service>
 
     <service verb="get" noun="PeriodParameters">
         <in-parameters>
             <parameter name="activeOrgId"/>
+            <parameter name="timePeriodId"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="currentFromDate" type="Date"/>
-            <parameter name="currentThruDate" type="Date"/>
-            <parameter name="previousFromDate" type="Date"/>
-            <parameter name="previousThruDate" type="Date"/>
-            <parameter name="currentUfValue" type="BigDecimal"/>
-            <parameter name="currentUfTitle"/>
+            <parameter name="periodFromDate" type="Date"/>
+            <parameter name="periodThruDate" type="Date"/>
+            <parameter name="periodUfValue" type="BigDecimal"/>
+            <parameter name="periodUfTitle"/>
             <parameter name="previousUfValue" type="BigDecimal"/>
             <parameter name="previousUfTitle"/>
-            <parameter name="currentUtmValue" type="BigDecimal"/>
-            <parameter name="currentUtaValue" type="BigDecimal"/>
+            <parameter name="periodUtmValue" type="BigDecimal"/>
+            <parameter name="periodUtaValue" type="BigDecimal"/>
             <parameter name="topeImponibleAfpUf" type="BigDecimal"/>
             <parameter name="topeImponibleAfp" type="BigDecimal"/>
             <parameter name="topeImponibleIpsUf" type="BigDecimal"/>
@@ -123,59 +114,60 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="topeImponibleAfc" type="BigDecimal"/>
         </out-parameters>
         <actions>
-            <service-call name="mchile.humanteam.PayrollServices.get#CurrentPeriod" in-map="context" out-map="context"/>
-            <if condition="!currentPayrollTimePeriod">
-                <return error="true" message="No current Payroll Time Period"/>
+            <service-call name="mchile.humanteam.PayrollServices.get#TimePeriod" in-map="context" out-map="context"/>
+            <if condition="!payrollTimePeriod">
+                <return error="true" message="Did not find Payroll Time Period"/>
             </if>
-            <entity-find entity-name="mchile.datacollect.DataSeriesValue" list="ufValues">
-                <econdition field-name="dataSeriesId" value="100504"/>
-                <econdition field-name="date" operator="greater-equals" from="currentPayrollTimePeriod.thruDate-1"/>
-                <econdition field-name="date" operator="less-equals" from="currentPayrollTimePeriod.thruDate"/>
-            </entity-find>
-            <if condition="currentPayrollTimePeriod">
-                <set field="currentFromDate" from="new java.sql.Timestamp(currentPayrollTimePeriod.fromDate.time)"/>
-                <set field="currentThruDate" from="new java.sql.Timestamp(currentPayrollTimePeriod.thruDate.time)"/>
-                <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CLF', date:currentThruDate]" out-map="currentUf"/>
-                <set field="currentUfValue" from="currentUf.value"/>
-                <set field="currentUfTitle" from="ec.l10n.format(currentThruDate, '\'al\' dd \'de\' MMMM yyyy')"/>
-                <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CL_UTM', date:currentThruDate]" out-map="currentUtm"/>
-                <set field="currentUtmValue" from="currentUtm.value"/>
-                <set field="currentUtaValue" from="currentUtmValue*12"/>
-            </if>
-            <if condition="previousPayrollTimePeriod"><then>
-                <set field="previousFromDate" from="previousPayrollTimePeriod.fromDate"/>
-                <set field="previousThruDate" from="previousPayrollTimePeriod.thruDate"/>
+            <if condition="payrollTimePeriod">
+                <set field="periodFromDate" from="new java.sql.Timestamp(payrollTimePeriod.fromDate.time)"/>
+                <set field="periodThruDate" from="new java.sql.Timestamp(payrollTimePeriod.thruDate.time)"/>
+                <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CLF', date:periodThruDate]" out-map="periodUf"/>
+                <set field="periodUfValue" from="periodUf.value"/>
+                <set field="periodUfTitle" from="ec.l10n.format(periodThruDate, '\'al\' dd \'de\' MMMM yyyy')"/>
+                <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CL_UTM', date:periodThruDate]" out-map="periodUtm"/>
+                <set field="periodUtmValue" from="periodUtm.value"/>
+                <set field="periodUtaValue" from="periodUtmValue*12"/>
+                <set field="previousThruDate" from="new java.sql.Timestamp(payrollTimePeriod.fromDate.time-10)"/>
                 <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CLF', date:previousThruDate]" out-map="previousUf"/>
                 <set field="previousUfValue" from="previousUf.value"/>
                 <set field="previousUfTitle" from="ec.l10n.format(previousThruDate, '\'al\' dd \'de\' MMMM yyyy')"/>
-            </then><else>
-                <set field="previousUfTitle" value=""/>
-            </else></if>
-
+            </if>
             <entity-find entity-name="mchile.humanteam.payroll.PayrollParameter" list="parameterList">
                 <econdition field-name="payrollParameterTypeEnumId" value="MchPptTopeImponibleAfp"/>
-                <date-filter valid-date="currentFromDate"/>
+                <date-filter valid-date="periodFromDate"/>
             </entity-find>
             <if condition="parameterList">
                 <set field="topeImponibleAfpUf" from="parameterList.first.value"/>
-                <set field="topeImponibleAfp" from="topeImponibleAfpUf*currentUfValue"/></if>
+                <set field="topeImponibleAfp" from="topeImponibleAfpUf*periodUfValue"/></if>
 
             <entity-find entity-name="mchile.humanteam.payroll.PayrollParameter" list="parameterList">
                 <econdition field-name="payrollParameterTypeEnumId" value="MchPptTopeImponibleIps"/>
-                <date-filter valid-date="currentFromDate"/>
+                <date-filter valid-date="periodFromDate"/>
             </entity-find>
             <if condition="parameterList">
                 <set field="topeImponibleIpsUf" from="parameterList.first.value"/>
-                <set field="topeImponibleIps" from="topeImponibleIpsUf*currentUfValue"/></if>
+                <!-- Valor para IPS se calcula con UF del último día del mes anterior -->
+                <set field="topeImponibleIps" from="topeImponibleIpsUf*previousUfValue"/></if>
 
             <entity-find entity-name="mchile.humanteam.payroll.PayrollParameter" list="parameterList">
                 <econdition field-name="payrollParameterTypeEnumId" value="MchPptTopeImponibleAfc"/>
-                <date-filter valid-date="currentFromDate"/>
+                <date-filter valid-date="periodFromDate"/>
             </entity-find>
             <if condition="parameterList">
                 <set field="topeImponibleAfcUf" from="parameterList.first.value"/>
-                <set field="topeImponibleAfc" from="topeImponibleAfcUf*currentUfValue"/></if>
+                <set field="topeImponibleAfc" from="topeImponibleAfcUf*periodUfValue"/></if>
+        </actions>
+    </service>
 
+    <service verb="get" noun="PayrollPeriodTypes">
+        <out-parameters>
+            <parameter name="payrollPeriodTypes"/>
+        </out-parameters>
+        <actions>
+            <entity-find entity-name="mantle.party.time.TimePeriodType" list="timePeriodTypeList">
+                <econdition field-name="periodPurposeEnumId" value="Payroll"/>
+            </entity-find>
+            <set field="payrollPeriodTypes" from="timePeriodTypeList.timePeriodTypeId"/>
         </actions>
     </service>
 
