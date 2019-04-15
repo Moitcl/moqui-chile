@@ -133,6 +133,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="trabajoPesadoTrabajador" type="BigDecimal"/>
             <parameter name="trabajoMenosPesadoEmpleador" type="BigDecimal"/>
             <parameter name="trabajoMenosPesadoTrabajador" type="BigDecimal"/>
+            <parameter name="taxRateList" type="List"/>
         </out-parameters>
         <actions>
             <service-call name="mchile.humanteam.PayrollServices.get#TimePeriod" in-map="context" out-map="context"/>
@@ -327,6 +328,69 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <if condition="parameterList">
                 <set field="trabajoMenosPesadoTrabajador" from="parameterList.first.value"/></if>
+
+            <service-call name="mchile.humanteam.PayrollServices.get#PayrollPeriodTaxRate" in-map="[timePeriodId:timePeriodId]" out-map="context"/>
+            <set field="taxRateList" from="taxRateListEV"/>
+            <!--
+            <iterate list="taxRateListEV" entry="taxRateEV">
+                <script>taxRateList.add()</script>
+            </iterate>
+            -->
+
+        </actions>
+    </service>
+
+    <service verb="get" noun="PayrollPeriodTaxRate">
+        <in-parameters><parameter name="timePeriodId" required="true"/></in-parameters>
+        <out-parameters><parameter name="taxRateListEV"/></out-parameters>
+        <actions>
+            <entity-find entity-name="mchile.humanteam.payroll.PersonTaxRate" list="taxRateListEV">
+                <econdition field-name="currencyUomId" value="CLP"/>
+                <econdition field-name="taxTypeEnumId" value="MchTtImpuestoSegundaCategoria"/>
+                <econdition field-name="timePeriodId"/>
+            </entity-find>
+            <if condition="!taxRateListEV">
+                <entity-find-one value-field="timePeriod" entity-name="mantle.party.time.TimePeriod"/>
+                <if condition="!timePeriod">
+                    <return error="true" message="Could not find time period with Id ${timePeriodId}"/>
+                </if>
+                <if condition="timePeriod.timePeriodTimeId != 'PayrollMonth'">
+                    <return error="true" message="Unsupported timePeriodTimeId ${timePeriod.timePeriodTimeId}"/>
+                </if>
+                <set field="taxTypeEnumId" value="MchTtImpuestoSegundaCategoria"/>
+                <set field="fromDate" from="new java.sql.Timestamp(timePeriod.fromDate.time)"/>
+                <entity-find entity-name="mchile.humanteam.payroll.PersonTaxRate" list="taxRateListUtm">
+                    <econdition field-name="currencyUomId" value="CL_UTM"/>
+                    <econdition field-name="taxTypeEnumId"/>
+                    <date-filter valid-date="fromDate"/>
+                    <order-by field-name="lowThreshold"/>
+                </entity-find>
+                <if condition="!taxRateListUtm">
+                    <return error="true" message="Could not find taxrate for type ${taxTypeEnumId}"/>
+                </if>
+                <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CL_UTM', date:fromDate]" out-map="utmMap"/>
+                <set field="utmValue" from="utmMap.value"/>
+                <log message="utmValue: ${utmValue}"/>
+                <set field="cumulatedAccruedAmount" from="0" type="BigDecimal"/>
+                <iterate list="taxRateListUtm" entry="taxRateUtm">
+                    <set field="lowThreshold" from="taxRateUtm.lowThreshold*utmValue"/>
+                    <set field="highThreshold" from="taxRateUtm.highThreshold?(taxRateUtm.highThreshold*utmValue):null"/>
+                    <set field="reduceAmount" from="(lowThreshold*taxRateUtm.taxRate/100)-cumulatedAccruedAmount"/>
+                    <if condition="highThreshold">
+                        <script>cumulatedAccruedAmount += (highThreshold-lowThreshold)*taxRateUtm.taxRate/100</script>
+                    </if>
+                    <set field="taxRateClp" from="[taxTypeEnumId:taxRateUtm.taxTypeEnumId, taxRate:taxRateUtm.taxRate, currencyUomId:'CLP', lowThreshold:lowThreshold,
+                                                   highThreshold:highThreshold, timePeriodId:timePeriodId, fromDate:timePeriod.fromDate, thruDate:timePeriod.thruDate,
+                                                   reduceAmount:reduceAmount]"/>
+                    <service-call name="create#mchile.humanteam.payroll.PersonTaxRate" in-map="taxRateClp"/>
+                </iterate>
+                <entity-find entity-name="mchile.humanteam.payroll.PersonTaxRate" list="taxRateListEV">
+                    <econdition field-name="currencyUomId" value="CLP"/>
+                    <econdition field-name="taxTypeEnumId" value="MchTtImpuestoSegundaCategoria"/>
+                    <econdition field-name="timePeriodId"/>
+                </entity-find>
+            </if>
+
         </actions>
     </service>
 
