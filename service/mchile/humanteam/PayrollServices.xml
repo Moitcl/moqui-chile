@@ -128,6 +128,13 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="tasaAfcCoFijoTrabajador" type="BigDecimal"/>
             <parameter name="tasaAfcCo11AEmpleador" type="BigDecimal"/>
             <parameter name="tasaAfcCo11ATrabajador" type="BigDecimal"/>
+            <parameter name="tasaSis" type="BigDecimal"/>
+            <parameter name="afpRateList" type="List"/>
+            <parameter name="asignacionFamiliarList" type="List"/>
+            <parameter name="trabajoPesadoEmpleador" type="BigDecimal"/>
+            <parameter name="trabajoPesadoTrabajador" type="BigDecimal"/>
+            <parameter name="trabajoMenosPesadoEmpleador" type="BigDecimal"/>
+            <parameter name="trabajoMenosPesadoTrabajador" type="BigDecimal"/>
         </out-parameters>
         <actions>
             <service-call name="mchile.humanteam.PayrollServices.get#TimePeriod" in-map="context" out-map="context"/>
@@ -267,6 +274,62 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="parameterList">
                 <set field="tasaAfcCo11ATrabajador" from="parameterList.first.value"/></if>
 
+            <!-- Cobro AFP y Tasa SiS -->
+            <entity-find entity-name="mchile.humanteam.payroll.PayrollParameter" list="parameterList">
+                <econdition field-name="payrollParameterTypeEnumId" value="MchPptTasaSis"/>
+                <date-filter valid-date="periodFromDate"/>
+            </entity-find>
+            <if condition="parameterList">
+                <set field="tasaSis" from="parameterList.first.value"/></if>
+            <entity-find entity-name="mchile.humanteam.payroll.AfpRate" list="afpRateListEV">
+                <date-filter valid-date="periodFromDate"/>
+                <order-by field-name="afpPartyId"/>
+            </entity-find>
+            <set field="afpRateList" from="[]"/>
+            <iterate entry="afpRate" list="afpRateListEV">
+                <entity-find-one entity-name="mantle.party.Organization" value-field="afpOrganization" auto-field-map="[partyId:afpRate.afpPartyId]"/>
+                <script>afpRateList.add([partyId:afpRate.afpPartyId, rate:afpRate.rate, organizationName:afpOrganization.organizationName])</script>
+            </iterate>
+            
+            <!-- Asignación Familiar -->
+            <entity-find entity-name="mchile.humanteam.payroll.AsignacionFamiliar" list="asignacionFamiliarListEV">
+                <econdition field-name="currencyUomId" value="CLP"/>
+                <date-filter valid-date="periodFromDate"/>
+            </entity-find>
+            <set field="asignacionFamiliarList" from="[]"/>
+            <iterate list="asignacionFamiliarListEV" entry="af">
+                <log message="processing entry ${af}"/>
+                <set field="requisitoRenta" from="(af.lowThreshold == 0? '': (ec.l10n.formatCurrency(af.lowThreshold, 'CLP') + ' &lt;= ')) + 'Renta' + (af.highThreshold? (' &lt;= ' + ec.l10n.formatCurrency(af.highThreshold, 'CLP')): '')"/>
+                <script>asignacionFamiliarList.add([tramo:af.tramo, monto:af.amount, requisitoRenta:requisitoRenta])</script>
+            </iterate>
+
+            <entity-find entity-name="mchile.humanteam.payroll.PayrollParameter" list="parameterList">
+                <econdition field-name="payrollParameterTypeEnumId" value="MchPptTrabajoPesadoEmpleador"/>
+                <date-filter valid-date="periodFromDate"/>
+            </entity-find>
+            <if condition="parameterList">
+                <set field="trabajoPesadoEmpleador" from="parameterList.first.value"/></if>
+
+            <entity-find entity-name="mchile.humanteam.payroll.PayrollParameter" list="parameterList">
+                <econdition field-name="payrollParameterTypeEnumId" value="MchPptTrabajoPesadoTrabajador"/>
+                <date-filter valid-date="periodFromDate"/>
+            </entity-find>
+            <if condition="parameterList">
+                <set field="trabajoPesadoTrabajador" from="parameterList.first.value"/></if>
+
+            <entity-find entity-name="mchile.humanteam.payroll.PayrollParameter" list="parameterList">
+                <econdition field-name="payrollParameterTypeEnumId" value="MchPptTrabajoMenosPesadoEmpleador"/>
+                <date-filter valid-date="periodFromDate"/>
+            </entity-find>
+            <if condition="parameterList">
+                <set field="trabajoMenosPesadoEmpleador" from="parameterList.first.value"/></if>
+
+            <entity-find entity-name="mchile.humanteam.payroll.PayrollParameter" list="parameterList">
+                <econdition field-name="payrollParameterTypeEnumId" value="MchPptTrabajoMenosPesadoTrabajador"/>
+                <date-filter valid-date="periodFromDate"/>
+            </entity-find>
+            <if condition="parameterList">
+                <set field="trabajoMenosPesadoTrabajador" from="parameterList.first.value"/></if>
         </actions>
     </service>
 
