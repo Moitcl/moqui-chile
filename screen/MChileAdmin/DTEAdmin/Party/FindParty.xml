@@ -1,0 +1,311 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a 
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd"
+        default-menu-include="false">
+
+    <transition name="editParty"><default-response url="../EditThirdParty"/></transition>
+    <transition name="findOrder"><default-response url="../../Order/FindOrder"/></transition>
+
+    <transition name="createPerson"><service-call name="mantle.party.PartyServices.create#Person"/>
+        <default-response url="../EditParty"/></transition>
+    <transition name="createPersonCustomer"><service-call name="mantle.party.PartyServices.create#PersonCustomer"/>
+        <default-response url="../EditParty"/></transition>
+    <transition name="createOrganization"><service-call name="mantle.party.PartyServices.create#Organization"/>
+        <default-response url="../EditParty"/></transition>
+
+    <transition name="createAccount"><service-call name="mantle.sales.AccountServices.create#Account"/>
+        <default-response url="../EditParty"/></transition>
+    <transition name="createContact"><service-call name="mantle.sales.AccountServices.create#Contact"/>
+        <default-response url="../EditParty"/></transition>
+
+    <transition-include name="searchPartyList" location="component://SimpleScreens/template/party/PartyForms.xml"/>
+    <transition-include name="getGeoCountryStates" location="component://SimpleScreens/template/party/PartyForms.xml"/>
+    <transition-include name="getPartyClassificationList" location="component://SimpleScreens/template/party/PartyTransitions.xml"/>
+
+    <actions>
+        <service-call name="mantle.party.PartyServices.search#Party" in-map="context" out-map="context"/>
+    </actions>
+    <widgets>
+        <container-dialog id="CreatePersonDialog" button-text="New Person">
+            <form-single name="CreatePersonForm" transition="createPerson">
+                <field name="roleTypeId"><default-field><hidden/></default-field></field>
+                <field name="firstName"><default-field><text-line size="30"/></default-field></field>
+                <field name="lastName"><default-field><text-line size="30"/></default-field></field>
+                <field name="submitButton"><default-field title="Create"><submit/></default-field></field>
+            </form-single>
+        </container-dialog>
+        <container-dialog id="CreatePersonCustDialog" button-text="New Person Customer">
+            <form-single name="CreatePersonCustForm" transition="createPersonCustomer">
+                <field name="roleTypeId"><default-field title="Role">
+                    <drop-down no-current-selected-key="Customer"><entity-options key="${roleTypeId}" text="${description}">
+                        <entity-find entity-name="mantle.party.RoleType"><order-by field-name="description"/></entity-find>
+                    </entity-options></drop-down>
+                </default-field></field>
+                <field name="partyClassificationId"><default-field title="Customer Class">
+                    <drop-down allow-empty="true" no-current-selected-key="CustConsumer">
+                        <entity-options key="${partyClassificationId}" text="${description}">
+                            <entity-find entity-name="mantle.party.PartyClassification">
+                                <econdition field-name="classificationTypeEnumId" value="PcltCustomer"/>
+                                <order-by field-name="description"/></entity-find></entity-options>
+                    </drop-down>
+                </default-field></field>
+                <field name="accountPartyId"><default-field title="Sales Account">
+                    <drop-down allow-empty="true">
+                        <entity-options key="${partyId}" text="PartyNameTemplate">
+                            <entity-find entity-name="mantle.party.PartyDetailAndRole">
+                                <econdition field-name="roleTypeId" value="Account"/>
+                                <econdition field-name="disabled" value="N" or-null="true"/>
+                                <order-by field-name="organizationName,firstName,lastName"/>
+                            </entity-find>
+                        </entity-options>
+                    </drop-down>
+                </default-field></field>
+
+                <field name="firstName"><default-field title="" tooltip="First Name"><text-line size="30"/></default-field></field>
+                <field name="lastName"><default-field title="" tooltip="Last Name"><text-line size="30"/></default-field></field>
+                <field name="emailAddress"><default-field title="Email"><text-line size="40"/></default-field></field>
+
+                <field name="countryCode"><default-field title="" tooltip="Country Code">
+                    <label text="+"/><text-line size="3" maxlength="3" default-value="${ec.user.getPreference('TelecomNumber.DefaultCountryCode') ?: '1'}"/></default-field></field>
+                <field name="areaCode"><default-field  title="" tooltip="Area Code">
+                    <label text="-"/><text-line size="3" maxlength="3"/></default-field></field>
+                <field name="contactNumber"><default-field  title="" tooltip="Phone Number">
+                    <label text="-"/><text-line size="8" maxlength="8"/></default-field></field>
+
+                <field name="address1"><default-field title="Address 1"><text-line size="30"/></default-field></field>
+                <field name="unitNumber"><default-field title="Unit"><text-line size="10"/></default-field></field>
+                <field name="address2"><default-field title="Address 2"><text-line size="30"/></default-field></field>
+                <field name="city"><default-field title="" tooltip="City"><text-line size="16"/></default-field></field>
+
+                <field name="countryGeoId"><default-field title="">
+                    <drop-down no-current-selected-key="USA">
+                        <entity-options key="${geoId}" text="${geoName}">
+                            <entity-find entity-name="moqui.basic.Geo" list="geoList">
+                                <econdition field-name="geoTypeEnumId" value="GEOT_COUNTRY"/>
+                                <order-by field-name="geoName"/></entity-find>
+                        </entity-options>
+                    </drop-down>
+                </default-field></field>
+                <field name="stateProvinceGeoId"><default-field title="">
+                    <drop-down><dynamic-options transition="getGeoCountryStates" value-field="geoId">
+                        <depends-on field="countryGeoId"/></dynamic-options></drop-down>
+                </default-field></field>
+                <field name="postalCode"><default-field title="" tooltip="Zip/Postal Code"><text-line size="8"/></default-field></field>
+                <field name="postalCodeExt"><default-field title="" tooltip="Zip/Postal Code Extension"><text-line size="4"/></default-field></field>
+
+                <field name="creditCardTypeEnumId"><default-field title="">
+                    <drop-down><entity-options key="${enumId}" text="${description}">
+                        <entity-find entity-name="moqui.basic.Enumeration">
+                            <econdition field-name="enumTypeId" value="CreditCardType"/>
+                            <order-by field-name="description"/></entity-find>
+                    </entity-options></drop-down>
+                </default-field></field>
+                <field name="cardNumber"><default-field title="" tooltip="Leave blank to not add credit card">
+                    <text-line size="16"/></default-field></field>
+                <field name="expireMonth">
+                    <default-field title=""><drop-down no-current-selected-key="${ec.l10n.format(ec.user.nowTimestamp, 'MM')}">
+                        <option key="01"/><option key="02"/><option key="03"/><option key="04"/><option key="05"/>
+                        <option key="06"/><option key="07"/><option key="08"/><option key="09"/><option key="10"/>
+                        <option key="11"/><option key="12"/>
+                    </drop-down></default-field>
+                </field>
+                <field name="expireYear">
+                    <default-field title=""><drop-down no-current-selected-key="${ec.l10n.format(ec.user.nowTimestamp, 'yyyy')}">
+                        <list-options list="org.moqui.util.StringUtilities.getYearList(10)"/></drop-down></default-field>
+                </field>
+                <field name="paymentGatewayConfigId"><default-field title="Payment Gateway">
+                    <drop-down allow-empty="true">
+                        <entity-options key="${paymentGatewayConfigId}" text="${description}">
+                            <entity-find entity-name="mantle.account.method.PaymentGatewayConfig">
+                                <econdition field-name="paymentGatewayTypeEnumId" operator="not-equals" value="PgtTest"/>
+                                <order-by field-name="description"/></entity-find>
+                        </entity-options>
+                    </drop-down>
+                </default-field></field>
+
+                <field name="submitButton"><default-field title="Create"><submit/></default-field></field>
+
+                <field-layout>
+                    <field-ref name="roleTypeId"/>
+                    <field-ref name="partyClassificationId"/>
+                    <field-ref name="accountPartyId"/>
+                    <field-row-big title="Name"><field-ref name="firstName"/>
+                        <field-ref name="lastName"/></field-row-big>
+
+                    <field-ref name="emailAddress"/>
+                    <field-row-big title="Phone"><field-ref name="countryCode"/><field-ref name="areaCode"/>
+                        <field-ref name="contactNumber"/></field-row-big>
+
+                    <field-row><field-ref name="address1"/><field-ref name="unitNumber"/></field-row>
+                    <field-ref name="address2"/>
+                    <field-row-big title="City/Zip"><field-ref name="city"/>
+                        <field-ref name="postalCode"/><field-ref name="postalCodeExt"/></field-row-big>
+                    <field-row-big title="Country/State"><field-ref name="countryGeoId"/>
+                        <field-ref name="stateProvinceGeoId"/></field-row-big>
+
+                    <field-row-big title="Card Number"><field-ref name="creditCardTypeEnumId"/>
+                        <field-ref name="cardNumber"/></field-row-big>
+                    <field-row-big title="Expire Date"><field-ref name="expireMonth"/>
+                        <field-ref name="expireYear"/></field-row-big>
+                    <field-ref name="paymentGatewayConfigId"/>
+
+                    <field-ref name="submitButton"/>
+                </field-layout>
+            </form-single>
+        </container-dialog>
+
+        <!--container-dialog id="CreateOrganizationDialog" button-text="New Organization">
+            <form-single name="CreateOrganizationForm" transition="createOrganization">
+                <field name="roleTypeId"><default-field><hidden/></default-field></field>
+                <field name="organizationName"><default-field><text-line size="60"/></default-field></field>
+                <field name="submitButton"><default-field title="Create"><submit/></default-field></field>
+            </form-single>
+        </container-dialog-->
+
+        <!--container-dialog id="CreateAccountDialog" button-text="New Sales Account">
+            <form-single name="CreateAccountForm" transition="createAccount">
+                <field name="organizationName"><default-field><text-line size="60"/></default-field></field>
+                <field name="parentAccountPartyId"><default-field title="Parent Sales Account"><drop-down allow-empty="true">
+                    <dynamic-options transition="searchPartyList" server-search="true" min-length="2" parameter-map="[roleTypeId:'Account']"/>
+                </drop-down></default-field></field>
+                <field name="submitButton"><default-field title="Create"><submit/></default-field></field>
+            </form-single>
+        </container-dialog-->
+        <!--container-dialog id="CreateContactDialog" button-text="New Sales Contact">
+            <form-single name="CreateContactForm" transition="createContact">
+                <field name="accountPartyId"><default-field title="Sales Account"><drop-down allow-empty="true">
+                    <dynamic-options transition="searchPartyList" server-search="true" min-length="2" parameter-map="[roleTypeId:'Account']"/>
+                </drop-down></default-field></field>
+                <field name="firstName"><default-field><text-line size="30"/></default-field></field>
+                <field name="lastName"><default-field><text-line size="30"/></default-field></field>
+                <field name="fromRoleTypeId"><default-field title="Role">
+                    <drop-down allow-empty="true"><entity-options key="${roleTypeId}" text="${description}">
+                        <entity-find entity-name="mantle.party.RoleGroupMemberAndType" cache="true">
+                            <econdition field-name="roleGroupEnumId" value="RgpAccountContact"/>
+                            <order-by field-name="description"/></entity-find></entity-options></drop-down>
+                </default-field></field>
+                <field name="submitButton"><default-field title="Create"><submit/></default-field></field>
+            </form-single>
+        </container-dialog-->
+
+        <link url="https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-query-string-query.html#query-string-syntax"
+                url-type="plain" link-type="anchor" target-window="_blank" text="Search String Reference"/>
+        <form-single name="OuterSearchForm">
+            <field name="anyField"><default-field title="" tooltip="Matches whole words, use the asterisk (*) wildcard to match partial words; use field:term to search a specific field">
+                <text-line size="100"/></default-field></field>
+            <field name="submitButton"><default-field title="Search"><submit/></default-field></field>
+            <field-layout><field-row-big><field-ref name="anyField"/><field-ref name="submitButton"/></field-row-big></field-layout>
+        </form-single>
+
+        <form-list name="PartyListForm" list="documentList" skip-form="true" header-dialog="true">
+            <field name="anyField"><header-field><text-line size="80"/></header-field></field>
+
+            <field name="pseudoId">
+                <header-field title="ID" show-order-by="true"><text-line size="20"/></header-field>
+                <default-field><link url="editParty" text="${pseudoId}" link-type="anchor"/></default-field>
+            </field>
+            <field name="idValue"><header-field title="Other ID"><text-line size="20"/></header-field></field>
+            <field name="gatewayCimId"><header-field title="CIM ID"><text-line size="20"/></header-field></field>
+
+            <field name="organizationName"><header-field><text-line size="40"/></header-field></field>
+            <field name="firstName"><header-field><text-line size="40"/></header-field></field>
+            <field name="lastName"><header-field><text-line size="40"/></header-field></field>
+
+            <field name="combinedName">
+                <header-field title="Name" show-order-by="true"><text-line size="40"/></header-field>
+                <default-field><link url="editParty" text="${combinedName}" link-type="anchor"/></default-field>
+            </field>
+            <field name="username">
+                <header-field show-order-by="true"><text-line size="20"/></header-field>
+                <default-field><display text="${userAccounts ? userAccounts*.username.join(', ') : ''}"/></default-field>
+            </field>
+
+            <field name="roleTypeId">
+                <header-field title="Role">
+                    <drop-down allow-empty="true"><entity-options key="${roleTypeId}" text="${description}">
+                        <entity-find entity-name="mantle.party.RoleType">
+                            <order-by field-name="description"/></entity-find>
+                    </entity-options></drop-down>
+                </header-field>
+                <default-field><display text="${roles ? roles*.role.join(', ') : ''}"/></default-field>
+            </field>
+
+            <field name="classificationTypeEnumId"><header-field title="Class Type">
+                <widget-template-include location="component://webroot/template/screen/BasicWidgetTemplates.xml#enumDropDown">
+                    <set field="enumTypeId" value="PartyClassificationType"/>
+                    <set field="allowEmpty" value="true"/></widget-template-include>
+            </header-field></field>
+            <field name="partyClassificationId">
+                <header-field title="Class">
+                    <drop-down allow-empty="true"><dynamic-options transition="getPartyClassificationList"
+                            value-field="partyClassificationId" label-field="description">
+                        <depends-on field="classificationTypeEnumId"/></dynamic-options></drop-down>
+                </header-field>
+                <default-field><display text="${classifications ? classifications*.class.join(', ') : ''}"/></default-field>
+            </field>
+
+            <field name="disabled">
+                <header-field><drop-down allow-empty="true"><option key="Y"/><option key="N"/></drop-down></header-field>
+                <default-field><display/></default-field>
+            </field>
+            <field name="hasDuplicates">
+                <header-field title="Dups"><drop-down allow-empty="true"><option key="Y"/><option key="N"/></drop-down></header-field>
+                <default-field><display/></default-field>
+            </field>
+
+            <field name="matches"><default-field>
+                <section-iterate name="MatchesSection" list="highlights" key="hlField" entry="hlList"><actions>
+                    <script><![CDATA[
+                        hlFieldDisplay = hlField
+                        if (hlFieldDisplay.contains('.')) hlFieldDisplay = hlFieldDisplay.substring(hlFieldDisplay.lastIndexOf('.') + 1)
+                        hlFieldDisplay = org.moqui.util.StringUtilities.camelCaseToPretty(hlFieldDisplay)
+                        hlListDisplay = hlList.collect({'"' + org.moqui.util.WebUtilities.encodeHtml(it.toString().replace('<em>', '__EMO_').replace('</em>', '__EMC_'))
+                                .replace('__EMO_', '<strong>').replace('__EMC_', '</strong>') + '"'})
+                    ]]></script>
+                </actions><widgets>
+                    <label text="${hlFieldDisplay}: ${hlListDisplay.join(', ')}" type="div" encode="false"/>
+                </widgets></section-iterate>
+            </default-field></field>
+
+            <field name="infoString"><header-field title="Email"><text-line size="40"/></header-field></field>
+            <field name="areaCode"><header-field><text-line size="5"/></header-field></field>
+            <field name="contactNumber"><header-field><text-line size="10"/></header-field></field>
+
+            <field name="address1"><header-field><text-line size="40"/></header-field></field>
+            <field name="city"><header-field><text-line size="30"/></header-field></field>
+            <field name="stateProvinceGeoId"><header-field title="State">
+                <drop-down allow-empty="true"><entity-options key="${toGeoId}" text="${geoName}">
+                    <entity-find entity-name="moqui.basic.GeoAssocAndToDetail">
+                        <econdition field-name="geoId" value="USA"/>
+                        <econdition field-name="geoAssocTypeEnumId" value="GAT_REGIONS"/>
+                        <order-by field-name="geoName"/>
+                    </entity-find>
+                </entity-options></drop-down>
+            </header-field></field>
+            <field name="postalCode"><header-field><text-line size="10"/></header-field></field>
+
+            <field name="submitButton">
+                <header-field title="Find"><submit/></header-field>
+                <default-field>
+                    <link url="findOrder" text="Sales Orders" parameter-map="[customerPartyId:partyId]" link-type="anchor"/>
+                    <link url="findOrder" text="Purchase Orders" parameter-map="[vendorPartyId:partyId]" link-type="anchor"/>
+                </default-field>
+            </field>
+        </form-list>
+
+        <container-row><row-col md="2" style="text-right"><label text="Current Search String" type="strong"/></row-col>
+            <row-col><label text="${queryString?:'No Current Search'}"/></row-col></container-row>
+    </widgets>
+</screen>

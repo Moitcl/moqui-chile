@@ -1179,6 +1179,8 @@ along with this software (see the LICENSE.md file). If not, see
                 <select-field field-name="nroResol"/>
             </entity-find-one>
 
+            <!-- TODO: Probar que funcione sin parametros en tabla -->
+
 
             <set field="idS" value="Doc"/>
 
@@ -1897,7 +1899,7 @@ return
             <parameter name="fonoContacto"/>
         </out-parameters>
         <actions>
-            <entity-find-one entity-name="mchile.dte.OrganizationDteParams" value-field="orgField">
+            <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="orgField">
                 <field-map field-name="partyId" from="partyId"/>
                 <select-field field-name="templateFactura"/>
                 <select-field field-name="templateBoleta"/>
@@ -2400,10 +2402,13 @@ return
                 <!-- Organizacion -->
                 <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField"/>
                 <set field="rznSocReceptor" from="organizationField.organizationName"/>
-                <if condition="!organizationField.giro">
+
+                <!--if condition="!organizationField.giro">
                     <return error="true" message="Receptor no tiene giro"/>
-                </if>
-                <set field="giroReceptor" from="organizationField.giro"/>
+                </if-->
+                <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:toPartyId]" out-map="giroOutMap"/>
+                <set field="giroReceptor" from="giroOutMap.description"/>
+                <!--set field="giroReceptor" from="organizationField.giro"/-->
                 <!-- Obtención de contacto para impuestos en organización -->
                 <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
                               in-map="[partyId:partyId, postalContactMechPurposeId:'PostalTax']"/>
@@ -6257,5 +6262,31 @@ return
         </actions>
     </service>
 
+    <service verb="get" noun="GiroPrimario">
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="giroId"/>
+            <parameter name="description"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.PartyGiro" value-field="giroField">
+                <field-map field-name="partyId" from="partyId"/>
+                <field-map field-name="isPrimary" value="true"/>
+            </entity-find-one>
+            <if condition="!giroField"><then>
+                <entity-find-one entity-name="mchile.dte.PartyGiro" value-field="giroField">
+                    <field-map field-name="partyId" from="partyId"/>
+                </entity-find-one>
+                <if condition="!giroField">
+                    <return error="true" message="Receptor no tiene giro primario o giro registrado"/>
+                </if>
+                </then>
+            </if>
+            <set field="giroId" from="giroField.giroId"/>
+            <set field="description" from="giroField.description"/>
+        </actions>
+    </service>
 
 </services>
