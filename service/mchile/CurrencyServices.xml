@@ -60,7 +60,6 @@ along with this software (see the LICENSE.md file). If not, see
                     cal.add(Calendar.MILLISECOND, -1)
                     thruDate = new Timestamp(cal.time.time)
                 </script>
-                <log message="fromDate: ${fromDate}, thruDate: ${thruDate}"/>
                 <service-call name="mchile.CurrencyServices.fetch#ExchangerateValues" in-map="[fromCurrencyUomId:fromCurrencyUomId, fromDate:fromDate, thruDate:thruDate]"/>
                 <entity-find entity-name="mchile.currency.Exchangerate" list="foundRate">
                     <econdition field-name="fromCurrencyUomId"/>
@@ -200,6 +199,9 @@ along with this software (see the LICENSE.md file). If not, see
             </then><else>
                 <!-- fetch from Moit -->
                 <service-call name="mchile.CurrencyServices.fetch#ExchangerateValuesFromMoit" in-map="[fromCurrencyUomId:fromCurrencyUomId, toCurrencyUomId:toCurrencyUomId, fromDate:fromDate, thruDate:thruDate]" out-map="moit"/>
+                <iterate entry="erv" list="moit.exchangeRateValues.exchangeRateValues">
+                    <service-call name="mchile.CurrencyServices.set#ExchangerateValue" in-map="[fromCurrencyUomId:erv['fromCurrencyUomId'], toCurrencyUomId:erv.toCurrencyUomId, date:new Timestamp(erv.fromDate), value:erv.factor]"/>
+                </iterate>
             </else></if>
         </actions>
     </service>
@@ -223,7 +225,7 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="fetch" noun="ExchangerateValuesFromMoit" type="remote-json-rpc" location="https://moqui.moit.cl/rest/s1/mchile/currency/exchangerateValues" method="get">
+    <service verb="fetch" noun="ExchangerateValuesFromMoit">
         <in-parameters>
             <parameter name="fromCurrencyUomId"/>
             <parameter name="toCurrencyUomId" default-value="CLP"/>
@@ -240,6 +242,14 @@ along with this software (see the LICENSE.md file). If not, see
                 <parameter name="factor" type="BigDecimal"/>
             </parameter>
         </out-parameters>
+        <actions>
+            <script><![CDATA[
+                parameters = [fromCurrencyUomId:fromCurrencyUomId, toCurrencyUomId:toCurrencyUomId, fromDate:fromDate.toString(), thruDate:thruDate.toString()]
+                restClient = ec.service.rest().uri('https://moqui.moit.cl/rest/s1/mchile/currency/exchangerateValues').method("GET").addBodyParameters(parameters)
+                restResponse = restClient.call()
+                exchangeRateValues = new groovy.json.JsonSlurper().parseText(restResponse.text())
+            ]]></script>
+        </actions>
     </service>
 
     <service verb="get" noun="ExchangerateValues">
