@@ -16,9 +16,10 @@
         <parameter name="transactionDate"/>
         <parameter name="amountUomId"/>
         <parameter name="glJournalId"/>
+        <parameter name="invoiceId"/>
         <actions>
             <service-call name="mchile.DTEServices.preLoad#Dte" in-map="[xml:xml, pdf:pdf, activeOrgId:activeOrgId, productMatch:productMatch, organizationPartyId:organizationPartyId,
-                    fiscalTaxDocumentAggrEnumId:fiscalTaxDocumentAggrEnumId]"/>
+                    fiscalTaxDocumentAggrEnumId:fiscalTaxDocumentAggrEnumId, invoiceId:invoiceId]"/>
         </actions>
         <default-response url="."/>
     </transition>
@@ -43,13 +44,17 @@
     </transition>
 
     <actions>
-        <entity-find entity-name="mchile.InvoiceSummaryAndFiscalTaxDocument" list="invoiceList">
-            <search-form-inputs default-order-by="-forInvoiceId"/>
+        <!--entity-find entity-name="mchile.InvoiceSummaryAndFiscalTaxDocument" list="invoiceList"-->
+        <entity-find entity-name="moitutils.InvoiceSummaryAndFiscalTaxDocument" list="invoiceList">
+            <!--search-form-inputs default-order-by="forInvoiceId"/-->
+            <search-form-inputs default-order-by="-invoiceDate"/>
             <econdition field-name="invoiceTypeEnumId" value="InvoiceSales"/>
             <econdition field-name="statusId" operator="not-equals" value="InvoiceCancelled"/>
             <econdition field-name="fiscalTaxDocumentId" operator="is-null"/>
             <econdition field-name="toPartyId" operator="equals" from="activeOrgId"/>
+            <order-by field-name="-invoiceDate"/>
         </entity-find>
+        <log message="Lista: $invoiceList" level="warn"/>
     </actions>
     <widgets>
 
@@ -103,6 +108,7 @@
             </form-single>
         </container-dialog>
 
+        <!-- Eliminado: orden requiere tener items para colocarla -->
         <container-dialog id="LoadDtDialog" button-text="Ingresar Factura No Electrónica">
             <form-single name="LoadDtForm" transition="loadDt">
                 <field name="activeOrgId"><default-field><hidden/></default-field></field>
@@ -256,8 +262,10 @@
                     <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField">
                         <field-map field-name="partyId" from="fromPartyId"/>
                     </entity-find-one>
+                    <log level="warn" message="from: $fromPartyId - to: $toPartyId"/>
                     <set field="rznSocReceptor" from="organizationField.organizationName"/>
-                    <set field="giroReceptor" from="organizationField.giro"/>
+                    <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:toPartyId]" out-map="giroOutMap"/>
+                    <set field="giroReceptor" from="giroOutMap.description"/>
                     <!-- Obtención de contacto en organización -->
                     <entity-find-one entity-name="mantle.party.PartyRelationship" value-field="relationField">
                         <field-map field-name="toPartyId" from="partyId"/>
@@ -352,9 +360,10 @@
             <field name="assocDteForm">
                 <default-field title="">
                     <container-dialog id="AssocDteDialog" button-text="Asociar XML de Factura Electrónica">
+                        <label text="Orden de cobro ${invoiceId}" type="h4"/>
                         <form-single name="AssocDteForm" transition="loadDte">
                             <field name="activeOrgId"><default-field><hidden/></default-field></field>
-                            <field name="invoiceId"><default-field title="Invoice"><display/></default-field></field>
+                            <field name="invoiceId"><default-field><hidden/></default-field></field>
                             <field name="xml">
                                 <default-field title="XML de Factura">
                                     <file size="30"/>
