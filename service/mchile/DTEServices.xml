@@ -4127,6 +4127,7 @@ return
             <set field="nmbEnvio" value=""/>
             <set field="fchRecep" value=""/>
             <set field="rutEmisor" value=""/>
+
             <set field="rutReceptor" value=""/>
             <set field="estadoRecepEnvEnumId" value=""/>
 
@@ -4488,6 +4489,26 @@ return
                 ByteArrayOutputStream outTemp = new ByteArrayOutputStream();
                 respuesta.save(outTemp, opts);
             </script>
+
+            <!-- Recuperación del email de destinatario de aceptación -->
+            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyAceptacionField">
+                <field-map field-name="idValue" from="rutEmisor"/>
+            </entity-find-one>
+
+            <if condition="!partyAceptacionField">
+                <return error="true" message="Organización a enviar aceptación no tiene RUT definido"/>
+            </if>
+
+            <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
+                          in-map="[partyId:partyAceptacionField.partyId, postalContactMechPurposeId:'PostalTax']"/>
+            <if condition="!contactOut.postalContactMechId">
+                <return error="true" message="Receptor de aceptación no tiene contacto tributario asignado"/>
+            </if>
+
+            <!--return error="true" message="PPP: $rutEmisor, partyId: $partyAceptacionField.partyId - $contactOut.emailAddress"/-->
+
+            <set field="emailAceptacion" from="contactOut.emailAddress"/>
+
             <!-- Recuperación de algunos datos desde FiscalTaxDocument -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="fiscalTaxDocumentField">
                 <field-map field-name="fiscalTaxDocumentId"/>
@@ -4516,7 +4537,8 @@ return
             <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" async="true">
                 <field-map field-name="fiscalTaxDocumentId" from="folioAceptacion"/>
                 <field-map field-name="emailTypeEnumId" from="emailTypeEnumId"/>
-                <field-map field-name="toAddresses" value="cherrera156@gmail.com"/>
+                <!--field-map field-name="toAddresses" value="cherrera@moit.cl"/-->
+                <field-map field-name="toAddresses" from="emailAceptacion"/>
                 <field-map field-name="emailTemplateId" value="Aceptacion"/>
                 <field-map field-name="bodyParameters" from="bodyParameters"/>
             </service-call>
