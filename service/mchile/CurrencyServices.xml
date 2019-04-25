@@ -52,15 +52,14 @@ along with this software (see the LICENSE.md file). If not, see
                     cal.set(Calendar.HOUR_OF_DAY, 0)
                     if (fromCurrencyUomId == 'CL_UTM')
                         cal.set(Calendar.DAY_OF_MONTH, 1)
-                    fromDate = cal.time
+                    fromDate = new Timestamp(cal.time.time)
                     if (fromCurrencyUomId == 'CLF')
                         cal.add(Calendar.DAY_OF_MONTH, 1)
                     else if (fromCurrencyUomId == 'CL_UTM')
                         cal.add(Calendar.MONTH, 1)
                     cal.add(Calendar.MILLISECOND, -1)
-                    thruDate = cal.time
+                    thruDate = new Timestamp(cal.time.time)
                 </script>
-                <log message="fromDate: ${fromDate}, thruDate: ${thruDate}"/>
                 <service-call name="mchile.CurrencyServices.fetch#ExchangerateValues" in-map="[fromCurrencyUomId:fromCurrencyUomId, fromDate:fromDate, thruDate:thruDate]"/>
                 <entity-find entity-name="mchile.currency.Exchangerate" list="foundRate">
                     <econdition field-name="fromCurrencyUomId"/>
@@ -116,8 +115,8 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="fetch" noun="ExchangerateValues">
         <in-parameters>
             <parameter name="fromCurrencyUomId" required="true"/>
-            <parameter name="fromDate" type="java.util.Date"/>
-            <parameter name="thruDate" type="java.util.Date"/>
+            <parameter name="fromDate" type="Timestamp"/>
+            <parameter name="thruDate" type="Timestamp"/>
             <parameter name="attemptUpstream" type="Boolean" default="true"/>
         </in-parameters>
         <actions>
@@ -142,7 +141,7 @@ along with this software (see the LICENSE.md file). If not, see
                 cal.set(Calendar.MINUTE, 0)
                 cal.set(Calendar.SECOND, 0)
                 cal.set(Calendar.MILLISECOND, 0)
-                fromDateS = new java.sql.Date(cal.time.time)
+                fromDateS = new Timestamp(cal.time.time)
                 cal.setTimeInMillis(thruDate.time)
                 if (cal.get(Calendar.DAY_OF_MONTH) > 9) {
                     cal.add(Calendar.MONTH, 1)
@@ -158,7 +157,7 @@ along with this software (see the LICENSE.md file). If not, see
                 cal.set(Calendar.MILLISECOND, 0)
                 cal.add(Calendar.MONTH, 1)
                 cal.add(Calendar.MILLISECOND, -1)
-                thruDateS = new java.sql.Date(cal.time.time)
+                thruDateS = new Timestamp(cal.time.time)
             </script>
             <if condition="ec.user.getPreference('mchile.bcentral.ws.username')"><then>
                 <service-call name="mchile.CurrencyServices.get#ExchangerateDataSeriesDetail" in-map="[currencyUomId:fromCurrencyUomId]" out-map="context"/>
@@ -199,7 +198,10 @@ along with this software (see the LICENSE.md file). If not, see
                 </if>
             </then><else>
                 <!-- fetch from Moit -->
-                <service-call name="mchile.CurrencyServices.fetch#ExchangerateValuesFromMoit" in-map="[currencyUomId:fromCurrencyUomId, toCurrencyUomId:toCurrencyUomId, fromDate:fromDateS, thruDate:thruDateS]"/>
+                <service-call name="mchile.CurrencyServices.fetch#ExchangerateValuesFromMoit" in-map="[fromCurrencyUomId:fromCurrencyUomId, toCurrencyUomId:toCurrencyUomId, fromDate:fromDate, thruDate:thruDate]" out-map="moit"/>
+                <iterate entry="erv" list="moit.exchangeRateValues.exchangeRateValues">
+                    <service-call name="mchile.CurrencyServices.set#ExchangerateValue" in-map="[fromCurrencyUomId:erv['fromCurrencyUomId'], toCurrencyUomId:erv.toCurrencyUomId, date:new Timestamp(erv.fromDate), value:erv.factor]"/>
+                </iterate>
             </else></if>
         </actions>
     </service>
@@ -214,7 +216,6 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
             <set field="dataseriesIdMap" from="[CLF:'F073.UFF.PRE.Z.D', CL_UTM:'F073.UTR.PRE.Z.M']"/>
-            <log message="looking up ${dataseriesIdMap[currencyUomId]}"/>
             <if condition="!dataseriesIdMap[currencyUomId]">
                 <return error="true" message="No se soporta Currency ${currencyUomId}"/>
             </if>
@@ -226,11 +227,28 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="fetch" noun="ExchangerateValuesFromMoit">
         <in-parameters>
-            <parameter name="currencyUomId"/>
+            <parameter name="fromCurrencyUomId"/>
+            <parameter name="toCurrencyUomId" default-value="CLP"/>
             <parameter name="fromDate" type="Date"/>
             <parameter name="thruDate" type="Date"/>
         </in-parameters>
+        <out-parameters>
+            <parameter name="exchangeRateValues" type="List">
+                <parameter name="fromCurrencyUomId"/>
+                <parameter name="toCurrencyUomId"/>
+                <parameter name="exchangeRateTypeEnumId"/>
+                <parameter name="fromDate" type="Timestamp"/>
+                <parameter name="thruDate" type="Timestamp"/>
+                <parameter name="factor" type="BigDecimal"/>
+            </parameter>
+        </out-parameters>
         <actions>
+            <script><![CDATA[
+                parameters = [fromCurrencyUomId:fromCurrencyUomId, toCurrencyUomId:toCurrencyUomId, fromDate:fromDate.toString(), thruDate:thruDate.toString()]
+                restClient = ec.service.rest().uri('https://moqui.moit.cl/rest/s1/mchile/currency/exchangerateValues').method("GET").addBodyParameters(parameters)
+                restResponse = restClient.call()
+                exchangeRateValues = new groovy.json.JsonSlurper().parseText(restResponse.text())
+            ]]></script>
         </actions>
     </service>
 
