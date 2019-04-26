@@ -18,9 +18,15 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="get" noun="EmploymentDisplayInfo">
         <in-parameters><parameter name="partyRelationshipId"/></in-parameters>
         <out-parameters>
-            <parameter name="employment"/>
-            <parameter name="employeeParty"/>
-            <parameter name="employerParty"/>
+            <parameter name="employment" type="Map"/>
+            <parameter name="employeeParty" type="Map"/>
+            <parameter name="employerParty" type="Map"/>
+            <parameter name="currentHealthInsuranceAffiliation" type="Map"/>
+            <parameter name="healthInsuranceAffiliationHistory" type="List"/>
+            <parameter name="healthInsuranceOrganizationNamesById" type="Map"/>
+            <parameter name="currentPensionFundAffiliation" type="Map"/>
+            <parameter name="pensionFundAffiliationHistory" type="List"/>
+            <parameter name="pensionFundOrganizationNamesById" type="Map"/>
         </out-parameters>
         <actions>
             <entity-find-one entity-name="mantle.humanres.employment.EmploymentAndRelationship" value-field="employment"/>
@@ -42,6 +48,44 @@ along with this software (see the LICENSE.md file). If not, see
                 <order-by field-name="-expireDate"/>
             </entity-find>
             <if condition="rutList"><service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:rutList.first.idValue]" out-map="employerParty"/></if>
+
+            <!-- Isapre -->
+            <entity-find entity-name="mchile.humanteam.payroll.EmployeeAffiliation" list="healthInsuranceAffiliationHistory">
+                <econdition field-name="employeePartyId" from="employeeParty.partyId"/>
+                <econdition field-name="affiliationTypeEnumId" value="MchCeaHealth"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <set field="healthInsuranceOrganizationNamesById" from="[:]"/>
+            <iterate list="healthInsuranceAffiliationHistory" entry="hiah">
+                <if condition="'CLF' != hiah.currencyUomId"><return error="true" message="Unsupported Currency ${hiah.currencyUomId} for Health Insurance Affiliation"/></if>
+                <if condition="!healthInsuranceOrganizationNamesById.keySet().contains(hiah.organizationPartyId)">
+                    <entity-find-one entity-name="mantle.party.PartyDetail" value-field="pd" auto-field-map="[partyId:hiah.organizationPartyId]"/>
+                    <script>healthInsuranceOrganizationNamesById.put(hiah.organizationPartyId, pd.organizationName)</script>
+                </if>
+            </iterate>
+            <if condition="healthInsuranceAffiliationHistory.size() > 0 &amp;&amp; ( healthInsuranceAffiliationHistory.first.thruDate == null || healthInsuranceAffiliationHistory.first.thruDate > ec.user.nowTimestamp)">
+                <set field="currentHealthInsuranceAffiliation" from="healthInsuranceAffiliationHistory.first"/>
+                <script>healthInsuranceAffiliationHistory.remove(currentPlanIsapre)</script>
+            </if>
+
+            <!-- Afp -->
+            <entity-find entity-name="mchile.humanteam.payroll.EmployeeAffiliation" list="pensionFundAffiliationHistory">
+                <econdition field-name="employeePartyId" from="employeeParty.partyId"/>
+                <econdition field-name="affiliationTypeEnumId" value="MchCeaPensionFund"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <set field="pensionFundOrganizationNamesById" from="[:]"/>
+            <iterate list="pensionFundAffiliationHistory" entry="pfah">
+                <if condition="!pensionFundOrganizationNamesById.keySet().contains(pfah.organizationPartyId)">
+                    <entity-find-one entity-name="mantle.party.PartyDetail" value-field="pd" auto-field-map="[partyId:pfah.organizationPartyId]"/>
+                    <script>pensionFundOrganizationNamesById.put(pfah.organizationPartyId, pd.organizationName)</script>
+                </if>
+            </iterate>
+            <if condition="pensionFundAffiliationHistory.size() > 0 &amp;&amp; ( pensionFundAffiliationHistory.first.thruDate == null || pensionFundAffiliationHistory.first.thruDate > ec.user.nowTimestamp)">
+                <set field="currentPensionFundAffiliation" from="pensionFundAffiliationHistory.first"/>
+                <script>pensionFundAffiliationHistory.remove(currentPlanIsapre)</script>
+            </if>
+
         </actions>
     </service>
 </services>
