@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+    <service verb="get" noun="EmploymentDisplayInfo">
+        <in-parameters><parameter name="partyRelationshipId"/></in-parameters>
+        <out-parameters>
+            <parameter name="employment"/>
+            <parameter name="employeeParty"/>
+            <parameter name="employerParty"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.humanres.employment.EmploymentAndRelationship" value-field="employment"/>
+            <if condition="employment == null"><return error="true" message="Could not find Employment ${partyRelationshipId}"/></if>
+            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="employeePartyEv" auto-field-map="[partyId:employment.fromPartyId]"/>
+            <set field="employeeParty" from="employeePartyEv.getMap()"/>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="rutList">
+                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+                <econdition field-name="partyId" from="employeeParty.partyId"/>
+                <order-by field-name="-expireDate"/>
+            </entity-find>
+            <if condition="rutList"><service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:rutList.first.idValue]" out-map="employeeParty"/></if>
+
+            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="employerPartyEv" auto-field-map="[partyId:employment.toPartyId]"/>
+            <set field="employerParty" from="employerPartyEv.getMap()"/>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="rutList">
+                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+                <econdition field-name="partyId" from="employerParty.partyId"/>
+                <order-by field-name="-expireDate"/>
+            </entity-find>
+            <if condition="rutList"><service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:rutList.first.idValue]" out-map="employerParty"/></if>
+        </actions>
+    </service>
+</services>
