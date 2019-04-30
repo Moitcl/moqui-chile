@@ -143,25 +143,24 @@ along with this software (see the LICENSE.md file). If not, see
             </parameter>
         </out-parameters>
         <actions>
-            <set field="locale" from="new Locale('en_US')"/>
+            <set field="locale" from="new Locale('en','US')"/>
             <service-call name="mchile.humanteam.PayrollServices.get#TimePeriod" in-map="context" out-map="context"/>
             <if condition="!timePeriod">
                 <return error="true" message="Did not find Payroll Time Period"/>
             </if>
-            <if condition="timePeriod">
-                <set field="periodFromDate" from="new java.sql.Timestamp(timePeriod.fromDate.time)"/>
-                <set field="periodThruDate" from="new java.sql.Timestamp(timePeriod.thruDate.time)"/>
-                <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CLF', date:periodThruDate]" out-map="periodUf"/>
-                <set field="periodUfValue" from="periodUf.value"/>
-                <set field="periodUfTitle" from="ec.l10n.format(periodThruDate, '\'al\' dd \'de\' MMMM yyyy')"/>
-                <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CL_UTM', date:periodThruDate]" out-map="periodUtm"/>
-                <set field="periodUtmValue" from="periodUtm.value"/>
-                <set field="periodUtaValue" from="periodUtmValue*12"/>
-                <set field="previousThruDate" from="new java.sql.Timestamp(timePeriod.fromDate.time-10)"/>
-                <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CLF', date:previousThruDate]" out-map="previousUf"/>
-                <set field="previousUfValue" from="previousUf.value"/>
-                <set field="previousUfTitle" from="ec.l10n.format(previousThruDate, '\'al\' dd \'de\' MMMM yyyy')"/>
-            </if>
+            <set field="periodFromDate" from="new java.sql.Timestamp(timePeriod.fromDate.time)"/>
+            <set field="periodThruDate" from="new java.sql.Timestamp(timePeriod.thruDate.time)"/>
+            <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CLF', date:periodThruDate]" out-map="periodUf"/>
+            <set field="periodUfValue" from="periodUf.value"/>
+            <set field="periodUfTitle" from="ec.l10n.format(periodThruDate, '\'al\' dd \'de\' MMMM yyyy')"/>
+            <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CL_UTM', date:periodThruDate]" out-map="periodUtm"/>
+            <set field="periodUtmValue" from="periodUtm.value"/>
+            <set field="periodUtaValue" from="periodUtmValue*12"/>
+            <set field="previousThruDate" from="new java.sql.Timestamp(timePeriod.fromDate.time-10)"/>
+            <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CLF', date:previousThruDate]" out-map="previousUf"/>
+            <set field="previousUfValue" from="previousUf.value"/>
+            <set field="previousUfTitle" from="ec.l10n.format(previousThruDate, '\'al\' dd \'de\' MMMM yyyy')"/>
+
             <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
                 <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
                 <econdition field-name="parameterName" value="TopeImponibleAfpCLF"/>
@@ -449,15 +448,111 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="calculate" noun="EmployeeAffiliationAdjustment">
-        <implements service="mantle.humanres.PayrollServices.calculate#Adjustment"/>
+    <service verb="calculate" noun="PensionFundAdjustment">
+        <in-parameters>
+            <parameter name="adjCalcServiceId"/>
+            <parameter name="description"/>
+            <parameter name="payrollPhaseEnumId"/>
+            <parameter name="taxablePayAmount" type="BigDecimal"/>
+            <parameter name="socialTaxablePayAmount" type="BigDecimal"/>
+            <parameter name="medicalTaxablePayAmount" type="BigDecimal"/>
+            <parameter name="taxableYtdIncome" type="BigDecimal"/>
+            <parameter name="socialTaxableYtdIncome" type="BigDecimal"/>
+            <parameter name="medicalTaxableYtdIncome" type="BigDecimal"/>
+            <parameter name="priorAdjustmentList" type="List"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="adjustmentList" type="List"/>
+        </out-parameters>
         <actions>
-            <entity-find-one entity-name="mantle.humanres.employment.EmploymentAndRelationship" value-field="employment"/>
-            <set field="employeePartyId" from="employment.fromPartyId"/>
-            <log message="calculating EmployeeAffiliationAdjustment for employeePartyId ${employeePartyId}, adjCalcServiceId: ${adjCalcServiceId}"/>
-            <entity-find entity-name="mchile.humanteam.payroll.EmployeeAffiliation" list="afpAffiliation"/>
-        </actions>
+            <set field="affiliationTypeEnumId" value="MchCeaPensionFund"/>
+            <entity-find entity-name="mchile.humanteam.payroll.EmployeeAffiliation" list="emplAffList">
+                <econdition field-name="fromDate" operator="less-equals" from="timePeriod.thruDate"/>
+                <econdition field-name="thruDate" operator="greater-equals" from="timePeriod.fromDate"/>
+                <econdition field-name="affiliationTypeEnumId"/>
+                <econdition field-name="employeePartyId"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <if condition="emplAffList.size() &lt; 1"><return error="true" message="Found no definition of Isapre for employee ${employeePartyId}"/></if>
+            <set field="emplAff" from="emplAff.first"/>
+            <service-call name="mchile.humanteam.PayrollServices.get#PeriodParameters" in-map="[timePeriodId:timePeriodId]" out-map="pp"/>
+            <set field="adjustmentBasisAmount" from="taxablePayAmount &lt;= pp.topeImponibleAfp ? taxablePayAmount : pp.topeImponibleAfp" type="BigDecimal"/>
+            <set field="payeePartyId" from="emplAff.organizationPartyId"/>
+            <entity-find-one entity-name="mantle.party.Organization" value-field="afpOrg"><field-map field-name="partyId" from="payeePartyId"/></entity-find-one>
 
+            <entity-find entity-name="mchile.humanteam.payroll.AfpRate" list="afpRateList">
+                <econdition field-name="afpPartyId" from="emplAff.organizationPartyId"/>
+                <date-filter valid-date="timePeriod.fromDate"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <if condition="!afpRateList"><return error="true" message="No AfpRate found for Afp ${emplAff.organizationPartyId} at ${timePeriod.fromDate}"/></if>
+            <set field="afpRate" from="afpRateList.first"/>
+            <set field="amount" from="adjustmentBasisAmount * afpRate.rate /100"/>
+            <script>
+                adjustmentList = priorAdjustmentList
+                adjustmentList.add([isEmployeePaid:'N', quantity:1, isTax:'N', isTaxable:'Y', isSocialTax:'N', isSocialTaxable:'Y', isMedicalTax:'N', isMedicalTaxable:'Y', rateBasisEnumId:'PrbsIncome', adjustmentApplies:true, payeeDueDays:13, itemTypeEnumId:'ItemClAfp', payeePartyId:payeePartyId, amount:amount, description:''])
+            </script>
+        </actions>
+    </service>
+
+    <service verb="calculate" noun="HealthAdjustment">
+        <in-parameters>
+            <parameter name="adjCalcServiceId"/>
+            <parameter name="description"/>
+            <parameter name="payrollPhaseEnumId"/>
+            <parameter name="taxablePayAmount" type="BigDecimal"/>
+            <parameter name="socialTaxablePayAmount" type="BigDecimal"/>
+            <parameter name="medicalTaxablePayAmount" type="BigDecimal"/>
+            <parameter name="taxableYtdIncome" type="BigDecimal"/>
+            <parameter name="socialTaxableYtdIncome" type="BigDecimal"/>
+            <parameter name="medicalTaxableYtdIncome" type="BigDecimal"/>
+            <parameter name="priorAdjustmentList" type="List"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="adjustmentList" type="List"/>
+        </out-parameters>
+        <actions>
+            <set field="employeePartyId" from="employment.fromPartyId"/>
+            <set field="affiliationTypeEnumId" value="MchCeaHealth"/>
+            <entity-find entity-name="mchile.humanteam.payroll.EmployeeAffiliation" list="emplAff">
+                <econdition field-name="fromDate" operator="less-equals" from="timePeriod.thruDate"/>
+                <econdition field-name="thruDate" operator="greater-equals" from="timePeriod.fromDate"/>
+                <econdition field-name="affiliationTypeEnumId"/>
+                <econdition field-name="employeePartyId"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <service-call name="mchile.humanteam.PayrollServices.get#PeriodParameters" in-map="[timePeriodId:timePeriodId]" out-map="pp"/>
+
+            <set field="adjustmentBasisAmount" from="medicalTaxablePayAmount &lt;= pp.topeImponibleAfp ? medicalTaxablePayAmount : pp.topeImponibleAfp" type="BigDecimal"/>
+            <set field="legalAmount" from="adjustmentBasisAmount * 7 / 100"/>
+            <set field="baseMap" from="[isEmployeePaid:'N', quantity:1, isTax:'N', isTaxable:'Y', isSocialTax:'N', isSocialTaxable:'Y', isMedicalTax:'N', isMedicalTaxable:'Y',
+                                            rateBasisEnumId:'PrbsIncome', adjustmentApplies:true, payeeDueDays:13, itemTypeEnumId:'ItemClIsapre']"/>
+            <set field="adjustmentList" from="priorAdjustmentList"/>
+            <if condition="emplAff.size() &lt; 1"><then>
+                <script>adjustmentList.add(baseMap+[payeePartyId:'CHLSSAL-FONASA', amount:legalAmount, itemTypeEnumId:'', description:'Cotización Salud obligatoria (Fonasa)'])</script>
+            </then><else>
+                <set field="payeePartyId" from="emplAff.first.organizationPartyId"/>
+                <entity-find-one entity-name="mantle.party.Organization" value-field="isapreOrg"><field-map field-name="partyId" from="payeePartyId"/></entity-find-one>
+                <set field="isapreName" from="isapreOrg.organizationName"/>
+                <if condition="emplAff.currencyUomId == 'CLF'"><then>
+                     <set field="totalAmount" from="pp.periodUfValue*emplAff.amount"/>
+                </then><else-if condition="emplAff.currencyUomId == 'CLP'">
+                    <set field="totalAmount" from="emplAff.amount"/>
+                </else-if><else>
+                    <return error="true" message="Unsupported currency while processing EmployeeAffiliation ${emplAff}"/>
+                </else></if>
+                <if condition="totalAmount > legalAmount"><then>
+                    <!-- Se agrega un adicional -->
+                    <script>adjustmentList.add(baseMap+[payeePartyId:payeePartyId, amount:legalAmount, description:'Cotización Salud obligatoria (Isapre ${isapreName})'])</script>
+                    <script>adjustmentList.add(baseMap+[payeePartyId:payeePartyId, amount:(totalAmount-legalAmount), description:'Cotización Salud adicional (Isapre ${isapreName})"'])</script>
+                </then><else-if condition="totalAmount &lt; legalAmount">
+                    <!-- Se paga el legalAmount y queda un excedente -->
+                    <script>adjustmentList.add(baseMap+[payeePartyId:payeePartyId, amount:legalAmount, description:'Cotización Salud obligatoria (Isapre ${isapreName})'])</script>
+                </else-if><else>
+                    <script>adjustmentList.add(baseMap+[payeePartyId:payeePartyId, amount:legalAmount, description:'Cotización Salud obligatoria (Isapre ${isapreName})'])</script>
+                </else></if>
+            </else></if>
+        </actions>
     </service>
 
 </services>
