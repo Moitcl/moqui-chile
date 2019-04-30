@@ -454,7 +454,6 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="adjustmentList" type="List"/>
         </out-parameters>
         <actions>
-            <log message="calculating PensionFundAdjustment for time period ${timePeriod?.timePeriodId}"/>
             <set field="affiliationTypeEnumId" value="MchCeaPensionFund"/>
             <set field="employeePartyId" from="employee.partyId"/>
             <entity-find entity-name="mchile.humanteam.payroll.EmployeeAffiliation" list="emplAffList">
@@ -481,9 +480,35 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="afpRate" from="afpRateList.first"/>
             <set field="amount" from="(adjustmentBasisAmount * afpRate.rate /100).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
             <set field="description" value="Cotización Previsional (AFP ${afpName})"/>
+
             <script>
                 adjustmentList = priorAdjustmentList
-                adjustmentList.add([isEmployeePaid:'N', quantity:1, isTax:'N', isTaxable:'Y', isSocialTax:'N', isSocialTaxable:'Y', isMedicalTax:'N', isMedicalTaxable:'Y', rateBasisEnumId:'PrbsIncome', adjustmentApplies:false, payeeDueDays:13, itemTypeEnumId:'ItemClAfp', payeePartyId:payeePartyId, amount:-amount, description:description])
+                adjustmentList.add([isEmployerPaid:'N', quantity:1, isTax:'N', isTaxable:'Y', isSocialTax:'N', isSocialTaxable:'Y', isMedicalTax:'N', isMedicalTaxable:'Y', rateBasisEnumId:'PrbsIncome', adjustmentApplies:false, payeeDueDays:13, itemTypeEnumId:'ItemClAfp', payeePartyId:payeePartyId, amount:-amount, description:description])
+            </script>
+
+            <!-- Afc -->
+            <set field="afcRateEmpleador" from="null"/>
+            <set field="afcRateTrabajador" from="null"/>
+            <set field="afcBase" from="taxablePayAmount > pp.topeImponibleAfc ? pp.topeImponibleAfc : taxablePayAmount"/>
+            <if condition="employment.employmentDurationTypeEnumId == 'MchedtPlazoIndefinido'"><then>
+                <set field="afcRateEmpleador" from="pp.tasaAfcCoIndefinidoEmpleador"/>
+                <set field="afcRateTrabajador" from="pp.tasaAfcCoIndefinidoTrabajador"/>
+            </then><else-if condition="employment.employmentDurationTypeEnumId == 'MchedtPlazoFijo'">
+                <set field="afcRateEmpleador" from="pp.tasaAfcCoFijoEmpleador"/>
+                <set field="afcRateTrabajador" from="pp.tasaAfcCoFijoTrabajador"/>
+            </else-if><else-if condition="employment.employmentDurationTypeEnumId == 'MchedtPlazoIndefinido11Anos'">
+                <set field="afcRateEmpleador" from="pp.tasaAfcCo11AEmpleador"/>
+                <set field="afcRateTrabajador" from="pp.tasaAfcCo11ATrabajador"/>
+            </else-if><else>
+                <return error="true" message="Unknown employmentDurationType ${empoymentDurationTypeEnumId}"/>
+            </else></if>
+            <set field="afcBaseMap" from="[quantity:1, isTax:'N', isTaxable:'Y', isSocialTax:'N', isSocialTaxable:'Y', isMedicalTax:'N', isMedicalTaxable:'Y',
+                                          rateBasisEnumId:'PrbsIncome', adjustmentApplies:true, payeeDueDays:13, payeePartyId:'CHLSPENS-AFC']"/>
+            <set field="afcAmountEmpleador" from="(afcBase*afcRateEmpleador/100).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
+            <set field="afcAmountTrabajador" from="(afcBase*afcRateTrabajador/100).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
+            <script>
+                if (afcAmountEmpleador > 0) adjustmentList.add(afcBaseMap+[isEmployerPaid:'Y', itemTypeEnumId:'ItemClAfcEmpleador', amount:-afcAmountEmpleador, description:'Seguro de Cesantía de cargo del empleador (AFC)'])
+                if (afcAmountTrabajador > 0) adjustmentList.add(afcBaseMap+[isEmployerPaid:'N', itemTypeEnumId:'ItemClAfcTrabajador', amount:-afcAmountTrabajador, description:'Seguro de Cesantía de cargo del trabajador (AFC)'])
             </script>
         </actions>
     </service>
@@ -507,7 +532,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="adjustmentBasisAmount" from="medicalTaxablePayAmount &lt;= pp.topeImponibleAfp ? medicalTaxablePayAmount : pp.topeImponibleAfp" type="BigDecimal"/>
             <set field="legalAmount" from="(adjustmentBasisAmount * 7 / 100).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
-            <set field="baseMap" from="[isEmployeePaid:'N', quantity:1, isTax:'N', isTaxable:'Y', isSocialTax:'N', isSocialTaxable:'Y', isMedicalTax:'N', isMedicalTaxable:'Y',
+            <set field="baseMap" from="[isEmployerPaid:'N', quantity:1, isTax:'N', isTaxable:'Y', isSocialTax:'N', isSocialTaxable:'Y', isMedicalTax:'N', isMedicalTaxable:'Y',
                                             rateBasisEnumId:'PrbsIncome', adjustmentApplies:true, payeeDueDays:13, itemTypeEnumId:'ItemClIsapre']"/>
             <set field="adjustmentList" from="priorAdjustmentList"/>
             <set field="emplAff" from="emplAffList.first"/>
@@ -517,6 +542,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="baseMap.payeePartyId" from="emplAff.organizationPartyId"/>
                 <set field="baseMap.description" value="Cotización Salud obligatoria (Isapre ${isapreName})"/>
                 <entity-find-one entity-name="mantle.party.Organization" value-field="isapreOrg"><field-map field-name="partyId" from="emplAff.organizationPartyId"/></entity-find-one>
+                <if condition="isapreOrg == null"><return error="true" message="Could not find organization for Affiliation ${emplAff}"/></if>
                 <set field="isapreName" from="isapreOrg.organizationName"/>
                 <if condition="emplAff.currencyUomId == 'CLF'"><then>
                     <set field="totalAmount" from="(pp.periodUfValue*emplAff.amount).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
