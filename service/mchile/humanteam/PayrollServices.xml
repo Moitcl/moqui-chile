@@ -15,9 +15,33 @@ along with this software (see the LICENSE.md file). If not, see
 <services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
 
+    <service verb="create" noun="NextPayrollPeriods">
+        <in-parameters>
+            <parameter name="date" type="Date"/>
+            <parameter name="timePeriodTypeId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="timePeriodIdList" type="List"/>
+        </out-parameters>
+        <actions>
+            <!--
+            <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="userOrgInfo"/>
+            -->
+            <entity-find entity-name="mantle.party.PartyRole" list="internalOrgList">
+                <econdition field-name="partyRoleTypeEnumId" value="OrgInternal"/>
+            </entity-find>
+            <set field="timePeriodIdList" from="[]"/>
+            <iterate entry="internalOrg" list="internalOrgList">
+                <service-call name="mchile.humanteam.PayrollServices.create#PayrollPeriod" in-map="[partyId:internalOrg.partyId]" out-map="out"/>
+                <script>timePeriodIdList.add(out.timePeriodId)</script>
+            </iterate>
+            <script>ec.message.addMessage("Created timePeriods ${timePeriodIdList}")</script>
+        </actions>
+    </service>
+
     <service verb="create" noun="PayrollPeriod">
         <in-parameters>
-            <parameter name="timePeriodTypeId"/>
+            <parameter name="timePeriodTypeId" default-value="PayrollMonth"/>
             <parameter name="date" type="Timestamp"/>
             <parameter name="partyId" required="true"/>
         </in-parameters>
@@ -60,13 +84,15 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- find previous by dates -->
             <entity-find entity-name="mantle.party.time.TimePeriod" list="previousList">
                 <econdition field-name="timePeriodTypeId" from="timePeriodTypeId"/>
+                <econdition field-name="partyId"/>
                 <date-filter valid-date="previousThruDate"/>
             </entity-find>
             <if condition="previousList"><then>
                 <service-call name="mantle.party.TimeServices.create#TimePeriod" in-map="[previousPeriodId:previousList.first.timePeriodId]"/>
             </then><else>
-                <service-call name="mantle.party.TimeServices.create#TimePeriod" in-map="[partyId:partyId, timePeriodTypeId:timePeriodTypeId, fromDate:fromDate]"/>
+                <service-call name="mantle.party.TimeServices.create#TimePeriod" in-map="[partyId:partyId, timePeriodTypeId:timePeriodTypeId, fromDate:fromDate]" out-map="context"/>
             </else></if>
+            <service-call name="mchile.humanteam.PayrollServices.get#PayrollPeriodTaxRate" in-map="[timePeriodId:timePeriodId]"/>
         </actions>
     </service>
 
