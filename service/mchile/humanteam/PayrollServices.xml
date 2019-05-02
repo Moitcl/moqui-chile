@@ -93,6 +93,35 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="get" noun="ParameterValue">
+        <in-parameters>
+            <parameter name="adjCalcServiceId" default-value="MChile.PayrollPeriodAdjustments"/>
+            <parameter name="parameterNameList" required="true" type="List"/>
+            <parameter name="validDate" type="Timestamp"/>
+            <parameter name="type" default-value="Number"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="valueMap" type="Map"/>
+        </out-parameters>
+        <actions>
+            <set field="locale" from="new Locale('en','US')"/>
+            <set field="valueMap" from="[:]"/>
+            <iterate entry="parameterName" list="parameterNameList">
+                <script>outName = parameterName.toLowerCase()[0] + parameterName.substring(1)</script>
+                <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
+                    <econdition field-name="adjCalcServiceId"/>
+                    <econdition field-name="parameterName"/>
+                    <date-filter valid-date="validDate?:ec.user.nowTimestamp"/>
+                </entity-find>
+                <if condition="parameterList.size() &lt; 1 || parameterList.first.parameterValue == null"><return error="true" message="Could not find parameter ${parameterName}"/></if>
+                <script>
+                    if (type == 'Number') valueMap.put(outName, ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale))
+                    else valueMap.put(parameterName, parameterList.first.parameterValue)
+                </script>
+            </iterate>
+        </actions>
+    </service>
+
     <service verb="get" noun="PeriodParameters">
         <in-parameters>
             <parameter name="activeOrgId"/>
@@ -109,35 +138,35 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="previousUfTitle"/>
             <parameter name="periodUtmValue" type="BigDecimal"/>
             <parameter name="periodUtaValue" type="BigDecimal"/>
-            <parameter name="topeImponibleAfpUf" type="BigDecimal"/>
+            <parameter name="topeImponibleAfpCLF" type="BigDecimal"/>
             <parameter name="topeImponibleAfp" type="BigDecimal"/>
-            <parameter name="topeImponibleIpsUf" type="BigDecimal"/>
+            <parameter name="topeImponibleIpsCLF" type="BigDecimal"/>
             <parameter name="topeImponibleIps" type="BigDecimal"/>
-            <parameter name="topeImponibleAfcUf" type="BigDecimal"/>
+            <parameter name="topeImponibleAfcCLF" type="BigDecimal"/>
             <parameter name="topeImponibleAfc" type="BigDecimal"/>
-            <parameter name="rentaMinimaGeneral" type="BigDecimal"/>
-            <parameter name="rentaMinimaMenores" type="BigDecimal"/>
-            <parameter name="rentaMinimaCasa" type="BigDecimal"/>
-            <parameter name="rentaMinimaNorem" type="BigDecimal"/>
-            <parameter name="topeApvMensualUf" type="BigDecimal"/>
+            <parameter name="rentaMinimaGeneralCLP" type="BigDecimal"/>
+            <parameter name="rentaMinimaMenoresCLP" type="BigDecimal"/>
+            <parameter name="rentaMinimaCasaCLP" type="BigDecimal"/>
+            <parameter name="rentaMinimaNoremCLP" type="BigDecimal"/>
+            <parameter name="topeApvMensualCLF" type="BigDecimal"/>
             <parameter name="topeApvMensual" type="BigDecimal"/>
-            <parameter name="topeApvAnualUf" type="BigDecimal"/>
+            <parameter name="topeApvAnualCLF" type="BigDecimal"/>
             <parameter name="topeApvAnual" type="BigDecimal"/>
-            <parameter name="topeDepositoConvenidoAnualUf" type="BigDecimal"/>
+            <parameter name="topeDepositoConvenidoAnualCLF" type="BigDecimal"/>
             <parameter name="topeDepositoConvenidoAnual" type="BigDecimal"/>
-            <parameter name="tasaAfcCoIndefinidoEmpleador" type="BigDecimal"/>
-            <parameter name="tasaAfcCoIndefinidoTrabajador" type="BigDecimal"/>
-            <parameter name="tasaAfcCoFijoEmpleador" type="BigDecimal"/>
-            <parameter name="tasaAfcCoFijoTrabajador" type="BigDecimal"/>
-            <parameter name="tasaAfcCo11AEmpleador" type="BigDecimal"/>
-            <parameter name="tasaAfcCo11ATrabajador" type="BigDecimal"/>
+            <parameter name="tasaAfcContratoIndefinidoEmpleador" type="BigDecimal"/>
+            <parameter name="tasaAfcContratoIndefinidoTrabajador" type="BigDecimal"/>
+            <parameter name="tasaAfcContratoFijoEmpleador" type="BigDecimal"/>
+            <parameter name="tasaAfcContratoFijoTrabajador" type="BigDecimal"/>
+            <parameter name="tasaAfcContrato11AnosEmpleador" type="BigDecimal"/>
+            <parameter name="tasaAfcContrato11AnosTrabajador" type="BigDecimal"/>
             <parameter name="tasaSis" type="BigDecimal"/>
+            <parameter name="tasaTrabajoPesadoEmpleador" type="BigDecimal"/>
+            <parameter name="tasaTrabajoPesadoTrabajador" type="BigDecimal"/>
+            <parameter name="tasaTrabajoMenosPesadoEmpleador" type="BigDecimal"/>
+            <parameter name="tasaTrabajoMenosPesadoTrabajador" type="BigDecimal"/>
             <parameter name="afpRateList" type="List"/>
             <parameter name="asignacionFamiliarList" type="List"/>
-            <parameter name="trabajoPesadoEmpleador" type="BigDecimal"/>
-            <parameter name="trabajoPesadoTrabajador" type="BigDecimal"/>
-            <parameter name="trabajoMenosPesadoEmpleador" type="BigDecimal"/>
-            <parameter name="trabajoMenosPesadoTrabajador" type="BigDecimal"/>
             <parameter name="taxRateListMap" type="List">
                 <parameter name="taxRateList" type="Map"/>
             </parameter>
@@ -161,149 +190,24 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="previousUfValue" from="previousUf.value"/>
             <set field="previousUfTitle" from="ec.l10n.format(previousThruDate, '\'al\' dd \'de\' MMMM yyyy')"/>
 
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="TopeImponibleAfpCLF"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="topeImponibleAfpUf" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/>
-                <set field="topeImponibleAfp" from="topeImponibleAfpUf*periodUfValue"/></if>
+            <service-call name="mchile.humanteam.PayrollServices.get#ParameterValue" in-map="[parameterNameList:['TopeImponibleAfpCLF', 'TopeImponibleIpsCLF',
+                          'TopeImponibleAfcCLF', 'RentaMinimaGeneralCLP', 'RentaMinimaMenoresCLP', 'RentaMinimaCasaCLP', 'RentaMinimaNoremCLP',
+                          'TopeApvMensualCLF', 'TopeApvAnualCLF', 'TopeDepositoConvenidoAnualCLF', 'TasaAfcContratoIndefinidoEmpleador',
+                          'TasaAfcContratoIndefinidoTrabajador', 'TasaAfcContratoFijoEmpleador', 'TasaAfcContratoFijoTrabajador',
+                          'TasaAfcContrato11AnosEmpleador', 'TasaAfcContrato11AnosTrabajador',  'TasaSis', 'TasaTrabajoPesadoEmpleador',
+                          'TasaTrabajoPesadoTrabajador', 'TasaTrabajoMenosPesadoEmpleador', 'TasaTrabajoMenosPesadoTrabajador'],
+                          validDate:periodFromDate]" out-map="pv"/>
+            <script>context.putAll(pv.valueMap)</script>
 
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="TopeImponibleIpsCLF"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="topeImponibleIpsUf" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/>
-                <!-- Valor para IPS se calcula con UF del último día del mes anterior -->
-                <set field="topeImponibleIps" from="topeImponibleIpsUf*previousUfValue"/></if>
+            <if condition="topeImponibleAfpCLF"><set field="topeImponibleAfp" from="topeImponibleAfpCLF*periodUfValue"/></if>
+            <!-- Valor para IPS se calcula con UF del último día del mes anterior -->
+            <if condition="topeImponibleIpsCLF"><set field="topeImponibleIps" from="topeImponibleIpsCLF*previousUfValue"/></if>
+            <if condition="topeImponibleAfcCLF"><set field="topeImponibleAfc" from="topeImponibleAfcCLF*periodUfValue"/></if>
+            <if condition="topeApvMensualCLF"><set field="topeApvMensual" from="topeApvMensualCLF*periodUfValue"/></if>
+            <if condition="topeApvAnualCLF"><set field="topeApvAnual" from="topeApvAnualCLF*periodUfValue"/></if>
+            <if condition="topeDepositoConvenidoAnualCLF"><set field="topeDepositoConvenidoAnual" from="topeDepositoConvenidoAnualCLF*periodUfValue"/></if>
 
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="TopeImponibleAfcCLF"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="topeImponibleAfcUf" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/>
-                <set field="topeImponibleAfc" from="topeImponibleAfcUf*periodUfValue"/></if>
-
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="RentaMinimaGeneralCLP"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="rentaMinimaGeneral" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/></if>
-
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="RentaMinimaMenoresCLP"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="rentaMinimaMenores" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/></if>
-
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="RentaMinimaCasaCLP"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="rentaMinimaCasa" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/></if>
-
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="RentaMinimaNoremCLP"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="rentaMinimaNorem" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/></if>
-
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="TopeApvMensualCLF"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="topeApvMensualUf" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/>
-                <set field="topeApvMensual" from="topeApvMensualUf*periodUfValue"/></if>
-
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="TopeApvAnualCLF"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="topeApvAnualUf" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/>
-                <set field="topeApvAnual" from="topeApvAnualUf*periodUfValue"/></if>
-
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="TopeDepositoConvenidoAnualCLF"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="topeDepositoConvenidoAnualUf" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/>
-                <set field="topeDepositoConvenidoAnual" from="topeDepositoConvenidoAnualUf*periodUfValue"/></if>
-
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="TasaAfcContratoIndefinidoEmpleador"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="tasaAfcCoIndefinidoEmpleador" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/></if>
-
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="TasaAfcContratoIndefinidoTrabajador"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="tasaAfcCoIndefinidoTrabajador" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/></if>
-
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="TasaAfcContratoFijoEmpleador"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="tasaAfcCoFijoEmpleador" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/></if>
-
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="TasaAfcContratoFijoTrabajador"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="tasaAfcCoFijoTrabajador" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/></if>
-
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="TasaAfcContrato11AnosEmpleador"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="tasaAfcCo11AEmpleador" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/></if>
-
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="TasaAfcContrato11AnosTrabajador"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="tasaAfcCo11ATrabajador" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/></if>
-
-            <!-- Cobro AFP y Tasa SiS -->
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="TasaSis"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="tasaSis" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/></if>
+            <!-- Cobro AFP -->
             <entity-find entity-name="mchile.humanteam.payroll.AfpRate" list="afpRateListEV">
                 <date-filter valid-date="periodFromDate"/>
                 <order-by field-name="afpPartyId"/>
@@ -324,38 +228,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="requisitoRenta" from="(af.periodMin == 0? '': (ec.l10n.formatCurrency(af.periodMin, 'CLP') + ' &lt;= ')) + 'Renta' + (af.periodMax? (' &lt;= ' + ec.l10n.formatCurrency(af.periodMax-1, 'CLP')): '')"/>
                 <script>asignacionFamiliarList.add([tramo:af.detailSeqId, monto:af.flatAmount, requisitoRenta:requisitoRenta])</script>
             </iterate>
-
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="TasaTrabajoPesadoEmpleador"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="trabajoPesadoEmpleador" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/></if>
-
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="TasaTrabajoPesadoTrabajador"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="trabajoPesadoTrabajador" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/></if>
-
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="TasaTrabajoMenosPesadoEmpleador"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="trabajoMenosPesadoEmpleador" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/></if>
-
-            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
-                <econdition field-name="parameterName" value="TasaTrabajoMenosPesadoTrabajador"/>
-                <date-filter valid-date="periodFromDate"/>
-            </entity-find>
-            <if condition="parameterList">
-                <set field="trabajoMenosPesadoTrabajador" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/></if>
 
             <service-call name="mchile.humanteam.PayrollServices.get#PayrollPeriodTaxRate" in-map="[timePeriodId:timePeriodId]" out-map="context"/>
             <set field="taxRateListMap" from="taxRateListMap"/>
@@ -491,14 +363,14 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="afcRateTrabajador" from="null"/>
             <set field="afcBase" from="taxablePayAmount > pp.topeImponibleAfc ? pp.topeImponibleAfc : taxablePayAmount"/>
             <if condition="employment.employmentDurationTypeEnumId == 'MchedtPlazoIndefinido'"><then>
-                <set field="afcRateEmpleador" from="pp.tasaAfcCoIndefinidoEmpleador"/>
-                <set field="afcRateTrabajador" from="pp.tasaAfcCoIndefinidoTrabajador"/>
+                <set field="afcRateEmpleador" from="pp.tasaAfcContratoIndefinidoEmpleador"/>
+                <set field="afcRateTrabajador" from="pp.tasaAfcContratoIndefinidoTrabajador"/>
             </then><else-if condition="employment.employmentDurationTypeEnumId == 'MchedtPlazoFijo'">
-                <set field="afcRateEmpleador" from="pp.tasaAfcCoFijoEmpleador"/>
-                <set field="afcRateTrabajador" from="pp.tasaAfcCoFijoTrabajador"/>
+                <set field="afcRateEmpleador" from="pp.tasaAfcContratoFijoEmpleador"/>
+                <set field="afcRateTrabajador" from="pp.tasaAfcContratoFijoTrabajador"/>
             </else-if><else-if condition="employment.employmentDurationTypeEnumId == 'MchedtPlazoIndefinido11Anos'">
-                <set field="afcRateEmpleador" from="pp.tasaAfcCo11AEmpleador"/>
-                <set field="afcRateTrabajador" from="pp.tasaAfcCo11ATrabajador"/>
+                <set field="afcRateEmpleador" from="pp.tasaAfcContrato11AnosEmpleador"/>
+                <set field="afcRateTrabajador" from="pp.tasaAfcContrato11AnosTrabajador"/>
             </else-if><else>
                 <return error="true" message="Unknown employmentDurationType ${empoymentDurationTypeEnumId}"/>
             </else></if>
