@@ -15,24 +15,30 @@ along with this software (see the LICENSE.md file). If not, see
 <services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
 
-    <service verb="create" noun="NextPayrollPeriods">
+    <service verb="create" noun="PayrollPeriods">
         <in-parameters>
             <parameter name="date" type="Date"/>
             <parameter name="timePeriodTypeId"/>
+            <parameter name="partyId" type="List"/>
         </in-parameters>
         <out-parameters>
             <parameter name="timePeriodIdList" type="List"/>
         </out-parameters>
         <actions>
-            <!--
+            <set field="orgIdList" from="partyId"/>
             <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="userOrgInfo"/>
-            -->
             <entity-find entity-name="mantle.party.PartyRole" list="internalOrgList">
-                <econdition field-name="partyRoleTypeEnumId" value="OrgInternal"/>
+                <econdition field-name="roleTypeId" value="OrgInternal"/>
+                <econdition field-name="partyId" operator="in" from="orgIdList" ignore-if-empty="true"/>
+                <econditions combine="or">
+                    <econdition field-name="partyId" from="ec.user.userAccount.partyId"/>
+                    <econdition field-name="partyId" operator="in" from="userOrgInfo.userOrgIds"/>
+                </econditions>
             </entity-find>
             <set field="timePeriodIdList" from="[]"/>
+            <set field="date" from="date ? new java.sql.Timestamp(date.time) : ec.user.nowTimestamp"/>
             <iterate entry="internalOrg" list="internalOrgList">
-                <service-call name="mchile.humanteam.PayrollServices.create#PayrollPeriod" in-map="[partyId:internalOrg.partyId]" out-map="out"/>
+                <service-call name="mchile.humanteam.PayrollServices.create#PayrollPeriod" in-map="[date:date, partyId:internalOrg.partyId]" out-map="out"/>
                 <script>timePeriodIdList.add(out.timePeriodId)</script>
             </iterate>
             <script>ec.message.addMessage("Created timePeriods ${timePeriodIdList}")</script>
@@ -139,7 +145,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <econdition field-name="parameterName"/>
                     <date-filter valid-date="validDate?:ec.user.nowTimestamp"/>
                 </entity-find>
-                <if condition="parameterList.size() &lt; 1 || parameterList.first.parameterValue == null"><return error="true" message="Could not find parameter ${parameterName}"/></if>
+                <if condition="parameterList.size() &lt; 1 || parameterList.first.parameterValue == null"><return error="true" message="Could not find parameter ${parameterName} at date ${validDate?:ec.user.nowTimestamp}"/></if>
                 <script>
                     if (type == 'Number') valueMap.put(outName, ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale))
                     else valueMap.put(parameterName, parameterList.first.parameterValue)
@@ -225,13 +231,13 @@ along with this software (see the LICENSE.md file). If not, see
                           validDate:periodFromDate]" out-map="pv"/>
             <script>context.putAll(pv.valueMap)</script>
 
-            <if condition="topeImponibleAfpCLF"><set field="topeImponibleAfp" from="topeImponibleAfpCLF*periodUfValue"/></if>
+            <if condition="topeImponibleAfpCLF"><set field="topeImponibleAfp" from="ec.l10n.roundCurrency(topeImponibleAfpCLF*periodUfValue, 'CLP')"/></if>
             <!-- Valor para IPS se calcula con UF del último día del mes anterior -->
-            <if condition="topeImponibleIpsCLF"><set field="topeImponibleIps" from="topeImponibleIpsCLF*previousUfValue"/></if>
-            <if condition="topeImponibleAfcCLF"><set field="topeImponibleAfc" from="topeImponibleAfcCLF*periodUfValue"/></if>
-            <if condition="topeApvMensualCLF"><set field="topeApvMensual" from="topeApvMensualCLF*periodUfValue"/></if>
-            <if condition="topeApvAnualCLF"><set field="topeApvAnual" from="topeApvAnualCLF*periodUfValue"/></if>
-            <if condition="topeDepositoConvenidoAnualCLF"><set field="topeDepositoConvenidoAnual" from="topeDepositoConvenidoAnualCLF*periodUfValue"/></if>
+            <if condition="topeImponibleIpsCLF"><set field="topeImponibleIps" from="ec.l10n.roundCurrency(topeImponibleIpsCLF*previousUfValue, 'CLP')"/></if>
+            <if condition="topeImponibleAfcCLF"><set field="topeImponibleAfc" from="ec.l10n.roundCurrency(topeImponibleAfcCLF*periodUfValue, 'CLP')"/></if>
+            <if condition="topeApvMensualCLF"><set field="topeApvMensual" from="ec.l10n.roundCurrency(topeApvMensualCLF*periodUfValue, 'CLP')"/></if>
+            <if condition="topeApvAnualCLF"><set field="topeApvAnual" from="ec.l10n.roundCurrency(topeApvAnualCLF*periodUfValue, 'CLP')"/></if>
+            <if condition="topeDepositoConvenidoAnualCLF"><set field="topeDepositoConvenidoAnual" from="ec.l10n.roundCurrency(topeDepositoConvenidoAnualCLF*periodUfValue, 'CLP')"/></if>
 
             <!-- Cobro AFP -->
             <entity-find entity-name="mchile.humanteam.payroll.AfpRate" list="afpRateListEV">
@@ -270,7 +276,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="Could not find time period with Id ${timePeriodId}"/>
             </if>
             <entity-find entity-name="mantle.humanres.employment.PayrollAdjustmentAndDetail" list="taxRateListEV">
-                <econdition field-name="payrollAdjustmentId" value="ClImpSegCatClClp"/>
+                <econdition field-name="itemTypeEnumId" value="ItemTaxClImpuestoSegundaCatClp"/>
                 <date-filter valid-date="new java.sql.Timestamp(timePeriod.fromDate.time)"/>
             </entity-find>
             <if condition="!taxRateListEV">
@@ -279,16 +285,17 @@ along with this software (see the LICENSE.md file). If not, see
                 </if>
                 <set field="fromDate" from="new java.sql.Timestamp(timePeriod.fromDate.time)"/>
                 <entity-find entity-name="mantle.humanres.employment.PayrollAdjustmentAndDetail" list="taxRateListUtm">
-                    <econdition field-name="payrollAdjustmentId" value="ClImpSegCatClUtm"/>
+                    <econdition field-name="itemTypeEnumId" value="ItemTaxClImpuestoSegundaCatUtm"/>
                     <date-filter valid-date="fromDate"/>
                     <order-by field-name="periodMin"/>
                 </entity-find>
                 <if condition="!taxRateListUtm">
-                    <return error="true" message="Could not find taxrate for type ${taxTypeEnumId}"/>
+                    <return error="true" message="Could not find taxrate for type ItemTaxClImpuestoSegundaCatUtm"/>
                 </if>
                 <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CL_UTM', date:fromDate]" out-map="utmMap"/>
                 <set field="utmValue" from="utmMap.value"/>
                 <set field="cumulatedAccruedAmount" from="0" type="BigDecimal"/>
+                <set field="clpPayrollAdjustmentId" value="ClImpSegCatClp${ec.l10n.format(timePeriod.fromDate, 'yyyyMM')}"/>
                 <iterate list="taxRateListUtm" entry="taxRateUtm">
                     <set field="periodMin" from="taxRateUtm.periodMin*utmValue"/>
                     <set field="periodMax" from="taxRateUtm.periodMax?(taxRateUtm.periodMax*utmValue):null"/>
@@ -296,8 +303,9 @@ along with this software (see the LICENSE.md file). If not, see
                     <if condition="periodMax">
                         <script>cumulatedAccruedAmount += (periodMax-periodMin)*taxRateUtm.rate</script>
                     </if>
-                    <set field="taxRateClp" from="taxRateUtm.map+[payrollAdjustmentId:'ClImpSegCatClClp', periodMin:periodMin, periodMax:periodMax,
+                    <set field="taxRateClp" from="taxRateUtm.getMap()+[payrollAdjustmentId:clpPayrollAdjustmentId, periodMin:periodMin, periodMax:periodMax,
                                                    fromDate:timePeriod.fromDate, thruDate:timePeriod.thruDate, flatAmount:-flatAmount,
+                                                   itemTypeEnumId:'ItemTaxClImpuestoSegundaCatClp',
                                                    payrollPhaseEnumId:'PrphTax', description:'Impuesto de Segunda Categoría, en Pesos']"/>
                     <service-call name="store#mantle.humanres.employment.PayrollAdjustment" in-map="taxRateClp"/>
                     <service-call name="create#mantle.humanres.employment.PayrollAdjustmentDetail" in-map="taxRateClp"/>
