@@ -2400,27 +2400,28 @@ return
             <set field="rutReceptor" from="partyField.idValue"/>
 
             <!-- Datos para encontrar contacto -->
+            <entity-find entity-name="mantle.party.contact.PartyContactMech" list="postalPcmList">
+                <date-filter/><econdition field-name="partyId"/>
+                <econdition field-name="contactMechPurposeId" value="PostalTax"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
 
-
-            <entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
-                <field-map field-name="partyId" from="partyId"/>
-                <field-map field-name="contactMechPurposeId" value="PostalTax"/>
-            </entity-find-one>
-            <if condition="!contactMechField">
-                <return error="true" message="Receptor no tiene dirección postal para impuestos"/>
+            <if condition="!postalPcmList">
+                <return error="true" message="Receptor ${partyId} no tiene dirección postal para impuestos"/>
             </if>
-            <set field="contactMechId" from="contactMechField.contactMechId"/>
+            <set field="contactMechId" from="postalPcmList[0].contactMechId"/>
+
 
             <!-- Datos de contacto -->
             <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressField"/>
             <if condition="!contactPostalAddressField">
-                 <return message="Receptor no tiene dirección postal" error="true"/>
+                 <return message="Receptor ${partyId} no tiene dirección postal para impuestos" error="true"/>
             </if>
             <set field="dirReceptor" from="contactPostalAddressField.address1"/>
             <script>
                 dirReceptor = dirReceptor + " " + contactPostalAddressField.unitNumber
             </script>
-
+            <!--return error="true" message="aaaaa $contactMechId"/-->
             <!-- Comuna -->
             <entity-find-one entity-name="moqui.basic.Geo" value-field="geoField">
                 <field-map field-name="geoId" from="contactPostalAddressField.stateProvinceGeoId"/>
@@ -2458,6 +2459,7 @@ return
                 <set field="giroReceptor" from="giroOutMap.description"/>
                 <!--set field="giroReceptor" from="organizationField.giro"/-->
                 <!-- Obtención de contacto para impuestos en organización -->
+
                 <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
                               in-map="[partyId:partyId, postalContactMechPurposeId:'PostalTax']"/>
                 <if condition="!contactOut.postalContactMechId">
@@ -2630,16 +2632,18 @@ return
             </else></if>
 
             <!-- Datos para encontrar contacto -->
+            <entity-find entity-name="mantle.party.contact.PartyContactMech" list="postalPcmList">
+                <date-filter/><econdition field-name="partyId"/>
+                <econdition field-name="contactMechPurposeId" value="PostalTax"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
 
-
-            <entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
-                <field-map field-name="partyId" from="partyId"/>
-                <field-map field-name="contactMechPurposeId" value="PostalTax"/>
-            </entity-find-one>
-            <set field="contactMechId"/>
-            <if condition="contactMechField">
-                <set field="contactMechId" from="contactMechField.contactMechId"/>
+            <if condition="!postalPcmList">
+                <return error="true" message="Receptor ${partyId} no tiene dirección postal para impuestos"/>
             </if>
+            <set field="contactMechId" from="postalPcmList[0].contactMechId"/>
+
+
             <!-- Datos de contacto -->
             <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressField"/>
             <if condition="!contactPostalAddressField">
@@ -6364,7 +6368,6 @@ return
                     recp.setRUTRecep(rutReceptor.trim());
                     recp.setRznSocRecep(rznSocReceptor);
                     // Campo giro receptor no existe en esquema BOLETADefType
-                    //recp.setGiroRecep(giroReceptor);
                     recp.setContacto(contactoReceptor);
                     recp.setDirRecep(dirReceptor);
                     recp.setCmnaRecep(cmnaReceptor);
@@ -8523,16 +8526,18 @@ return
             <parameter name="description"/>
         </out-parameters>
         <actions>
+
             <entity-find-one entity-name="mchile.dte.PartyGiro" value-field="giroField">
                 <field-map field-name="partyId" from="partyId"/>
                 <field-map field-name="isPrimary" value="Primario"/>
             </entity-find-one>
-            <if condition="!giroField"><then>
+            <if condition="giroField == null"><then>
+
                 <entity-find-one entity-name="mchile.dte.PartyGiro" value-field="giroField">
                     <field-map field-name="partyId" from="partyId"/>
                 </entity-find-one>
                 <if condition="!giroField">
-                    <return error="true" message="Receptor no tiene giro primario o giro registrado"/>
+                    <return error="true" message="Empresa de ID ${partyId} no tiene giro primario o giro registrado"/>
                 </if>
                 </then>
             </if>
