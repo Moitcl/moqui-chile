@@ -273,6 +273,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="totalNeto" value="0" type="Long"/>
             <set field="totalExento" value="0" type="Long"/>
 
+            <!-- Campo para guardar resumen atributos -->
+            <set field="amount" value="0" type="Long"/>
+
 
             <if condition="tipoFactura == 33">
                 <script>
@@ -410,6 +413,9 @@ along with this software (see the LICENSE.md file). If not, see
                     if(totalExento &gt; 0) {
                         tot.setMntExe(Math.round(totalExento));
                     }
+
+                    amount = totalInvoice;
+
                 </script>
             </if>
 
@@ -509,9 +515,13 @@ along with this software (see the LICENSE.md file). If not, see
                     montoTotal = totalInvoice;
                     montoExento = totalInvoice;
 
+                    amount = totalInvoice;
+
                 </script>
             </if>
             <!-- TODO: Nota de Crédito Electrónica -->
+            <set field="anulaBoleta"/>
+            <set field="folioAnulaBoleta"/>
             <if condition="tipoFactura == 61">
                 <script>
                     int i = 0
@@ -556,6 +566,13 @@ along with this software (see the LICENSE.md file). If not, see
                             ref[i].setTpoDocRef(tpoDocRef);
                             ref[i].setCodRef(codRef);
                             ref[i].setFolioRef(referenciaEntry.folio.toString());
+                            if((referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-39") || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41")) &amp;&amp; codRef.equals(1) ) {
+                                // Nota de crédito hace referencia a Boletas Electrónicas
+                                </script>
+                                <set field="anulaBoleta" value="true"/>
+                                <set field="folioAnulaBoleta" from="referenciaEntry.folio.toString()"/>
+                                <script>
+                            }
                         }
                         if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-34")) {
                             dteExenta = true;
@@ -636,8 +653,10 @@ along with this software (see the LICENSE.md file). If not, see
                         totalInvoice = totalInvoice + totalItem
                         if(itemAfecto.equals("true")) {
                             totalNeto = totalNeto + totalItem
+                            montoNeto = totalNeto
                         } else {
                             totalExento = totalExento + totalItem
+                            montoExento = totalExento
                             det[i].setIndExe(1);
                         }
                         i = i + 1
@@ -658,52 +677,57 @@ along with this software (see the LICENSE.md file). If not, see
                     // Si la razon es modifica texto (2) no van los montos
                     logger.warn("Codref: " + codRef + ", dteExenta: " + dteExenta);
                     if(BigDecimal.valueOf(codRef) == 1) { // Anulación
+                        logger.warn("IF:" );
                         if(!dteExenta) {
+                    logger.warn("IF2:" + montoIva);
                             tot.setTasaIVA(BigDecimal.valueOf(19));
                             tot.setMntExe(totalExento);
                             tot.setIVA(montoIva);
                             tot.setMntNeto(montoNeto);
                             tot.setMntTotal(montoTotal);
-                            montoExento = montoExe;
-                            montoIvaRecuperable = montoIva;
+                            //montoExento = montoExe;
+                            montoExento = totalExento;
+                            montoIVARecuperable = montoIva;
+                            amount = montoTotal;
                         } else {
+                    logger.warn("IF3:" );
                             tot.setMntExe(montoNeto);
                             //tot.setMntNeto(montoNeto);
                             tot.setMntTotal(montoNeto);
                             montoExento = montoNeto;
-                            montoIvaRecuperable = 0;
+                            montoIVARecuperable = 0;
+                            amount = montoNeto;
                         }
                     } else if(BigDecimal.valueOf(codRef) != 2) {
-                        logger.warn("Else 3")
                         if(!dteExenta) {
-                            logger.warn("Else 4")
                             tot.setTasaIVA(BigDecimal.valueOf(19));
                             tot.setMntExe(totalExento);
                             tot.setIVA(montoIva);
                             tot.setMntNeto(montoNeto);
                             tot.setMntTotal(montoTotal);
                             montoExento = montoExe;
-                            montoIvaRecuperable = montoIva;
+                            montoIVARecuperable = montoIva;
+                            amount = montoTotal;
                         } else {
-                            logger.warn("Else 5")
                             tot.setMntExe(montoNeto);
                             //tot.setMntNeto(montoNeto);
                             tot.setMntTotal(montoNeto);
                             montoExento = montoNeto;
-                            montoIvaRecuperable = 0;
+                            montoIVARecuperable = 0;
+                            amount = montoNeto;
                         }
                     } else { // Modifica Texto
                         if(!dteExenta) {
-                            logger.warn("Else 6");
                             //tot.setMntExe(montoNeto);
                             //tot.setMntTotal(montoTotal);
                             tot.setMntNeto(0);
                             tot.setTasaIVA(BigDecimal.valueOf(19));
                             tot.setIVA(0);
                             tot.setMntTotal(0);
+                            amount = 0;
                         } else {
-                            logger.warn("Else 7");
                             tot.setMntTotal(0);
+                            amount = 0;
                         }
                     }
 
@@ -716,7 +740,7 @@ along with this software (see the LICENSE.md file). If not, see
                 </script>
 
             </if>
-            <!-- TODO: Nota de Débito Electrónica -->
+            <!-- Nota de Débito Electrónica -->
             <if condition="tipoFactura == 56">
                 <script>
 
@@ -819,30 +843,25 @@ along with this software (see the LICENSE.md file). If not, see
                         det[i].setNmbItem(nombreItem);
                         if(dteExenta) {
                             if(BigDecimal.valueOf(codRef) != 2 && BigDecimal.valueOf(codRef) != 1) {
-                                logger.warn("If 1: totalItemTmp: " + totalItemTmp);
                                 det[i].setIndExe(BigInteger.valueOf(1));
                                 det[i].setQtyItem(qtyItem);
                                 det[i].setPrcItem(Long.valueOf(priceItem));
                                 det[i].setMontoItem(Long.valueOf(totalItemTmp));
                             } else {
-                                logger.warn("If 2");
                                 det[i].setMontoItem(0);
                                 //det[i].setQtyItem(qtyItem);
                                 //det[i].setPrcItem(0);
                             }
                         } else {
                             if(BigDecimal.valueOf(codRef) != 2 && BigDecimal.valueOf(codRef) != 1) {
-                                logger.warn("If 8: totalItemTmp: " + totalItemTmp);
                                 det[i].setQtyItem(qtyItem);
                                 det[i].setPrcItem(Long.valueOf(priceItem));
                                 det[i].setMontoItem(Long.valueOf(totalItemTmp));
                             } else {
-                                logger.warn("If 9");
                                 det[i].setMontoItem(0);
                             }
                         }
                         totalInvoice = totalInvoice + totalItemTmp
-
                         i = i + 1
                     ]]></script>
                 </iterate>
@@ -855,11 +874,11 @@ along with this software (see the LICENSE.md file). If not, see
                     montoNeto = Long.valueOf(totalInvoice)
                     long montoIva = montoNeto * 0.19
                     long montoTotal = montoIva + montoNeto
+
                     logger.warn("codRef:" + codRef +", dteExenta:" +dteExenta);
                     // Si la razon es modifica texto (2) no van los montos
                     // Notas de débito son siempre afectas
                     if(codRef != 2 && codRef != 1) {
-                        logger.warn("Else 3")
                         if(!dteExenta) {
                             logger.warn("Else 4")
                             tot.setTasaIVA(BigDecimal.valueOf(19));
@@ -870,8 +889,8 @@ along with this software (see the LICENSE.md file). If not, see
                             montoExento = montoExe;
                             montoNeto = montoNeto;
                             montoIvaRecuperable = montoIva;
+                            amount = montoTotal;
                         } else { // Cod con factura exenta en la NC
-                            logger.warn("Else 5, montoNeto: " + montoNeto)
                             tot.setMntExe(montoNeto);
                             tot.setMntTotal(montoNeto);
                             tot.setMntNeto(0);
@@ -879,14 +898,17 @@ along with this software (see the LICENSE.md file). If not, see
                             //tot.setTasaIVA(BigDecimal.valueOf(19));
                             montoExento = montoNeto;
                             montoIVARecuperable = 0;
+                            amount = montoNeto;
                         }
                     } else {
                         logger.warn("CodRef == 1, " + dteExenta);
                         if(!dteExenta) {
                             //tot.setMntExe(montoNeto);
                             tot.setMntTotal(0);
+                            amount = 0;
                         } else {
                             tot.setMntTotal(0);
+                            amount = 0;
                         }
                     }
                     i = 0
@@ -895,7 +917,7 @@ along with this software (see the LICENSE.md file). If not, see
                     ]]>
                 </script>
             </if>
-            <!-- TODO: Guías de Despacho -->
+            <!-- Guías de Despacho -->
             <if condition="tipoFactura == 52">
                 <script>
                     int i = 0
@@ -1051,7 +1073,9 @@ along with this software (see the LICENSE.md file). If not, see
                     tot.setMntNeto(montoNeto);
                     tot.setMntTotal(montoTotal);
                     montoExento = montoExe;
-                    montoIvaRecuperable = montoIva;
+                    //montoIvaRecuperable = montoIva;
+
+                    amount = montoTotal;
 
                 </script>
 
@@ -1114,11 +1138,12 @@ along with this software (see the LICENSE.md file). If not, see
                 }
             </script>
             <!-- Registro de DTE en base de datos y generación de PDF -->
-
             <set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/>
             <set field="xml" value="${resultS}DTE${tipoFactura}-${folio}.xml"/>
             <set field="pdf" value="${pathPdf}DTE${tipoFactura}-${folio}.pdf"/>
             <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, activeOrgId:activeOrgId]" out-map="context"/>
+
+
 
             <!-- Creación de registro en FiscalTaxDocument -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
@@ -1148,9 +1173,13 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+            <!--return error="true" message="$anulaBoleta - $folioAnulaBoleta - monto: $amount - neto: $montoNeto - exento: $montoExento - montoIva: $montoIVARecuperable"/-->
+            <!-- Creación de registro en FiscalTaxDocumentAttributes -->
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, amount:amount, fechaEmision:fechaEmision, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmision,
+                                         montoExento:montoExento, montoIVARecuperable:montoIVARecuperable]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentAttributes" out-map="context" in-map="createMap"/>
 
             <set field="fiscalTaxDocumentId" from="dteField.fiscalTaxDocumentId"/>
-
         </actions>
     </service>
 
@@ -1749,15 +1778,15 @@ return
                 doc2 = XMLUtil.parseDocument(salida);
 
                 if (Signer.verify(doc2, "SetDTE")) {
-                archivoEnvio = pathResults + "ENV" + idS + ".xml"
-                Path path = Paths.get(pathResults + "ENV" + idS + ".xml");
-                Files.write(path, salida);
-                logger.warn("Envio generado OK");
+                    archivoEnvio = pathResults + "ENV" + idS + ".xml"
+                    Path path = Paths.get(pathResults + "ENV" + idS + ".xml");
+                    Files.write(path, salida);
+                    logger.warn("Envio generado OK");
                 } else {
-                archivoEnvio = pathResults + "ENV" + idS + "-mala.xml"
-                Path path = Paths.get(pathResults + "ENV" + idS + "-mala.xml");
-                Files.write(path, salida);
-                logger.warn("Error al generar envio");
+                    archivoEnvio = pathResults + "ENV" + idS + "-mala.xml"
+                    Path path = Paths.get(pathResults + "ENV" + idS + "-mala.xml");
+                    Files.write(path, salida);
+                    logger.warn("Error al generar envio");
                 }
             ]]></script>
             <!-- Se guarda referencia a XML de envío en BD -->
@@ -1795,10 +1824,6 @@ return
             <!-- Validación rut -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/>
 
-            <!--service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CERT', partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="resourceValue"/>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PASS_CERT', partyId:activeOrgId]" out-map="context"/>
-            <set field="passS" from="resourceValue"/-->
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
             <set field="certS" from="pathCert"/>
@@ -1881,6 +1906,8 @@ return
             <parameter name="templateAceptaciones"/>
             <parameter name="templateLibro"/>
             <parameter name="templateLibroGuia"/>
+            <parameter name="templateLibroBoletas"/>
+            <parameter name="templateRcof"/>
             <parameter name="logo"/>
             <parameter name="fchResol"/>
             <parameter name="nroResol"/>
@@ -1916,6 +1943,8 @@ return
                 <select-field field-name="templateAceptaciones"/>
                 <select-field field-name="templateLibro"/>
                 <select-field field-name="templateLibroGuia"/>
+                <select-field field-name="templateLibroBoletas"/>
+                <select-field field-name="templateRcof"/>
                 <select-field field-name="logo"/>
                 <select-field field-name="fchResol"/>
                 <select-field field-name="nroResol"/>
@@ -1939,6 +1968,11 @@ return
                 <select-field field-name="mailContacto"/>
                 <select-field field-name="fonoContacto"/>
             </entity-find-one>
+
+            <if condition="!orgField">
+                <return error="true" message="Organización no tiene datos para generar DTE"/>
+            </if>
+
             <set field="templateFactura" from="orgField.templateFactura"/>
             <set field="templateBoleta" from="orgField.templateBoleta"/>
             <set field="templatePdf" from="orgField.templatePdf"/>
@@ -1947,6 +1981,9 @@ return
             <set field="templateEnvioBoleta" from="orgField.templateEnvioBoleta"/>
             <set field="templateAceptaciones" from="orgField.templateAceptaciones"/>
             <set field="templateLibro" from="orgField.templateLibro"/>
+            <set field="templateLibroGuia" from="orgField.templateLibroGuia"/>
+            <set field="templateLibroBoletas" from="orgField.templateLibroBoletas"/>
+            <set field="templateRcof" from="orgField.templateRcof"/>
             <set field="logo" from="orgField.logo"/>
             <set field="fchResol" from="orgField.fchResol"/>
             <set field="nroResol" from="orgField.nroResol"/>
@@ -2345,11 +2382,13 @@ return
 
             <!-- email receptor -->
             <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:toPartyId]" out-map="context"/>
+
             <if condition="!emailAddress">
-                <return error="true" message="Receptor no tiene dirección de correo, sólo se puede emitir boleta"/>
+                <if condition="fiscalTaxDocumentTypeEnumId != 'Ftdt-39' &amp;&amp; fiscalTaxDocumentTypeEnumId != 'Ftdt-41'">
+                    <return error="true" message="Receptor no tiene dirección de correo, sólo se puede emitir boleta"/>
+                </if>
             </if>
             <set field="username" from="emailAddress"/>
-
             <!-- rut receptor -->
             <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
             <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyField"/>
@@ -2361,24 +2400,28 @@ return
             <set field="rutReceptor" from="partyField.idValue"/>
 
             <!-- Datos para encontrar contacto -->
+            <entity-find entity-name="mantle.party.contact.PartyContactMech" list="postalPcmList">
+                <date-filter/><econdition field-name="partyId"/>
+                <econdition field-name="contactMechPurposeId" value="PostalTax"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
 
+            <if condition="!postalPcmList">
+                <return error="true" message="Receptor ${partyId} no tiene dirección postal para impuestos"/>
+            </if>
+            <set field="contactMechId" from="postalPcmList[0].contactMechId"/>
 
-            <entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
-                <field-map field-name="partyId" from="partyId"/>
-                <field-map field-name="contactMechPurposeId" value="PostalTax"/>
-            </entity-find-one>
-            <set field="contactMechId" from="contactMechField.contactMechId"/>
 
             <!-- Datos de contacto -->
             <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressField"/>
             <if condition="!contactPostalAddressField">
-                 <return message="Receptor no tiene dirección postal" error="true"/>
+                 <return message="Receptor ${partyId} no tiene dirección postal para impuestos" error="true"/>
             </if>
             <set field="dirReceptor" from="contactPostalAddressField.address1"/>
             <script>
                 dirReceptor = dirReceptor + " " + contactPostalAddressField.unitNumber
             </script>
-
+            <!--return error="true" message="aaaaa $contactMechId"/-->
             <!-- Comuna -->
             <entity-find-one entity-name="moqui.basic.Geo" value-field="geoField">
                 <field-map field-name="geoId" from="contactPostalAddressField.stateProvinceGeoId"/>
@@ -2416,6 +2459,7 @@ return
                 <set field="giroReceptor" from="giroOutMap.description"/>
                 <!--set field="giroReceptor" from="organizationField.giro"/-->
                 <!-- Obtención de contacto para impuestos en organización -->
+
                 <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
                               in-map="[partyId:partyId, postalContactMechPurposeId:'PostalTax']"/>
                 <if condition="!contactOut.postalContactMechId">
@@ -2455,18 +2499,249 @@ return
                 <econdition field-name="invoiceId" from="invoiceId"/>
                 <order-by field-name="fiscalTaxDocumentTypeEnumId"/>
             </entity-find>
-            <!-- TODO: Generación de Boletas -->
             <if condition="(fiscalTaxDocumentTypeEnumId == 'Ftdt-39') || (fiscalTaxDocumentTypeEnumId == 'Ftdt-41')"><then>
+                <!-- Generacion de boletas -->
+                <service-call name="mchile.DTEServices.genera#Boleta" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, activeOrgId:activeOrgId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
+                           contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
+                           invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId]" out-map="context"/>
+            </then><else>
+                <!-- Generacion de factura -->
+                <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, activeOrgId:activeOrgId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
+                      contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
+                          invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId, globalDiscount:globalDiscount, glosaDr:glosaDr]" out-map="context"/>
+            </else></if>
+        </actions>
+    </service>
+
+    <service verb="boletear" noun="Invoice">
+        <description>
+            Obtiene datos para llamar a método generar#Factura
+        </description>
+        <in-parameters>
+            <parameter name="invoiceId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="activeOrgId" required="true"/>
+            <parameter name="items"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="fiscalTaxDocumentId"/>
+        </out-parameters>
+        <actions>
+
+            <!-- Obtención de descuento global, si es > 0 se aplica -->
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoiceField">
+                <field-map field-name="invoiceId" from="invoiceId"/>
+            </entity-find-one>
+            <set field="globalDiscount" from="invoiceField.globalDiscount"/>
+            <set field="glosaDr" from="invoiceField.glosaDr"/>
+
+            <set field="listItems" type="List"/>
+            <if condition="items">
+                <set field="listItems" from="items instanceof List ? items : items.split(',') as List"/>
+            </if>
+            <iterate list="listItems" entry="detailItem">
+                <set field="listProduct" from="detailItem instanceof List ? detailItem : detailItem.split('-') as List"/>
+                <log message="Leyendo: $listProduct" level="warn"/>
+                <!-- Con invoiceId se busca en invoiceItem y se actualiza porcentaje de descuento -->
+                <entity-find-one entity-name="mantle.account.invoice.InvoiceItem" value-field="invoiceItemField">
+                    <field-map field-name="invoiceId" from="invoiceId"/>
+                    <field-map field-name="invoiceItemSeqId" value="${listProduct[0]}"/>
+                </entity-find-one>
+                <script>
+                    long discount = Long.valueOf(listProduct[3]);
+                </script>
+                <set field="invoiceItemField.pctDiscount" from="discount"/>
+                <entity-update value-field="invoiceItemField"/>
+            </iterate>
+
+            <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
+
+            <set field="paymentId" from="paymentApplicationList.paymentId[0]"/>
+
+            <if condition="paymentId">
+                <entity-find-one entity-name="mantle.account.payment.Payment" value-field="payment"/>
+                <!-- Ajuste de forma de pago -->
+                <set field="medioPago" value="OT"/>
+                <set field="formaPago" value="3"/>
+                <if condition="payment.paymentInstrumentEnumId == 'PiCreditCard'">
+                    <set field="medioPago" value="TC"/>
+                    <set field="formaPago" value="2"/>
+                </if>
+                <if condition="payment.paymentInstrumentEnumId == 'PiCompanyCheck'">
+                    <set field="medioPago" value="CH"/>
+                    <set field="formaPago" value="1"/>
+                </if>
+                <if condition="payment.paymentInstrumentEnumId == 'PiPersonalCheck'">
+                    <set field="medioPago" value="CH"/>
+                    <set field="formaPago" value="1"/>
+                </if>
+                <if condition="payment.paymentInstrumentEnumId == 'PiCompanyCheckDate'">
+                    <set field="medioPago" value="CF"/>
+                    <set field="formaPago" value="2"/>
+                </if>
+                <if condition="payment.paymentInstrumentEnumId == 'PiPersonalCheckDate'">
+                    <set field="medioPago" value="CF"/>
+                    <set field="formaPago" value="2"/>
+                </if>
+                <if condition="payment.paymentInstrumentEnumId == 'PiCash'">
+                    <set field="medioPago" value="EF"/>
+                    <set field="formaPago" value="1"/>
+                </if>
+                <if condition="payment.paymentInstrumentEnumId == 'PiLetra'">
+                    <set field="medioPago" value="LT"/>
+                    <set field="formaPago" value="2"/>
+                </if>
+                <if condition="payment.paymentInstrumentEnumId == 'PiBillingAccount'">
+                    <set field="medioPago" value="PE"/>
+                    <set field="formaPago" value="1"/>
+                </if>
+            </if>
+            <if condition="!paymentId">
+                <set field="medioPago" value="CH"/>
+                <set field="formaPago" value="1"/>
+            </if>
+
+            <!-- Datos principales de invoice -->
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
+            <if condition="invoice == null"><return error="true" message="Invoice not found with ID ${invoiceId}"/></if>
+            <set field="partyId" from="invoice.toPartyId"/>
+            <set field="toPartyId" from="invoice.toPartyId"/>
+
+            <!-- Items de invoice -->
+            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemList">
+                <econdition field-name="invoiceId"/><order-by field-name="invoiceItemSeqId"/></entity-find>
+
+            <!-- email receptor -->
+            <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:toPartyId]" out-map="context"/>
+
+            <if condition="!emailAddress">
+                    <log level="warn" message="Receptor no tiene dirección de correo"/>
+            </if>
+            <set field="username" from="emailAddress"/>
+            <!-- rut receptor -->
+            <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyField"/>
+
+            <set field="rutReceptor" value="66666666-6"/>
+            <if condition="!partyField"><then>
+                    <!--return error="true" message="Receptor no tiene RUT"/-->
+                    <log level="warn" message="Receptor de boleta para invoice $invoiceId sin RUT"/>
+                </then>
+            <else>
+                <set field="rutReceptor" from="partyField.idValue"/>
+            </else></if>
+
+            <!-- Datos para encontrar contacto -->
+            <entity-find entity-name="mantle.party.contact.PartyContactMech" list="postalPcmList">
+                <date-filter/><econdition field-name="partyId"/>
+                <econdition field-name="contactMechPurposeId" value="PostalTax"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+
+            <if condition="!postalPcmList">
+                <return error="true" message="Receptor ${partyId} no tiene dirección postal para impuestos"/>
+            </if>
+            <set field="contactMechId" from="postalPcmList[0].contactMechId"/>
+
+
+            <!-- Datos de contacto -->
+            <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressField"/>
+            <if condition="!contactPostalAddressField">
+                <log level="warn" message="Receptor no tiene dirección postal"/>
+            </if>
+            <set field="dirReceptor"/>
+            <if condition="contactPostalAddressField">
+                <set field="dirReceptor" from="contactPostalAddressField.address1"/>
+                <script>
+                    dirReceptor = dirReceptor + " " + contactPostalAddressField.unitNumber
+                </script>
+            </if>
+
+
+            <set field="cmnaReceptor"/>
+            <set field="ciudadReceptor"/>
+            <set field="receptorContactId"/>
+            <!-- Comuna -->
+            <if condition="contactPostalAddressField">
+                <entity-find-one entity-name="moqui.basic.Geo" value-field="geoField">
+                    <field-map field-name="geoId" from="contactPostalAddressField.stateProvinceGeoId"/>
+                </entity-find-one>
+
+                <set field="cmnaReceptor" from="geoField.geoName"/>
+                <set field="ciudadReceptor" from="contactPostalAddressField.city"/>
+                <set field="receptorContactId" from="contactPostalAddressField.telecomContactMechId"/>
+            </if>
+
+
+            <!-- Party puede ser Organization o Persona -->
+            <entity-find-one entity-name="mantle.party.Party" value-field="partyField"/>
+            <set field="partyTypeEnumId" from="partyField.partyTypeEnumId"/>
+
+            <set field="rznSocReceptor" value=""/>
+            <set field="giroReceptor" value="Sin Giro"/>
+
+            <if condition="partyTypeEnumId == 'PtyOrganization'">
+                <!-- email -->
+                <entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
+                    <field-map field-name="partyId" from="partyId"/>
+                    <field-map field-name="contactMechPurposeId" value="PostalTax"/>
+                </entity-find-one>
+                <set field="contactMechId"/>
+                <if condition="contactMechField">
+                    <set field="contactMechId" from="contactMechField.contactMechId"/>
+                </if>
+                <!-- Organizacion -->
+                <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField"/>
+                <set field="rznSocReceptor" from="organizationField.organizationName"/>
+                <!-- Giro no es necesario en boleta -->
+                <!--service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:toPartyId]" out-map="giroOutMap"/>
+                <set field="giroReceptor" from="giroOutMap.description"/-->
+                <set field="giroReceptor" value=""/>
+                <!-- Obtención de contacto para impuestos en organización -->
+                <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
+                              in-map="[partyId:partyId, postalContactMechPurposeId:'PostalTax']"/>
+                <if condition="!contactOut.postalContactMechId">
+                    <return error="true" message="Receptor no tiene contacto tributario asignado"/>
+                </if>
+                <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="postalAddressField">
+                    <field-map field-name="contactMechId" from="contactOut.postalContactMechId"/>
+                </entity-find-one>
+                <!-- Obtención de contacto en organización -->
+                <if condition="!postalAddressField">
+                    <return error="true" message="Nombre receptor no encontrado"/>
+                </if>
+
+                <set field="contactoReceptor" from="postalAddressField.toName"/>
+
+            </if>
+            <if condition="partyTypeEnumId == 'PtyPerson'">
+                <!-- email -->
+                <!--service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:fromPartyId]" out-map="context"/>
+                <set field="contactMechId" from="emailAddress"/-->
+
+                <!-- Persona Natural -->
+                <entity-find-one entity-name="mantle.party.Person" value-field="personField"/>
+                <if condition="!personField">
+                    <return error="true" message="No existe persona para facturar"/>
+                </if>
+
+                <set field="rznSocReceptor" from="personField.firstName"/>
+                <script>
+                    rznSocReceptor = rznSocReceptor + " " + personField.lastName
+                </script>
+                <set field="contactoReceptor" from="rznSocReceptor"/>
+            </if>
+            <!-- Recuperación de referencias -->
+            <entity-find entity-name="mchile.dte.ReferenciaInvoiceAndFiscalCode" list="referenciaList">
+                <econdition field-name="invoiceId" from="invoiceId"/>
+                <order-by field-name="fiscalTaxDocumentTypeEnumId"/>
+            </entity-find>
+
+            <!-- TODO: Generación de Boletas -->
                 <!-- Generacion de boletas -->
                 <service-call name="mchile.DTEServices.genera#Boleta" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, activeOrgId:activeOrgId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
                           contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
                           invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId]" out-map="context"/>
-            </then><else>
-                <!-- Generacion de factura -->
-                <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, activeOrgId:activeOrgId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
-                          contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
-                          invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId, globalDiscount:globalDiscount, glosaDr:glosaDr]" out-map="context"/>
-            </else></if>
         </actions>
     </service>
 
@@ -3515,6 +3790,28 @@ return
         </actions>
     </service>
 
+    <service verb="anular" noun="DTE">
+        <description>
+            Marca una DTE (inicialmente boleta) como anulada
+        </description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="activeOrgId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
+                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+            </entity-find-one>
+
+            <if condition="!dteField">
+                <return error="true" message="Boleta a anular no existe"/>
+            </if>
+
+            <set field="dteField.fiscalTaxDocumentStatusEnumId" value="Ftdt-Cancelled"/>
+            <entity-update value-field="dteField"/>
+        </actions>
+    </service>
+
     <service verb="get" noun="InvoiceFromReturn">
         <description>
             Obtiene datos para llamar a método generar#Factura para Nota de Crédito
@@ -3617,36 +3914,52 @@ return
 
             <set field="partyId" from="returnField.customerPartyId"/>
 
+            <set field="username"/>
             <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:returnField.customerPartyId]" out-map="context"/>
-            <if condition="!emailAddress">
-                <return error="true" message="Receptor no tiene dirección de correo"/>
-            </if>
-            <set field="username" from="emailAddress"/>
+            <if condition="!emailAddress"><then>
+                <!--return error="true" message="Receptor no tiene dirección de correo"/-->
+                <log level="warn" message="Receptor no tiene dirección de correo"/>
+            </then><else>
+                <set field="username" from="emailAddress"/>
+            </else></if>
 
             <!-- rut receptor -->
             <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
             <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyField"/>
-
-            <if condition="!partyField">
-                <return error="true" message="Receptor no tiene RUT"/>
+            <set field="rutReceptor"/>
+            <if condition="!partyField"><then>
+                <log message="Receptor no tiene RUT" level="warn"/>
+                <set field="rutReceptor" from="'66666666-6'"/>
+            </then><else>
+                <set field="rutReceptor" from="partyField.idValue"/>
+            </else>
             </if>
 
-            <set field="rutReceptor" from="partyField.idValue"/>
+
 
             <!-- Datos para encontrar contacto -->
 
             <set field="contactMechId"/>
 
-            <entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
+            <!-- Modificado para quedarse con la dirección válida a la fecha actual -->
+            <!--entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
                 <field-map field-name="partyId" from="partyId"/>
                 <field-map field-name="contactMechPurposeId" value="PostalTax"/>
-            </entity-find-one>
+            </ientity-find-one-->
 
-            <if condition="!contactMechField">
-                <return error="true" message="Receptor no tiene dirección para impuestos"/>
+            <entity-find entity-name="mantle.party.contact.PartyContactMech" list="contactMechList">
+                <econdition field-name="partyId" from="partyId"/>
+                <econdition field-name="contactMechPurposeId" value="PostalTax"/>
+                <econdition field-name="fromDate" operator="less-equals" from="ec.user.nowTimestamp"/>
+                <econdition field-name="thruDate" from="null"/>
+            </entity-find>
+
+            <if condition="!contactMechList">
+                <return error="true" message="Receptor no tiene dirección activa para impuestos"/>
             </if>
 
-            <set field="contactMechId" from="contactMechField.contactMechId"/>
+            <!--set field="contactMechId" from="contactMechField.contactMechId"/-->
+            <set field="contactMechId" from="contactMechList.contactMechId.first()"/>
 
 
             <!-- Datos de contacto -->
@@ -3657,7 +3970,7 @@ return
             </script>
             <set field="cmnaReceptor" from="contactPostalAddressField.city"/>
             <if condition="!cmnaReceptor">
-                <return error="true" message="Receptor no tiene comuna/ciudad definida"/>
+                <return error="true" message="Receptor no tiene comuna/ciudad definida $contactMechId"/>
             </if>
             <!-- ID Contacto receptor -->
             <set field="receptorContactId" from="contactPostalAddressField.telecomContactMechId"/>
@@ -4127,6 +4440,7 @@ return
             <set field="nmbEnvio" value=""/>
             <set field="fchRecep" value=""/>
             <set field="rutEmisor" value=""/>
+
             <set field="rutReceptor" value=""/>
             <set field="estadoRecepEnvEnumId" value=""/>
 
@@ -4488,6 +4802,26 @@ return
                 ByteArrayOutputStream outTemp = new ByteArrayOutputStream();
                 respuesta.save(outTemp, opts);
             </script>
+
+            <!-- Recuperación del email de destinatario de aceptación -->
+            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyAceptacionField">
+                <field-map field-name="idValue" from="rutEmisor"/>
+            </entity-find-one>
+
+            <if condition="!partyAceptacionField">
+                <return error="true" message="Organización a enviar aceptación no tiene RUT definido"/>
+            </if>
+
+            <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
+                          in-map="[partyId:partyAceptacionField.partyId, postalContactMechPurposeId:'PostalTax']"/>
+            <if condition="!contactOut.postalContactMechId">
+                <return error="true" message="Receptor de aceptación no tiene contacto tributario asignado"/>
+            </if>
+
+            <!--return error="true" message="PPP: $rutEmisor, partyId: $partyAceptacionField.partyId - $contactOut.emailAddress"/-->
+
+            <set field="emailAceptacion" from="contactOut.emailAddress"/>
+
             <!-- Recuperación de algunos datos desde FiscalTaxDocument -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="fiscalTaxDocumentField">
                 <field-map field-name="fiscalTaxDocumentId"/>
@@ -4516,7 +4850,8 @@ return
             <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" async="true">
                 <field-map field-name="fiscalTaxDocumentId" from="folioAceptacion"/>
                 <field-map field-name="emailTypeEnumId" from="emailTypeEnumId"/>
-                <field-map field-name="toAddresses" value="cherrera156@gmail.com"/>
+                <!--field-map field-name="toAddresses" value="cherrera@moit.cl"/-->
+                <field-map field-name="toAddresses" from="emailAceptacion"/>
                 <field-map field-name="emailTemplateId" value="Aceptacion"/>
                 <field-map field-name="bodyParameters" from="bodyParameters"/>
             </service-call>
@@ -4535,6 +4870,7 @@ return
             <parameter name="tipoEnvio" default="'TOTAL'"/><!-- PARCIAL-FINAL-TOTAL-AJUSTE -->
             <parameter name="periodo" default="'2000-04'"/><!-- Si es nulo, se toma el mes anterior -->
             <parameter name="folio" default-value="1"/>
+            <parameter name="activeOrgId" required="true"/>
         </in-parameters>
         <actions>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
@@ -4545,10 +4881,11 @@ return
             <set field="pathPdf" from="pathPdf"/>
             <set field="cafS" from="pathCaf"/>
             <set field="plantillaS" from="templateLibro"/>
-            <set field="enviador" from="rutEnviador"/>
-            <set field="emisor" from="rutEmisor"/>
+            <set field="enviadorS" from="rutEnvia"/>
+            <set field="emisorS" from="rutEmisor"/>
             <set field="fchResol" from="fchResol"/>
             <set field="nroResol" from="nroResol"/>
+
 
 
             <set field="resultadoFirmado" from="resultS"/>
@@ -4740,6 +5077,7 @@ return
             <parameter name="tipoEnvio" default="'TOTAL'"/><!-- PARCIAL-FINAL-TOTAL-AJUSTE -->
             <parameter name="periodo" default="'2000-04'"/><!-- Si es nulo, se toma el mes anterior -->
             <parameter name="folio" default-value="1"/>
+            <parameter name="activeOrgId" required="true"/>
         </in-parameters>
         <actions>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
@@ -4750,8 +5088,8 @@ return
             <set field="pathPdf" from="pathPdf"/>
             <set field="cafS" from="pathCaf"/>
             <set field="plantillaS" from="templateLibro"/>
-            <set field="enviador" from="rutEnviador"/>
-            <set field="emisor" from="rutEmisor"/>
+            <set field="enviadorS" from="rutEnvia"/>
+            <set field="emisorS" from="rutEmisor"/>
             <set field="fchResol" from="fchResol"/>
             <set field="nroResol" from="nroResol"/>
 
@@ -4834,6 +5172,8 @@ return
                 // CARATULA
                 //arrayLineasCaratulas = c.formatoLibroCVLineas(rutaLibro,arrayLineasCaratulas, "C");
                 arrayLineasCaratulas.add(new ArrayList&lt;String&gt;());
+                logger.warn("Emisor:" +emisorS);
+                logger.warn("Enviador:" +enviadorS);
                 arrayLineasCaratulas.get(0).add(emisorS);
                 arrayLineasCaratulas.get(0).add(enviadorS);
                 arrayLineasCaratulas.get(0).add('2018-04');
@@ -5139,6 +5479,7 @@ return
             <parameter name="tipoEnvio" default="'TOTAL'"/><!-- PARCIAL-FINAL-TOTAL-AJUSTE -->
             <parameter name="periodo" default="'2000-04'"/><!-- Si es nulo, se toma el mes anterior -->
             <parameter name="folio" default-value="1"/>
+            <parameter name="activeOrgId" required="true"/>
         </in-parameters>
         <actions>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
@@ -5414,6 +5755,275 @@ return
         </actions>
     </service>
 
+    <!-- TODO: Libro de boletas -->
+    <service verb="genera" noun="LibroBoletas">
+        <description>
+            Generación de libro de boletas - hardcoded!
+        </description>
+        <in-parameters>
+            <parameter name="tipoLibro" default="'ESPECIAL'"/><!-- MENSUAL-ESPECIAL-RECTIFICA-->
+            <parameter name="tipoEnvio" default="'TOTAL'"/><!-- PARCIAL-FINAL-TOTAL-AJUSTE -->
+            <parameter name="periodo" default="'2000-04'"/><!-- Si es nulo, se toma el mes anterior -->
+            <parameter name="folio" default-value="1"/>
+            <parameter name="activeOrgId" required="true"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <set field="certS" from="pathCert"/>
+            <set field="passS" from="passCert"/>
+            <set field="resultS" from="pathResults"/>
+            <set field="pathTemp" from="pathTemp"/>
+            <set field="pathPdf" from="pathPdf"/>
+            <set field="cafS" from="pathCaf"/>
+            <set field="plantillaS" from="templateLibroBoletas"/>
+            <set field="enviadorS" from="rutEnvia"/>
+            <set field="emisorS" from="rutEmisor"/>
+            <set field="fchResol" from="fchResol"/>
+            <set field="nroResol" from="nroResol"/>
+
+
+            <set field="resultadoFirmado" from="resultS"/>
+
+            <set field="tipoFactura" from="tipoFacturaS"/>
+
+            <set field="fechaEmision" value=""/>
+
+            <set field="entryDate" from="ec.user.nowTimestamp"/>
+            <set field="idS" value=""/>
+
+            <!-- TODO: Variables no implementadas -->
+            <set field="nroSegmento" value=""/>
+            <!--set field="folioNotificacion" value="1025728"/-->
+            <!--set field="folioNotificacion" value="2"/-->
+            <set field="folioNotificacion" type="String"/>
+            <set field="codAutRec" value=""/>
+            <script>
+                import java.math.BigDecimal;
+                import java.text.SimpleDateFormat;
+                import java.util.ArrayList;
+                import java.util.Properties;
+                import java.util.Iterator;
+                import java.util.Map;
+                import java.util.Map.Entry;
+                import java.nio.file.Path;
+                import org.apache.xmlbeans.XmlCursor;
+                import org.apache.xmlbeans.XmlOptions;
+                import org.w3c.dom.Document;
+
+                import cl.nic.dte.util.Signer;
+
+                import java.security.KeyStore;
+                import java.security.PrivateKey;
+                import java.security.cert.X509Certificate;
+
+                import cl.nic.dte.util.Utilities;
+                import cl.nic.dte.util.XMLUtil;
+
+                import cl.helpcom.recursos.Validador;
+                import cl.helpcom.recursos.ComunicadorAppClienteTXT;
+                import cl.helpcom.dte.util.FirmaLibroBoleta;
+                import cl.helpcom.dte.util.AgregarCamposLibros;
+                import cl.helpcom.recursos.LectorFichero;
+
+                import cl.sii.siiDte.libroboletas.LibroBoletaDocument;
+                import cl.sii.siiDte.libroboletas.LibroBoletaDocument.LibroBoleta;
+                import cl.sii.siiDte.libroboletas.LibroBoletaDocument.LibroBoleta.EnvioLibro.Detalle;
+                import cl.sii.siiDte.libroboletas.LibroBoletaDocument.LibroBoleta.EnvioLibro.ResumenPeriodo.TotalesPeriodo;
+                import cl.sii.siiDte.libroboletas.LibroBoletaDocument.LibroBoleta.EnvioLibro;
+                import cl.sii.siiDte.libroboletas.LibroBoletaDocument.LibroBoleta.EnvioLibro.ResumenPeriodo;
+                import cl.sii.siiDte.libroboletas.LibroBoletaDocument.LibroBoleta.EnvioLibro.ResumenSegmento;
+                import cl.sii.siiDte.libroboletas.LibroBoletaDocument.LibroBoleta.EnvioLibro.ResumenSegmento.TotalesSegmento;
+                import cl.sii.siiDte.libroboletas.LibroBoletaDocument.LibroBoleta.EnvioLibro.Caratula;
+                import cl.sii.siiDte.libroboletas.LibroBoletaDocument.LibroBoleta.EnvioLibro.Caratula.TipoLibro;
+                import cl.sii.siiDte.libroboletas.LibroBoletaDocument.LibroBoleta.EnvioLibro.Caratula.TipoEnvio;
+                import cl.sii.siiDte.libroboletas.LibroBoletaDocument.LibroBoleta.EnvioLibro.Caratula.TipoLibro.Enum;
+                import cl.sii.siiDte.libroboletas.LibroBoletaDocument.LibroBoleta.EnvioLibro.ResumenSegmento.TotalesSegmento.TotalesServicio;
+                import cl.sii.siiDte.FechaType;
+
+                LectorFichero lectorFichero = new LectorFichero();
+                String resultadoSinFirma = "/tmp/LBR-temp.xml";
+
+                SimpleDateFormat dateFormat = new SimpleDateFormat("ddMMyyyy_HHmm");
+                idS  = "ID"+dateFormat.format(new Date());
+
+                SimpleDateFormat formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
+                Date dateFechaEmision = new Date();
+                fechaEmision = formatterFechaEmision.format(dateFechaEmision);
+
+                ComunicadorAppClienteTXT c = new ComunicadorAppClienteTXT();
+                Validador val = new Validador();
+
+                ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasCaratulas= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
+                ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasCaratulas2= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
+                ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasTotal= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
+                ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasDetalle= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
+                ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasSegmentos= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
+                // Lee y llena los campos  => Caratula se debe armar con parámetros
+                // CARATULA
+                //arrayLineasCaratulas = c.formatoLibroCVLineas(rutaLibro,arrayLineasCaratulas, "C");
+                arrayLineasCaratulas.add(new ArrayList&lt;String&gt;());
+                arrayLineasCaratulas.get(0).add(emisorS);
+                arrayLineasCaratulas.get(0).add(enviadorS);
+                arrayLineasCaratulas.get(0).add('2018-04');
+                arrayLineasCaratulas.get(0).add(fchResol);
+                arrayLineasCaratulas.get(0).add(nroResol);
+                arrayLineasCaratulas.get(0).add(tipo);
+                arrayLineasCaratulas.get(0).add(tipoLibro);
+                arrayLineasCaratulas.get(0).add(tipoEnvio);
+
+                arrayLineasCaratulas.get(0).add(nroSegmento);         // Solo para tipo de envio PARCIAL
+                arrayLineasCaratulas.get(0).add(folioNotificacion); // Solo para envío ESPECIAL
+                arrayLineasCaratulas.get(0).add(codAutRec);         // Solo para reemplazo de libro
+
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+                /* XML FACTURA */
+                LibroBoletaDocument libCV;
+
+                /* LibroCV */
+                libCV = LibroBoletaDocument.Factory.parse(new FileInputStream(plantillaS));
+
+                LibroBoleta libroBoleta = libCV.getLibroBoleta();
+                libCV.getLibroBoleta().setVersion(new BigDecimal("1.0"));
+                EnvioLibro envioLibro = libroBoleta.addNewEnvioLibro();
+
+                // ID de libro se debería calcular
+                libCV.getLibroBoleta().getEnvioLibro().setID(idS);
+
+
+
+                //AgregarCamposLibros addCampos = new AgregarCamposLibros();
+                // Agregar CARATULA
+                //addCampos.addDatosCaratula(envioLibro, arrayLineasCaratulas);
+
+                Caratula caratula = envioLibro.addNewCaratula();
+                //Caratula caratula = envioLibro.getCaratula();
+                caratula.setRutEmisorLibro(emisorS);
+                caratula.setRutEnvia(enviadorS);
+                Calendar cal = Calendar.getInstance();
+                cal.clear();
+                cal.set(Calendar.YEAR, Integer.valueOf('2019'));
+                cal.set(Calendar.MONTH, Integer.valueOf('04'));
+                caratula.setPeriodoTributario(cal);
+                cal.clear();
+                cal.set(Calendar.YEAR, Integer.valueOf('2019'));
+                cal.set(Calendar.MONTH, Integer.valueOf('04'));
+                cal.set(Calendar.DAY_OF_MONTH, Integer.valueOf('28'));
+                caratula.setFchResol(cal);
+                caratula.setNroResol(Integer.valueOf(nroResol));
+                //caratula.setTipoOperacion('BOLETA');
+
+                //DscRcgGlobal dscGlobal = DscRcgGlobal.Factory.newInstance();
+                //dscGlobal.setTpoMov(DscRcgGlobal.TpoMov.Enum.forString("D"));
+
+                TipoLibro tpL = TipoLibro.Factory.newInstance();
+                //tpL.setTipoLibro(TipoLibro.Enum.forString("ESPECIAL"));
+
+                caratula.setTipoLibro(TipoLibro.Enum.forString("ESPECIAL"));
+                caratula.setTipoEnvio(TipoEnvio.Enum.forString("TOTAL"));
+                caratula.setNroSegmento(0);
+                caratula.setFolioNotificacion(1); // Solo para envío ESPECIAL
+
+
+                //XmlCursor cursor = libCV.newCursor();
+                ResumenSegmento resumenSegmento = envioLibro.addNewResumenSegmento();
+
+                // Boleta Electronica (39)
+                TotalesSegmento totalesSegmento = resumenSegmento.addNewTotalesSegmento();
+
+                totalesSegmento.setTpoDoc(BigInteger.valueOf(39));
+                // Array de Totales Servicio
+                ArrayList&lt;TotalesServicio&gt; totServicio = new ArrayList&lt;TotalesServicio&gt;();
+                oimp = TotalesServicio.Factory.newInstance();
+                oimp.setTpoServ(3);
+                oimp.setTotDoc(10);
+                oimp.setTotMntExe(4082);
+                oimp.setTotMntTotal(622725);
+                totServicio.add(oimp);
+                array = new TotalesServicio[totServicio.size()];
+                totServicio.toArray(array);
+                totalesSegmento.setTotalesServicioArray(array);
+
+                ResumenPeriodo resumenPeriodo = envioLibro.addNewResumenPeriodo();
+                TotalesPeriodo totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
+                totalesPeriodo.setTpoDoc(BigInteger.valueOf(39));
+                // Array de Totales Servicio
+                ArrayList &lt;cl.sii.siiDte.libroboletas.LibroBoletaDocument.LibroBoleta.EnvioLibro.ResumenPeriodo.TotalesPeriodo.TotalesServicio&gt;  totServicio2 = new ArrayList&lt;cl.sii.siiDte.libroboletas.LibroBoletaDocument.LibroBoleta.EnvioLibro.ResumenPeriodo.TotalesPeriodo.TotalesServicio&gt;();
+
+                oimp2 = cl.sii.siiDte.libroboletas.LibroBoletaDocument.LibroBoleta.EnvioLibro.ResumenPeriodo.TotalesPeriodo.TotalesServicio.Factory.newInstance();
+
+                // TODO: Usar casos de set de pruebas
+
+                oimp2.setTpoServ(3);
+                oimp2.setTotDoc(10);
+                oimp2.setTotMntExe(4082);
+                oimp2.setTotMntTotal(622725);
+                totServicio2.add(oimp2);
+
+                array2 = new cl.sii.siiDte.libroboletas.LibroBoletaDocument.LibroBoleta.EnvioLibro.ResumenPeriodo.TotalesPeriodo.TotalesServicio[totServicio2.size()];
+                totServicio2.toArray(array2);
+                totalesPeriodo.setTotalesServicioArray(array2);
+
+                Detalle detalle = envioLibro.addNewDetalle(); // Caso 1025774-1
+
+                detalle.setTpoDoc(39);
+                detalle.setFolioDoc(Long.valueOf(1));
+                detalle.setTpoServ(3);
+                cal.clear();
+                cal.set(Calendar.YEAR, Integer.valueOf('2019'));
+                cal.set(Calendar.MONTH, Integer.valueOf('04'));
+                cal.set(Calendar.DAY_OF_MONTH, Integer.valueOf('28'));
+                detalle.setFchEmiDoc(cal);
+                detalle.setRUTCliente("66666666-6");
+                detalle.setMntTotal(106991);
+                //logger.warn("XML: " + libCV);
+
+                outPDF=lectorFichero.crearFicheroMMDDFlex(resultadoFirmado, arrayLineasCaratulas.get(0).get(3));
+                outPDF+="/"+arrayLineasCaratulas.get(0).get(5)+"_"+arrayLineasCaratulas.get(0).get(6)+"_"+arrayLineasCaratulas.get(0).get(7)+"_"+idS+".xml";
+                // Debo meter el namespace porque SII no lo genera
+                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;();
+                namespaces.put("", "http://www.sii.cl/SiiDte");
+                namespaces.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+                XmlOptions opts = new XmlOptions();
+                opts.setLoadSubstituteNamespaces(namespaces);
+
+                //opts = new XmlOptions();
+                opts.setSavePrettyPrint();
+                //opts.setSavePrettyPrintIndent(0);
+                //opts.setCharacterEncoding("ISO-8859-1");
+                libCV = LibroBoletaDocument.Factory.parse(libCV.newInputStream(opts), (opts));
+
+                // CARPETA AUXILIAR DTE XML SIN TIMBRE
+                //File archivoEnvio = new File(resultadoSinFirma);
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                //libCV.save(archivoEnvio, opts);
+
+                libCV.save(new File(resultS + "LIBBLT" + idS + "-sinfirma.xml"), opts);
+                libCV.save(out, opts);
+
+                LibroBoletaDocument libro = null;
+                PrivateKey key = null;
+
+                try {
+                    libro = LibroBoletaDocument.Factory.parse(new FileInputStream(resultS + "LIBBLT" + idS + "-sinfirma.xml"));
+                } catch (Exception e1) {
+
+                e1.printStackTrace();
+                return null;
+
+                }
+
+                logger.warn("Libro:" + libro);
+
+                FirmaLibroBoleta firmaLibro = new FirmaLibroBoleta();
+
+                String mensaje=firmaLibro.firmarLibro(certS, passS, resultS + "LIBBLT" + idS + "-sinfirma.xml",outPDF,10,"ENVIADO",arrayLineasCaratulas.get(0).get(5),arrayLineasCaratulas.get(0).get(2),"xmlasdas",tipoEnvio);
+
+            </script>
+        </actions>
+    </service>
+
+
     <service verb="get" noun="DteContent">
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
@@ -5478,13 +6088,13 @@ return
                 <field-map field-name="productId" from="productId"/>
                 <field-map field-name="productCategoryId" value="100000"/>
             </entity-find-one>
-            <log level="warn" message="Verificando item $productId"/>
+            <log level="warn" message="Verificando si item $productId es AFECTO o EXENTO"/>
             <if condition="categoryMemberField"><then>
-                <log message="Item afecto encontrado $productId" level="warn"/>
+                <log message="Item AFECTO encontrado $productId" level="warn"/>
                 <set field="afecto" value="true"/>
             </then>
             <else>
-                <log level="warn" message="Item exento"/>
+                <log level="warn" message="Item EXENTO $productId"/>
                 <set field="afecto" value="false"/>
             </else></if>
         </actions>
@@ -5497,13 +6107,13 @@ return
         <in-parameters>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="activeOrgId" required="true"/>
-            <parameter name="rutReceptor" required="true"/>
+            <parameter name="rutReceptor"/>
             <parameter name="receiverPartyId" required="true"/>
-            <parameter name="rznSocReceptor" required="true"/>
-            <parameter name="giroReceptor" required="true"/>
-            <parameter name="contactoReceptor" required="true"/>
-            <parameter name="dirReceptor" required="true"/>
-            <parameter name="cmnaReceptor" required="true"/>
+            <parameter name="rznSocReceptor"/>
+            <parameter name="giroReceptor"/>
+            <parameter name="contactoReceptor"/>
+            <parameter name="dirReceptor"/>
+            <parameter name="cmnaReceptor"/>
             <parameter name="ciudadReceptor" default-value="${cmnaReceptor}"/>
             <parameter name="detailList" type="List" required="false"/>
             <parameter name="invoiceId" required="true"/>
@@ -5527,7 +6137,6 @@ return
 
 
 
-
             <!-- Validación rut -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutReceptor]"/>
 
@@ -5548,7 +6157,7 @@ return
             <set field="rutEmisor" from="rutEmisor"/>
             <set field="rutEnvia" from="rutEnvia"/>
             <set field="rznSocEmisor" from="rznSocEmisor"/>
-            <set field="giroEmisor" from="giroEmisor"/>
+            <!--set field="giroEmisor" from="giroEmisor"/-->
             <set field="cdgSIISucur" from="cdgSIISucur"/>
             <set field="dirOrigen" from="dirOrigen"/>
             <set field="cmnaOrigen" from="cmnaOrigen"/>
@@ -5556,6 +6165,10 @@ return
             <set field="fchResol" from="fchResol"/>
             <set field="nroResol" from="nroResol"/>
             <set field="templatePdfBoleta" from="templatePdfBoleta"/>
+            <!-- Giro del emisor -->
+            <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:activeOrgId]" out-map="giroOutMap"/>
+            <set field="giroEmisor" from="giroOutMap.description"/>
+
 
             <!-- Recuperación del código SII de DTE -->
             <service-call name="mchile.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" out-map="codeOut"/>
@@ -5714,10 +6327,9 @@ return
                 fechaEmision = formatterFechaEmision.format(dateFechaEmision);
 
                 // Indicador Servicio
-                // 3 para Factura de Servicios
-                // Para Facturas de Exportación:
-                //   4 Servicios de Hotelería
-                //   5 Servicio de Transporte Terrestre Internacional
+                // 1 Boleta de servicios periódicos
+                // 2 Boleta de servicios periódicos domiciliarios
+                // 3 Boleta de Venta de Servicios
                 boleta.getDocumento().getEncabezado().getIdDoc().setIndServicio(BigInteger.valueOf(3));
                 logger.warn("Boleta: " + boleta);
 
@@ -5735,37 +6347,43 @@ return
 
 
             </script>
-            <!--service-call name="mchile.DTEServices.escape#Characters" in-map="[cadenaString:cmnaReceptor]" out-map="context"/>
-            <set field="cmnaReceptor" from="outString"/>
-            <service-call name="mchile.DTEServices.escape#Characters" in-map="[cadenaString:dirReceptor]" out-map="context"/>
-            <set field="dirReceptor" from="outString"/-->
+            <if condition="rutReceptor == '66666666-6'"><then>
+                <script>
+                    // Receptor
+                    Receptor recp = boleta.getDocumento().getEncabezado().addNewReceptor();
+                    recp.setRUTRecep(rutReceptor.trim());
+                    //recp.setRznSocRecep(rznSocReceptor);
+                    recp.setRznSocRecep("Venta a publico sin nombre receptor");
+                    // Campo giro receptor no existe en esquema BOLETADefType
+                    //recp.setGiroRecep(giroReceptor);
+                    //recp.setContacto(rznSocReceptor);
+                    //recp.setDirRecep(dirReceptor);
+                    //recp.setCmnaRecep(cmnaReceptor);
+                    //recp.setCiudadRecep(ciudadReceptor);
+                </script>
+            </then><else>
+                <script>
+                    // Receptor
+                    Receptor recp = boleta.getDocumento().getEncabezado().addNewReceptor();
+                    recp.setRUTRecep(rutReceptor.trim());
+                    recp.setRznSocRecep(rznSocReceptor);
+                    // Campo giro receptor no existe en esquema BOLETADefType
+                    recp.setContacto(contactoReceptor);
+                    recp.setDirRecep(dirReceptor);
+                    recp.setCmnaRecep(cmnaReceptor);
+                    recp.setCiudadRecep(ciudadReceptor);
+                </script>
+            </else></if>
             <script>
-
-                // Receptor
-                Receptor recp = boleta.getDocumento().getEncabezado().addNewReceptor();
-                recp.setRUTRecep(rutReceptor.trim());
-                recp.setRznSocRecep(rznSocReceptor);
-                // Campo giro receptor no existe en esquema BOLETADefType
-                //recp.setGiroRecep(giroReceptor);
-                recp.setContacto(contactoReceptor);
-                recp.setDirRecep(dirReceptor);
-                recp.setCmnaRecep(cmnaReceptor);
-                recp.setCiudadRecep(ciudadReceptor);
 
                 // Emisor
                 Emisor emisor = boleta.getDocumento().getEncabezado().addNewEmisor();
                 emisor.setRUTEmisor(rutEmisor);
-                //emisor.setRznSocEmisor("INVERSIONES CJ LIMITADA");
                 emisor.setRznSocEmisor(rznSocEmisor);
-                //emisor.setGiroEmisor("SOCIEDAD DE INVERSIONES, ARRENDAMIENTO DE OFICINAS AMOBLADAS");
                 emisor.setGiroEmisor(giroEmisor);
-                //emisor.setCdgSIISucur(77441050);
                 emisor.setCdgSIISucur(Integer.valueOf(cdgSIISucur));
-                //emisor.setDirOrigen("PUERTO MADERO 9620");
                 emisor.setDirOrigen(dirOrigen);
-                //emisor.setCmnaOrigen("PUDAHUEL");
                 emisor.setCmnaOrigen(cmnaOrigen);
-                //emisor.setCiudadOrigen("SANTIAGO");
                 emisor.setCiudadOrigen(ciudadOrigen);
 
             </script>
@@ -5782,15 +6400,31 @@ return
                 </script>
                 <set field="totalInvoice" value="0" type="Integer"/>
                 <iterate list="detailList" entry="detailEntry">
-                    <log message="******* Iterando invoice $detailEntry" level="warn"/>
                     <set field="nombreItem" from="detailEntry.description"/>
                     <set field="qtyItem" from="detailEntry.quantity" type="Integer"/>
                     <!-- TODO: obtener precio de productId -->
                     <set field="priceItem" from="detailEntry.amount" type="Integer"/>
                     <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+                    <!-- TODO: Verificar si item es afecto o exento -->
+                    <service-call name="mchile.DTEServices.check#Afecto" in-map="[productId:detailEntry.productId]" out-map="afectoOutMap"/>
+                    <set field="itemAfecto" from="afectoOutMap.afecto" type="String"/>
+                    <log message="Item afecto: $itemAfecto, $totalItem" level="warn"/>
                     <script>
                         // Agrego detalles
                         det[i] = Detalle.Factory.newInstance();
+                        if(itemAfecto.equals("true")) {
+                            //totalNeto = totalNeto + totalItem
+                            long neto = Math.round(totalItem/1.19)
+                            montoNeto = montoNeto + neto
+                            montoIVARecuperable = montoIVARecuperable + (totalItem - neto );
+                        } else {
+                            //totalExento = totalExento + totalItem
+                            montoExento = montoExento + totalItem
+                            det[i].setIndExe(1);
+                        }
+
+                        // TODO: Unidad de medida en última caso de prueba (UnmdItem, antes de precio)
+
                         det[i].setNroLinDet(i+1);
                         det[i].setNmbItem(nombreItem);
                         det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
@@ -5839,7 +6473,6 @@ return
                     </script>
                 </iterate>
                 <script>
-                    //doc.getDTE().getDocumento().setReferenciaArray(ref);
                     boleta.getDocumento().setReferenciaArray(ref);
                 </script>
 
@@ -5847,22 +6480,11 @@ return
                     boleta.getDocumento().setDetalleArray(det);
                     // Totales
                     Totales tot = boleta.getDocumento().getEncabezado().addNewTotales();
-
-                    tot.setMntNeto(totalInvoice);
-                    montoNeto = totalInvoice;
-                    //tot.setTasaIVA(BigDecimal.valueOf(19));
-                    //tot.setTasaIVA(iva);
-                    // Valor de solo IVA
-                    long totalIVA = totalInvoice * 0.19
-                    montoIVARecuperable = totalIVA;
-                    tot.setIVA(totalIVA)
+                    //montoNeto = totalInvoice;
                     logger.warn("monto neto:" + montoNeto);
-                    logger.warn("total IVA:" + totalIVA);
-                    // total neto + IVA
-                    totalInvoice = totalInvoice + totalIVA
                     logger.warn("Total: " + totalInvoice);
                     tot.setMntTotal(totalInvoice)
-                    logger.warn("BOLETA: " + boleta);
+                    amount=totalInvoice;
                 </script>
             </if>
 
@@ -5964,6 +6586,7 @@ return
                     tot.setMntTotal(totalInvoice);
                     montoTotal = totalInvoice;
                     montoExento = totalInvoice;
+                    amount = totalInvoice;
 
                 </script>
             </if>
@@ -5982,7 +6605,6 @@ return
                 BOLETADefType[] bolArr = new BOLETADefType[1];
                 bolArr[0] = boleta;
                 sdte.setDTEArray(bolArr);
-                sdte.setID("envio-boleta");// doc.getDTE().getDocumento().setID("N" + System.nanoTime());
                 sdte.setID("envboleta-" + System.nanoTime());
 
 
@@ -5992,15 +6614,9 @@ return
                 caratula.setRutEmisor(rutEmisor);
                 caratula.setRutEnvia(rutEnvia);
                 caratula.setRutReceptor(rutReceptor);
-                // TODO: Parsear fchResol
+
                 Date dateFchResol = new SimpleDateFormat("yyyy-MM-dd").parse(fchResol);
-                logger.warn("Fecha: "+dateFchResol);
-                Calendar calendar = Calendar.getInstance();
-                //calendar.set(Calendar.YEAR, Integer.valueOf('2018'));
-                //calendar.set(Calendar.MONTH, Integer.valueOf('10'));
-                //calendar.set(Calendar.DAY_OF_MONTH, Integer.valueOf('24'));
-                calendar.setTime(dateFchResol);
-                caratula.setFchResol(calendar);
+                caratula.xsetFchResol(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol)));
 
                 caratula.setNroResol(Integer.valueOf(nroResol));
                 now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
@@ -6068,7 +6684,6 @@ return
 
             </script>
             <!-- Registro de DTE en base de datos y generación de PDF -->
-
             <set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/>
             <set field="xml" value="${resultS}BOL${tipoFactura}-${folio}.xml"/>
             <set field="pdf" value="${pathPdf}BOL${tipoFactura}-${folio}.pdf"/>
@@ -6080,9 +6695,13 @@ return
                 <field-map field-name="fiscalTaxDocumentNumber" from="folio"/>
             </entity-find-one>
 
+
+
             <set field="dteField.issuerPartyId" from="activeOrgId"/>
-            <set field="dteField.receiverPartyId" from="receiverPartyId"/>
-            <set field="dteField.receiverPartyIdTypeEnumId" value="PtidNationalTaxId"/>
+            <if condition="rutReceptor != '66666666-6'"><then>
+                <set field="dteField.receiverPartyId" from="receiverPartyId"/>
+                <set field="dteField.receiverPartyIdTypeEnumId" value="PtidNationalTaxId"/>
+            </then></if>
             <set field="dteField.fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
             <set field="dteField.fiscalTaxDocumentSentStatusEnumId" value="Ftdt-NotSent"/>
             <set field="dteField.invoiceId" from="invoiceId"/>
@@ -6095,6 +6714,18 @@ return
 
             <entity-update value-field="dteField"/>
 
+            <!-- Creación de registro en FiscalTaxDocumentAttributes -->
+            <!-- montoNeto aaaaaa-->
+            <!-- montoIVARecuperable -->
+            <!-- montoExento -->
+            <!-- Amount -->
+            <set field="updateMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, emailEmisor:emailEmisor, amount:amount,
+                                         montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmision,
+                                         montoExento:montoExento, montoIVARecuperable:montoIVARecuperable
+                                         ]"/>
+
+            <service-call name="create#mchile.dte.FiscalTaxDocumentAttributes" out-map="context" in-map="updateMap"/>
+
             <!-- Creacion de registros en FiscalTaxDocumentContent -->
             <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xml, contentDate:ts]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
@@ -6103,6 +6734,1588 @@ return
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
 
             <set field="fiscalTaxDocumentId" from="dteField.fiscalTaxDocumentId"/>
+
+        </actions>
+    </service>
+
+    <service verb="genera" noun="CasoPruebaBoletas">
+        <description>
+            Generación de Boletas para Caso de Prueba
+        </description>
+        <in-parameters>
+            <parameter name="activeOrgId" required="true"/>
+            <parameter name="rutReceptor" default="'66666666-6'"/>
+            <parameter name="receiverPartyId"/>
+            <parameter name="rznSocReceptor" default="'Venta a publico sin nombre receptor'"/>
+            <parameter name="giroReceptor"/>
+            <parameter name="contactoReceptor"/>
+            <parameter name="dirReceptor"/>
+            <parameter name="cmnaReceptor"/>
+            <parameter name="ciudadReceptor" default-value="${cmnaReceptor}"/>
+            <!--parameter name="detailList" type="List" required="false"/>
+            <parameter name="invoiceId" required="true"/>
+            <parameter name="medioPago" required="false"/>
+            <parameter name="formaPago" required="false" type="String"/>
+            <parameter name="referenciaList" type="List"/-->
+        </in-parameters>
+        <out-parameters>
+            <parameter name="fiscalTaxDocumentId"/>
+        </out-parameters>
+        <actions>
+
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
+                <econdition field-name="partyId" from="activeOrgId"/></entity-find>
+
+            <if condition="!partyIdentificationList.idValue[0]">
+                <return error="true" message="Organización no tiene RUT definido"/>
+            </if>
+            <set field="emisorS" from="partyIdentificationList.idValue[0]"/>
+
+
+
+            <!-- Validación rut -->
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutReceptor]"/>
+
+
+            <!-- Recuperacion de parametros de la organizacion -->
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <set field="certS" from="pathCert"/>
+            <set field="passS" from="passCert"/>
+            <set field="resultS" from="pathResults"/>
+            <set field="pathTemp" from="pathTemp"/>
+            <set field="pathPdf" from="pathPdf"/>
+            <set field="cafS" from="pathCaf"/>
+            <set field="plantillaS" from="templateBoleta"/>
+            <set field="enviadorS" from="rutEnviador"/>
+            <set field="emisorS" from="rutEmisor"/>
+            <set field="fchResol" from="fchResol"/>
+            <set field="nroResol" from="nroResol"/>
+            <set field="rutEmisor" from="rutEmisor"/>
+            <set field="rutEnvia" from="rutEnvia"/>
+            <set field="rznSocEmisor" from="rznSocEmisor"/>
+            <!--set field="giroEmisor" from="giroEmisor"/-->
+            <set field="cdgSIISucur" from="cdgSIISucur"/>
+            <set field="dirOrigen" from="dirOrigen"/>
+            <set field="cmnaOrigen" from="cmnaOrigen"/>
+            <set field="ciudadOrigen" from="ciudadOrigen"/>
+            <set field="fchResol" from="fchResol"/>
+            <set field="nroResol" from="nroResol"/>
+            <set field="templatePdfBoleta" from="templatePdfBoleta"/>
+            <!-- Giro del emisor -->
+            <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:activeOrgId]" out-map="giroOutMap"/>
+            <set field="giroEmisor" from="giroOutMap.description"/>
+
+
+
+            <set field="fechaEmision"/>
+
+
+            <!-- Obtención de primer folio y path de CAF -->
+            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-39', activeOrgId:activeOrgId]" out-map="context"/>
+
+            <set field="folioS" from="folio" type="Integer"/>
+            <set field="codRef" value="0" type="Integer"/>
+            <script>
+                cafS = cafS + caf
+            </script>
+
+            <set field="idS" value="BO"/>
+
+            <script>
+                import java.text.SimpleDateFormat;
+                import java.util.Date;
+
+                Date dNow = new Date();
+                SimpleDateFormat ft = new SimpleDateFormat("yyMMddhhmmssMs");
+                String datetime = ft.format(dNow);
+                idS = idS + datetime;
+
+                import java.io.ByteArrayOutputStream;
+                import java.io.IOException;
+                import java.io.StringReader;
+                import java.math.BigDecimal;
+                import java.math.BigInteger;
+                import java.sql.Connection;
+                import java.sql.SQLException;
+                import java.text.SimpleDateFormat;
+                import java.util.ArrayList;
+                import java.util.Calendar;
+                import java.util.Collection;
+                import java.util.Date;
+                import java.util.HashMap;
+                import java.nio.file.Path;
+                import cl.sii.siiDte.FechaHoraType;
+                import cl.sii.siiDte.FechaType;
+                import cl.sii.siiDte.MedioPagoType;
+                import cl.nic.dte.util.Signer;
+                import cl.nic.dte.util.Utilities;
+                import cl.nic.dte.util.XMLUtil;
+                import java.nio.file.Files;
+                import java.nio.file.Path;
+                import java.nio.file.Paths;
+
+                import org.apache.log4j.Logger;
+                import org.apache.xmlbeans.XmlDate;
+                import org.apache.xmlbeans.XmlException;
+                import org.apache.xmlbeans.XmlOptions;
+                import javax.xml.namespace.QName;
+                import org.apache.xmlbeans.XmlCursor;
+                import java.security.cert.X509Certificate;
+                import java.security.KeyStore;
+                import java.security.PrivateKey;
+                import org.w3c.dom.Document;
+
+                import cl.nic.dte.VerifyResult;
+                import cl.sii.siiDte.AUTORIZACIONDocument;
+                import cl.sii.siiDte.AutorizacionType;
+                import cl.sii.siiDte.boletas.BOLETADefType;
+                import cl.sii.siiDte.boletas.EnvioBOLETADocument;
+                import cl.sii.siiDte.boletas.BOLETADefType.Documento;
+                import cl.sii.siiDte.boletas.BOLETADefType.Documento.Detalle;
+                import cl.sii.siiDte.boletas.BOLETADefType.Documento.DscRcgGlobal;
+                import cl.sii.siiDte.boletas.BOLETADefType.Documento.Encabezado;
+                import cl.sii.siiDte.boletas.BOLETADefType.Documento.Referencia;
+                import cl.sii.siiDte.boletas.BOLETADefType.Documento.SubTotInfo;
+                import cl.sii.siiDte.boletas.BOLETADefType.Documento.Detalle.CdgItem;
+                import cl.sii.siiDte.boletas.BOLETADefType.Documento.DscRcgGlobal.TpoMov;
+                import cl.sii.siiDte.boletas.BOLETADefType.Documento.DscRcgGlobal.TpoValor;
+                import cl.sii.siiDte.boletas.BOLETADefType.Documento.Encabezado.Emisor;
+                import cl.sii.siiDte.boletas.BOLETADefType.Documento.Encabezado.IdDoc;
+                import cl.sii.siiDte.boletas.BOLETADefType.Documento.Encabezado.Receptor;
+                import cl.sii.siiDte.boletas.BOLETADefType.Documento.Encabezado.Totales;
+                import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA;
+                import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE;
+                import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula;
+                import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula.SubTotDTE;
+
+                int folio;
+                AutorizacionType caf;
+                AutorizacionType caf2;
+                AutorizacionType caf3;
+                AutorizacionType caf4;
+                AutorizacionType caf5;
+                PrivateKey key;
+                int tipoFactura;
+                int frmPago = 1;
+                int listSize = 0;
+
+                // Boleta 1
+
+                // Leo el folio
+                folio = Integer.valueOf(folioS);
+                //tipoFactura = Integer.valueOf(tipoFacturaS);
+                tipoFactura = Integer.valueOf(39);
+                if(formaPago != null)
+                frmPago = Integer.valueOf(formaPago);
+
+                // Debo meter el namespace porque SII no lo genera
+                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;();
+                namespaces.put("", "http://www.sii.cl/SiiDte");
+                namespaces.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+                XmlOptions opts = new XmlOptions();
+                opts.setLoadSubstituteNamespaces(namespaces);
+
+                caf = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts).getAUTORIZACION();
+
+                BOLETADefType boleta; // boleta tiene cargada toda la información correspondiente
+
+                // (emisor, receptor, detalle, totales, etc)
+                boleta = BOLETADefType.Factory.newInstance();
+
+                boleta.addNewDocumento();
+                boleta.getDocumento().addNewEncabezado();
+                // IdDoc
+                boleta.getDocumento().getEncabezado().addNewIdDoc();
+                // Detalles
+                boleta.getDocumento().addNewDetalle();
+
+
+                // leo certificado y llave privada del archivo pkcs12
+                KeyStore ks = KeyStore.getInstance("PKCS12");
+                ks.load(new FileInputStream(certS), passS.toCharArray());
+                String alias = ks.aliases().nextElement();
+
+                logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
+
+                cert = (X509Certificate) ks.getCertificate(alias);
+                key = (PrivateKey) ks.getKey(alias, passS.toCharArray());
+
+                // Se recorre lista de productos para armar documento (detailList)
+                //doc.addNewDocumento();
+                //doc.getDocumento().addNewEncabezado();
+
+                //IdDoc iddoc = doc.getDocumento().getEncabezado().addNewIdDoc();
+                boleta.getDocumento().getEncabezado().getIdDoc().setFolio(folio);
+                boleta.getDocumento().setID(idS);
+
+                // Tipo de DTE
+                boleta.getDocumento().getEncabezado().getIdDoc().setTipoDTE(BigInteger.valueOf(tipoFactura));
+                boleta.getDocumento().getEncabezado().getIdDoc().xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+
+
+
+                SimpleDateFormat formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
+                Date dateFechaEmision = new Date();
+                fechaEmision = formatterFechaEmision.format(dateFechaEmision);
+
+                // Indicador Servicio
+                // 1 Boleta de servicios periódicos
+                // 2 Boleta de servicios periódicos domiciliarios
+                // 3 Boleta de Venta de Servicios
+                boleta.getDocumento().getEncabezado().getIdDoc().setIndServicio(BigInteger.valueOf(3));
+                logger.warn("Boleta: " + boleta);
+
+                Calendar cal = Calendar.getInstance();
+                cal.add(Calendar.DAY_OF_MONTH, 45);
+
+
+                // Receptor
+                Receptor recp = boleta.getDocumento().getEncabezado().addNewReceptor();
+                recp.setRUTRecep(rutReceptor.trim());
+                //recp.setRznSocRecep(rznSocReceptor);
+                recp.setRznSocRecep('Venta a publico sin nombre receptor');
+
+                // Emisor
+                Emisor emisor = boleta.getDocumento().getEncabezado().addNewEmisor();
+                emisor.setRUTEmisor(rutEmisor);
+                emisor.setRznSocEmisor(rznSocEmisor);
+                emisor.setGiroEmisor(giroEmisor);
+                emisor.setCdgSIISucur(Integer.valueOf(cdgSIISucur));
+                emisor.setDirOrigen(dirOrigen);
+                emisor.setCmnaOrigen(cmnaOrigen);
+                emisor.setCiudadOrigen(ciudadOrigen);
+
+            </script>
+
+            <!-- Campos para elaboración de libro -->
+            <set field="montoNeto" value="0" type="Long"/>
+            <set field="montoExento" value="0" type="Long"/>
+            <set field="montoIVARecuperable" value="0" type="Long"/>
+
+            <!-- TODO: Se debe usar el invoiceId correspondiente a primera boleta -->
+            <set field="invoiceId" value="101071"/>
+            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="detailList">
+                <econdition field-name="invoiceId" from="invoiceId"/><order-by field-name="invoiceItemSeqId"/></entity-find>
+
+            <script>
+                    int i = 0
+                    listSize = detailList.size()
+                    Detalle[] det = new Detalle[listSize]
+            </script>
+            <set field="totalInvoice" value="0" type="Integer"/>
+            <iterate list="detailList" entry="detailEntry">
+                    <log message="******* Iterando invoice $detailEntry" level="warn"/>
+                    <set field="nombreItem" from="detailEntry.description"/>
+                    <set field="qtyItem" from="detailEntry.quantity" type="Integer"/>
+                    <!-- TODO: obtener precio de productId -->
+                    <set field="priceItem" from="detailEntry.amount" type="Integer"/>
+                    <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+                    <!-- TODO: Verificar si item es afecto o exento -->
+                    <service-call name="mchile.DTEServices.check#Afecto" in-map="[productId:detailEntry.productId]" out-map="afectoOutMap"/>
+                    <set field="itemAfecto" from="afectoOutMap.afecto" type="String"/>
+                    <script>
+                        // Agrego detalles
+                        det[i] = Detalle.Factory.newInstance();
+                        if(itemAfecto.equals("true")) {
+                        //totalNeto = totalNeto + totalItem
+                        } else {
+                        //totalExento = totalExento + totalItem
+                        det[i].setIndExe(1);
+                        }
+                        det[i].setNroLinDet(i+1);
+                        det[i].setNmbItem(nombreItem);
+                        det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                        det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                        det[i].setMontoItem( totalItem );
+                        totalInvoice = totalInvoice + totalItem
+
+                        i = i + 1
+                    </script>
+            </iterate>
+            <script>
+
+                boleta.getDocumento().setDetalleArray(det);
+                // Totales
+                Totales tot = boleta.getDocumento().getEncabezado().addNewTotales();
+
+                //tot.setMntNeto(totalInvoice);
+                montoNeto = totalInvoice;
+                //tot.setTasaIVA(BigDecimal.valueOf(19));
+                //tot.setTasaIVA(iva);
+                // Valor de solo IVA
+                //long totalIVA = totalInvoice * 0.19
+                //montoIVARecuperable = totalIVA;
+                //tot.setIVA(totalIVA)
+                logger.warn("monto neto:" + montoNeto);
+                //logger.warn("total IVA:" + totalIVA);
+                // total neto + IVA
+                //totalInvoice = totalInvoice + totalIVA
+                logger.warn("Total: " + totalInvoice);
+                tot.setMntTotal(totalInvoice)
+
+                // Timbro
+
+                boleta.timbrar(caf.getCAF(), caf.getPrivateKey(null));
+
+                logger.warn("Boleta 1: " + boleta);
+
+            </script>
+            <!-- Obtención de primer folio y path de CAF -->
+            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-39', activeOrgId:activeOrgId]" out-map="context"/>
+            <log level="warn" message="Folio leído: $folio"/>
+            <set field="folioS" from="folio" type="Integer"/>
+            <set field="codRef" value="0" type="Integer"/>
+            <script>
+                //cafS = cafS + caf
+            </script>
+
+            <set field="idS" value="BO"/>
+            <script>
+                // ***********************************************************************
+                // Boleta 2
+                // ***********************************************************************
+
+                dNow = new Date();
+                ft = new SimpleDateFormat("yyMMddhhmmssMs");
+                datetime = ft.format(dNow);
+                idS = idS + datetime;
+
+                //folio = Integer.valueOf(folioS);
+                folio = Integer.valueOf(2);
+                tipoFactura = Integer.valueOf(39);
+                if(formaPago != null)
+                frmPago = Integer.valueOf(formaPago);
+
+                // Debo meter el namespace porque SII no lo genera
+                HashMap&lt;String, String&gt; namespaces2 = new HashMap&lt;String, String&gt;();
+                namespaces2.put("", "http://www.sii.cl/SiiDte");
+                namespaces2.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+                XmlOptions opts2 = new XmlOptions();
+                opts2.setLoadSubstituteNamespaces(namespaces2);
+
+                caf2 = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts2).getAUTORIZACION();
+
+                BOLETADefType boleta2; // boleta tiene cargada toda la información correspondiente
+
+                // (emisor, receptor, detalle, totales, etc)
+                boleta2 = BOLETADefType.Factory.newInstance();
+
+                boleta2.addNewDocumento();
+                boleta2.getDocumento().addNewEncabezado();
+                // IdDoc
+                boleta2.getDocumento().getEncabezado().addNewIdDoc();
+                // Detalles
+                boleta2.getDocumento().addNewDetalle();
+
+
+                // leo certificado y llave privada del archivo pkcs12
+                KeyStore ks2 = KeyStore.getInstance("PKCS12");
+                ks2.load(new FileInputStream(certS), passS.toCharArray());
+                alias2 = ks2.aliases().nextElement();
+
+                logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
+
+                cert = (X509Certificate) ks2.getCertificate(alias);
+                key = (PrivateKey) ks2.getKey(alias2, passS.toCharArray());
+
+
+                boleta2.getDocumento().getEncabezado().getIdDoc().setFolio(folio);
+                boleta2.getDocumento().setID(idS);
+
+                // Tipo de DTE
+                boleta2.getDocumento().getEncabezado().getIdDoc().setTipoDTE(BigInteger.valueOf(tipoFactura));
+                boleta2.getDocumento().getEncabezado().getIdDoc().xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+
+
+
+                formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
+                dateFechaEmision = new Date();
+                fechaEmision = formatterFechaEmision.format(dateFechaEmision);
+
+                // Indicador Servicio
+                // 1 Boleta de servicios periódicos
+                // 2 Boleta de servicios periódicos domiciliarios
+                // 3 Boleta de Venta de Servicios
+                boleta2.getDocumento().getEncabezado().getIdDoc().setIndServicio(BigInteger.valueOf(3));
+                logger.warn("Boleta 2: " + boleta2);
+
+                cal = Calendar.getInstance();
+                cal.add(Calendar.DAY_OF_MONTH, 45);
+
+
+                // Receptor
+                Receptor recp2 = boleta2.getDocumento().getEncabezado().addNewReceptor();
+                recp2.setRUTRecep(rutReceptor.trim());
+                recp2.setRznSocRecep('Venta a publico sin nombre receptor');
+
+                // Emisor
+                Emisor emisor2 = boleta2.getDocumento().getEncabezado().addNewEmisor();
+                emisor2.setRUTEmisor(rutEmisor);
+                emisor2.setRznSocEmisor(rznSocEmisor);
+                emisor2.setGiroEmisor(giroEmisor);
+                emisor2.setCdgSIISucur(Integer.valueOf(cdgSIISucur));
+                emisor2.setDirOrigen(dirOrigen);
+                emisor2.setCmnaOrigen(cmnaOrigen);
+                emisor2.setCiudadOrigen(ciudadOrigen);
+
+            </script>
+
+            <!-- Campos para elaboración de libro -->
+            <set field="montoNeto" value="0" type="Long"/>
+            <set field="montoExento" value="0" type="Long"/>
+            <set field="montoIVARecuperable" value="0" type="Long"/>
+
+            <!-- TODO: Se debe usar el invoiceId correspondiente a primera boleta -->
+            <set field="invoiceId" value="101072"/>
+            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="detailList">
+                <econdition field-name="invoiceId" from="invoiceId"/><order-by field-name="invoiceItemSeqId"/></entity-find>
+
+            <script>
+                i = 0
+                listSize = detailList.size()
+                //Detalle[] det = new Detalle[listSize]
+                det = new Detalle[listSize]
+            </script>
+            <set field="totalInvoice" value="0" type="Integer"/>
+            <iterate list="detailList" entry="detailEntry">
+                <log message="******* Iterando invoice $detailEntry" level="warn"/>
+                <set field="nombreItem" from="detailEntry.description"/>
+                <set field="qtyItem" from="detailEntry.quantity" type="Integer"/>
+                <!-- TODO: obtener precio de productId -->
+                <set field="priceItem" from="detailEntry.amount" type="Integer"/>
+                <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+                <!-- TODO: Verificar si item es afecto o exento  -->
+                <service-call name="mchile.DTEServices.check#Afecto" in-map="[productId:detailEntry.productId]" out-map="afectoOutMap"/>
+                <set field="itemAfecto" from="afectoOutMap.afecto" type="String"/>
+                <script>
+                    // Agrego detalles
+                    det[i] = Detalle.Factory.newInstance();
+                    if(itemAfecto.equals("true")) {
+                    //totalNeto = totalNeto + totalItem
+                    } else {
+                    //totalExento = totalExento + totalItem
+                    det[i].setIndExe(1);
+                    }
+                    det[i].setNroLinDet(i+1);
+                    det[i].setNmbItem(nombreItem);
+                    det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                    det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                    det[i].setMontoItem( totalItem );
+                    totalInvoice = totalInvoice + totalItem
+
+                    i = i + 1
+                </script>
+            </iterate>
+            <script>
+
+                boleta2.getDocumento().setDetalleArray(det);
+                // Totales
+                tot = boleta2.getDocumento().getEncabezado().addNewTotales();
+
+                montoNeto = totalInvoice;
+                logger.warn("monto neto:" + montoNeto);
+                tot.setMntTotal(totalInvoice)
+
+                // Timbro
+
+                boleta2.timbrar(caf2.getCAF(), caf2.getPrivateKey(null));
+
+                logger.warn("Boleta 2: " + boleta2);
+
+
+
+            </script>
+            <!-- Obtención de primer folio y path de CAF -->
+            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-39', activeOrgId:activeOrgId]" out-map="context"/>
+            <log level="warn" message="Folio leído: $folio"/>
+            <set field="folioS" from="folio" type="Integer"/>
+            <set field="codRef" value="0" type="Integer"/>
+            <script>
+                //cafS = cafS + caf
+            </script>
+
+            <set field="idS" value="BO"/>
+            <script>
+                // ***********************************************************************
+                // Boleta 3
+                // ***********************************************************************
+
+
+                dNow = new Date();
+                ft = new SimpleDateFormat("yyMMddhhmmssMs");
+                datetime = ft.format(dNow);
+                idS = idS + datetime;
+
+                //folio = Integer.valueOf(folioS);
+                folio = Integer.valueOf(3);
+                tipoFactura = Integer.valueOf(39);
+                if(formaPago != null)
+                frmPago = Integer.valueOf(formaPago);
+
+                // Debo meter el namespace porque SII no lo genera
+                HashMap&lt;String, String&gt; namespaces3 = new HashMap&lt;String, String&gt;();
+                namespaces3.put("", "http://www.sii.cl/SiiDte");
+                namespaces3.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+                XmlOptions opts3 = new XmlOptions();
+                opts3.setLoadSubstituteNamespaces(namespaces3);
+
+                caf3 = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts3).getAUTORIZACION();
+
+                BOLETADefType boleta3;
+
+                // (emisor, receptor, detalle, totales, etc)
+                boleta3 = BOLETADefType.Factory.newInstance();
+
+                boleta3.addNewDocumento();
+                boleta3.getDocumento().addNewEncabezado();
+                // IdDoc
+                boleta3.getDocumento().getEncabezado().addNewIdDoc();
+                // Detalles
+                boleta3.getDocumento().addNewDetalle();
+
+
+                // leo certificado y llave privada del archivo pkcs12
+                KeyStore ks3 = KeyStore.getInstance("PKCS12");
+                ks3.load(new FileInputStream(certS), passS.toCharArray());
+                alias3 = ks3.aliases().nextElement();
+
+                logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
+
+                cert = (X509Certificate) ks3.getCertificate(alias);
+                key = (PrivateKey) ks3.getKey(alias2, passS.toCharArray());
+
+
+                boleta3.getDocumento().getEncabezado().getIdDoc().setFolio(folio);
+                boleta3.getDocumento().setID(idS);
+
+                // Tipo de DTE
+                boleta3.getDocumento().getEncabezado().getIdDoc().setTipoDTE(BigInteger.valueOf(tipoFactura));
+                boleta3.getDocumento().getEncabezado().getIdDoc().xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+
+
+
+                formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
+                dateFechaEmision = new Date();
+                fechaEmision = formatterFechaEmision.format(dateFechaEmision);
+
+                // Indicador Servicio
+                // 1 Boleta de servicios periódicos
+                // 2 Boleta de servicios periódicos domiciliarios
+                // 3 Boleta de Venta de Servicios
+                boleta3.getDocumento().getEncabezado().getIdDoc().setIndServicio(BigInteger.valueOf(3));
+                logger.warn("Boleta 3: " + boleta3);
+
+                cal = Calendar.getInstance();
+                cal.add(Calendar.DAY_OF_MONTH, 45);
+
+
+                // Receptor
+                Receptor recp3 = boleta3.getDocumento().getEncabezado().addNewReceptor();
+                recp3.setRUTRecep(rutReceptor.trim());
+                recp3.setRznSocRecep('Venta a publico sin nombre receptor');
+
+                // Emisor
+                Emisor emisor3 = boleta3.getDocumento().getEncabezado().addNewEmisor();
+                emisor3.setRUTEmisor(rutEmisor);
+                emisor3.setRznSocEmisor(rznSocEmisor);
+                emisor3.setGiroEmisor(giroEmisor);
+                emisor3.setCdgSIISucur(Integer.valueOf(cdgSIISucur));
+                emisor3.setDirOrigen(dirOrigen);
+                emisor3.setCmnaOrigen(cmnaOrigen);
+                emisor3.setCiudadOrigen(ciudadOrigen);
+
+            </script>
+
+            <!-- Campos para elaboración de libro -->
+            <set field="montoNeto" value="0" type="Long"/>
+            <set field="montoExento" value="0" type="Long"/>
+            <set field="montoIVARecuperable" value="0" type="Long"/>
+
+            <!-- TODO: Se debe usar el invoiceId correspondiente a primera boleta -->
+            <set field="invoiceId" value="101075"/>
+            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="detailList">
+                <econdition field-name="invoiceId" from="invoiceId"/><order-by field-name="invoiceItemSeqId"/></entity-find>
+
+            <script>
+                i = 0
+                listSize = detailList.size()
+                //Detalle[] det = new Detalle[listSize]
+                det = new Detalle[listSize]
+            </script>
+            <set field="totalInvoice" value="0" type="Integer"/>
+            <iterate list="detailList" entry="detailEntry">
+                <log message="******* Iterando invoice $detailEntry" level="warn"/>
+                <set field="nombreItem" from="detailEntry.description"/>
+                <set field="qtyItem" from="detailEntry.quantity" type="Integer"/>
+                <!-- TODO: obtener precio de productId -->
+                <set field="priceItem" from="detailEntry.amount" type="Integer"/>
+                <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+                <!-- TODO: Verificar si item es afecto o exento  -->
+                <service-call name="mchile.DTEServices.check#Afecto" in-map="[productId:detailEntry.productId]" out-map="afectoOutMap"/>
+                <set field="itemAfecto" from="afectoOutMap.afecto" type="String"/>
+                <script>
+                    // Agrego detalles
+                    det[i] = Detalle.Factory.newInstance();
+                    if(itemAfecto.equals("true")) {
+                    //totalNeto = totalNeto + totalItem
+                    } else {
+                    //totalExento = totalExento + totalItem
+                    det[i].setIndExe(1);
+                    }
+                    det[i].setNroLinDet(i+1);
+                    det[i].setNmbItem(nombreItem);
+                    det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                    det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                    det[i].setMontoItem( totalItem );
+                    totalInvoice = totalInvoice + totalItem
+
+                    i = i + 1
+                </script>
+            </iterate>
+            <script>
+
+                boleta3.getDocumento().setDetalleArray(det);
+                // Totales
+                tot = boleta3.getDocumento().getEncabezado().addNewTotales();
+
+                montoNeto = totalInvoice;
+                logger.warn("monto neto:" + montoNeto);
+                tot.setMntTotal(totalInvoice)
+
+                // Timbro
+
+                boleta3.timbrar(caf3.getCAF(), caf3.getPrivateKey(null));
+
+                logger.warn("Boleta 3: " + boleta3);
+
+                // *********************************************************************
+                // Fin Boleta 3
+                // *********************************************************************
+
+                // ***********************************************************************
+                // Boleta 4
+                // ***********************************************************************
+
+
+                dNow = new Date();
+                ft = new SimpleDateFormat("yyMMddhhmmssMs");
+                datetime = ft.format(dNow);
+                idS = idS + datetime;
+
+                //folio = Integer.valueOf(folioS);
+                folio = Integer.valueOf(4);
+                tipoFactura = Integer.valueOf(39);
+                if(formaPago != null)
+                frmPago = Integer.valueOf(formaPago);
+
+                // Debo meter el namespace porque SII no lo genera
+                HashMap&lt;String, String&gt; namespaces4 = new HashMap&lt;String, String&gt;();
+                namespaces4.put("", "http://www.sii.cl/SiiDte");
+                namespaces4.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+                XmlOptions opts4 = new XmlOptions();
+                opts4.setLoadSubstituteNamespaces(namespaces4);
+
+                caf4 = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts4).getAUTORIZACION();
+
+                BOLETADefType boleta4;
+
+                // (emisor, receptor, detalle, totales, etc)
+                boleta4 = BOLETADefType.Factory.newInstance();
+
+                boleta4.addNewDocumento();
+                boleta4.getDocumento().addNewEncabezado();
+                // IdDoc
+                boleta4.getDocumento().getEncabezado().addNewIdDoc();
+                // Detalles
+                boleta4.getDocumento().addNewDetalle();
+
+
+                // leo certificado y llave privada del archivo pkcs12
+                KeyStore ks4 = KeyStore.getInstance("PKCS12");
+                ks4.load(new FileInputStream(certS), passS.toCharArray());
+                alias4 = ks4.aliases().nextElement();
+
+                logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
+
+                cert = (X509Certificate) ks4.getCertificate(alias);
+                key = (PrivateKey) ks4.getKey(alias2, passS.toCharArray());
+
+
+                boleta4.getDocumento().getEncabezado().getIdDoc().setFolio(folio);
+                boleta4.getDocumento().setID(idS);
+
+                // Tipo de DTE
+                boleta4.getDocumento().getEncabezado().getIdDoc().setTipoDTE(BigInteger.valueOf(tipoFactura));
+                boleta4.getDocumento().getEncabezado().getIdDoc().xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+
+
+
+                formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
+                dateFechaEmision = new Date();
+                fechaEmision = formatterFechaEmision.format(dateFechaEmision);
+
+                // Indicador Servicio
+                // 1 Boleta de servicios periódicos
+                // 2 Boleta de servicios periódicos domiciliarios
+                // 3 Boleta de Venta de Servicios
+                boleta4.getDocumento().getEncabezado().getIdDoc().setIndServicio(BigInteger.valueOf(3));
+                logger.warn("Boleta 4: " + boleta4);
+
+                cal = Calendar.getInstance();
+                cal.add(Calendar.DAY_OF_MONTH, 45);
+
+
+                // Receptor
+                Receptor recp4 = boleta4.getDocumento().getEncabezado().addNewReceptor();
+                recp4.setRUTRecep(rutReceptor.trim());
+                recp4.setRznSocRecep('Venta a publico sin nombre receptor');
+
+                // Emisor
+                Emisor emisor4 = boleta4.getDocumento().getEncabezado().addNewEmisor();
+                emisor4.setRUTEmisor(rutEmisor);
+                emisor4.setRznSocEmisor(rznSocEmisor);
+                emisor4.setGiroEmisor(giroEmisor);
+                emisor4.setCdgSIISucur(Integer.valueOf(cdgSIISucur));
+                emisor4.setDirOrigen(dirOrigen);
+                emisor4.setCmnaOrigen(cmnaOrigen);
+                emisor4.setCiudadOrigen(ciudadOrigen);
+
+            </script>
+
+            <!-- Campos para elaboración de libro -->
+            <set field="montoNeto" value="0" type="Long"/>
+            <set field="montoExento" value="0" type="Long"/>
+            <set field="montoIVARecuperable" value="0" type="Long"/>
+
+            <!-- TODO: Se debe usar el invoiceId correspondiente a primera boleta -->
+            <set field="invoiceId" value="101076"/>
+            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="detailList">
+                <econdition field-name="invoiceId" from="invoiceId"/><order-by field-name="invoiceItemSeqId"/></entity-find>
+
+            <script>
+                i = 0
+                listSize = detailList.size()
+                //Detalle[] det = new Detalle[listSize]
+                det = new Detalle[listSize]
+            </script>
+            <set field="totalInvoice" value="0" type="Integer"/>
+            <iterate list="detailList" entry="detailEntry">
+                <log message="******* Iterando invoice $detailEntry" level="warn"/>
+                <set field="nombreItem" from="detailEntry.description"/>
+                <set field="qtyItem" from="detailEntry.quantity" type="Integer"/>
+                <!-- TODO: obtener precio de productId -->
+                <set field="priceItem" from="detailEntry.amount" type="Integer"/>
+                <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+                <!-- TODO: Verificar si item es afecto o exento  -->
+                <service-call name="mchile.DTEServices.check#Afecto" in-map="[productId:detailEntry.productId]" out-map="afectoOutMap"/>
+                <set field="itemAfecto" from="afectoOutMap.afecto" type="String"/>
+                <script>
+                    // Agrego detalles
+                    det[i] = Detalle.Factory.newInstance();
+                    if(itemAfecto.equals("true")) {
+                    //totalNeto = totalNeto + totalItem
+                    } else {
+                    //totalExento = totalExento + totalItem
+                    det[i].setIndExe(1);
+                    }
+                    det[i].setNroLinDet(i+1);
+                    det[i].setNmbItem(nombreItem);
+                    det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                    det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                    det[i].setMontoItem( totalItem );
+                    totalInvoice = totalInvoice + totalItem
+
+                    i = i + 1
+                </script>
+            </iterate>
+            <script>
+
+                boleta4.getDocumento().setDetalleArray(det);
+                // Totales
+                tot = boleta4.getDocumento().getEncabezado().addNewTotales();
+
+                montoNeto = totalInvoice;
+                logger.warn("monto neto:" + montoNeto);
+                tot.setMntTotal(totalInvoice)
+
+                // Timbro
+
+                boleta4.timbrar(caf4.getCAF(), caf4.getPrivateKey(null));
+
+                logger.warn("Boleta 4: " + boleta4);
+
+                // *********************************************************************
+                // Fin Boleta 4
+                // ********************************************************************
+
+                // ***********************************************************************
+                // Boleta 5
+                // ***********************************************************************
+
+
+                dNow = new Date();
+                ft = new SimpleDateFormat("yyMMddhhmmssMs");
+                datetime = ft.format(dNow);
+                idS = idS + datetime;
+
+                //folio = Integer.valueOf(folioS);
+                folio = Integer.valueOf(5);
+                tipoFactura = Integer.valueOf(39);
+                if(formaPago != null)
+                frmPago = Integer.valueOf(formaPago);
+
+                // Debo meter el namespace porque SII no lo genera
+                HashMap&lt;String, String&gt; namespaces5 = new HashMap&lt;String, String&gt;();
+                namespaces5.put("", "http://www.sii.cl/SiiDte");
+                namespaces5.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+                XmlOptions opts5 = new XmlOptions();
+                opts5.setLoadSubstituteNamespaces(namespaces5);
+
+                caf5 = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts5).getAUTORIZACION();
+
+                BOLETADefType boleta5;
+
+                // (emisor, receptor, detalle, totales, etc)
+                boleta5 = BOLETADefType.Factory.newInstance();
+
+                boleta5.addNewDocumento();
+                boleta5.getDocumento().addNewEncabezado();
+                // IdDoc
+                boleta5.getDocumento().getEncabezado().addNewIdDoc();
+                // Detalles
+                boleta5.getDocumento().addNewDetalle();
+
+
+                // leo certificado y llave privada del archivo pkcs12
+                KeyStore ks5 = KeyStore.getInstance("PKCS12");
+                ks5.load(new FileInputStream(certS), passS.toCharArray());
+                alias5 = ks5.aliases().nextElement();
+
+                logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
+
+                cert = (X509Certificate) ks5.getCertificate(alias);
+                key = (PrivateKey) ks5.getKey(alias5, passS.toCharArray());
+
+
+                boleta5.getDocumento().getEncabezado().getIdDoc().setFolio(folio);
+                boleta5.getDocumento().setID(idS);
+
+                // Tipo de DTE
+                boleta5.getDocumento().getEncabezado().getIdDoc().setTipoDTE(BigInteger.valueOf(tipoFactura));
+                boleta5.getDocumento().getEncabezado().getIdDoc().xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+
+
+
+                formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
+                dateFechaEmision = new Date();
+                fechaEmision = formatterFechaEmision.format(dateFechaEmision);
+
+                // Indicador Servicio
+                // 1 Boleta de servicios periódicos
+                // 2 Boleta de servicios periódicos domiciliarios
+                // 3 Boleta de Venta de Servicios
+                boleta5.getDocumento().getEncabezado().getIdDoc().setIndServicio(BigInteger.valueOf(3));
+                logger.warn("Boleta 5: " + boleta5);
+
+                cal = Calendar.getInstance();
+                cal.add(Calendar.DAY_OF_MONTH, 45);
+
+
+                // Receptor
+                Receptor recp5 = boleta5.getDocumento().getEncabezado().addNewReceptor();
+                recp5.setRUTRecep(rutReceptor.trim());
+                recp5.setRznSocRecep('Venta a publico sin nombre receptor');
+
+                // Emisor
+                Emisor emisor5 = boleta5.getDocumento().getEncabezado().addNewEmisor();
+                emisor5.setRUTEmisor(rutEmisor);
+                emisor5.setRznSocEmisor(rznSocEmisor);
+                emisor5.setGiroEmisor(giroEmisor);
+                emisor5.setCdgSIISucur(Integer.valueOf(cdgSIISucur));
+                emisor5.setDirOrigen(dirOrigen);
+                emisor5.setCmnaOrigen(cmnaOrigen);
+                emisor5.setCiudadOrigen(ciudadOrigen);
+
+            </script>
+
+            <!-- Campos para elaboración de libro -->
+            <set field="montoNeto" value="0" type="Long"/>
+            <set field="montoExento" value="0" type="Long"/>
+            <set field="montoIVARecuperable" value="0" type="Long"/>
+
+            <!-- TODO: Se debe usar el invoiceId correspondiente a primera boleta -->
+            <set field="invoiceId" value="101122"/>
+            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="detailList">
+                <econdition field-name="invoiceId" from="invoiceId"/><order-by field-name="invoiceItemSeqId"/></entity-find>
+
+            <script>
+                i = 0
+                listSize = detailList.size()
+                //Detalle[] det = new Detalle[listSize]
+                det = new Detalle[listSize]
+            </script>
+            <set field="totalInvoice" value="0" type="Integer"/>
+            <iterate list="detailList" entry="detailEntry">
+                <log message="******* Iterando invoice $detailEntry" level="warn"/>
+                <set field="nombreItem" from="detailEntry.description"/>
+                <set field="qtyItem" from="detailEntry.quantity" type="Integer"/>
+                <!-- TODO: obtener precio de productId -->
+                <set field="priceItem" from="detailEntry.amount" type="Integer"/>
+                <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+                <!-- TODO: Verificar si item es afecto o exento  -->
+                <service-call name="mchile.DTEServices.check#Afecto" in-map="[productId:detailEntry.productId]" out-map="afectoOutMap"/>
+                <set field="itemAfecto" from="afectoOutMap.afecto" type="String"/>
+                <script>
+                    // Agrego detalles
+                    det[i] = Detalle.Factory.newInstance();
+                    if(itemAfecto.equals("true")) {
+                    //totalNeto = totalNeto + totalItem
+                    } else {
+                    //totalExento = totalExento + totalItem
+                    det[i].setIndExe(1);
+                    }
+                    det[i].setNroLinDet(i+1);
+                    det[i].setNmbItem(nombreItem);
+                    det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                    det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                    det[i].setMontoItem( totalItem );
+                    totalInvoice = totalInvoice + totalItem
+
+                    i = i + 1
+                </script>
+            </iterate>
+            <script>
+
+                boleta5.getDocumento().setDetalleArray(det);
+                // Totales
+                tot = boleta5.getDocumento().getEncabezado().addNewTotales();
+
+                montoNeto = totalInvoice;
+                logger.warn("monto neto:" + montoNeto);
+                tot.setMntTotal(totalInvoice)
+
+                // Timbro
+
+                boleta5.timbrar(caf5.getCAF(), caf5.getPrivateKey(null));
+
+                logger.warn("Boleta 5: " + boleta5);
+
+                // *********************************************************************
+                // Fin Boleta5
+                // *********************************************************************
+
+
+                logger.warn("Generando Envio Boleta\n");
+
+                // ajustes para el formato (MAGIA) antes de firmar
+                cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument = EnvioBOLETADocument.Factory.newInstance();
+                EnvioBOLETA eb = EnvioBOLETA.Factory.newInstance();
+                SetDTE sdte = SetDTE.Factory.newInstance();
+
+                BOLETADefType[] bolArr = new BOLETADefType[5];
+                bolArr[0] = boleta;
+                bolArr[1] = boleta2;
+                bolArr[2] = boleta3;
+                bolArr[3] = boleta4;
+                bolArr[4] = boleta5;
+                sdte.setDTEArray(bolArr);
+                sdte.setID("envio-boleta");// doc.getDTE().getDocumento().setID("N" + System.nanoTime());
+                sdte.setID("envboleta-" + System.nanoTime());
+
+
+                // Datos de carátula
+                Caratula caratula = sdte.addNewCaratula();
+                caratula.setRutEmisor(rutEmisor);
+                caratula.setRutEnvia(rutEnvia);
+                //caratula.setRutReceptor(rutReceptor);
+                Date dateFchResol = new SimpleDateFormat("yyyy-MM-dd").parse(fchResol);
+                caratula.xsetFchResol(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol)));
+
+                caratula.setNroResol(Integer.valueOf(nroResol));
+                now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                caratula.xsetTmstFirmaEnv(now);
+
+                // Subtotales
+                SubTotDTE[] subtDtes = new SubTotDTE[1];
+                SubTotDTE subt = SubTotDTE.Factory.newInstance();
+                subt.setTpoDTE(new BigInteger(tipoFactura.toString()));
+                subt.setNroDTE(new BigInteger(5));
+                subtDtes[0] = subt;
+                caratula.setSubTotDTEArray(subtDtes);
+
+                eb.setSetDTE(sdte);
+                eb.setVersion(new BigDecimal("1.0"));
+                envioBoletaDocument.setEnvioBOLETA(eb);
+
+                opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces);
+                opts.setLoadSubstituteNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(0);
+
+                try {
+                    envioBoletaDocument = EnvioBOLETADocument.Factory.parse(envioBoletaDocument.newInputStream(opts), opts);
+                } catch (Exception e) {
+                    logger.warn("Error al parsear XML");
+                    return
+                }
+
+                boleta = envioBoletaDocument.getEnvioBOLETA().getSetDTE().getDTEArray(0);
+
+                //boleta.sign(key, cert);
+
+                logger.warn("Boleta: " + boleta);
+
+                String uri = "";
+                FechaHoraType now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                uri = boleta.getDocumento().getID();
+                boleta.getDocumento().xsetTmstFirma(now);
+
+                uri = "#" + uri;
+
+                logger.warn("URI: " + uri)
+
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                envioBoletaDocument.save(new File(resultS + "BOL" + tipoFactura + "-" + folio + "-sinfirma.xml"), opts);
+                envioBoletaDocument.save(out, opts);
+
+                Document doc2 = XMLUtil.parseDocument(out.toByteArray());
+
+                byte[] salida = Signer.sign(doc2, uri, key, cert, uri, "Documento");
+                doc2 = XMLUtil.parseDocument(salida);
+
+                if (Signer.verify(doc2, "Documento")) {
+                    Path path = Paths.get(resultS + "BOL" + tipoFactura + "-" + folio + ".xml");
+                    Files.write(path, salida);
+                    logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                } else {
+                    Path path = Paths.get(resultS + "BOL" + tipoFactura + "-" + folio + "-mala.xml");
+                    Files.write(path, salida);
+                    logger.warn("Error al generar boleta folio "+folio);
+                }
+
+            </script>
+            <!-- Registro de DTE en base de datos y generación de PDF -->
+
+            <!--set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/>
+            <set field="xml" value="${resultS}BOL${tipoFactura}-${folio}.xml"/>
+            <set field="pdf" value="${pathPdf}BOL${tipoFactura}-${folio}.pdf"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, activeOrgId:activeOrgId, boleta:true]" out-map="context"/-->
+
+            <!-- Creación de registro en FiscalTaxDocument -->
+            <!--entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
+                <field-map field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <field-map field-name="fiscalTaxDocumentNumber" from="folio"/>
+            </entity-find-one>
+
+            <set field="dteField.issuerPartyId" from="activeOrgId"/>
+            <if condition="rutReceptor != '66666666-6'"><then>
+                <set field="dteField.receiverPartyId" from="receiverPartyId"/>
+                <set field="dteField.receiverPartyIdTypeEnumId" value="PtidNationalTaxId"/>
+            </then></if>
+            <set field="dteField.fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
+            <set field="dteField.fiscalTaxDocumentSentStatusEnumId" value="Ftdt-NotSent"/>
+            <set field="dteField.invoiceId" from="invoiceId"/-->
+
+            <!--script>
+                Date date = new Date();
+                Timestamp ts = new Timestamp(date.getTime());
+            </script>
+            <set field="dteField.date" from="ts"/>
+
+            <entity-update value-field="dteField"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xml, contentDate:ts]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+
+            <set field="fiscalTaxDocumentId" from="dteField.fiscalTaxDocumentId"/-->
+
+        </actions>
+    </service>
+
+    <!-- TODO: RCOF -->
+    <service verb="genera" noun="RCOF">
+        <description>
+            Generación de Boletas para Caso de Prueba
+        </description>
+        <in-parameters>
+            <parameter name="activeOrgId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="fechaInicio" required="false"/>
+            <parameter name="fechaFin" required="false"/>
+        </in-parameters>
+        <actions>
+
+            <if condition="fechaInicio > fechaFin">
+                <return error="true" message="Fecha fin debe ser mayor o igual a fecha inicio"/>
+            </if>
+
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
+                <econdition field-name="partyId" from="activeOrgId"/></entity-find>
+
+            <if condition="!partyIdentificationList.idValue[0]">
+                <return error="true" message="Organización no tiene RUT definido"/>
+            </if>
+            <set field="emisorS" from="partyIdentificationList.idValue[0]"/>
+
+            <!-- Validación rut -->
+            <!--service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutReceptor]"/-->
+
+
+            <!-- Recuperacion de parametros de la organizacion -->
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <set field="certS" from="pathCert"/>
+            <set field="passS" from="passCert"/>
+            <set field="resultS" from="pathResults"/>
+            <set field="pathTemp" from="pathTemp"/>
+            <set field="pathPdf" from="pathPdf"/>
+            <set field="cafS" from="pathCaf"/>
+            <set field="plantillaS" from="templateRcof"/>
+            <set field="enviadorS" from="rutEnviador"/>
+            <set field="emisorS" from="rutEmisor"/>
+            <set field="fchResol" from="fchResol"/>
+            <set field="nroResol" from="nroResol"/>
+            <set field="rutEmisor" from="rutEmisor"/>
+            <set field="rutEnvia" from="rutEnvia"/>
+            <set field="rznSocEmisor" from="rznSocEmisor"/>
+            <!--set field="giroEmisor" from="giroEmisor"/-->
+            <set field="cdgSIISucur" from="cdgSIISucur"/>
+            <set field="dirOrigen" from="dirOrigen"/>
+            <set field="cmnaOrigen" from="cmnaOrigen"/>
+            <set field="ciudadOrigen" from="ciudadOrigen"/>
+            <set field="fchResol" from="fchResol"/>
+            <set field="nroResol" from="nroResol"/>
+            <set field="templatePdfBoleta" from="templatePdfBoleta"/>
+            <!-- Giro del emisor -->
+            <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:activeOrgId]" out-map="giroOutMap"/>
+            <set field="giroEmisor" from="giroOutMap.description"/>
+
+            <set field="fechaEmision"/>
+            <set field="resultadoFirmado" from="resultS"/>
+
+
+            <!-- TODO: Buscar lista de DTE 39 que se hayan emitido/anulado-->
+            <service-call name="mchile.DTEServices.get#ResumenRcof" in-map="[fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-39', activeOrgId:activeOrgId]" out-map="mapBoleta"/>
+            <!-- TODO: Buscar lista de DTE 41 -->
+            <service-call name="mchile.DTEServices.get#ResumenRcof" in-map="[fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-41', activeOrgId:activeOrgId]" out-map="mapBoletaExenta"/>
+            <!-- TODO: Buscar lista de DTE 61 que anulen boletas -->
+            <service-call name="mchile.DTEServices.get#ResumenRcofNC" in-map="[fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-61', activeOrgId:activeOrgId]" out-map="mapNotaCredito"/>
+
+            <set field="idS" value=""/>
+
+            <script>
+                import java.text.SimpleDateFormat;
+                import java.util.Date;
+
+                Date dNow = new Date();
+                SimpleDateFormat ft = new SimpleDateFormat("yyMMddhhmmssMs");
+                String datetime = ft.format(dNow);
+                idS = idS + datetime;
+
+                import java.io.ByteArrayOutputStream;
+                import java.io.IOException;
+                import java.io.StringReader;
+                import java.math.BigDecimal;
+                import java.math.BigInteger;
+                import java.sql.Connection;
+                import java.sql.SQLException;
+                import java.text.SimpleDateFormat;
+                import java.util.ArrayList;
+                import java.util.Calendar;
+                import java.util.Collection;
+                import java.util.Date;
+                import java.util.HashMap;
+                import java.nio.file.Path;
+                import cl.sii.siiDte.FechaHoraType;
+                import cl.sii.siiDte.FechaType;
+                import cl.sii.siiDte.MedioPagoType;
+                import cl.nic.dte.util.Signer;
+                import cl.nic.dte.util.Utilities;
+                import cl.nic.dte.util.XMLUtil;
+                import java.nio.file.Files;
+                import java.nio.file.Path;
+                import java.nio.file.Paths;
+
+                import org.apache.log4j.Logger;
+                import org.apache.xmlbeans.XmlDate;
+                import org.apache.xmlbeans.XmlException;
+                import org.apache.xmlbeans.XmlOptions;
+                import javax.xml.namespace.QName;
+                import org.apache.xmlbeans.XmlCursor;
+                import java.security.cert.X509Certificate;
+                import java.security.KeyStore;
+                import java.security.PrivateKey;
+                import org.w3c.dom.Document;
+
+                import cl.helpcom.dte.util.FirmaRcof;
+                import cl.helpcom.recursos.LectorFichero;
+
+                import cl.nic.dte.VerifyResult;
+                import cl.sii.siiDte.AUTORIZACIONDocument;
+                import cl.sii.siiDte.AutorizacionType;
+                import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument;
+                import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument.ConsumoFolios;
+                import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument.ConsumoFolios.DocumentoConsumoFolios;
+                import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument.ConsumoFolios.DocumentoConsumoFolios.Caratula;
+                import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument.ConsumoFolios.DocumentoConsumoFolios.Resumen;
+                import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument.ConsumoFolios.DocumentoConsumoFolios.Resumen.RangoUtilizados;
+                import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument.ConsumoFolios.DocumentoConsumoFolios.Resumen.RangoAnulados;
+
+                LectorFichero lectorFichero = new LectorFichero();
+
+                PrivateKey key;
+                int tipoFactura;
+                int frmPago = 1;
+                int listSize = 0;
+
+                tipoFactura = Integer.valueOf(39);
+                if(formaPago != null)
+                frmPago = Integer.valueOf(formaPago);
+
+                // Debo meter el namespace porque SII no lo genera
+                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;();
+                //namespaces.put("http://www.sii.cl/SiiDte","");
+
+                namespaces.put("", "http://www.sii.cl/SiiDte");
+                //namespaces.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+                //namespaces.put("xmlns:siid", "http://www.sii.cl/SiiDte");
+                namespaces.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+                namespaces.put("xsi:schemaLocation","http://www.sii.cl/SiiDte ConsumoFolio_v10.xsd");
+                XmlOptions opts = new XmlOptions();
+                opts.setLoadSubstituteNamespaces(namespaces);
+
+            </script>
+
+            <script>
+
+                logger.warn("Generando RCOF\n");
+
+                cl.sii.siiDte.consumofolios.ConsumoFoliosDocument consumoFoliosDocument = ConsumoFoliosDocument.Factory.newInstance();
+
+                consumoFoliosDocument = ConsumoFoliosDocument.Factory.parse(new FileInputStream(plantillaS));
+
+
+                ConsumoFolios cf = consumoFoliosDocument.getConsumoFolios();
+
+
+                // Datos de carátula
+
+                DocumentoConsumoFolios dcf = cf.addNewDocumentoConsumoFolios();
+                dcf.setID("RCOF"+idS);
+                //DocumentoConsumoFolios dcf = consumoFoliosDocument.addNewDocumentoConsumoFolios();
+
+                // leo certificado y llave privada del archivo pkcs12
+                KeyStore ks = KeyStore.getInstance("PKCS12");
+                ks.load(new FileInputStream(certS), passS.toCharArray());
+                String alias = ks.aliases().nextElement();
+                logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS);
+
+                X509Certificate x509 = (X509Certificate) ks.getCertificate(alias);
+                String enviadorS = Utilities.getRutFromCertificate(x509);
+                PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray());
+
+                //dcf.setVersion("1.0");
+
+                Caratula caratula = dcf.addNewCaratula();
+
+                //caratula.setVersion(BigDecimal.valueOf(1.0));
+                caratula.setRutEmisor(rutEmisor);
+                caratula.setRutEnvia(rutEnvia);
+                //caratula.setRutReceptor(rutReceptor);
+
+
+                Date dateFchResol = new SimpleDateFormat("yyyy-MM-dd").parse(fchResol);
+
+                //iddoc.xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+                caratula.xsetFchResol(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol)));
+
+                caratula.setNroResol(0);
+                // Fecha de Inicio del Resumen
+                //caratula.setFchInicio(calendar);
+                caratula.setFchInicio(calendar);
+                caratula.xsetFchInicio(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol)));
+
+                // Fecha Final del Resumen
+                //caratula.setFchFinal(calendar);
+                caratula.setFchFinal(calendar);
+                caratula.xsetFchFinal(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol)));
+
+                caratula.setCorrelativo(1);
+                // Secuencia de envío
+                caratula.setSecEnvio(1);
+
+                caratula.setNroResol(Integer.valueOf(nroResol));
+                now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                caratula.xsetTmstFirmaEnv(now);
+                Resumen[] resumenArray = new Resumen[3];
+                // *****************************************************************
+                // Resumen de Boleta (39)
+                // *****************************************************************
+
+                Resumen resumen = Resumen.Factory.newInstance();
+
+                resumen.setTipoDocumento(39);
+                resumen.setMntNeto(mapBoleta.totalMontoNeto);
+                resumen.setMntIva(mapBoleta.totalMontoIva);
+                resumen.setTasaIVA(19);
+                resumen.setMntExento(mapBoleta.totalMontoExento);
+                resumen.setMntTotal(mapBoleta.totalMontoTotal);
+                resumen.setFoliosEmitidos(mapBoleta.cantDocEmitidos);
+                resumen.setFoliosAnulados(mapBoleta.cantFoliosAnulados);
+                resumen.setFoliosUtilizados(mapBoleta.cantDocUtilizados);
+
+                // Rango de folios emitidos
+
+                RangoUtilizados[] rangoUtilizadosArray;
+
+                if(mapBoleta.rangosFoliosUtilizados != null)
+                   rangoUtilizadosArray = new RangoUtilizados[mapBoleta.rangosFoliosUtilizados.size()];
+                int i = 0;
+            </script>
+               <iterate list="mapBoleta.rangosFoliosUtilizados" entry="rangoField">
+                   <script>
+                       RangoUtilizados rangoUtilizados = RangoUtilizados.Factory.newInstance();
+                       rangoUtilizados.setInicial(rangoField[0]);
+                       rangoUtilizados.setFinal(rangoField[1]);
+                       rangoUtilizadosArray[i] = rangoUtilizados;
+                       i++;
+                   </script>
+               </iterate>
+            
+            <script>
+                resumen.setRangoUtilizadosArray(rangoUtilizadosArray);
+
+                // Rango de folios anulados
+                RangoAnulados[] rangoAnuladosArray;
+                if(mapBoleta.rangosFoliosAnulados != null)
+                    rangoAnuladosArray = new RangoAnulados[mapBoleta.rangosFoliosAnulados.size()];
+                i = 0;
+            </script>
+            <iterate list="mapBoleta.rangosFoliosAnulados" entry="rangoField">
+                <script>
+                    RangoAnulados rangoAnulados = RangoAnulados.Factory.newInstance();
+                    rangoAnulados.setInicial(rangoField[0]);
+                    rangoAnulados.setFinal(rangoField[1]);
+                    rangoAnuladosArray[i] = rangoAnulados;
+                    i++;
+                </script>
+            </iterate>
+            <script>
+                resumen.setRangoAnuladosArray(rangoAnuladosArray);
+
+                resumenArray[0] = resumen; // Resumen de Boleta
+
+                // *****************************************************************
+                // Resumen de Boleta Exenta Electrónica (41)
+                // *****************************************************************
+                resumen = Resumen.Factory.newInstance();
+
+                resumen.setTipoDocumento(41);
+                resumen.setMntNeto(0);
+                resumen.setMntIva(0);
+                //resumen.setTasaIVA(19);
+                resumen.setMntExento(mapBoletaExenta.totalMontoTotal);
+                resumen.setMntTotal(mapBoletaExenta.totalMontoTotal);
+                resumen.setFoliosEmitidos(mapBoletaExenta.cantDocEmitidos);
+                resumen.setFoliosAnulados(mapBoletaExenta.cantFoliosAnulados);
+                resumen.setFoliosUtilizados(mapBoletaExenta.cantDocUtilizados);
+
+                // Rango de folios emitidos
+                if(mapBoletaExenta.rangosFoliosUtilizados != null)
+                    rangoUtilizadosArray = new RangoUtilizados[mapBoletaExenta.rangosFoliosUtilizados.size()];
+                i = 0;
+            </script>
+            <iterate list="mapBoletaExenta.rangosFoliosUtilizados" entry="rangoField">
+                <script>
+                    RangoUtilizados rangoUtilizados = RangoUtilizados.Factory.newInstance();
+                    rangoUtilizados.setInicial(rangoField[0]);
+                    rangoUtilizados.setFinal(rangoField[1]);
+                    rangoUtilizadosArray[i] = rangoUtilizados;
+                    i++;
+                </script>
+            </iterate>
+
+            <script>
+                resumen.setRangoUtilizadosArray(rangoUtilizadosArray);
+
+                // Rango de folios anulados
+                //RangoAnulados[] rangoAnuladosArray;
+
+                if(mapBoletaExenta.rangosFoliosAnulados != null)
+                    rangoAnuladosArray = new RangoAnulados[mapBoletaExenta.rangosFoliosAnulados.size()];
+                i = 0;
+            </script>
+            <iterate list="mapBoletaExenta.rangosFoliosAnulados" entry="rangoField">
+                <script>
+                    RangoAnulados rangoAnulados = RangoAnulados.Factory.newInstance();
+                    rangoAnulados.setInicial(rangoField[0]);
+                    rangoAnulados.setFinal(rangoField[1]);
+                    rangoAnuladosArray[i] = rangoAnulados;
+                    i++;
+                </script>
+            </iterate>
+
+            <script>
+
+                resumen.setRangoAnuladosArray(rangoAnuladosArray);
+
+                resumenArray[1] = resumen; // Resumen de Boleta Exenta Electrónica
+
+                // *****************************************************************
+                // Resumen de Notas de Crédito (61)
+                // *****************************************************************
+                resumen = Resumen.Factory.newInstance();
+
+                resumen.setTipoDocumento(61);
+                resumen.setMntNeto(mapNotaCredito.totalMontoNeto);
+                resumen.setMntIva(mapNotaCredito.totalMontoIva);
+                resumen.setTasaIVA(19);
+                resumen.setMntExento(mapNotaCredito.totalMontoExento);
+                resumen.setMntTotal(mapNotaCredito.totalMontoTotal);
+                resumen.setFoliosEmitidos(mapNotaCredito.cantDocEmitidos);
+                resumen.setFoliosAnulados(mapNotaCredito.cantFoliosAnulados);
+                resumen.setFoliosUtilizados(mapNotaCredito.cantDocUtilizados);
+
+                // Rango de folios emitidos
+
+                if(mapNotaCredito.rangosFoliosUtilizados != null)
+                    rangoUtilizadosArray = new RangoUtilizados[mapNotaCredito.rangosFoliosUtilizados.size()];
+                i = 0;
+            </script>
+            <iterate list="mapNotaCredito.rangosFoliosUtilizados" entry="rangoField">
+                <script>
+                    RangoUtilizados rangoUtilizados = RangoUtilizados.Factory.newInstance();
+                    rangoUtilizados.setInicial(rangoField[0]);
+                    rangoUtilizados.setFinal(rangoField[1]);
+                    rangoUtilizadosArray[i] = rangoUtilizados;
+                    i++;
+                </script>
+            </iterate>
+
+            <script>
+                resumen.setRangoUtilizadosArray(rangoUtilizadosArray);
+
+                // Rango de folios anulados
+                if(mapNotaCredito.rangosFoliosAnulados != null)
+                    rangoAnuladosArray = new RangoAnulados[mapNotaCredito.rangosFoliosAnulados.size()];
+                i = 0;
+            </script>
+            <iterate list="mapNotaCredito.rangosFoliosAnulados" entry="rangoField">
+                <script>
+                    RangoAnulados rangoAnulados = RangoAnulados.Factory.newInstance();
+                    rangoAnulados.setInicial(rangoField[0]);
+                    rangoAnulados.setFinal(rangoField[1]);
+                    rangoAnuladosArray[i] = rangoAnulados;
+                    i++;
+                </script>
+            </iterate>
+
+            <script>
+                resumen.setRangoAnuladosArray(rangoAnuladosArray);
+
+                resumenArray[2] = resumen; // Resumen de Notas de Crédito
+
+                dcf.setResumenArray(resumenArray);
+
+
+                // antes de firmar le doy formato a los datos
+                //opts = new XmlOptions();
+                //opts.setSaveImplicitNamespaces(namespaces);
+                //opts.setLoadSubstituteNamespaces(namespaces);
+                //opts.setLoadAdditionalNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(4);
+
+                // releo el doc para que se reflejen los cambios de formato
+                logger.warn("XML:" + consumoFoliosDocument);
+
+                consumoFoliosDocument = ConsumoFoliosDocument.Factory.parse(consumoFoliosDocument.newInputStream(opts), opts);
+
+
+                // Guardo
+                //opts = new XmlOptions();
+                //opts.setCharacterEncoding("ISO-8859-1");
+                //opts.setSaveImplicitNamespaces(namespaces);
+
+                String uri = "";
+                FechaHoraType now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                uri = cf.getDocumentoConsumoFolios().getID();
+                //cf.getDocumentoConsumoFolios().xsetTmstFirma(now);
+
+
+                logger.warn("URI: " + uri)
+
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                consumoFoliosDocument.save(new File(resultS + "RCOF-" + uri + "-sinfirma.xml"), opts);
+                consumoFoliosDocument.save(out, opts);
+
+                logger.warn("XML2:" + consumoFoliosDocument);
+
+
+                //Document doc2 = XMLUtil.parseDocument(out.toByteArray());
+                //byte[] salida = Signer.sign(doc2, uri, key, cert, uri, "DocumentoConsumoFolios");
+                //doc2 = XMLUtil.parseDocument(salida);
+
+                FirmaRcof firmaLibro = new FirmaRcof();
+
+                SimpleDateFormat formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
+                Date dateFechaEmision = new Date();
+                fechaEmision = formatterFechaEmision.format(dateFechaEmision);
+
+                //logger.warn("cert:" + certS + " passS: " + passS);
+                outPDF=lectorFichero.crearFicheroMMDDFlex(resultadoFirmado, fchResol);
+                outPDF+="/RCOF-firmado-"+uri+".xml";
+
+                String mensaje=firmaLibro.firmarRcof(certS, passS, resultS + "RCOF-" + uri + "-sinfirma.xml",outPDF,10,"ENVIADO","qq","pp","xmlasdas","ESPECIAL");
+
+                return
+
+
+
+
+            </script>
+            <!-- Registro de DTE en base de datos y generación de PDF -->
+
+            <!--set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/>
+            <set field="xml" value="${resultS}BOL${tipoFactura}-${folio}.xml"/>
+            <set field="pdf" value="${pathPdf}BOL${tipoFactura}-${folio}.pdf"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, activeOrgId:activeOrgId, boleta:true]" out-map="context"/-->
+
+            <!-- Creación de registro en FiscalTaxDocument -->
+            <!--entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
+                <field-map field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <field-map field-name="fiscalTaxDocumentNumber" from="folio"/>
+            </entity-find-one>
+
+            <set field="dteField.issuerPartyId" from="activeOrgId"/>
+            <if condition="rutReceptor != '66666666-6'"><then>
+                <set field="dteField.receiverPartyId" from="receiverPartyId"/>
+                <set field="dteField.receiverPartyIdTypeEnumId" value="PtidNationalTaxId"/>
+            </then></if>
+            <set field="dteField.fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
+            <set field="dteField.fiscalTaxDocumentSentStatusEnumId" value="Ftdt-NotSent"/>
+            <set field="dteField.invoiceId" from="invoiceId"/-->
+
+            <!--script>
+                Date date = new Date();
+                Timestamp ts = new Timestamp(date.getTime());
+            </script>
+            <set field="dteField.date" from="ts"/>
+
+            <entity-update value-field="dteField"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xml, contentDate:ts]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+
+            <set field="fiscalTaxDocumentId" from="dteField.fiscalTaxDocumentId"/-->
 
         </actions>
     </service>
@@ -6313,21 +8526,397 @@ return
             <parameter name="description"/>
         </out-parameters>
         <actions>
+
             <entity-find-one entity-name="mchile.dte.PartyGiro" value-field="giroField">
                 <field-map field-name="partyId" from="partyId"/>
                 <field-map field-name="isPrimary" value="Primario"/>
             </entity-find-one>
-            <if condition="!giroField"><then>
+            <if condition="giroField == null"><then>
+
                 <entity-find-one entity-name="mchile.dte.PartyGiro" value-field="giroField">
                     <field-map field-name="partyId" from="partyId"/>
                 </entity-find-one>
                 <if condition="!giroField">
-                    <return error="true" message="Receptor no tiene giro primario o giro registrado"/>
+                    <return error="true" message="Empresa de ID ${partyId} no tiene giro primario o giro registrado"/>
                 </if>
                 </then>
             </if>
             <set field="giroId" from="giroField.giroId"/>
             <set field="description" from="giroField.description"/>
+        </actions>
+    </service>
+
+    <service verb="validar" noun="DTE">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true" type="String"/>
+            <parameter name="rutEmisor" required="true"/>
+            <parameter name="folio" required="true" type="Integer"/>
+            <parameter name="fechaEmision" required="true"/>
+            <parameter name="monto" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="fiscalTaxDocumentId"/>
+        </out-parameters>
+        <actions>
+
+            <!--return error="true" message="$fiscalTaxDocumentTypeEnumId - $rutEmisor - $folio - $fechaEmision - $monto"/-->
+            <!-- Se busca partyId de acuerdo a emisor -->
+            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyField">
+                <field-map field-name="idValue" from="rutEmisor"/>
+            </entity-find-one>
+            <if condition="!partyField">
+                <return error="true" message="No se encontró documento con los parámetros ingresados 1"/>
+            </if>
+
+            <set field="issuerPartyId" from="partyField.partyId"/>
+
+            <!-- Se verifica en tabla principal -->
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="ftdtField">
+                <field-map field-name="fiscalTaxDocumentNumber" from="folio"/>
+                <field-map field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <field-map field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
+                <field-map field-name="issuerPartyId" from="issuerPartyId"/>
+            </entity-find-one>
+            <if condition="!ftdtField">
+                <return error="true" message="No se encontró documento con los parámetros ingresados 2 $issuerPartyId"/>
+            </if>
+            <set field="fiscalTaxDocumentId" from="ftdtField.fiscalTaxDocumentId"/>
+            <!-- Se buscan atributos en mchile.dte.FiscalTaxDocumentAttributes -->
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAttributes" value-field="ftdtAttField">
+                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+                <field-map field-name="amount" from="monto"/>
+                <field-map field-name="fechaEmision" from="fechaEmision"/>
+            </entity-find-one>
+
+            <if condition="!ftdtAttField">
+                <return error="true" message="No se encontró documento con los parámetros ingresados 3"/>
+            </if>
+
+
+            <!--return error="false" message="Documento encontrado $ftdtField"/-->
+        </actions>
+    </service>
+
+    <service verb="get" noun="ResumenRcof">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true" type="String"/>
+            <parameter name="fechaInicio" required="true" type="Timestamp"/>
+            <parameter name="fechaFin" required="true" type="Timestamp"/>
+            <parameter name="activeOrgId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="totalMontoNeto" type="BigDecimal"/>
+            <parameter name="totalMontoIva" type="BigDecimal"/><!-- Se toma monto IVA Recuperable -->
+            <parameter name="tasaIva"/>
+            <parameter name="totalMontoExento"/>
+            <parameter name="totalMontoTotal"/>
+            <parameter name="cantDocEmitidos"/>
+            <parameter name="cantFoliosAnulados"/>
+            <parameter name="cantDocUtilizados"/>
+            <parameter name="rangosFoliosUtilizados" type="List"/>
+            <parameter name="rangosFoliosAnulados" type="List"/>
+        </out-parameters>
+        <actions>
+            <set field="totalMontoNeto" from="0"/>
+            <set field="totalMontoIva" from="0"/>
+            <set field="totalMontoExento" from="0"/>
+            <set field="totalMontoTotal" from="0"/>
+            <set field="cantDocEmitidos" from="0"/>
+            <set field="cantFoliosAnulados" from="0"/>
+            <set field="cantDocUtilizados" from="0"/>
+            <set field="tasaIva" from="19"/>
+            <set field="rangosFoliosUtilizados" type="List"/>
+            <set field="rangosFoliosAnulados" type="List"/>
+            <script>
+                Calendar cal = Calendar.getInstance();
+                cal.setTimeInMillis(fechaFin.getTime());
+                // add x hours
+                cal.add(Calendar.HOUR, 24);
+                fechaFin = new Timestamp(cal.getTime().getTime());
+            </script>
+
+            <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <!--econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/-->
+                <econditions combine="or">
+                    <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
+                    <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Cancelled"/>
+                </econditions>
+                <econdition field-name="issuerPartyId" from="activeOrgId"/>
+                <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
+                <econdition field-name="date" operator="less-equals" from="fechaFin"/>
+                <order-by field-name="fiscalTaxDocumentId"/>
+            </entity-find>
+
+
+
+            <iterate list="dteList" entry="dteField">
+                <!--log level="warn" message="Atributos encontrados: $dteField.fiscalTaxDocumentId, Monto Neto: $dteField.montoNeto, monto IVA: $dteField.montoIVARecuperable, tipo: $dteField.fiscalTaxDocumentStatusEnumId"/-->
+                <if condition="!dteField.fiscalTaxDocumentStatusEnumId.equals('Ftdt-Cancelled')"><then>
+                    <script>
+                        if(dteField.montoNeto != null) {
+                            long montoNeto = (long) dteField.montoNeto
+                            totalMontoNeto = totalMontoNeto + montoNeto
+                        }
+                        if(dteField.montoIVARecuperable != null) {
+                            long montoIva = (long) dteField.montoIVARecuperable
+                            totalMontoIva = totalMontoIva + montoIva
+                        }
+                        if(dteField.montoExento != null) {
+                            long montoExento = (long) dteField.montoExento
+                            totalMontoExento = totalMontoExento + montoExento
+                        }
+                        cantDocEmitidos = cantDocEmitidos + 1
+                    </script>
+                </then>
+                <else><!-- Documento cancelado -->
+                    <!--log message="DTE Cancelada" level="warn"/-->
+                    <script>
+                        cantFoliosAnulados = cantFoliosAnulados + 1
+                    </script>
+                </else>
+                </if>
+            </iterate>
+            <set field="cantDocUtilizados" from="cantFoliosAnulados + cantDocEmitidos"/>
+            <set field="totalMontoTotal" from="totalMontoNeto + totalMontoExento + totalMontoIva"/>
+
+
+            <!-- TODO: Consulta para ver todos los folios usados -->
+            <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
+                <econdition field-name="issuerPartyId" from="activeOrgId"/>
+                <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
+                <econdition field-name="date" operator="less-equals" from="fechaFin"/>
+                <order-by field-name="fiscalTaxDocumentId"/>
+            </entity-find>
+            <script>
+                List&lt;Integer&gt; list;
+                List&lt;List&lt;Integer&gt;&gt; lList = new ArrayList&lt;List&lt;Integer&gt;&gt;();
+                int i = 0;
+                int start = 0;
+                List&lt;Integer&gt; sList = new ArrayList&lt;Integer&gt;(2);
+                int listSize = 0;
+
+                for (i = 1; i &lt; dteList.size(); i++) {
+
+                    if(dteList.get(i-1).fiscalTaxDocumentNumber + 1 != dteList.get(i).fiscalTaxDocumentNumber) {
+                        sList.add(dteList.get(start).fiscalTaxDocumentNumber);
+                        sList.add(dteList.get(i-1).fiscalTaxDocumentNumber);
+                        lList.add(sList);
+                        sList = new ArrayList&lt;Integer&gt;(2);
+                        start = i;
+
+                    }
+
+                }
+                if(dteList.size() &gt; 0) {
+                    sList.add(dteList.get(start).fiscalTaxDocumentNumber);
+                    sList.add(dteList.get(dteList.size()-1).fiscalTaxDocumentNumber);
+                    lList.add(sList);
+                }
+                logger.warn("Lista de rangos emitidos: " + lList);
+
+            </script>
+
+            <!-- TODO: Consulta para ver todos los folios anulados -->
+            <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Cancelled"/>
+                <econdition field-name="issuerPartyId" from="activeOrgId"/>
+                <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
+                <econdition field-name="date" operator="less-equals" from="fechaFin"/>
+                <order-by field-name="fiscalTaxDocumentId"/>
+            </entity-find>
+
+
+            <script>
+                List&lt;Integer&gt; listc;
+                List&lt;List&lt;Integer&gt;&gt; lListc = new ArrayList&lt;List&lt;Integer&gt;&gt;();
+                i = 0;
+                start = 0;
+                List&lt;Integer&gt; sListc = new ArrayList&lt;Integer&gt;(2);
+                for (i = 1; i &lt; dteList.size(); i++) {
+                    if(dteList.get(i-1).fiscalTaxDocumentNumber + 1 != dteList.get(i).fiscalTaxDocumentNumber) {
+                        sListc.add(dteList.get(start).fiscalTaxDocumentNumber);
+                        sListc.add(dteList.get(i-1).fiscalTaxDocumentNumber);
+                        lListc.add(sList);
+                        sListc = new ArrayList&lt;Integer&gt;(2);
+                        start = i;
+                    }
+                }
+                if(dteList.size() &gt; 0) {
+                    sListc.add(dteList.get(start).fiscalTaxDocumentNumber);
+                    sListc.add(dteList.get(dteList.size()-1).fiscalTaxDocumentNumber);
+                    lListc.add(sListc);
+                }
+                logger.warn("Lista de rangos anulados: " + lListc);
+            </script>
+            <set field="rangosFoliosUtilizados" from="lList"/>
+            <set field="rangosFoliosAnulados" from="lListc"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="ResumenRcofNC">
+        <description>
+            Servicio que devuelve resumen de NC emitidas que refieren a boletas (39, 41)
+        </description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true" type="String"/>
+            <parameter name="fechaInicio" required="true" type="Timestamp"/>
+            <parameter name="fechaFin" required="true" type="Timestamp"/>
+            <parameter name="activeOrgId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="totalMontoNeto" type="BigDecimal"/>
+            <parameter name="totalMontoIva" type="BigDecimal"/><!-- Se toma monto IVA Recuperable -->
+            <parameter name="tasaIva"/>
+            <parameter name="totalMontoExento"/>
+            <parameter name="totalMontoTotal"/>
+            <parameter name="cantDocEmitidos"/>
+            <parameter name="cantFoliosAnulados"/>
+            <parameter name="cantDocUtilizados"/>
+            <parameter name="rangosFoliosUtilizados" type="List"/>
+            <parameter name="rangosFoliosAnulados" type="List"/>
+        </out-parameters>
+        <actions>
+            <set field="totalMontoNeto" from="0"/>
+            <set field="totalMontoIva" from="0"/>
+            <set field="totalMontoExento" from="0"/>
+            <set field="totalMontoTotal" from="0"/>
+            <set field="cantDocEmitidos" from="0"/>
+            <set field="cantFoliosAnulados" from="0"/>
+            <set field="cantDocUtilizados" from="0"/>
+            <set field="tasaIva" from="19"/>
+            <set field="rangosFoliosUtilizados" type="List"/>
+            <set field="rangosFoliosAnulados" type="List"/>
+            <script>
+                Calendar cal = Calendar.getInstance();
+                cal.setTimeInMillis(fechaFin.getTime());
+                // add x hours
+                cal.add(Calendar.HOUR, 24);
+                fechaFin = new Timestamp(cal.getTime().getTime());
+            </script>
+
+            <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <!--econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/-->
+                <econditions combine="or">
+                    <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
+                    <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Cancelled"/>
+                </econditions>
+                <econdition field-name="issuerPartyId" from="activeOrgId"/>
+                <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
+                <econdition field-name="date" operator="less-equals" from="fechaFin"/>
+                <order-by field-name="fiscalTaxDocumentId"/>
+            </entity-find>
+
+
+
+            <iterate list="dteList" entry="dteField">
+                <!--log level="warn" message="Atributos encontrados: $dteField.fiscalTaxDocumentId, Monto Neto: $dteField.montoNeto, monto IVA: $dteField.montoIVARecuperable, tipo: $dteField.fiscalTaxDocumentStatusEnumId"/-->
+                <if condition="!dteField.fiscalTaxDocumentStatusEnumId.equals('Ftdt-Cancelled')"><then>
+                    <script>
+                        if(dteField.montoNeto != null) {
+                        long montoNeto = (long) dteField.montoNeto
+                        totalMontoNeto = totalMontoNeto + montoNeto
+                        }
+                        if(dteField.montoIVARecuperable != null) {
+                        long montoIva = (long) dteField.montoIVARecuperable
+                        totalMontoIva = totalMontoIva + montoIva
+                        }
+                        if(dteField.montoExento != null) {
+                        long montoExento = (long) dteField.montoExento
+                        totalMontoExento = totalMontoExento + montoExento
+                        }
+                        cantDocEmitidos = cantDocEmitidos + 1
+                    </script>
+                </then>
+                    <else><!-- Documento cancelado -->
+                        <!--log message="DTE Cancelada" level="warn"/-->
+                        <script>
+                            cantFoliosAnulados = cantFoliosAnulados + 1
+                        </script>
+                    </else>
+                </if>
+            </iterate>
+            <set field="cantDocUtilizados" from="cantFoliosAnulados + cantDocEmitidos"/>
+            <set field="totalMontoTotal" from="totalMontoNeto + totalMontoExento + totalMontoIva"/>
+            <!--return error="true" message="NC: $cantDocUtilizados - $totalMontoTotal"/-->
+
+            <!-- TODO: Consulta para ver todos los folios usados -->
+            <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
+                <econdition field-name="issuerPartyId" from="activeOrgId"/>
+                <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
+                <econdition field-name="date" operator="less-equals" from="fechaFin"/>
+                <order-by field-name="fiscalTaxDocumentId"/>
+            </entity-find>
+            <script>
+                List&lt;Integer&gt; list;
+                List&lt;List&lt;Integer&gt;&gt; lList = new ArrayList&lt;List&lt;Integer&gt;&gt;();
+                int i = 0;
+                int start = 0;
+                List&lt;Integer&gt; sList = new ArrayList&lt;Integer&gt;(2);
+                int listSize = 0;
+
+                for (i = 1; i &lt; dteList.size(); i++) {
+
+                if(dteList.get(i-1).fiscalTaxDocumentNumber + 1 != dteList.get(i).fiscalTaxDocumentNumber) {
+                sList.add(dteList.get(start).fiscalTaxDocumentNumber);
+                sList.add(dteList.get(i-1).fiscalTaxDocumentNumber);
+                lList.add(sList);
+                sList = new ArrayList&lt;Integer&gt;(2);
+                start = i;
+
+                }
+
+                }
+                if(dteList.size() &gt; 0) {
+                sList.add(dteList.get(start).fiscalTaxDocumentNumber);
+                sList.add(dteList.get(dteList.size()-1).fiscalTaxDocumentNumber);
+                lList.add(sList);
+                }
+                logger.warn("Lista de rangos emitidos: " + lList);
+
+            </script>
+
+            <!-- TODO: Consulta para ver todos los folios anulados -->
+            <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Cancelled"/>
+                <econdition field-name="issuerPartyId" from="activeOrgId"/>
+                <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
+                <econdition field-name="date" operator="less-equals" from="fechaFin"/>
+                <order-by field-name="fiscalTaxDocumentId"/>
+            </entity-find>
+
+
+            <script>
+                List&lt;Integer&gt; listc;
+                List&lt;List&lt;Integer&gt;&gt; lListc = new ArrayList&lt;List&lt;Integer&gt;&gt;();
+                i = 0;
+                start = 0;
+                List&lt;Integer&gt; sListc = new ArrayList&lt;Integer&gt;(2);
+                for (i = 1; i &lt; dteList.size(); i++) {
+                if(dteList.get(i-1).fiscalTaxDocumentNumber + 1 != dteList.get(i).fiscalTaxDocumentNumber) {
+                sListc.add(dteList.get(start).fiscalTaxDocumentNumber);
+                sListc.add(dteList.get(i-1).fiscalTaxDocumentNumber);
+                lListc.add(sList);
+                sListc = new ArrayList&lt;Integer&gt;(2);
+                start = i;
+                }
+                }
+                if(dteList.size() &gt; 0) {
+                sListc.add(dteList.get(start).fiscalTaxDocumentNumber);
+                sListc.add(dteList.get(dteList.size()-1).fiscalTaxDocumentNumber);
+                lListc.add(sListc);
+                }
+                logger.warn("Lista de rangos anulados: " + lListc);
+            </script>
+            <set field="rangosFoliosUtilizados" from="lList"/>
+            <set field="rangosFoliosAnulados" from="lListc"/>
         </actions>
     </service>
 
