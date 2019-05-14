@@ -7704,6 +7704,9 @@ return
                 // Fin Boleta5
                 // *********************************************************************
 
+                // *********************************************************************
+                // Preparación de Envio Boleta con 5 boletas
+                // *********************************************************************
 
                 logger.warn("Generando Envio Boleta\n");
 
@@ -7714,6 +7717,9 @@ return
 
                 BOLETADefType[] bolArr = new BOLETADefType[5];
                 bolArr[0] = boleta;
+
+                BOLETADefType boleta0 = boleta;
+
                 bolArr[1] = boleta2;
                 bolArr[2] = boleta3;
                 bolArr[3] = boleta4;
@@ -7787,22 +7793,450 @@ return
                 doc2 = XMLUtil.parseDocument(salida);
 
                 if (Signer.verify(doc2, "Documento")) {
-                    Path path = Paths.get(resultS + "BOL" + tipoFactura + "-" + folio + ".xml");
+                    Path path = Paths.get(resultS + "BOL-Envio.xml");
                     Files.write(path, salida);
                     logger.warn("Factura "+path+" folio "+folio+" generada OK");
                 } else {
-                    Path path = Paths.get(resultS + "BOL" + tipoFactura + "-" + folio + "-mala.xml");
+                    Path path = Paths.get(resultS + "BOL-Envio-mala.xml");
                     Files.write(path, salida);
                     logger.warn("Error al generar boleta folio "+folio);
                 }
 
+                // **************************************************************
+                // Creación de PDF en base a EnvioBOLETA con boletaN aaaaa
+                // PDF Boleta 1
+                // **************************************************************
+                // ajustes para el formato (MAGIA) antes de firmar
+
+                cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument1 = EnvioBOLETADocument.Factory.newInstance();
+                EnvioBOLETA eb1 = EnvioBOLETA.Factory.newInstance();
+                SetDTE sdte1 = SetDTE.Factory.newInstance();
+
+                BOLETADefType[] bolArr1 = new BOLETADefType[1];
+                bolArr1[0] = boleta0;
+
+                folio = "1";
+
+                sdte1.setDTEArray(bolArr1);
+                sdte1.setID("envio-boleta");// doc.getDTE().getDocumento().setID("N" + System.nanoTime());
+                sdte1.setID("envboleta-" + System.nanoTime());
+
+                // Datos de carátula
+                Caratula caratula1 = sdte1.addNewCaratula();
+                caratula1.setRutEmisor(rutEmisor);
+                caratula1.setRutEnvia(rutEnvia);
+                Date dateFchResol1 = new SimpleDateFormat("yyyy-MM-dd").parse(fchResol);
+                caratula1.xsetFchResol(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol1)));
+
+                caratula1.setNroResol(Integer.valueOf(nroResol));
+                now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                caratula1.xsetTmstFirmaEnv(now);
+
+                // Subtotales
+                SubTotDTE[] subtDtes1 = new SubTotDTE[1];
+                SubTotDTE subt1 = SubTotDTE.Factory.newInstance();
+                subt1.setTpoDTE(new BigInteger(tipoFactura.toString()));
+                subt1.setNroDTE(new BigInteger(5));
+                subtDtes1[0] = subt1;
+                caratula1.setSubTotDTEArray(subtDtes1);
+
+                eb1.setSetDTE(sdte1);
+                eb1.setVersion(new BigDecimal("1.0"));
+                envioBoletaDocument1.setEnvioBOLETA(eb1);
+
+                opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces);
+                opts.setLoadSubstituteNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(0);
+
+                try {
+                    //envioBoletaDocument1 = EnvioBOLETADocument.Factory.parse(envioBoletaDocument1.newInputStream(opts), opts);
+                } catch (Exception e) {
+                    logger.warn("Error al parsear XML");
+                    return
+                }
+                // No es necesario de nuevo
+                //boleta = envioBoletaDocument.getEnvioBOLETA().getSetDTE().getDTEArray(0);
+
+                String uri1 = "";
+                //FechaHoraType now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                uri = boleta0.getDocumento().getID();
+                boleta0.getDocumento().xsetTmstFirma(now);
+
+                uri = "#" + uri;
+
+                logger.warn("URI: " + uri)
+
+                ByteArrayOutputStream out1 = new ByteArrayOutputStream();
+                envioBoletaDocument1.save(new File(resultS + "BOLPDF" + tipoFactura + "-1-sinfirma.xml"), opts);
+                envioBoletaDocument1.save(out1, opts);
+
+                Document doc1 = XMLUtil.parseDocument(out1.toByteArray());
+
+                byte[] salida1 = Signer.sign(doc1, uri, key, cert, uri, "Documento");
+                doc1 = XMLUtil.parseDocument(salida1);
+
+                if (Signer.verify(doc1, "Documento")) {
+                    Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-1.xml");
+                    Files.write(path, salida1);
+                    logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                } else {
+                    Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-1-mala.xml");
+                    Files.write(path, salida1);
+                    logger.warn("Error al generar boleta folio "+folio);
+                }
+                // ******************************************************************
+
+                // PDF Boleta 2
+                // **************************************************************
+                // ajustes para el formato (MAGIA) antes de firmar
+
+                cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument2 = EnvioBOLETADocument.Factory.newInstance();
+                EnvioBOLETA eb2 = EnvioBOLETA.Factory.newInstance();
+                SetDTE sdte2 = SetDTE.Factory.newInstance();
+
+                BOLETADefType[] bolArr2 = new BOLETADefType[1];
+                bolArr2[0] = boleta2;
+
+                folio = "2";
+
+                sdte2.setDTEArray(bolArr2);
+                sdte2.setID("envio-boleta");
+                sdte2.setID("envboleta-" + System.nanoTime());
+
+                // Datos de carátula
+                Caratula caratula2 = sdte2.addNewCaratula();
+                caratula2.setRutEmisor(rutEmisor);
+                caratula2.setRutEnvia(rutEnvia);
+                Date dateFchResol2 = new SimpleDateFormat("yyyy-MM-dd").parse(fchResol);
+                caratula2.xsetFchResol(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol2)));
+
+                caratula2.setNroResol(Integer.valueOf(nroResol));
+                //now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                caratula2.xsetTmstFirmaEnv(now);
+
+                // Subtotales
+                SubTotDTE[] subtDtes2 = new SubTotDTE[1];
+                SubTotDTE subt2 = SubTotDTE.Factory.newInstance();
+                subt2.setTpoDTE(new BigInteger(tipoFactura.toString()));
+                subt2.setNroDTE(new BigInteger(5));
+                subtDtes2[0] = subt2;
+                caratula2.setSubTotDTEArray(subtDtes2);
+
+                eb2.setSetDTE(sdte2);
+                eb2.setVersion(new BigDecimal("1.0"));
+                envioBoletaDocument2.setEnvioBOLETA(eb2);
+
+                opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces);
+                opts.setLoadSubstituteNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(0);
+
+                try {
+                //envioBoletaDocument1 = EnvioBOLETADocument.Factory.parse(envioBoletaDocument1.newInputStream(opts), opts);
+                } catch (Exception e) {
+                logger.warn("Error al parsear XML");
+                return
+                }
+                //FechaHoraType now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                uri = boleta2.getDocumento().getID();
+                boleta2.getDocumento().xsetTmstFirma(now);
+
+                uri = "#" + uri;
+
+                logger.warn("URI: " + uri)
+
+                ByteArrayOutputStream out2 = new ByteArrayOutputStream();
+                envioBoletaDocument2.save(new File(resultS + "BOLPDF" + tipoFactura + "-2-sinfirma.xml"), opts);
+                envioBoletaDocument2.save(out2, opts);
+
+                Document doc22 = XMLUtil.parseDocument(out2.toByteArray());
+
+                byte[] salida2 = Signer.sign(doc22, uri, key, cert, uri, "Documento");
+                doc22 = XMLUtil.parseDocument(salida2);
+
+                if (Signer.verify(doc22, "Documento")) {
+                Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-2.xml");
+                Files.write(path, salida2);
+                logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                } else {
+                Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-2-mala.xml");
+                Files.write(path, salida2);
+                logger.warn("Error al generar boleta folio "+folio);
+                }
+                // *****************************************************************
+
+
+                // ******************************************************************
+
+                // PDF Boleta 3
+                // **************************************************************
+                // ajustes para el formato (MAGIA) antes de firmar
+
+                cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument3 = EnvioBOLETADocument.Factory.newInstance();
+                EnvioBOLETA eb3 = EnvioBOLETA.Factory.newInstance();
+                SetDTE sdte3 = SetDTE.Factory.newInstance();
+
+                BOLETADefType[] bolArr3 = new BOLETADefType[1];
+                bolArr3[0] = boleta3;
+
+                folio = "3";
+
+                sdte3.setDTEArray(bolArr3);
+                sdte3.setID("envio-boleta");
+                sdte3.setID("envboleta-" + System.nanoTime());
+
+                // Datos de carátula
+                Caratula caratula3 = sdte3.addNewCaratula();
+                caratula3.setRutEmisor(rutEmisor);
+                caratula3.setRutEnvia(rutEnvia);
+                Date dateFchResol3 = new SimpleDateFormat("yyyy-MM-dd").parse(fchResol);
+                caratula3.xsetFchResol(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol3)));
+
+                caratula3.setNroResol(Integer.valueOf(nroResol));
+                caratula3.xsetTmstFirmaEnv(now);
+
+                // Subtotales
+                SubTotDTE[] subtDtes3 = new SubTotDTE[1];
+                SubTotDTE subt3 = SubTotDTE.Factory.newInstance();
+                subt3.setTpoDTE(new BigInteger(tipoFactura.toString()));
+                subt3.setNroDTE(new BigInteger(5));
+                subtDtes3[0] = subt3;
+                caratula3.setSubTotDTEArray(subtDtes3);
+
+                eb3.setSetDTE(sdte3);
+                eb3.setVersion(new BigDecimal("1.0"));
+                envioBoletaDocument3.setEnvioBOLETA(eb3)
+
+                opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces);
+                opts.setLoadSubstituteNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(0);
+
+                try {
+                //envioBoletaDocument1 = EnvioBOLETADocument.Factory.parse(envioBoletaDocument1.newInputStream(opts), opts);
+                } catch (Exception e) {
+                logger.warn("Error al parsear XML");
+                return
+                }
+                uri = boleta3.getDocumento().getID();
+                boleta3.getDocumento().xsetTmstFirma(now);
+
+                uri = "#" + uri;
+
+                logger.warn("URI: " + uri)
+
+                ByteArrayOutputStream out3 = new ByteArrayOutputStream();
+                envioBoletaDocument3.save(new File(resultS + "BOLPDF" + tipoFactura + "-3-sinfirma.xml"), opts);
+                envioBoletaDocument3.save(out3, opts);
+
+                Document doc33 = XMLUtil.parseDocument(out3.toByteArray());
+
+                byte[] salida3 = Signer.sign(doc33, uri, key, cert, uri, "Documento");
+                doc33 = XMLUtil.parseDocument(salida3);
+
+                if (Signer.verify(doc33, "Documento")) {
+                Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-3.xml");
+                Files.write(path, salida3);
+                logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                } else {
+                Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-3-mala.xml");
+                Files.write(path, salida3);
+                logger.warn("Error al generar boleta folio "+folio);
+                }
+                // *****************************************************************
+
+                // ******************************************************************
+
+                // PDF Boleta 4
+                // **************************************************************
+                // ajustes para el formato (MAGIA) antes de firmar
+
+                cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument4 = EnvioBOLETADocument.Factory.newInstance();
+                EnvioBOLETA eb4 = EnvioBOLETA.Factory.newInstance();
+                SetDTE sdte4 = SetDTE.Factory.newInstance();
+
+                BOLETADefType[] bolArr4 = new BOLETADefType[1];
+                bolArr4[0] = boleta4;
+
+                folio = "4";
+
+                sdte4.setDTEArray(bolArr4);
+                sdte4.setID("envio-boleta");
+                sdte4.setID("envboleta-" + System.nanoTime());
+
+                // Datos de carátula
+                Caratula caratula4 = sdte4.addNewCaratula();
+                caratula4.setRutEmisor(rutEmisor);
+                caratula4.setRutEnvia(rutEnvia);
+                Date dateFchResol4 = new SimpleDateFormat("yyyy-MM-dd").parse(fchResol);
+                caratula4.xsetFchResol(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol4)));
+
+                caratula4.setNroResol(Integer.valueOf(nroResol));
+                caratula4.xsetTmstFirmaEnv(now);
+
+                // Subtotales
+                SubTotDTE[] subtDtes4 = new SubTotDTE[1];
+                SubTotDTE subt4 = SubTotDTE.Factory.newInstance();
+                subt4.setTpoDTE(new BigInteger(tipoFactura.toString()));
+                subt4.setNroDTE(new BigInteger(5));
+                subtDtes4[0] = subt4;
+                caratula4.setSubTotDTEArray(subtDtes4);
+
+                eb4.setSetDTE(sdte4);
+                eb4.setVersion(new BigDecimal("1.0"));
+                envioBoletaDocument4.setEnvioBOLETA(eb4)
+
+                opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces);
+                opts.setLoadSubstituteNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(0);
+
+                try {
+                //envioBoletaDocument1 = EnvioBOLETADocument.Factory.parse(envioBoletaDocument1.newInputStream(opts), opts);
+                } catch (Exception e) {
+                logger.warn("Error al parsear XML");
+                return
+                }
+                uri = boleta4.getDocumento().getID();
+                boleta4.getDocumento().xsetTmstFirma(now);
+
+                uri = "#" + uri;
+
+                logger.warn("URI: " + uri)
+
+                ByteArrayOutputStream out4 = new ByteArrayOutputStream();
+                envioBoletaDocument4.save(new File(resultS + "BOLPDF" + tipoFactura + "-4-sinfirma.xml"), opts);
+                envioBoletaDocument4.save(out4, opts);
+
+                Document doc44 = XMLUtil.parseDocument(out4.toByteArray());
+
+                byte[] salida4 = Signer.sign(doc44, uri, key, cert, uri, "Documento");
+                doc44 = XMLUtil.parseDocument(salida4);
+
+                if (Signer.verify(doc44, "Documento")) {
+                    Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-4.xml");
+                    Files.write(path, salida4);
+                    logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                } else {
+                    Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-4-mala.xml");
+                    Files.write(path, salida4);
+                    logger.warn("Error al generar boleta folio "+folio);
+                }
+                // *****************************************************************
+
+                // ******************************************************************
+
+                // PDF Boleta5
+                // **************************************************************
+                // ajustes para el formato (MAGIA) antes de firmar
+
+                cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument5 = EnvioBOLETADocument.Factory.newInstance();
+                EnvioBOLETA eb5 = EnvioBOLETA.Factory.newInstance();
+                SetDTE sdte5 = SetDTE.Factory.newInstance();
+
+                BOLETADefType[] bolArr5 = new BOLETADefType[1];
+                bolArr5[0] = boleta5;
+
+                folio = "5";
+
+                sdte5.setDTEArray(bolArr5);
+                sdte5.setID("envio-boleta");
+                sdte5.setID("envboleta-" + System.nanoTime());
+
+                // Datos de carátula
+                Caratula caratula5 = sdte5.addNewCaratula();
+                caratula5.setRutEmisor(rutEmisor);
+                caratula5.setRutEnvia(rutEnvia);
+                Date dateFchResol5 = new SimpleDateFormat("yyyy-MM-dd").parse(fchResol);
+                caratula5.xsetFchResol(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol5)));
+
+                caratula5.setNroResol(Integer.valueOf(nroResol));
+                caratula5.xsetTmstFirmaEnv(now);
+
+                // Subtotales
+                SubTotDTE[] subtDtes5 = new SubTotDTE[1];
+                SubTotDTE subt5 = SubTotDTE.Factory.newInstance();
+                subt5.setTpoDTE(new BigInteger(tipoFactura.toString()));
+                subt5.setNroDTE(new BigInteger(5));
+                subtDtes5[0] = subt5;
+                caratula5.setSubTotDTEArray(subtDtes5);
+
+                eb5.setSetDTE(sdte5);
+                eb5.setVersion(new BigDecimal("1.0"));
+                envioBoletaDocument5.setEnvioBOLETA(eb5)
+
+                opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces);
+                opts.setLoadSubstituteNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(0);
+
+                try {
+                //envioBoletaDocument1 = EnvioBOLETADocument.Factory.parse(envioBoletaDocument1.newInputStream(opts), opts);
+                } catch (Exception e) {
+                logger.warn("Error al parsear XML");
+                return
+                }
+                uri = boleta5.getDocumento().getID();
+                boleta5.getDocumento().xsetTmstFirma(now);
+
+                uri = "#" + uri;
+
+                logger.warn("URI: " + uri)
+
+                ByteArrayOutputStream out5 = new ByteArrayOutputStream();
+                envioBoletaDocument5.save(new File(resultS + "BOLPDF" + tipoFactura + "-5-sinfirma.xml"), opts);
+                envioBoletaDocument5.save(out5, opts);
+
+                Document doc55 = XMLUtil.parseDocument(out5.toByteArray());
+
+                byte[] salida5 = Signer.sign(doc55, uri, key, cert, uri, "Documento");
+                doc55 = XMLUtil.parseDocument(salida5);
+
+                if (Signer.verify(doc55, "Documento")) {
+                    Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-5.xml");
+                    Files.write(path, salida5);
+                    logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                } else {
+                    Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-5-mala.xml");
+                    Files.write(path, salida5);
+                    logger.warn("Error al generar boleta folio "+folio);
+                }
+                // *****************************************************************
+
+
             </script>
             <!-- Registro de DTE en base de datos y generación de PDF -->
 
-            <!--set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/>
-            <set field="xml" value="${resultS}BOL${tipoFactura}-${folio}.xml"/>
-            <set field="pdf" value="${pathPdf}BOL${tipoFactura}-${folio}.pdf"/>
-            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, activeOrgId:activeOrgId, boleta:true]" out-map="context"/-->
+            <!--set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/-->
+            <set field="xml1" value="${resultS}BOLPDF${tipoFactura}-1.xml"/>
+            <set field="pdf1" value="${pathPdf}BOLPDF${tipoFactura}-1.pdf"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf1, dte:xml1, activeOrgId:activeOrgId, boleta:true]" out-map="context"/>
+
+            <set field="xml1" value="${resultS}BOLPDF${tipoFactura}-2.xml"/>
+            <set field="pdf1" value="${pathPdf}BOLPDF${tipoFactura}-2.pdf"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf1, dte:xml1, activeOrgId:activeOrgId, boleta:true]" out-map="context"/>
+
+            <set field="xml1" value="${resultS}BOLPDF${tipoFactura}-3.xml"/>
+            <set field="pdf1" value="${pathPdf}BOLPDF${tipoFactura}-3.pdf"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf1, dte:xml1, activeOrgId:activeOrgId, boleta:true]" out-map="context"/>
+
+            <set field="xml1" value="${resultS}BOLPDF${tipoFactura}-4.xml"/>
+            <set field="pdf1" value="${pathPdf}BOLPDF${tipoFactura}-4.pdf"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf1, dte:xml1, activeOrgId:activeOrgId, boleta:true]" out-map="context"/>
+
+            <set field="xml1" value="${resultS}BOLPDF${tipoFactura}-5.xml"/>
+            <set field="pdf1" value="${pathPdf}BOLPDF${tipoFactura}-5.pdf"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf1, dte:xml1, activeOrgId:activeOrgId, boleta:true]" out-map="context"/>
 
             <!-- Creación de registro en FiscalTaxDocument -->
             <!--entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
@@ -7837,14 +8271,13 @@ return
         </actions>
     </service>
 
-    <!-- TODO: RCOF -->
     <service verb="genera" noun="RCOF">
         <description>
-            Generación de Boletas para Caso de Prueba
+            Generación de Registro de Consumo de Folios
         </description>
         <in-parameters>
             <parameter name="activeOrgId" required="true"/>
-            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <!--parameter name="fiscalTaxDocumentTypeEnumId" required="true"/-->
             <parameter name="fechaInicio" required="false"/>
             <parameter name="fechaFin" required="false"/>
         </in-parameters>
