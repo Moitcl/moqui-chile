@@ -133,7 +133,9 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="trabajoPesadoTrabajador" type="BigDecimal"/>
             <parameter name="trabajoMenosPesadoEmpleador" type="BigDecimal"/>
             <parameter name="trabajoMenosPesadoTrabajador" type="BigDecimal"/>
-            <parameter name="taxRateList" type="List"/>
+            <parameter name="taxRateListMap" type="List">
+                <parameter name="taxRateList" type="Map"/>
+            </parameter>
         </out-parameters>
         <actions>
             <set field="locale" from="new Locale('en_US')"/>
@@ -164,7 +166,6 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="parameterList">
                 <set field="topeImponibleAfpUf" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/>
                 <set field="topeImponibleAfp" from="topeImponibleAfpUf*periodUfValue"/></if>
-            <log message="got topeImponibleAfpUf: ${topeImponibleAfpUf}"/>
 
             <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
                 <econdition field-name="adjCalcServiceId" value="MChile.PayrollPeriodAdjustments"/>
@@ -354,19 +355,14 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="trabajoMenosPesadoTrabajador" from="ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale)"/></if>
 
             <service-call name="mchile.humanteam.PayrollServices.get#PayrollPeriodTaxRate" in-map="[timePeriodId:timePeriodId]" out-map="context"/>
-            <set field="taxRateList" from="taxRateListEV"/>
-            <!--
-            <iterate list="taxRateListEV" entry="taxRateEV">
-                <script>taxRateList.add()</script>
-            </iterate>
-            -->
+            <set field="taxRateListMap" from="taxRateListMap"/>
 
         </actions>
     </service>
 
     <service verb="get" noun="PayrollPeriodTaxRate">
         <in-parameters><parameter name="timePeriodId" required="true"/></in-parameters>
-        <out-parameters><parameter name="taxRateListEV"/></out-parameters>
+        <out-parameters><parameter name="taxRateListMap"/></out-parameters>
         <actions>
             <entity-find-one entity-name="mantle.party.time.TimePeriod" value-field="timePeriod"/>
             <if condition="!timePeriod">
@@ -391,7 +387,6 @@ along with this software (see the LICENSE.md file). If not, see
                 </if>
                 <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CL_UTM', date:fromDate]" out-map="utmMap"/>
                 <set field="utmValue" from="utmMap.value"/>
-                <log message="utmValue: ${utmValue}"/>
                 <set field="cumulatedAccruedAmount" from="0" type="BigDecimal"/>
                 <iterate list="taxRateListUtm" entry="taxRateUtm">
                     <set field="periodMin" from="taxRateUtm.periodMin*utmValue"/>
@@ -411,7 +406,19 @@ along with this software (see the LICENSE.md file). If not, see
                     <date-filter valid-date="new java.sql.Timestamp(timePeriod.fromDate.time)"/>
                 </entity-find>
             </if>
-
+            <set field="monthRateList" from="[]"/>
+            <set field="biweekRateList" from="[]"/>
+            <set field="weekRateList" from="[]"/>
+            <set field="dayRateList" from="[]"/>
+            <iterate entry="tr" list="taxRateListEV">
+                <script>
+                    monthRateList.add([rate:tr.rate, periodMin:tr.periodMin, periodMax:tr.periodMax, flatAmount:tr.flatAmount])
+                    biweekRateList.add([rate:tr.rate, periodMin:(tr.periodMin?:0)/2, periodMax:(tr.periodMax?:0)/2, flatAmount:(tr.flatAmount?:0)/2])
+                    weekRateList.add([rate:tr.rate, periodMin:(tr.periodMin?:0)/30*7, periodMax:(tr.periodMax?:0)/30*7, flatAmount:(tr.flatAmount?:0)/30*7])
+                    dayRateList.add([rate:tr.rate, periodMin:(tr.periodMin?:0)/30, periodMax:(tr.periodMax?:0)/30, flatAmount:(tr.flatAmount?:0)/30])
+                </script>
+            </iterate>
+            <set field="taxRateListMap" from="[PayrollMonth:monthRateList, PayrollBiweek:biweekRateList, PayrollWeek:weekRateList, PayrollDay:dayRateList]"/>
         </actions>
     </service>
 
