@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+    <service verb="get" noun="EmploymentDisplayInfo">
+        <in-parameters><parameter name="partyRelationshipId"/></in-parameters>
+        <out-parameters>
+            <parameter name="employment" type="Map"/>
+            <parameter name="employeeParty" type="Map"/>
+            <parameter name="employerParty" type="Map"/>
+            <parameter name="currentSalary" type="Map"/>
+            <parameter name="salaryHistory" type="Map"/>
+            <parameter name="currentHealthInsuranceAffiliation" type="Map"/>
+            <parameter name="healthInsuranceAffiliationHistory" type="List"/>
+            <parameter name="healthInsuranceOrganizationNamesById" type="Map"/>
+            <parameter name="currentPensionFundAffiliation" type="Map"/>
+            <parameter name="pensionFundAffiliationHistory" type="List"/>
+            <parameter name="pensionFundOrganizationNamesById" type="Map"/>
+            <parameter name="commutingAdjustmentHistory" type="List"/>
+            <parameter name="currentCommutingAdjustment" type="Map"/>
+            <parameter name="nourishmentAdjustmentHistory" type="List"/>
+            <parameter name="currentNourishmentAdjustment" type="Map"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.humanres.employment.EmploymentAndRelationship" value-field="employment"/>
+            <if condition="employment == null"><return error="true" message="Could not find Employment ${partyRelationshipId}"/></if>
+            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="employeePartyEv" auto-field-map="[partyId:employment.fromPartyId]"/>
+            <set field="employeeParty" from="employeePartyEv.getMap()"/>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="rutList">
+                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+                <econdition field-name="partyId" from="employeeParty.partyId"/>
+                <order-by field-name="-expireDate"/>
+            </entity-find>
+            <if condition="rutList"><service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:rutList.first.idValue]" out-map="employeeParty"/></if>
+
+            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="employerPartyEv" auto-field-map="[partyId:employment.toPartyId]"/>
+            <set field="employerParty" from="employerPartyEv.getMap()"/>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="rutList">
+                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+                <econdition field-name="partyId" from="employerParty.partyId"/>
+                <order-by field-name="-expireDate"/>
+            </entity-find>
+            <if condition="rutList"><service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:rutList.first.idValue]" out-map="employerParty"/></if>
+
+            <!-- Salary -->
+            <entity-find entity-name="mantle.humanres.employment.EmploymentSalary" list="salaryHistory">
+                <econdition field-name="partyRelationshipId" from="employment.partyRelationshipId"/>
+                <econdition field-name="timePeriodTypeId" from="employment.timePeriodTypeId"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <if condition="salaryHistory"><set field="currentSalary" from="salaryHistory.first"/></if>
+
+            <!-- Colación -->
+            <entity-find entity-name="mantle.humanres.employment.PayrollAdjustmentAndDetail" list="commutingAdjustmentHistory">
+                <econdition field-name="partyRelationshipId" from="employment.partyRelationshipId"/>
+                <econdition field-name="itemTypeEnumId" value="ItemPayrollCommuting"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <if condition="commutingAdjustmentHistory"><set field="currentCommutingAdjustment" from="commutingAdjustmentHistory.first"/></if>
+
+            <!-- Movilización -->
+            <entity-find entity-name="mantle.humanres.employment.PayrollAdjustmentAndDetail" list="nourishmentAdjustmentHistory">
+                <econdition field-name="partyRelationshipId" from="employment.partyRelationshipId"/>
+                <econdition field-name="itemTypeEnumId" value="ItemPayrollNourishment"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <if condition="nourishmentAdjustmentHistory"><set field="currentNourishmentAdjustment" from="nourishmentAdjustmentHistory.first"/></if>
+
+            <!-- Isapre -->
+            <entity-find entity-name="mchile.humanteam.payroll.EmployeeAffiliation" list="healthInsuranceAffiliationHistory">
+                <econdition field-name="employeePartyId" from="employeeParty.partyId"/>
+                <econdition field-name="affiliationTypeEnumId" value="MchCeaHealth"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <set field="healthInsuranceOrganizationNamesById" from="[:]"/>
+            <iterate list="healthInsuranceAffiliationHistory" entry="hiah">
+                <if condition="'CLF' != hiah.currencyUomId"><return error="true" message="Unsupported Currency ${hiah.currencyUomId} for Health Insurance Affiliation"/></if>
+                <if condition="!healthInsuranceOrganizationNamesById.keySet().contains(hiah.organizationPartyId)">
+                    <entity-find-one entity-name="mantle.party.PartyDetail" value-field="pd" auto-field-map="[partyId:hiah.organizationPartyId]"/>
+                    <script>healthInsuranceOrganizationNamesById.put(hiah.organizationPartyId, pd.organizationName)</script>
+                </if>
+            </iterate>
+            <if condition="healthInsuranceAffiliationHistory.size() > 0 &amp;&amp; ( healthInsuranceAffiliationHistory.first.thruDate == null || healthInsuranceAffiliationHistory.first.thruDate > ec.user.nowTimestamp)">
+                <set field="currentHealthInsuranceAffiliation" from="healthInsuranceAffiliationHistory.first"/>
+                <script>healthInsuranceAffiliationHistory.remove(currentPlanIsapre)</script>
+            </if>
+
+            <!-- Afp -->
+            <entity-find entity-name="mchile.humanteam.payroll.EmployeeAffiliation" list="pensionFundAffiliationHistory">
+                <econdition field-name="employeePartyId" from="employeeParty.partyId"/>
+                <econdition field-name="affiliationTypeEnumId" value="MchCeaPensionFund"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <set field="pensionFundOrganizationNamesById" from="[:]"/>
+            <iterate list="pensionFundAffiliationHistory" entry="pfah">
+                <if condition="!pensionFundOrganizationNamesById.keySet().contains(pfah.organizationPartyId)">
+                    <entity-find-one entity-name="mantle.party.PartyDetail" value-field="pd" auto-field-map="[partyId:pfah.organizationPartyId]"/>
+                    <script>pensionFundOrganizationNamesById.put(pfah.organizationPartyId, pd.organizationName)</script>
+                </if>
+            </iterate>
+            <if condition="pensionFundAffiliationHistory.size() > 0 &amp;&amp; ( pensionFundAffiliationHistory.first.thruDate == null || pensionFundAffiliationHistory.first.thruDate > ec.user.nowTimestamp)">
+                <set field="currentPensionFundAffiliation" from="pensionFundAffiliationHistory.first"/>
+                <script>pensionFundAffiliationHistory.remove(currentPlanIsapre)</script>
+            </if>
+
+        </actions>
+    </service>
+</services>

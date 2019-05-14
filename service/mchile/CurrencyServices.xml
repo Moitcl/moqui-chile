@@ -67,7 +67,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <date-filter valid-date="timestamp"/>
                 </entity-find>
             </if>
-            <if condition="!foundRate">
+            <if condition="!foundRate || foundRate.first.factor == null">
                 <return error="true" message="No se encontró valor para ${fromCurrencyUomId} en fecha ${date}"/>
             </if>
             <set field="fromDate" from="foundRate.first.fromDate"/>
@@ -217,7 +217,7 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <set field="dataseriesIdMap" from="[CLF:'F073.UFF.PRE.Z.D', CL_UTM:'F073.UTR.PRE.Z.M']"/>
             <if condition="!dataseriesIdMap[currencyUomId]">
-                <return error="true" message="No se soporta Currency ${currencyUomId}"/>
+                <return error="true" message="Unsupported Currency ${currencyUomId}"/>
             </if>
             <entity-find-one value-field="dataSeries" entity-name="mchile.datacollect.DataSeries" auto-field-map="[originSeriesId:dataseriesIdMap[currencyUomId], originPartyId:'CHLBCENTRAL']"/>
             <if condition="!dataSeries"><return error="true" message="Error: did not find data series for ${currencyUomId}!"/></if>
@@ -244,7 +244,7 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
             <script><![CDATA[
-                parameters = [fromCurrencyUomId:fromCurrencyUomId, toCurrencyUomId:toCurrencyUomId, fromDate:fromDate.toString(), thruDate:thruDate.toString()]
+                parameters = [fromCurrencyUomId:fromCurrencyUomId, toCurrencyUomId:toCurrencyUomId, fromDate:fromDate.time.toString(), thruDate:thruDate.time.toString()]
                 restClient = ec.service.rest().uri('https://moqui.moit.cl/rest/s1/mchile/currency/exchangerateValues').method("GET").addBodyParameters(parameters)
                 restResponse = restClient.call()
                 exchangeRateValues = new groovy.json.JsonSlurper().parseText(restResponse.text())
@@ -264,24 +264,26 @@ along with this software (see the LICENSE.md file). If not, see
                 <parameter name="fromCurrencyUomId"/>
                 <parameter name="toCurrencyUomId"/>
                 <parameter name="exchangeRateTypeEnumId"/>
-                <parameter name="fromDate" type="Timestamp"/>
-                <parameter name="thruDate" type="Timestamp"/>
+                <parameter name="fromDate" type="Date"/>
+                <parameter name="thruDate" type="Date"/>
                 <parameter name="factor" type="BigDecimal"/>
             </parameter>
         </out-parameters>
         <actions>
+            <set field="fromTimestamp" from="new java.sql.Timestamp(fromDate.time)"/>
+            <set field="thruTimestamp" from="new java.sql.Timestamp(thruDate.time)"/>
             <if condition="toCurrencyUomId != 'CLP'"><return error="true" message="Only CLP supported as toCurrencyUomId for now"/></if>
             <if condition="!(fromCurrencyUomId in ['CLF', 'CL_UTM'])"><return error="true" message="Only CLF ('Unidad de Fomento') or CL_UTM ('Unidad Tributaria Mensual') allowed for fromCurrencyUomId for now"/></if>
-            <if condition="fromDate > thruDate"><return/></if>
+            <if condition="fromTimestamp > thruTimestamp"><return/></if>
             <service-call name="mchile.CurrencyServices.get#LastAvailableExchangeratePeriodDates" in-map="[currencyUomId:fromCurrencyUomId]" out-map="lastPeriod"/>
-            <if condition="thruDate > lastPeriod.thruDate"><set field="thruDate" from="lastPeriod.thruDate"/></if>
-            <if condition="(thruDate.time - fromDate.time) > 1000L*60*60*24*90"><return error="true" message="Time Period too long, maximum allowed is 90 days."/></if>
+            <if condition="thruTimestamp > lastPeriod.thruDate"><set field="thruTimestamp" from="lastPeriod.thruDate"/></if>
+            <if condition="(thruTimestamp.time - fromTimestamp.time) > 1000L*60*60*24*90"><return error="true" message="Time Period too long, maximum allowed is 90 days."/></if>
 
             <entity-find entity-name="mchile.currency.Exchangerate" list="exchangeRateValues">
                 <econdition field-name="fromCurrencyUomId"/>
                 <econdition field-name="toCurrencyUomId"/>
-                <econdition field-name="fromDate" operator="less-equals" from="thruDate"/>
-                <econdition field-name="thruDate" operator="greater-equals" from="fromDate"/>
+                <econdition field-name="fromDate" operator="less-equals" from="thruTimestamp"/>
+                <econdition field-name="thruDate" operator="greater-equals" from="fromTimestamp"/>
                 <select-field field-name="fromCurrencyUomId"/>
                 <select-field field-name="toCurrencyUomId"/>
                 <select-field field-name="fromDate"/>
@@ -338,7 +340,9 @@ along with this software (see the LICENSE.md file). If not, see
                 ]]></script>
             <if condition="fetchPeriods.size() == 0"><return/></if>
             <iterate list="fetchPeriods" entry="fetchPeriod">
-                <service-call name="mchile.CurrencyServices.fetch#ExchangerateValues" in-map="[fromCurrencyUomId:fromCurrencyUomId, fromDate:fetchPeriod.fromDate, thruDate:fetchPeriod.thruDate]"/>
+                <set field="fetchFromDate" from="new java.sql.Timestamp(fetchPeriod.fromDate.time)"/>
+                <set field="fetchThruDate" from="new java.sql.Timestamp(fetchPeriod.thruDate.time)"/>
+                <service-call name="mchile.CurrencyServices.fetch#ExchangerateValues" in-map="[fromCurrencyUomId:fromCurrencyUomId, fromDate:fetchFromDate, thruDate:fetchThruDate]"/>
             </iterate>
             <entity-find entity-name="mchile.currency.Exchangerate" list="exchangeRateValues">
                 <econdition field-name="fromCurrencyUomId"/>
