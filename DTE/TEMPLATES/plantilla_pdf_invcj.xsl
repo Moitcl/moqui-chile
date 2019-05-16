@@ -476,10 +476,10 @@
 		</fo:block-container>
 		<fo:block-container absolute-position="absolute" top="3cm"
 							margin-top="0.5cm" left="12cm" height="3cm" width="7.5cm">
-     		<!--fo:block font-size="12pt" font-family="monospace"
+     		<fo:block font-size="12pt" font-family="monospace"
 				  font-weight="bold" color="red" text-align="center">
 			S.I.I. - Santiago Oriente
-		</fo:block-->
+		</fo:block>
 		</fo:block-container>
 
 	</xsl:template>
