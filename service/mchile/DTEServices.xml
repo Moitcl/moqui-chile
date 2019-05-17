@@ -1145,8 +1145,23 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="xml" value="${resultS}DTE${tipoFactura}-${folio}.xml"/>
             <set field="pdf" value="${pathPdf}DTE${tipoFactura}-${folio}.pdf"/>
             <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, activeOrgId:activeOrgId]" out-map="context"/>
+            <set field="bArray2"/>
 
-
+            <!-- Lectura y conversión a arreglo de bytes de PDF temporal -->
+            <script>
+                File file = new File(pdf);
+                FileInputStream fis = null;
+                byte[] bArray = new byte[(int) file.length()];
+                try {
+                    fis = new FileInputStream(file);
+                    fis.read(bArray);
+                    fis.close();
+                } catch (IOException ioExp) {
+                    ioExp.printStackTrace();
+                }
+                logger.warn("pdf largo: " + file.length());
+                bArray2 = bArray;
+            </script>
 
             <!-- Creación de registro en FiscalTaxDocument -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
@@ -1174,7 +1189,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xml, contentDate:ts, contentData:salida]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
 
-            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts]"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts, contentData:bArray2]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
             <!--return error="true" message="$anulaBoleta - $folioAnulaBoleta - monto: $amount - neto: $montoNeto - exento: $montoExento - montoIva: $montoIVARecuperable"/-->
             <!-- Creación de registro en FiscalTaxDocumentAttributes -->
@@ -1227,7 +1242,9 @@ along with this software (see the LICENSE.md file). If not, see
                 String datetime = ft.format(dNow);
                 idS = idS + datetime;
 
-                String[] DTEList = new String[documentList.size()];
+                //String[] DTEList = new String[documentList.size()];
+                //byte[][] DTEList = new byte[documentList.size()][];
+                javax.sql.rowset.serial.SerialBlob[] DTEList = new javax.sql.rowset.serial.SerialBlob[documentList.size()];
                 int j = 0;
             </script>
            <iterate list="documentList" entry="docField">
@@ -1236,13 +1253,15 @@ along with this software (see the LICENSE.md file). If not, see
                    <field-map field-name="fiscalTaxDocumentId" from="docField"/>
                    <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
                    <select-field field-name="contentLocation"/>
+                   <select-field field-name="contentData"/>
                </entity-find-one>
                <set field="xml" from="dteField.contentLocation"/>
+               <set field="xmlData" from="dteField.contentData"/>
                <script>
-                DTEList[j] = xml;
+                //DTEList[j] = xml;
+                DTEList[j] = xmlData;
                 logger.warn("Agregado: " + DTEList[j])
                 j++;
-
                 </script>
            </iterate>
 
@@ -1250,8 +1269,6 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="recepS">
                 <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:recepS]"/>
             </if>
-
-
 
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/>
 
@@ -1328,12 +1345,14 @@ along with this software (see the LICENSE.md file). If not, see
                 opts.setLoadSubstituteNamespaces(namespaces);
 
                 // Cantidad de documentos a enviar
+
                 DTEDefType[] dtes = new DTEDefType[DTEList.size()];
 
                 HashMap&lt;Integer, Integer&gt; hashTot = new HashMap&lt;Integer, Integer&gt;();
 
                 for (int i = 0; i &lt; DTEList.length; i++) {
-                    dtes[i] = DTEDocument.Factory.parse(new FileInputStream(DTEList[i]), opts).getDTE();
+                    //dtes[i] = DTEDocument.Factory.parse(new FileInputStream(DTEList[i]), opts).getDTE();
+                    dtes[i] = DTEDocument.Factory.parse(DTEList[i].getBinaryStream(), opts).getDTE();
                     // armar hash para totalizar por tipoDTE
                     if (hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) != null) {
                         hashTot.put(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue(),
@@ -2876,7 +2895,6 @@ return
             </if>
             <set field="envio" from="content" type="String"/>
 
-
             <!--set field="envio" from="fiscalTaxDocumentField.xml" type="String"/-->
             <set field="salida" value=""/>
             <set field="statusXML" value=""/>
@@ -2901,7 +2919,8 @@ return
                 XmlOptions opts = new XmlOptions();
                 opts.setLoadSubstituteNamespaces(namespaces);
 
-                DTEDocument doc = DTEDocument.Factory.parse(new FileInputStream(envio), opts);
+                //DTEDocument doc = DTEDocument.Factory.parse(new FileInputStream(envio), opts);
+                DTEDocument doc = DTEDocument.Factory.parse(contentData.getBinaryStream(), opts);
 
                 ConexionSii con = new ConexionSii();
 
@@ -3316,14 +3335,29 @@ return
 
             <set field="contentLocationXml" value="${fileRoot}/${archivoXml}"/>
             <set field="docRrXml" from="ec.resource.getLocationReference(contentLocationXml)"/>
+            <set field="bArrayXml"/>
 
             <script>
                 fileStream = xml.getInputStream()
                 try { docRrXml.putStream(fileStream) } finally { fileStream.close() }
             </script>
+            <!--script>
+
+                FileInputStream fisXml = null;
+                byte[] bArrayXmlTmp = new byte[(int) xml.getSize()];
+                try {
+                    fisXml = xml.getInputStream();
+                    fisXml.read(bArrayXmlTmp);
+                    fisXml.close();
+                } catch (IOException ioExp) {
+                    ioExp.printStackTrace();
+                }
+                bArrayXml = bArrayXmlTmp;
+            </script-->
 
             <!-- Carga PDF -->
             <set field="archivoPdf" from="pdf.getName()"/>
+            <set field="bArray2"/>
             <if condition="archivoPdf">
                 <set field="contentLocationPdf" value="${fileRoot}/${archivoPdf}"/>
                 <set field="docRrPdf" from="ec.resource.getLocationReference(contentLocationPdf)"/>
@@ -3331,8 +3365,20 @@ return
                     fileStream = pdf.getInputStream()
                     try { docRrPdf.putStream(fileStream) } finally { fileStream.close() }
                 </script>
+                <!-- Lectura y conversión a arreglo de bytes de PDF temporal -->
+                <!--script>
+                    FileInputStream fis = null;
+                    byte[] bArray = new byte[(int) pdf.getSize()];
+                    try {
+                        fis = pdf.getInputStream();
+                        fis.read(bArray);
+                        fis.close();
+                    } catch (IOException ioExp) {
+                        ioExp.printStackTrace();
+                    }
+                    bArray2 = bArray;
+                </script-->
             </if>
-
             <set field="rutEmisor" value=""/>
             <set field="rutReceptor" value=""/>
             <set field="razonSocialEmisor" value=""/>
@@ -3582,7 +3628,7 @@ return
                     <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts, contentData:xml.get()]"/>
                     <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
                     <if condition="contentLocationPdf">
-                        <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts]"/>
+                        <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts, contentData:pdf.get()]"/>
                         <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
                     </if>
             <script>
@@ -6035,12 +6081,14 @@ return
         </in-parameters>
         <out-parameters>
             <parameter name="content"/>
+            <parameter name="contentData"/>
         </out-parameters>
         <actions>
             <set field="content" from="null"/>
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="contentField"/>
             <if condition="contentField">
                 <set field="content" from="contentField.contentLocation"/>
+                <set field="contentData" from="contentField.contentData"/>
             </if>
         </actions>
     </service>
@@ -6693,6 +6741,23 @@ return
             <set field="pdf" value="${pathPdf}BOL${tipoFactura}-${folio}.pdf"/>
             <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, activeOrgId:activeOrgId, boleta:true]" out-map="context"/>
 
+            <set field="bArray2"/>
+            <!-- Lectura y conversión a arreglo de bytes de PDF temporal -->
+            <script>
+                File file = new File(pdf);
+                FileInputStream fis = null;
+                byte[] bArray = new byte[(int) file.length()];
+                try {
+                fis = new FileInputStream(file);
+                fis.read(bArray);
+                fis.close();
+                } catch (IOException ioExp) {
+                ioExp.printStackTrace();
+                }
+                logger.warn("pdf largo: " + file.length());
+                bArray2 = bArray;
+            </script>
+
             <!-- Creación de registro en FiscalTaxDocument -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
                 <field-map field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
@@ -6734,7 +6799,7 @@ return
             <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xml, contentDate:ts, contentData:salida]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
 
-            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts]"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts, contentData:bArray2]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
 
             <set field="fiscalTaxDocumentId" from="dteField.fiscalTaxDocumentId"/>
