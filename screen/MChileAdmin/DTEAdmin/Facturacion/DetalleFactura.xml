@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns=""
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd"
+        default-menu-include="false">
+
+    <parameter name="invoiceId" required="true"/>
+
+    <transition name="genFactura">
+        <parameter name="invoiceId" from="invoiceId"/>
+        <parameter name="activeOrgId" from="activeOrgId"/>
+        <actions>
+            <script><![CDATA[
+                    items = new StringBuilder()
+                    for (int i = 0; ; i++) {
+                        if ((context.get("_useRowSubmit") == "true" || context.get("_useRowSubmit_" + i) == "true")
+                                && context.get("_rowSubmit_" + i) != "true") continue
+                        String curKey = "invoiceItemSeqId_" + i
+                        String quantity = "quantity_" + i
+                        String amount = "amount_" + i
+                        String pctDiscount = "pctDiscount_" + i
+                        String description = "description_" + i
+                        if (context.containsKey(curKey))  {
+                            if (items.length() > 0) items.append(",")
+                            items.append(context.get(curKey)+"-"+context.get(quantity)+"-"+context.get(amount)+"-"+ context.get(pctDiscount)+"-"+context.get(description) )
+                        } else { break }
+                    }
+            ]]></script>
+            <service-call name="mchile.DTEServices.facturar#Invoice" in-map="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId, items:items]"/>
+        </actions>
+        <default-response url="../Facturacion"/>
+    </transition>
+
+    <transition name="updateGlobalDiscount">
+        <parameter name="invoiceId" from="invoiceId"/>
+        <parameter name="activeOrgId" from="activeOrgId"/>
+        <parameter name="globalDiscount" from="globalDiscount"/>
+        <parameter name="glosaDr" from="glosaDr"/>
+        <actions>
+            <service-call name="mchile.DTEServices.update#InvoiceGlobalDiscount" in-map="[invoiceId:invoiceId,activeOrgId:activeOrgId, globalDiscount:globalDiscount, glosaDr:glosaDr]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <actions>
+        <!-- Se busca detalle de invoice -->
+
+        <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
+        <if condition="invoice == null"><return error="true" message="Invoice ${invoiceId} not found"/></if>
+        <!-- set statusId for StatusChangeSection -->
+        <set field="statusId" from="invoice?.statusId"/>
+
+        <entity-find entity-name="mantle.party.PartyRole" list="fromOrgInternalList">
+            <econdition field-name="partyId" from="invoice.fromPartyId"/><econdition field-name="roleTypeId" value="OrgInternal"/></entity-find>
+        <set field="isFromPartyOrgInternal" from="fromOrgInternalList as boolean"/>
+        <set field="organizationPartyId" from="isFromPartyOrgInternal ? invoice.fromPartyId : invoice.toPartyId"/>
+
+
+        <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
+        <if condition="invoice == null"><return error="true" message="Invoice ${invoiceId} not found"/></if>
+        <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemList">
+            <econdition field-name="invoiceId"/><order-by field-name="invoiceItemSeqId"/></entity-find>
+        <set field="topItemList" from="invoiceItemList.findAll({ it.parentItemSeqId == null })"/>
+
+        <!-- put items with parentItemSeqId in the list after their parent -->
+        <script><![CDATA[
+            itemWithChildrenSet = new HashSet()
+            List reverseList = invoiceItemList.cloneList().orderByFields(["-invoiceItemSeqId"])
+            for (invoiceItem in reverseList) {
+                if (invoiceItem.parentItemSeqId) {
+                    itemWithChildrenSet.add(invoiceItem.parentItemSeqId)
+                    invoiceItemList.move(invoiceItemList.indexMatching([invoiceItemSeqId:invoiceItem.invoiceItemSeqId]),
+                            invoiceItemList.indexMatching([invoiceItemSeqId:invoiceItem.parentItemSeqId])+1)
+                }
+            }
+        ]]></script>
+
+        <set field="editableStatusIds" from="new HashSet(['InvoiceInProcess', 'InvoiceIncoming', 'InvoiceReceived'])"/>
+        <set field="invoiceEditable" from="invoice.statusId in editableStatusIds"/>
+
+        <entity-find entity-name="mantle.party.PartyRole" list="fromOrgInternalList">
+            <econdition field-name="partyId" from="invoice.fromPartyId"/><econdition field-name="roleTypeId" value="OrgInternal"/></entity-find>
+        <set field="isFromPartyOrgInternal" from="fromOrgInternalList as boolean"/>
+        <set field="organizationPartyId" from="isFromPartyOrgInternal ? invoice.fromPartyId : invoice.toPartyId"/>
+
+        <if condition="invoice.invoiceTypeEnumId == 'InvoiceSales' || invoice.invoiceTypeEnumId == 'InvoiceReturn'"><then>
+            <entity-find entity-name="moqui.basic.EnumAndGroup" list="itemTypeEnumList">
+                <econdition field-name="enumGroupEnumId" from="isFromPartyOrgInternal ? 'EngItemsSales' : 'EngItemsPurchase'"/><order-by field-name="description"/></entity-find>
+        </then><else-if condition="invoice.invoiceTypeEnumId == 'InvoicePayroll'">
+            <entity-find entity-name="moqui.basic.EnumAndParent" list="itemTypeEnumList">
+                <econdition field-name="parentEnumId" operator="in" value="ItemPayrollIncome,ItemPayrollDeduct,ItemPayrollTaxes,ItemPayrollExpense"/>
+                <order-by field-name="description"/></entity-find>
+        </else-if><else>
+            <entity-find entity-name="moqui.basic.Enumeration" list="itemTypeEnumList">
+                <econdition field-name="enumTypeId" value="ItemType"/><order-by field-name="description"/></entity-find>
+        </else></if>
+        <set field="globalDiscount" from="invoice.globalDiscount"/>
+        <if condition="!invoice.globalDiscount">
+            <set field="globalDiscount" value="0"/>
+        </if>
+
+        <set field="glosaDr" from="invoice.glosaDr"/>
+        <if condition="!invoice.glosaDr">
+            <set field="glosaDr" value="0"/>
+        </if>
+
+    </actions>
+
+    <widgets>
+        <container-row>
+            <row-col>
+                <container>
+                    <form-single name="EditInvoiceForm" transition="updateGlobalDiscount" map="fieldValues">
+                        <field name="invoiceId"><default-field title="Invoice"><display/></default-field></field>
+                        <field name="invoiceTotal"><default-field title="Total"><display currency-unit-field="invoice.currencyUomId"/></default-field></field>
+                        <field name="globalDiscount"><default-field title="Global Discount"><text-line size="4" default-value="${globalDiscount}"/></default-field></field>
+                        <field name="glosaDr"><default-field title="Glosa Descuento"><text-line size="4" default-value="${glosaDr}"/></default-field></field>
+                        <field name="submitButton"><default-field title="Update"><submit/></default-field></field>
+                    </form-single>
+
+                    <form-list name="InvoiceItems" list="invoiceItemList" transition="genFactura" multi="true" map-first-row="pruebaMap">
+                        <hidden-parameters>
+                            <parameter name="invoiceId"/>
+                            <parameter name="activeOrgId"/>
+                        </hidden-parameters>
+                        <field name="_useRowSubmit"><default-field><hidden default-value="true"/></default-field></field>
+                        <field name="invoiceItemSeqId"><default-field title="Item"><display/></default-field></field>
+                        <field name="description"><default-field><display/></default-field></field>
+                        <field name="productId"><default-field><hidden/></default-field></field>
+                        <field name="quantity"><default-field><display/></default-field></field>
+                        <field name="amount"><default-field><display/></default-field></field>
+                        <field name="total" from="((quantity != null ? quantity : 1.0) * (amount ?: 0.0))">
+                            <default-field><display currency-unit-field="invoice.currencyUomId"/></default-field></field>
+                        <field name="pctDiscount"><default-field title="% Descuento"><text-line size="4" default-value="0"/></default-field></field>
+                        <field name="_rowSubmit"><default-field title="Corregir"><hidden default-value="true"/>
+                            </default-field>
+                        </field>
+                        <field name="submitButton"><default-field title="Generar Factura"><submit/>
+                        </default-field></field>
+                    </form-list>
+                </container>
+            </row-col>
+        </container-row>
+    </widgets>
+</screen>

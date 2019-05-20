@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns=""
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd"
+        menu-image="glyphicon glyphicon-shopping-cart" menu-image-type="icon" default-menu-title="Facturación"
+        default-menu-index="30">
+
+    <transition name="editInvoice">
+        <default-response url="/vapps/PopcAdmin/Accounting/Invoice/EditInvoice"/>
+    </transition>
+
+    <transition name="detalleFactura"><default-response url="../DetalleFactura"/></transition>
+
+    <transition name="genBoleta">
+        <actions>
+            <service-call name="mchile.DTEServices.facturar#Invoice" in-map="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:'Ftdt-39', activeOrgId:activeOrgId]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="genBoletaExenta">
+        <actions>
+            <service-call name="mchile.DTEServices.facturar#Invoice" in-map="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:'Ftdt-41', activeOrgId:activeOrgId]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="genFacturaExenta">
+        <actions>
+            <service-call name="mchile.DTEServices.facturar#Invoice" in-map="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:'Ftdt-34', activeOrgId:activeOrgId]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="agregarReferenciaFact">
+        <service-call name="mchile.DTEServices.agregar#Referencia" in-map="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fecha:fecha,
+            rutOtroContribuyente:rutOtroContribuyente, codigoReferenciaEnumId:codigoReferenciaEnumId, razonReferencia:razonReferencia,
+            esFactura:'true', idAdicional:idAdicional, folio:folio]"/>
+        <default-response url="." save-current-screen="true"/>
+    </transition>
+
+    <transition name="eliminarReferenciaFact">
+        <parameter name="referenciaInvoiceId" from="referenciaInvoiceId"/>
+        <actions>
+            <service-call name="mchile.DTEServices.eliminar#Referencia" in-map="[referenciaId:referenciaInvoiceId, esFactura:'true']"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <actions>
+
+        <!--return error="true" message="Lista: $activeOrgId"/-->
+
+        <entity-find entity-name="mantle.account.invoice.Invoice" list="invoiceList">
+            <!--search-form-inputs default-order-by="forInvoiceId"/-->
+            <search-form-inputs default-order-by="-invoiceDate"/>
+            <econdition field-name="invoiceTypeEnumId" value="InvoiceSales"/>
+            <econdition field-name="fromPartyId" from="activeOrgId"/>
+            <econditions combine="or">
+                <econdition field-name="statusId" value="InvoiceInProcess"/>
+                <econdition field-name="statusId" value="InvoicePmtRecvd"/>
+                <econdition field-name="statusId" value="PmntConfirmed"/>
+                <econdition field-name="statusId" value="PmntReceived"/>
+                <econdition field-name="statusId" value="PmntAuthorized"/>
+                <econdition field-name="statusId" value="PmntDelivered"/>
+            </econditions>
+        </entity-find>
+
+    </actions>
+    <widgets>
+
+        <label text="Invoices listas para facturar" type="h4"/>
+
+        <form-list name="InvoiceForm" list="invoiceList" header-dialog="true" saved-finds="true" show-csv-button="false" skip-form="true">
+            <row-actions>
+                <!-- TODO: Encontrar giro primario de party -->
+                <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:toPartyId]" out-map="giroOutMap"/>
+                <set field="giroReceptor" from="giroOutMap.description"/>
+
+                <!-- Encontrar username -->
+                <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:fromPartyId]" out-map="context"/>
+                <set field="username" from="emailAddress"/>
+                <set field="invoiceIdRow" from="invoiceId"/>
+
+                <!-- Obtención de nombre cliente -->
+                <entity-find-one entity-name="mantle.party.Party" value-field="partyField">
+                        <field-map field-name="partyId" from="fromPartyId"/>
+                </entity-find-one>
+                <set field="partyTypeEnumId" from="partyField.partyTypeEnumId"/>
+
+                <if condition="partyTypeEnumId == 'PtyOrganization'">
+                    <!-- Organizacion -->
+                    <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField">
+                        <field-map field-name="partyId" from="fromPartyId"/>
+                    </entity-find-one>
+                    <set field="rznSocReceptor" from="organizationField.organizationName"/>
+                    <!--set field="giroReceptor" from="organizationField.giro"/-->
+                    <!-- Obtención de contacto en organización -->
+                    <entity-find-one entity-name="mantle.party.PartyRelationship" value-field="relationField">
+                        <field-map field-name="toPartyId" from="partyId"/>
+                        <field-map field-name="relationshipTypeEnumId" value="PtrAgent"/>
+                    </entity-find-one>
+                    <if condition="relationField">
+                        <set field="partyIdReceptor" from="relationField.fromPartyId"/>
+                        <entity-find-one entity-name="mantle.party.Person" value-field="personField">
+                            <field-map field-name="partyId" from="partyIdReceptor"/>
+                        </entity-find-one>
+                        <set field="contactoReceptor" from="personField.firstNAme"/>
+                        <script>
+                            contactoReceptor = contactoReceptor + " " + personField.lastName
+                        </script>
+                    </if>
+
+                </if>
+                <if condition="partyTypeEnumId == 'PtyPerson'">
+                    <!-- Persona Natural -->
+                    <entity-find-one entity-name="mantle.party.Person" value-field="personField">
+                        <field-map field-name="partyId" from="fromPartyId"/>
+                    </entity-find-one>
+                    <if condition="!personField">
+                        <return error="true" message="No existe persona para facturar"/>
+                    </if>
+
+                    <set field="rznSocReceptor" from="personField.firstName"/>
+                    <script>
+                        rznSocReceptor = rznSocReceptor + " " + personField.lastName
+                    </script>
+                    <set field="contactoReceptor" from="rznSocReceptor"/>
+                </if>
+
+                <!-- Receptor toPartyId -->
+                <entity-find-one entity-name="mantle.party.Party" value-field="partyField">
+                    <field-map field-name="partyId" from="toPartyId"/>
+                </entity-find-one>
+                <set field="partyTypeEnumId" from="partyField.partyTypeEnumId"/>
+
+                <if condition="partyTypeEnumId == 'PtyOrganization'">
+                    <!-- Organizacion -->
+                    <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField">
+                        <field-map field-name="partyId" from="toPartyId"/>
+                    </entity-find-one>
+                    <set field="receptor" from="organizationField.organizationName"/>
+                </if>
+                <if condition="partyTypeEnumId == 'PtyPerson'">
+                    <!-- Persona Natural -->
+                    <entity-find-one entity-name="mantle.party.Person" value-field="personField">
+                        <field-map field-name="partyId" from="toPartyId"/>
+                    </entity-find-one>
+                    <if condition="!personField">
+                        <return error="true" message="No existe persona para facturar"/>
+                    </if>
+
+                    <set field="rznSocReceptor" from="personField.firstName"/>
+                    <script>
+                        rznSocReceptor = rznSocReceptor + " " + personField.lastName
+                    </script>
+                    <set field="contactoReceptor" from="rznSocReceptor"/>
+                </if>
+
+            </row-actions>
+
+            <field name="invoiceId">
+                <header-field title="Invoice ID" show-order-by="true"><text-find/></header-field>
+                <default-field><link url="editInvoice" text="${invoiceId}" link-type="anchor" parameter-map="[invoiceId:invoiceId]"/>
+                </default-field>
+            </field>
+            <field name="paymentId">
+                <header-field title="Payment ID" show-order-by="true"><text-find/></header-field>
+                <default-field><display/></default-field>
+            </field>
+            <field name="rznSocReceptor">
+                <header-field title="Emisor" show-order-by="true"><text-find/></header-field>
+                <default-field><display/></default-field>
+            </field>
+            <field name="receptor">
+                <header-field title="Receptor" show-order-by="true"><text-find/></header-field>
+                <default-field><display/></default-field>
+            </field>
+            <field name="invoiceDate">
+                <header-field title="Fecha" show-order-by="true"><text-find/></header-field>
+                <default-field><display/></default-field>
+            </field>
+            <field name="invoiceTotal">
+                <header-field title="Total" show-order-by="true"><text-find/></header-field>
+                <default-field><display/></default-field>
+            </field>
+            <field name="paymentId"><default-field><hidden/></default-field></field>
+
+            <field name="addReferenciasForm">
+                <default-field title="">
+                    <container-dialog id="AgregarReferenciaDialog" button-text="Agr. Referencia">
+                        <form-single name="AgregarReferenciaForm" transition="agregarReferenciaFact">
+                            <field name="invoiceId"><default-field><hidden/></default-field>
+                            </field>
+                            <field name="fiscalTaxDocumentTypeEnumId"><default-field title="Tipo DTE Referencia">
+                                <drop-down><entity-options key="${enumId}" text="">
+                                    <entity-find entity-name="moqui.basic.Enumeration">
+                                        <!--econdition field-name="enumTypeId" value="FiscalTaxDocumentType"/-->
+                                        <econdition field-name="parentEnumId" operator="in" value="Ftdt-DTE,Ftdt-DT"/>
+                                    </entity-find>
+                                </entity-options></drop-down>
+                            </default-field></field>
+
+                            <field name="folio">
+                                <default-field title="Folio Referencia"><text-line size="10" /></default-field>
+                            </field>
+                            <field name="rutOtroContribuyente">
+                                <default-field title="RUT Otro Contribuyente"><text-line size="15"/></default-field>
+                            </field>
+                            <field name="idAdicional">
+                                <default-field title="ID Adicional Otro Contribuyente"><text-line size="15"/></default-field>
+                            </field>
+                            <field name="fecha">
+                                <default-field title="Fecha Documento Referencia"><date-time format="YYYY-MM-DD"/></default-field>
+                            </field>
+                            <field name="codigoReferenciaEnumId"><default-field title="Código Referencia">
+                                <drop-down><entity-options key="${enumId}" text="">
+                                    <entity-find entity-name="moqui.basic.Enumeration">
+                                        <econdition field-name="enumTypeId" value="CodigoReferencia"/>
+                                    </entity-find>
+                                </entity-options></drop-down>
+                            </default-field></field>
+                            <field name="razonReferencia">
+                                <default-field title="Razón Referencia"><text-line size="20"/></default-field>
+                            </field>
+                            <field name="submitButton"><default-field title="Añadir"><submit/></default-field></field>
+                        </form-single>
+                    </container-dialog>
+                    <link url="VerReferenciasFact" text="Ver Referencias" url-type="plain" link-type="auto" parameter-map="[invoiceId:invoiceId]"/>
+                    <link url="detalleFactura" text="Factura" parameter-map="[invoiceId:invoiceId]" link-type="auto"/>
+                    <link url="genFacturaExenta" text="Fact. Exenta" url-type="transition" link-type="auto" parameter-map="[invoiceId:invoiceId, activeOrgId:activeOrgId]"/>
+                </default-field>
+            </field>
+        </form-list>
+    </widgets>
+</screen>

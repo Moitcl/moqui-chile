@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns=""
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd"
+        menu-image="glyphicon glyphicon-shopping-cart" menu-image-type="icon" default-menu-title="Guías de Despacho"
+        default-menu-index="50">
+
+    <transition name="createShipment"><service-call name="mantle.shipment.ShipmentServices.create#Shipment"/>
+        <default-response url="../ShipmentDetail"/></transition>
+    <transition name="shipmentDetail">
+        <parameter name="shipmentId" from="shipmentId"/>
+        <default-response url="/vapps/PopcAdmin/Shipment/ShipmentDetail"/>
+    </transition>
+    <transition name="packShipmentScreen"><default-response url="//${appRoot}/Shipping/PackShipment"/></transition>
+    <transition name="orderDetail"><default-response url="//${appRoot}/Order/OrderDetail"/></transition>
+    <transition name="picklistDetail"><default-response url="//${appRoot}/Shipping/Picklist/PicklistDetail"/></transition>
+
+    <transition name="editFacility"><default-response url="//${appRoot}/Facility/EditFacility"/></transition>
+    <transition name="editParty"><default-response url="//${appRoot}/Party/EditParty"/></transition>
+    <transition name="editSupplier"><default-response url="//${appRoot}/Supplier/EditSupplier"/></transition>
+    <transition name="editCustomer"><default-response url="//${appRoot}/Customer/EditCustomer"/></transition>
+
+
+    <transition name="genGuiaDespacho"><default-response url="../DetalleShipmentGuiaDespacho"/></transition>
+
+    <transition name="agregarReferenciaShipment">
+        <service-call name="mchile.DTEServices.agregar#RefShipment" in-map="[shipmentId:shipmentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fecha:fecha,
+            rutOtroContribuyente:rutOtroContribuyente, codigoReferenciaEnumId:codigoReferenciaEnumId, razonReferencia:razonReferencia, idAdicional:idAdicional, folio:folio]"/>
+        <default-response url="." save-current-screen="true"/>
+    </transition>
+
+    <transition name="verReferencias">
+        <parameter name="shipmentId" from="shipmentId"/>
+        <actions>
+            <entity-find entity-name="mchile.dte.ReferenciaShipment" list="referenciaList">
+                <econdition field-name="shipmentId" from="shipmentId"/>
+            </entity-find>
+        </actions>
+        <default-response url="." save-current-screen="true"/>
+    </transition>
+
+    <transition name="eliminarReferencia">
+        <parameter name="referenciaReturnId" from="referenciaReturnId"/>
+        <actions>
+            <service-call name="mchile.DTEServices.eliminar#Referencia" in-map="[referenciaReturnId:referenciaReturnId]"/>
+        </actions>
+        <default-response url="." save-current-screen="true"/>
+    </transition>
+
+    <transition name="createReturn"><service-call name="mantle.order.ReturnServices.create#Return"/>
+        <default-response url="/vapps/PopcAdmin/Return/EditReturn"/></transition>
+
+    <transition name="editReturn">
+        <default-response url="/vapps/PopcAdmin/Return/EditReturn"/>
+    </transition>
+
+    <transition-include name="searchPartyList" location="component://SimpleScreens/template/party/PartyForms.xml"/>
+    <transition-include name="getFacilityList" location="component://SimpleScreens/template/facility/FacilityTransitions.xml"/>
+
+    <transition name="getWhFacilitiesByVendor">
+        <service-call name="mantle.facility.FacilityServices.get#FacilitiesByOwner"
+                      in-map="[ownerPartyId:vendorPartyId, facilityTypeEnumId:'FcTpWarehouse']" web-send-json-response="resultList"/>
+        <default-response type="none"/>
+    </transition>
+    <actions>
+        <entity-find entity-name="mantle.shipment.Shipment" list="shipmentList">
+            <search-form-inputs/><select-field field-name="returnId,statusId,entryDate,facilityId,vendorPartyId,customerPartyId"/>
+            <econditions combine="or">
+                <!--econdition field-name="vendorPartyId" from="activeOrgId"/-->
+            </econditions>
+        </entity-find>
+
+        <set field="vendorRole" value="Supplier,Vendor,VendorBillFrom"/>
+        <set field="customerRole" value="Customer,CustomerBillTo"/>
+
+        <set field="defaultFacilityId" from="ec.user.getPreference('FacilityGeneralDefault')"/>
+
+    </actions>
+
+    <widgets>
+
+        <label text="Despachos Disponibles" type="h4"/>
+
+        <form-list name="ShipmentList" list="shipmentList" skip-form="true" header-dialog="true" select-columns="true"
+                   saved-finds="true" show-csv-button="true">
+            <entity-find entity-name="mantle.shipment.ShipmentFindView" list="shipmentList" distinct="true">
+                <search-form-inputs default-order-by="-entryDate,shipmentId">
+                    <default-parameters statusId="ShipInput,ShipScheduled,ShipPicked" statusId_op="in"
+                                        entryDate_poffset="-3" entryDate_period="30d"/></search-form-inputs>
+                <date-filter from-field-name="customerClassFromDate" thru-field-name="customerClassThruDate" ignore="!customerClassificationId"/>
+                <econdition field-name="shipmentTypeEnumId" operator="in" from="shipmentTypeSet" ignore="!shipmentTypeSet"/>
+                <econdition field-name="productId" operator="in" from="findProductId" ignore-if-empty="true"/>
+                <select-field field-name="shipmentId"/>
+            </entity-find>
+            <row-actions>
+                <!-- Customer Classification -->
+                <entity-find entity-name="mantle.party.PartyClassificationAndAppl" list="custPcaaList">
+                    <date-filter/><econdition field-name="partyId" from="toPartyId"/>
+                    <econdition field-name="classificationTypeEnumId" value="PcltCustomer"/></entity-find>
+                <!-- Order IDs from ShipmentItemSource -->
+                <entity-find entity-name="mantle.shipment.ShipmentItemSource" list="sisList" distinct="true">
+                    <econdition field-name="shipmentId"/><select-field field-name="orderId"/></entity-find>
+                <!-- Tracking codes from ShipmentPackageRouteSeg -->
+                <entity-find entity-name="mantle.shipment.ShipmentPackageRouteSeg" list="sprsList" distinct="true">
+                    <econdition field-name="shipmentId"/><select-field field-name="trackingCode,returnTrackingCode"/></entity-find>
+                <!-- Orders -->
+                <entity-find entity-name="mantle.order.OrderHeader" list="orderHeaderList">
+                    <econdition field-name="orderId" operator="in" from="sisList*.orderId"/>
+                    <select-field field-name="orderId,salesChannelEnumId"/>
+                </entity-find>
+                <!-- Order Other Parties -->
+                <entity-find entity-name="mantle.order.OrderPartPartyDetail" list="orderPartyList">
+                    <econdition field-name="orderId" operator="in" from="sisList*.orderId"/>
+                    <select-field field-name="partyId,pseudoId,firstName,lastName,organizationName,description"/>
+                </entity-find>
+            </row-actions>
+
+            <field name="shipmentId">
+                <header-field title="Shipment" show-order-by="true"><text-find size="10" hide-options="true"/></header-field>
+                <default-field><link url="shipmentDetail" text="${shipmentId}" link-type="anchor" parameter-map="[shipmentId:shipmentId]"/></default-field>
+            </field>
+            <field name="shipmentTypeEnumId">
+                <header-field title="Type" show-order-by="true">
+                    <widget-template-include location="component://webroot/template/screen/BasicWidgetTemplates.xml#enumDropDown">
+                        <set field="enumTypeId" value="ShipmentType"/><set field="allowEmpty" value="true"/>
+                        <set field="allowMultiple" value="true"/></widget-template-include>
+                </header-field>
+                <default-field><display-entity entity-name="moqui.basic.Enumeration"/></default-field>
+            </field>
+
+            <field name="entryDate"><header-field show-order-by="true"><date-period/></header-field>
+                <default-field><display/></default-field></field>
+
+            <field name="findProductId"><header-field title="Product">
+                <drop-down allow-multiple="true"><dynamic-options transition="getProductList" server-search="true" min-length="0"/></drop-down>
+            </header-field></field>
+
+            <field name="originFacilityId">
+                <header-field title="Origin Facility">
+                    <drop-down allow-empty="true"><dynamic-options transition="getFacilityList" server-search="true" min-length="0"/></drop-down>
+                </header-field>
+                <default-field><link url="editFacility" entity-name="mantle.facility.Facility" text="FacilityNameTemplate"
+                                     link-type="anchor" parameter-map="[facilityId:originFacilityId]"/></default-field>
+            </field>
+            <field name="destinationFacilityId">
+                <header-field title="Dest. Facility">
+                    <drop-down allow-empty="true"><dynamic-options transition="getFacilityList" server-search="true" min-length="0"/></drop-down>
+                </header-field>
+                <default-field><link url="editFacility" entity-name="mantle.facility.Facility" text="FacilityNameTemplate"
+                                     link-type="anchor" parameter-map="[facilityId:destinationFacilityId]"/></default-field>
+            </field>
+            <field name="fromPartyId">
+                <header-field title="From Party">
+                    <drop-down allow-empty="true"><dynamic-options transition="searchPartyList" server-search="true" min-length="2"/></drop-down>
+                </header-field>
+                <!-- TODO: this could also be from a Customer, add different link if has the Customer role -->
+                <default-field><link url="editSupplier" entity-name="mantle.party.PartyDetail" text="PartyNameTemplate"
+                                     link-type="anchor" parameter-map="[partyId:fromPartyId]"/></default-field>
+            </field>
+            <field name="toPartyId">
+                <header-field title="To Party">
+                    <drop-down allow-empty="true"><dynamic-options transition="searchPartyList" server-search="true" min-length="2"/></drop-down>
+                </header-field>
+                <default-field>
+                    <link url="editCustomer" entity-name="mantle.party.PartyDetail" text="PartyNameTemplate"
+                          link-type="anchor" parameter-map="[partyId:toPartyId]"/>
+                    <label text=" - ${custPcaaList*.description.join(', ')}" condition="custPcaaList"/>
+                </default-field>
+            </field>
+            <field name="orderId"><header-field><text-find default-operator="begins"/></header-field></field>
+            <field name="salesChannelEnumId"><header-field title="Order Source">
+                <widget-template-include location="component://webroot/template/screen/BasicWidgetTemplates.xml#enumDropDown">
+                    <set field="enumTypeId" value="SalesChannel"/><set field="allowEmpty" value="true"/></widget-template-include>
+            </header-field></field>
+
+
+            <field name="orderIds"><default-field title="Orders">
+                <section-iterate name="OrderSisList" list="orderHeaderList" entry="orderHeader"><widgets>
+                    <link url="orderDetail" text="${orderHeader.orderId}" link-type="anchor" condition="orderHeader.orderId"
+                          parameter-map="[orderId:orderHeader.orderId]"/>
+                    <label text=" - ${orderHeader.salesChannel?.description?:''}" condition="orderHeader.salesChannelEnumId"/>
+                </widgets></section-iterate>
+            </default-field></field>
+
+            <field name="indTrasladoEnumId"><default-field title="Indicador Traslado">
+                <widget-template-include location="component://webroot/template/screen/BasicWidgetTemplates.xml#enumDropDown">
+                    <set field="enumTypeId" value="IndTraslado"/><set field="allowEmpty" value="true"/></widget-template-include>
+                </default-field>
+            </field>
+
+            <field name="tipoDespachoEnumId"><default-field title="Tipo Despacho">
+                <widget-template-include location="component://webroot/template/screen/BasicWidgetTemplates.xml#enumDropDown">
+                    <set field="enumTypeId" value="TipoDespacho"/><set field="allowEmpty" value="false"/></widget-template-include>
+            </default-field>
+            </field>
+
+            <field name="addReferenciasForm">
+                <default-field title="">
+                    <container-dialog id="AgregarReferenciaDialog" button-text="Agr. Referencia">
+                        <form-single name="AgregarReferenciaForm" transition="agregarReferenciaShipment">
+                            <field name="shipmentId"><default-field><hidden/></default-field>
+                            </field>
+                            <field name="fiscalTaxDocumentTypeEnumId"><default-field title="Tipo DTE Referencia">
+                                <drop-down><entity-options key="${enumId}" text="">
+                                    <entity-find entity-name="moqui.basic.Enumeration">
+                                        <!--econdition field-name="enumTypeId" value="FiscalTaxDocumentType"/-->
+                                        <econdition field-name="parentEnumId" operator="in" value="Ftdt-DTE,Ftdt-DT"/>
+                                    </entity-find>
+                                </entity-options></drop-down>
+                            </default-field></field>
+
+
+                            <field name="folio">
+                                <default-field title="Folio Referencia"><text-line size="10" /></default-field>
+                            </field>
+                            <field name="rutOtroContribuyente">
+                                <default-field title="RUT Otro Contribuyente"><text-line size="15"/></default-field>
+                            </field>
+                            <field name="idAdicional">
+                                <default-field title="ID Adicional Otro Contribuyente"><text-line size="15"/></default-field>
+                            </field>
+                            <field name="fecha">
+                                <default-field title="Fecha Documento Referencia"><date-time format="YYYY-MM-DD"/></default-field>
+                            </field>
+
+                            <field name="codigoReferenciaEnumId"><default-field title="Código Referencia">
+                                <drop-down><entity-options key="${enumId}" text="">
+                                    <entity-find entity-name="moqui.basic.Enumeration">
+                                        <econdition field-name="enumTypeId" value="CodigoReferencia"/>
+                                    </entity-find>
+                                </entity-options></drop-down>
+                            </default-field></field>
+                            <field name="razonReferencia">
+                                <default-field title="Razón Referencia"><text-line size="20"/></default-field>
+                            </field>
+                            <field name="submitButton"><default-field title="Añadir"><submit/></default-field></field>
+                        </form-single>
+                    </container-dialog>
+                    <link url="VerReferenciasShipment" text="Ver Referencias" url-type="plain" link-type="auto" parameter-map="[shipmentId:shipmentId]"/>
+                </default-field>
+            </field>
+
+            <field name="findButton"><default-field title="">
+                <link url="genGuiaDespacho" text="Generar Guía de Despacho" parameter-map="[shipmentId:shipmentId, activeOrgId:activeOrgId, indTrasladoEnumId:indTrasladoEnumId]" link-type="auto"/>
+            </default-field>
+            </field>
+
+        </form-list>
+    </widgets>
+</screen>

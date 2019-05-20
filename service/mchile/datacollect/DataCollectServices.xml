@@ -14,18 +14,18 @@ along with this software (see the LICENSE.md file). If not, see
 -->
 <services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
 
-    <service verb="update" noun="SeriesData">
+    <service verb="update" noun="SeriesData" transaction="force-new">
         <in-parameters>
-            <parameter name="fetchFromDate" required="true"/>
-            <parameter name="fetchThruDate" required="true"/>
+            <parameter name="fetchFromDate" type="Date" required="true"/>
+            <parameter name="fetchThruDate" type="Date" required="true"/>
             <parameter name="dataSeriesId" required="true"/>
         </in-parameters>
         <actions>
             <entity-find-one value-field="series" entity-name="mchile.datacollect.DataSeries" for-update="true"/>
             <set field="seriesName" from="series.description"/>
             <script><![CDATA[
-                firstDate = ec.l10n.format(ec.l10n.parseDate(fetchFromDate, 'yyyy-MM-dd HH:mm'), 'yyyy-MM-dd')
-                lastDate = ec.l10n.format(ec.l10n.parseDate(fetchThruDate, 'yyyy-MM-dd HH:mm'), 'yyyy-MM-dd')
+                firstDate = ec.l10n.format(fetchFromDate, 'yyyy-MM-dd')
+                lastDate = ec.l10n.format(fetchThruDate, 'yyyy-MM-dd')
             ]]></script>
             <if condition="!series"><return error="true" message="Did not find Data Series with id ${dataSeriesId}"/></if>
             <if condition="series.originPartyId == 'CHLBCENTRAL'">
@@ -35,17 +35,15 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="series.lastSeriesFetchDate" from="ec.user.nowTimestamp"/>
                 <entity-update value-field="series"/>
                 <set field="numErrors" from="ec.message.errors.size()"/>
+                <service-call name="create#mchile.datacollect.DataSeriesFetchAction" in-map="[dataSeriesId:dataSeriesId, fetchDate:ec.user.nowTimestamp,
+                        fromDate:firstDate, thruDate:lastDate, recordsError:numErrors, recordsCreated:numCreated, recordsDuplicated:numDuplicated, recordsReceived:numFetched]"/>
                 <script>ec.message.addMessage("Created ${numCreated} values, ignored ${numDuplicated} duplicates and got ${numErrors} errors.")</script>
                 <if condition="numUpdated || numErrors">
                     <script><![CDATA[
                         ec.makeNotificationMessage().topic("DataCollection").
                             type(numErrors? 'danger': 'success').
-                            message([dataSeriesId: dataSeriesId, seriesName:seriesName, errorList : errorList,
-                                     numUpdated:
-                                    numUpdated] as
-                                    Map<String,
-                                    Object>)
-                                .send()
+                                message([dataSeriesId: dataSeriesId, seriesName:seriesName, errorList : errorList, numUpdated: numUpdated] as
+                                    Map<String, Object>).send()
                 ]]></script>
                 </if>
                 <return/>

@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+    <service verb="create" noun="Return">
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+            <parameter name="orderPartId"/>
+            <parameter name="returnFacilityId" required="true"/>
+        </in-parameters>
+        <out-parameters><parameter name="returnId"/></out-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.order.OrderHeader" value-field="order"/>
+            <entity-find-one entity-name="mantle.order.OrderPart" value-field="orderPart"/>
+            <if condition="!order"><return message="Order ${orderId} not found"/></if>
+            <if condition="order.statusId != 'OrderCompleted'"><return message="Order ${orderId} not in 'OrderCompleted' status, cannot create Return"/></if>
+            <service-call name="create#mantle.order.return.ReturnHeader"
+                          in-map="[customerPartyId:orderPart.customerPartyId, vendorPartyId:orderPart.vendorPartyId,
+                          statusId:'ReturnCreated', finAccountId:creditAcctId, postalContactMechId:orderPart.postalContactMechId,
+                          telecomContactMechId:orderPart.telecomContactMechId, facilityId:returnFacilityId, entryDate:ec.user.nowTimestamp]"
+                          out-map="context"/>
+            <entity-find entity-name="mantle.order.OrderItem" list="orderItems">
+                <econdition field-name="orderId" from="orderId"/>
+                <econdition field-name="orderPartSeqId" from="orderPart.orderPartSeqId"/>
+            </entity-find>
+            <iterate list="orderItems" entry="orderItem">
+                <set field="returnPrice" from="orderItem.quantity*orderItem.unitAmount"/>
+                <service-call name="mantle.order.ReturnServices.add#OrderItemToReturn"
+                              in-map="[returnId:returnId, orderId:orderItem.orderId, orderItemSeqId:orderItem.orderItemSeqId,
+                              returnQuantity:orderItem.quantity, returnPrice:returnPrice, productId:orderItem.productId,
+                              description:orderItem.itemDescription, returnReasonEnumId:'RrsnDidNotWant',
+                              returnResponseEnumId:'RrspCredit']"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="change" noun="Customer">
+        <in-parameters>
+            <parameter name="returnId" required="true"/>
+            <parameter name="partyId"/>
+            <parameter name="organizationName"/>
+            <parameter name="firstName"/>
+            <parameter name="lastName"/>
+            <parameter name="rut" type="String"/>
+            <parameter name="run" type="String"/>
+            <parameter name="orgEmailAddress"></parameter>
+            <parameter name="orgCountryCode" type="String"/>
+            <parameter name="orgContactNumber"></parameter>
+            <parameter name="persEmailAddress"></parameter>
+            <parameter name="persCountryCode" type="String"/>
+            <parameter name="persContactNumber"></parameter>
+            <parameter name="postalContactMechPurposeId"/>
+            <parameter name="countryGeoId"/>
+            <parameter name="address1"/>
+            <parameter name="unitNumber"/>
+            <parameter name="address2"/>
+            <parameter name="stateProvinceGeoId"/>
+        </in-parameters>
+        <actions>
+            <if condition="!partyId">
+                <service-call name="mchile.SaleServices.create#Customer" in-map="context" out-map="context"/>
+            </if>
+            <service-call name="update#mantle.order.return.ReturnHeader" in-map="[returnId:returnId, customerPartyId:partyId]"/>
+        </actions>
+    </service>
+
+    <service verb="complete" noun="Return">
+        <in-parameters><parameter name="returnId"/></in-parameters>
+        <actions>
+            <!-- Check that customer exists and is not default store customer -->
+            <entity-find-one entity-name="mantle.order.return.ReturnHeader" value-field="returnHeader"/>
+            <if condition="returnHeader.customerPartyId == null || returnHeader.customerPartyId == 'cliente0'">
+                <return error="true" message="Need to identify customer!"/>
+            </if>
+            <set field="orderId" from="returnHeader.items[0].orderId"/>
+            <entity-find-one value-field="orderHeader" entity-name="mantle.order.OrderHeader"/>
+            <!-- Define financialAccount to credit -->
+            <entity-find entity-name="mantle.account.financial.FinancialAccount" list="finAccounts">
+                <econdition field-name="finAccountTypeId" value="CustomerCredit"/>
+                <econdition field-name="ownerPartyId" from="returnHeader.customerPartyId"/>
+                <econdition field-name="currencyUomId" from="orderHeader.currencyUomId"/>
+            </entity-find>
+            <if condition="finAccounts">
+                <then><set field="creditAcctId" from="finAccounts.first.finAccountId"/></then>
+                <else>
+                    <service-call name="create#mantle.account.financial.FinancialAccount"
+                                  in-map="[finAccountTypeId:'CustomerCredit', ownerPartyId:returnHeader.customerPartyId,
+                                  fromDate:ec.user.nowTimestamp, currencyUomId:orderHeader.currencyUomId]"
+                                  out-map="context"/>
+                    <set field="creditAcctId" from="finAccountId"/>
+                </else>
+            </if>
+            <!-- Change status and define financial Account -->
+            <service-call name="update#mantle.order.return.ReturnHeader" in-map="[returnId:returnId, statusId:'ReturnApproved', finAcctountId:creditAcctId]"/>
+            <entity-find entity-name="mantle.order.return.ReturnItem" list="returnItems">
+                <econdition field-name="returnId" from="returnHeader.returnId"/>
+                <econdition field-name="statusId" operator="in" from="['ReturnCreated', 'ReturnRequested', 'ReturnShipped']"/>
+            </entity-find>
+            <iterate entry="returnItem" list="returnItems">
+                <service-call name="update#mantle.order.return.ReturnItem"
+                              in-map="[returnId:returnId, returnItemSeqId:returnItem.returnItemSeqId, statusId:'ReturnApproved']"/>
+                <service-call name="mantle.order.ReturnServices.receive#ReturnItem"
+                              in-map="[returnId:returnId, returnItemSeqId:returnItem.returnItemSeqId, receivedQuantity:returnItem.returnQuantity]"/>
+            </iterate>
+            <!-- Check customer credit -->
+            <log message="Completing return ${returnHeader}"/>
+        </actions>
+    </service>
+    
+</services>

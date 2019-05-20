@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns=""
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd"
+        default-menu-include="false">
+
+    <parameter name="returnId" required="true"/>
+    <parameter name="invoiceId" required="true"/>
+
+    <transition name="genNotaCredito">
+        <parameter name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+        <parameter name="activeOrgId" from="activeOrgId"/>
+        <actions>
+            <script><![CDATA[
+                    items = new StringBuilder()
+                    for (int i = 0; ; i++) {
+                        if ((context.get("_useRowSubmit") == "true" || context.get("_useRowSubmit_" + i) == "true")
+                                && context.get("_rowSubmit_" + i) != "true") continue
+                        String curKey = "returnItemSeqId_" + i
+                        String returnQuantity = "returnQuantity_" + i
+                        String returnPrice = "returnPrice_" + i
+                        String description = "description_" + i
+                        String pctDiscount = "pctDiscount_" + i
+                        if (context.containsKey(curKey))  {
+                            if (items.length() > 0) items.append(",")
+                            items.append(context.get(curKey)+"-"+context.get(returnQuantity)+"-"+context.get(returnPrice)+"-"+context.get(pctDiscount)+"-"+context.get(description) )
+                        } else { break }
+                    }
+            ]]></script>
+            <service-call name="mchile.DTEServices.generar#NotaCredito" in-map="context + [returnId:returnId, fiscalTaxDocumentTypeEnumId:'Ftdt-61', invoiceId:invoiceId, activeOrgId:activeOrgId]"/>
+        </actions>
+        <default-response url="../../FindDTE"/>
+    </transition>
+
+    <actions>
+        <!-- Se buscan referencias de returnId  -->
+        <set field="codRef"/>
+        <entity-find-one entity-name="mchile.dte.ReferenciaReturn" value-field="referenciaField">
+            <field-map field-name="returnId" from="returnId"/>
+            <!--field-map field-name="fiscalTaxDocumentTypeEnumId" value="Ftdt-34"/-->
+        </entity-find-one>
+        <!--if condition="!referenciaField">
+            <return error="true" message="No existe factura especificada"/>
+        </if-->
+        <if condition="referenciaField">
+            <set field="codRef" from="referenciaField.codigoReferenciaEnumId"/>
+        </if>
+
+        <!-- Se busca detalle de items -->
+        <entity-find entity-name="mantle.order.return.ReturnItem" list="returnItemList">
+            <econdition field-name="returnId"/></entity-find>
+
+
+    </actions>
+
+    <widgets>
+        <container-row>
+            <row-col>
+                <container>
+                    <form-list name="ReturnItems" list="returnItemList" transition="genNotaCredito" multi="true">
+                        <hidden-parameters><parameter name="returnId"/><parameter name="activeOrgId"/></hidden-parameters>
+                        <field name="_useRowSubmit"><default-field><hidden default-value="true"/></default-field></field>
+                        <field name="returnItemSeqId"><default-field title="Item"><display/></default-field></field>
+                        <field name="description"><default-field><display/></default-field></field>
+                        <field name="returnQuantity"><default-field><display/></default-field></field>
+                        <field name="returnPrice"><default-field><display/></default-field></field>
+                        <field name="total" from="((returnQuantity != null ? returnQuantity : 1.0) * (returnPrice ?: 0.0))">
+                            <default-field><display/></default-field></field>
+                        <field name="pctDiscount"><default-field title="% Descuento"><text-line size="4" default-value="0"/></default-field></field>
+                        <field name="_rowSubmit"><default-field title="Corregir">
+                            <check no-current-selected-key="false"><option key="true" text=" "/></check></default-field>
+                        </field>
+                        <field name="submitButton"><default-field title="Generar Nota de Crédito"><submit/>
+                        </default-field></field>
+                    </form-list>
+                </container>
+            </row-col>
+        </container-row>
+    </widgets>
+</screen>

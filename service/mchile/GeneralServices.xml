@@ -26,16 +26,35 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="! ['PtidUniqueNationalId', 'PtidNationalTaxId'].contains(entityValue.partyIdTypeEnumId)">
                 <return/>
             </if>
-            <set field="idValue" from="entityValue.idValue?.replaceAll('\\.', '').toUpperCase()"/>
-            <set field="length" from="idValue.length()"/>
+
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:entityValue.idValue]" out-map="context"/>
+
+            <set field="entityValue.idValue" from="new String(rut) + '-' + dv"/>
+        </actions>
+    </service>
+
+    <service verb="verify" noun="Rut">
+        <!-- to be called directly -->
+        <in-parameters>
+            <parameter name="rut" required="true" type="String"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="rut"/>
+            <parameter name="dv"/>
+        </out-parameters>
+        <actions>
+            <set field="idValue" from="rut?.replaceAll('\\.', '').toUpperCase()"/>
+
+            <set field="length" from="rut.length()"/>
+
             <if condition="length &lt; 2">
-                <return error="true" message="Error validating RUT '${idValue}': length &lt; 2"/>
+                <return error="true" message="Error validating RUT '${rut}': length &lt; 2"/>
             </if>
             <script>
                 (rut, givenDv) = idValue.tokenize('-')
                 if (givenDv == null) {
-                    rut = idValue.substring(0, length-1)
-                    ec.logger.info("rut: ${rut}")
+                    rutStr = idValue.substring(0, length-1)
+                    ec.logger.info("rut: ${rutStr}")
                     givenDv = idValue.substring(length-1)
                     ec.logger.info("givenDv: ${givenDv}")
                 }
@@ -45,7 +64,6 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="givenDv != dv">
                 <return error="true" message="RUT incorrecto: ${idValue}"/>
             </if>
-            <set field="entityValue.idValue" from="new String(rut) + '-' + dv"/>
         </actions>
     </service>
 
@@ -60,6 +78,46 @@ along with this software (see the LICENSE.md file). If not, see
                 }
                 dv = (char) (s != 0 ? s + 47 : 75);
             </script>
+        </actions>
+    </service>
+
+    <service verb="format" noun="Rut">
+        <in-parameters><parameter name="rut" type="String"/></in-parameters>
+        <out-parameters><parameter name="rut" type="String"/></out-parameters>
+        <actions>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="context" out-map="vrut"/>
+            <set field="rut" value="${ec.l10n.format(new Integer(vrut.rut), '#,###')}-${vrut.dv}"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="PartyName">
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="partyName"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.party.Party" value-field="partyField"/>
+            <set field="partyTypeEnumId" from="partyField.partyTypeEnumId"/>
+
+            <set field="partyName" value=""/>
+
+            <if condition="partyTypeEnumId == 'PtyOrganization'">
+                <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField"/>
+                <if condition="organizationField">
+                    <set field="partyName" from="organizationField.organizationName"/>
+                </if>
+            </if>
+            <if condition="partyTypeEnumId == 'PtyPerson'">
+                <!-- Persona Natural -->
+                <entity-find-one entity-name="mantle.party.Person" value-field="personField"/>
+                <if condition="personField">
+                    <script>
+                        partyName = personField.firstName + " " + personField.lastName
+                    </script>
+                </if>
+            </if>
         </actions>
     </service>
 </services>

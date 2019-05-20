@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+    <service verb="delete" noun="GlAccounts">
+        <actions>
+            <service-call name="mchile.InstallServices.delete#AcctgTrans"/>
+            <entity-find entity-name="mantle.ledger.transaction.GlJournal" list="glJournalList"/>
+            <iterate list="glJournalList" entry="glJournal">
+                <service-call name="delete#mantle.ledger.transaction.GlJournal" in-map="[glJournalId:glJournal.glJournalId]"/>
+            </iterate>
+            <service-call name="mchile.InstallServices.delete#GlAccountsInternal"/>
+            <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList"/>
+            <iterate list="parameterList" entry="param">
+                <entity-delete value-field="param"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="delete" noun="GlAccountsInternal">
+        <in-parameters>
+            <parameter name="rootGlAccountId"/>
+        </in-parameters>
+        <actions>
+            <set field="thisGlAccountId" from="rootGlAccountId"/>
+            <entity-find entity-name="mantle.ledger.account.GlAccount" list="descendantAccounts">
+                <econdition field-name="parentGlAccountId" from="thisGlAccountId"/>
+            </entity-find>
+            <set field="descendantAccountIds" from="descendantAccounts.glAccountId"/>
+            <iterate list="descendantAccountIds" entry="glAccountId">
+                <service-call name="mchile.InstallServices.delete#GlAccountsInternal" in-map="[rootGlAccountId:glAccountId]"/>
+            </iterate>
+            <if condition="rootGlAccountId">
+                <service-call name="delete#mantle.ledger.account.GlAccountOrgTimePeriod" in-map="[glAccountId:rootGlAccountId, organizationPartyId:'DefaultSettings', timePeriodId:'*']"/>
+                <service-call name="delete#mantle.ledger.account.GlAccountOrgTimePeriod" in-map="[glAccountId:rootGlAccountId, organizationPartyId:'DefaultCHL', timePeriodId:'*']"/>
+                <service-call name="delete#mantle.ledger.account.GlAccountOrgTimePeriod" in-map="[glAccountId:rootGlAccountId, organizationPartyId:'MOIT', timePeriodId:'*']"/>
+                <service-call name="delete#mantle.ledger.account.GlAccountOrgTimePeriod" in-map="[glAccountId:rootGlAccountId, organizationPartyId:'INVCJ', timePeriodId:'*']"/>
+                <service-call name="delete#mantle.ledger.account.GlAccountOrganization" in-map="[glAccountId:rootGlAccountId, organizationPartyId:'*']"/>
+                <service-call name="delete#mantle.ledger.account.GlAccount" in-map="[glAccountId:rootGlAccountId]"/>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="delete" noun="AcctgTrans">
+        <in-parameters>
+            <parameter name="acctgTransId"/>
+        </in-parameters>
+        <actions>
+            <if condition="acctgTransId"><then>
+                <!-- delete all -->
+                <service-call name="delete#mantle.ledger.transaction.AcctgTransEntry" in-map="[acctgTransId:acctgTransId, acctgTransEntrySeqId:'*']"/>
+                <service-call name="delete#mantle.ledger.transaction.AcctgTrans" in-map="[acctgTransId:acctgTransId]"/>
+            </then><else>
+                <entity-find entity-name="mantle.ledger.transaction.AcctgTrans" list="acctgTransList" for-update="true">
+                    <econdition field-name="reversedByAcctgTransId" operator="is-not-null"/>
+                </entity-find>
+                <iterate list="acctgTransList" entry="acctgTrans">
+                    <set field="reverseAcctTransId" from="acctgTrans.reversedByAcctgTransId"/>
+                    <set field="acctgTrans.reversedByAcctgTransId" from="null"/>
+                    <entity-update value-field="acctgTrans"/>
+                    <service-call name="mchile.InstallServices.delete#AcctgTrans" in-map="[acctgTransId:acctgTrans.reversedByAcctgTransId]"/>
+                </iterate>
+                <entity-find entity-name="mantle.ledger.transaction.AcctgTrans" list="acctgTransList">
+                    <econdition field-name="reversedByAcctgTransId" operator="is-null"/>
+                </entity-find>
+                <iterate list="acctgTransList" entry="acctgTrans">
+                    <service-call name="mchile.InstallServices.delete#AcctgTrans" in-map="[acctgTransId:acctgTrans.acctgTransId]"/>
+                </iterate>
+            </else></if>
+        </actions>
+    </service>
+</services>

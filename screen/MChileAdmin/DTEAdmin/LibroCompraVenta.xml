@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd"
+        menu-image="glyphicon glyphicon-shopping-cart" menu-image-type="icon" default-menu-title="Apoyo a Certificación"
+        default-menu-index="2">
+
+    <transition name="eliminarLibro">
+        <actions>
+            <service-call name="mchile.DTEServices.eliminar#DTE" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="enviarSII">
+        <actions>
+             <service-call name="mchile.DTEServices.preparaEnvio#Documentos" in-map="[documentIds:fiscalTaxDocumentId, libro:'TRUE']"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="xml" read-only="true">
+        <parameter name="fiscalTaxDocumentId"/>
+        <actions>
+
+            <set field="extraPathNameList" from="sri.screenUrlInfo.extraPathNameList"/>
+
+
+            <if condition="extraPathNameList &amp;&amp; !fiscalTaxDocumentId">
+                <set field="fiscalTaxDocumentId" from="extraPathNameList[0]"/></if>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="document" cache="true">
+                <field-map field-name="fiscalTaxDocumentId"/></entity-find-one>
+
+            <if condition="document == null"><then>
+                <!-- NOTE: consider returning a default image instead of 404 -->
+                <script>ec.web.sendError(404, null, null)</script>
+            </then><else>
+                <script>ec.web.sendResourceResponse(document.xml, true)</script>
+            </else></if>
+        </actions>
+        <default-response type="none"/>
+    </transition>
+
+    <transition name="genLibroVentas">
+        <actions>
+            <service-call name="mchile.DTEServices.genera#LibroVentas" out-map="context" in-map="[tipo:fiscalTaxDocumentTypeEnumId, tipoLibro:tipoLibro, tipoEnvio:tipoEnvio, periodo:periodo, activeOrgId:activeOrgId]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="genLibroCompras">
+        <actions>
+            <service-call name="mchile.DTEServices.genera#LibroCompras" out-map="context" in-map="[tipo:fiscalTaxDocumentTypeEnumId, tipoLibro:tipoLibro, tipoEnvio:tipoEnvio, periodo:periodo, activeOrgId:activeOrgId]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="genLibroGuias">
+        <actions>
+            <service-call name="mchile.DTEServices.genera#LibroGuias" out-map="context" in-map="[tipo:fiscalTaxDocumentTypeEnumId, tipoLibro:tipoLibro, tipoEnvio:tipoEnvio, periodo:periodo, activeOrgId:activeOrgId]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="genLibroBoletas">
+        <actions>
+            <service-call name="mchile.DTEServices.genera#CasoPruebaBoletas" out-map="context" in-map="[tipo:fiscalTaxDocumentTypeEnumId, tipoLibro:tipoLibro, tipoEnvio:tipoEnvio, periodo:periodo, activeOrgId:activeOrgId]"/>
+            <service-call name="mchile.DTEServices.genera#LibroBoletas" out-map="context" in-map="[tipo:fiscalTaxDocumentTypeEnumId, tipoLibro:tipoLibro, tipoEnvio:tipoEnvio, periodo:periodo, activeOrgId:activeOrgId]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="genRCOF">
+        <actions>
+            <service-call name="mchile.DTEServices.genera#RCOF" out-map="context" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaInicio:fechaInicio, fechaFin:fechaFin, activeOrgId:activeOrgId]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <actions>
+        <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
+            <search-form-inputs/>
+            <!--econdition-object field="searchMap"/-->
+            <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in"
+                        from="['Ftdt-LibroVentas','Ftdt-LibroCompras']"/>
+        </entity-find>
+        <log message="Lista: $dteList" level="warn"/>
+    </actions>
+    <widgets>
+        <label text="Apoyo a Certificación" type="h4"/>
+
+        <container>
+            <link url="genLibroVentas" text="Generar Libro de Ventas" parameter-map="[activeOrgId:activeOrgId]" link-type="auto"/>
+            <link url="genLibroCompras" text="Generar Libro de Compras" parameter-map="[activeOrgId:activeOrgId]" link-type="auto"/>
+            <link url="genLibroGuias" text="Generar Libro de Guías" parameter-map="[activeOrgId:activeOrgId]" link-type="auto"/>
+            <link url="genLibroBoletas" text="Generar Caso de Prueba Boletas" parameter-map="[activeOrgId:activeOrgId]" link-type="auto"/>
+
+            <container-dialog id="GenRCOFDialog" button-text="Generar RCOF">
+                <form-single name="GenRCOFForm" transition="genRCOF">
+                    <field name="activeOrgId"><default-field><hidden/></default-field></field>
+
+                    <field name="fiscalTaxDocumentTypeEnumId"><default-field title="Tipo DTE Referencia">
+                        <drop-down><entity-options key="${enumId}" text="">
+                            <entity-find entity-name="moqui.basic.Enumeration">
+                                <!--econdition field-name="parentEnumId" operator="in" value="Ftdt-DTE,Ftdt-DT"/-->
+                                <econdition field-name="enumId" operator="in" value="Ftdt-39,Ftdt-41,Ftdt-61"/>
+                            </entity-find>
+                        </entity-options></drop-down>
+                    </default-field></field>
+
+                    <field name="fechaInicio">
+                        <default-field title="Fecha Inicio Período"><date-time format="YYYY-MM-DD"/> </default-field>
+                    </field>
+                    <field name="fechaFin">
+                        <default-field title="Fecha Fin Período"><date-time format="YYYY-MM-DD"/> </default-field>
+                    </field>
+                    <field name="submitButton"><default-field title="Añadir"><submit/></default-field></field>
+                </form-single>
+            </container-dialog>
+        </container>
+
+    </widgets>
+</screen>
