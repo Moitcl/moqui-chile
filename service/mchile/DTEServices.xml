@@ -125,6 +125,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="folioS" from="folio" type="Integer"/>
             <set field="codRef" value="0" type="Integer"/>
+
             <script>
                 cafS = cafS + caf
             </script>
@@ -167,6 +168,9 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.sii.siiDte.FechaHoraType;
                 import cl.sii.siiDte.FechaType;
                 import cl.sii.siiDte.MedioPagoType;
+                import org.apache.commons.io.IOUtils;
+
+
 
 
                 int folio;
@@ -191,7 +195,17 @@ along with this software (see the LICENSE.md file). If not, see
                 XmlOptions opts = new XmlOptions();
                 opts.setLoadSubstituteNamespaces(namespaces);
 
-                caf = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts).getAUTORIZACION();
+                //caf = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts).getAUTORIZACION();
+
+                // Recuperación de archivo CAF desde BD
+                int largo = cafData.length()
+                long inicio = 1
+                byte[] bytes = cafData.getBytes(inicio, largo)
+
+                //caf = AUTORIZACIONDocument.Factory.parse(bytes, opts).getAUTORIZACION();
+                caf = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts).getAUTORIZACION();
+
+                logger.warn("CAF:" + caf);
 
 
                 // Construyo base a partir del template
@@ -2169,7 +2183,6 @@ return
                 fileStream = filename.getInputStream()
                 try { docRr.putStream(fileStream) } finally { fileStream.close() }
             </script>
-            <!-- TODO: Parseo de XML -->
             <script>
                 import java.io.ByteArrayOutputStream;
                 import java.io.File;
@@ -2229,16 +2242,16 @@ return
                 <return error="true" message="RUT de archivo CAF no corresponde al registrado en el sistema como emisor: $rutCaf :: $rut"/>
             </if>
 
-            <set field="updateMap" from="[filename:archivo,desde:desde, hasta:hasta, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, ultimoFolio:desde, issuerPartyId:activeOrgId]"/>
+            <set field="updateMap" from="[filename:archivo,desde:desde, hasta:hasta, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, ultimoFolio:desde, issuerPartyId:activeOrgId, cafData:filename.get()]"/>
             <service-call name="create#mchile.dte.Caf" out-map="context" in-map="updateMap"/>
 
-            <!-- TODO: Creación de registros para reservar folios -->
+            <!-- Creación de registros para reservar folios -->
             <script><![CDATA[
                 int inicio = Integer.parseInt(desde);
                 int fin = Integer.parseInt(hasta);
                 for (int folio = inicio; folio <= fin; folio++) {]]></script>
                     <set field="fiscalTaxDocumentId" value="$fiscalTaxDocumentTypeEnumId$folio$rutNoDv"/>
-                    <log message="Creando: $fiscalTaxDocumentId, $dteTypeEnumId, $folio, $rut"/>
+                    <!--log message="Creando: $fiscalTaxDocumentId, $dteTypeEnumId, $folio, $rut"/-->
                     <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:activeOrgId,
                         issuerPartyIdTypeEnumId:'PtidNationalTaxId', fiscalTaxDocumentStatusEnumId:'Ftdt-NotIssued', fiscalTaxDocumentSentStatusEnumId:'Ftdt-NotSent']"/>
                     <service-call name="create#mchile.dte.FiscalTaxDocument" out-map="context" in-map="createMap"/>
@@ -2261,6 +2274,7 @@ return
         <out-parameters>
             <parameter name="folio"/>
             <parameter name="caf"/>
+            <parameter name="cafData"/>
         </out-parameters>
         <actions>
 
@@ -2301,6 +2315,7 @@ return
             <set field="folio" from="reservedList.first().fiscalTaxDocumentNumber"/>
 
             <set field="caf" from="cafEntry.filename"/>
+            <set field="cafData" from="cafEntry.cafData"/>
 
         </actions>
     </service>
@@ -3286,10 +3301,10 @@ return
                         receiverPartyId:activeOrgId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocument" out-map="mapOut" in-map="createMap"/>
             <!-- Se guarda contenido asociado a la DTE, todas las DTE que vienen en el mismo envío comparten el mismo XML -->
-            <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts]"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts, , contentData:xml.get()]]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
             <if condition="contentLocationPdf">
-                <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts]"/>
+                <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts, , contentData:pdf.get()]]"/>
                 <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
             </if>
             <script>
