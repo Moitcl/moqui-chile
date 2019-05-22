@@ -125,6 +125,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="folioS" from="folio" type="Integer"/>
             <set field="codRef" value="0" type="Integer"/>
+
             <script>
                 cafS = cafS + caf
             </script>
@@ -167,7 +168,7 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.sii.siiDte.FechaHoraType;
                 import cl.sii.siiDte.FechaType;
                 import cl.sii.siiDte.MedioPagoType;
-
+                import org.apache.commons.io.IOUtils;
 
                 int folio;
                 DTEDocument doc;
@@ -191,8 +192,10 @@ along with this software (see the LICENSE.md file). If not, see
                 XmlOptions opts = new XmlOptions();
                 opts.setLoadSubstituteNamespaces(namespaces);
 
-                caf = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts).getAUTORIZACION();
+                //caf = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts).getAUTORIZACION();
 
+                // Recuperación de archivo CAF desde BD
+                caf = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts).getAUTORIZACION();
 
                 // Construyo base a partir del template
                 doc = DTEDocument.Factory.parse(new File(plantillaS), opts);
@@ -203,7 +206,6 @@ along with this software (see the LICENSE.md file). If not, see
                 String alias = ks.aliases().nextElement();
 
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
-
 
                 cert = (X509Certificate) ks.getCertificate(alias);
                 key = (PrivateKey) ks.getKey(alias, passS.toCharArray());
@@ -1136,14 +1138,32 @@ along with this software (see the LICENSE.md file). If not, see
                     Files.write(path, salida);
                     logger.warn("Error al generar factura folio "+folio);
                 }
+
+                // Subir XML a base de datos
+
             </script>
             <!-- Registro de DTE en base de datos y generación de PDF -->
             <set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/>
             <set field="xml" value="${resultS}DTE${tipoFactura}-${folio}.xml"/>
             <set field="pdf" value="${pathPdf}DTE${tipoFactura}-${folio}.pdf"/>
             <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, activeOrgId:activeOrgId]" out-map="context"/>
+            <set field="bArray2"/>
 
-
+            <!-- Lectura y conversión a arreglo de bytes de PDF temporal -->
+            <script>
+                File file = new File(pdf);
+                FileInputStream fis = null;
+                byte[] bArray = new byte[(int) file.length()];
+                try {
+                    fis = new FileInputStream(file);
+                    fis.read(bArray);
+                    fis.close();
+                } catch (IOException ioExp) {
+                    ioExp.printStackTrace();
+                }
+                logger.warn("pdf largo: " + file.length());
+                bArray2 = bArray;
+            </script>
 
             <!-- Creación de registro en FiscalTaxDocument -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
@@ -1168,10 +1188,10 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-update value-field="dteField"/>
 
             <!-- Creacion de registros en FiscalTaxDocumentContent -->
-            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xml, contentDate:ts]"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xml, contentDate:ts, contentData:salida]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
 
-            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts]"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts, contentData:bArray2]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
             <!--return error="true" message="$anulaBoleta - $folioAnulaBoleta - monto: $amount - neto: $montoNeto - exento: $montoExento - montoIva: $montoIVARecuperable"/-->
             <!-- Creación de registro en FiscalTaxDocumentAttributes -->
@@ -1224,7 +1244,9 @@ along with this software (see the LICENSE.md file). If not, see
                 String datetime = ft.format(dNow);
                 idS = idS + datetime;
 
-                String[] DTEList = new String[documentList.size()];
+                //String[] DTEList = new String[documentList.size()];
+                //byte[][] DTEList = new byte[documentList.size()][];
+                javax.sql.rowset.serial.SerialBlob[] DTEList = new javax.sql.rowset.serial.SerialBlob[documentList.size()];
                 int j = 0;
             </script>
            <iterate list="documentList" entry="docField">
@@ -1233,13 +1255,15 @@ along with this software (see the LICENSE.md file). If not, see
                    <field-map field-name="fiscalTaxDocumentId" from="docField"/>
                    <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
                    <select-field field-name="contentLocation"/>
+                   <select-field field-name="contentData"/>
                </entity-find-one>
                <set field="xml" from="dteField.contentLocation"/>
+               <set field="xmlData" from="dteField.contentData"/>
                <script>
-                DTEList[j] = xml;
+                //DTEList[j] = xml;
+                DTEList[j] = xmlData;
                 logger.warn("Agregado: " + DTEList[j])
                 j++;
-
                 </script>
            </iterate>
 
@@ -1247,8 +1271,6 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="recepS">
                 <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:recepS]"/>
             </if>
-
-
 
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/>
 
@@ -1325,12 +1347,14 @@ along with this software (see the LICENSE.md file). If not, see
                 opts.setLoadSubstituteNamespaces(namespaces);
 
                 // Cantidad de documentos a enviar
+
                 DTEDefType[] dtes = new DTEDefType[DTEList.size()];
 
                 HashMap&lt;Integer, Integer&gt; hashTot = new HashMap&lt;Integer, Integer&gt;();
 
                 for (int i = 0; i &lt; DTEList.length; i++) {
-                    dtes[i] = DTEDocument.Factory.parse(new FileInputStream(DTEList[i]), opts).getDTE();
+                    //dtes[i] = DTEDocument.Factory.parse(new FileInputStream(DTEList[i]), opts).getDTE();
+                    dtes[i] = DTEDocument.Factory.parse(DTEList[i].getBinaryStream(), opts).getDTE();
                     // armar hash para totalizar por tipoDTE
                     if (hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) != null) {
                         hashTot.put(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue(),
@@ -1557,6 +1581,7 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.sii.siiDte.boletas.BOLETADefType.Documento.Encabezado.Totales;
                 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA;
                 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE;
+                import org.apache.commons.io.IOUtils;
 
                 AutorizacionType caf;
                 BOLETADefType boleta; // boleta tiene cargada toda la información correspondiente
@@ -1585,8 +1610,11 @@ along with this software (see the LICENSE.md file). If not, see
     			opts.setLoadSubstituteNamespaces(namespaces);
 	    		AutorizacionType auth;
 		    	// cargar archivo de CAF, o stream de datos del CAF
-			    //auth = AUTORIZACIONDocument.Factory.parse( CAF, opts).getAUTORIZACION();
-				auth = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts).getAUTORIZACION();
+				//auth = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts).getAUTORIZACION();
+
+				// Recuperación de archivo CAF desde BD
+                caf = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts).getAUTORIZACION();
+
 				logger.warn("CAF:" + cafS);
 				// TODO: Agregar datos a boleta
 
@@ -2052,7 +2080,8 @@ return
 
     <service verb="genera" noun="PDF">
         <description>
-            Genera archivo PDF de Factura (envio)
+            Genera archivo PDF de Factura (envio).
+            Dejarlo en BD probablemente no es buena idea.
         </description>
         <in-parameters>
             <parameter name="pdf" required="true"/>
@@ -2146,7 +2175,6 @@ return
                 fileStream = filename.getInputStream()
                 try { docRr.putStream(fileStream) } finally { fileStream.close() }
             </script>
-            <!-- TODO: Parseo de XML -->
             <script>
                 import java.io.ByteArrayOutputStream;
                 import java.io.File;
@@ -2206,16 +2234,16 @@ return
                 <return error="true" message="RUT de archivo CAF no corresponde al registrado en el sistema como emisor: $rutCaf :: $rut"/>
             </if>
 
-            <set field="updateMap" from="[filename:archivo,desde:desde, hasta:hasta, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, ultimoFolio:desde, issuerPartyId:activeOrgId]"/>
+            <set field="updateMap" from="[filename:archivo,desde:desde, hasta:hasta, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, ultimoFolio:desde, issuerPartyId:activeOrgId, cafData:filename.get()]"/>
             <service-call name="create#mchile.dte.Caf" out-map="context" in-map="updateMap"/>
 
-            <!-- TODO: Creación de registros para reservar folios -->
+            <!-- Creación de registros para reservar folios -->
             <script><![CDATA[
                 int inicio = Integer.parseInt(desde);
                 int fin = Integer.parseInt(hasta);
                 for (int folio = inicio; folio <= fin; folio++) {]]></script>
                     <set field="fiscalTaxDocumentId" value="$fiscalTaxDocumentTypeEnumId$folio$rutNoDv"/>
-                    <log message="Creando: $fiscalTaxDocumentId, $dteTypeEnumId, $folio, $rut"/>
+                    <!--log message="Creando: $fiscalTaxDocumentId, $dteTypeEnumId, $folio, $rut"/-->
                     <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:activeOrgId,
                         issuerPartyIdTypeEnumId:'PtidNationalTaxId', fiscalTaxDocumentStatusEnumId:'Ftdt-NotIssued', fiscalTaxDocumentSentStatusEnumId:'Ftdt-NotSent']"/>
                     <service-call name="create#mchile.dte.FiscalTaxDocument" out-map="context" in-map="createMap"/>
@@ -2238,6 +2266,7 @@ return
         <out-parameters>
             <parameter name="folio"/>
             <parameter name="caf"/>
+            <parameter name="cafData"/>
         </out-parameters>
         <actions>
 
@@ -2278,6 +2307,7 @@ return
             <set field="folio" from="reservedList.first().fiscalTaxDocumentNumber"/>
 
             <set field="caf" from="cafEntry.filename"/>
+            <set field="cafData" from="cafEntry.cafData"/>
 
         </actions>
     </service>
@@ -2872,7 +2902,6 @@ return
             </if>
             <set field="envio" from="content" type="String"/>
 
-
             <!--set field="envio" from="fiscalTaxDocumentField.xml" type="String"/-->
             <set field="salida" value=""/>
             <set field="statusXML" value=""/>
@@ -2897,7 +2926,8 @@ return
                 XmlOptions opts = new XmlOptions();
                 opts.setLoadSubstituteNamespaces(namespaces);
 
-                DTEDocument doc = DTEDocument.Factory.parse(new FileInputStream(envio), opts);
+                //DTEDocument doc = DTEDocument.Factory.parse(new FileInputStream(envio), opts);
+                DTEDocument doc = DTEDocument.Factory.parse(contentData.getBinaryStream(), opts);
 
                 ConexionSii con = new ConexionSii();
 
@@ -3263,10 +3293,10 @@ return
                         receiverPartyId:activeOrgId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocument" out-map="mapOut" in-map="createMap"/>
             <!-- Se guarda contenido asociado a la DTE, todas las DTE que vienen en el mismo envío comparten el mismo XML -->
-            <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts]"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts, , contentData:xml.get()]]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
             <if condition="contentLocationPdf">
-                <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts]"/>
+                <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts, , contentData:pdf.get()]]"/>
                 <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
             </if>
             <script>
@@ -3312,14 +3342,29 @@ return
 
             <set field="contentLocationXml" value="${fileRoot}/${archivoXml}"/>
             <set field="docRrXml" from="ec.resource.getLocationReference(contentLocationXml)"/>
+            <set field="bArrayXml"/>
 
             <script>
                 fileStream = xml.getInputStream()
                 try { docRrXml.putStream(fileStream) } finally { fileStream.close() }
             </script>
+            <!--script>
+
+                FileInputStream fisXml = null;
+                byte[] bArrayXmlTmp = new byte[(int) xml.getSize()];
+                try {
+                    fisXml = xml.getInputStream();
+                    fisXml.read(bArrayXmlTmp);
+                    fisXml.close();
+                } catch (IOException ioExp) {
+                    ioExp.printStackTrace();
+                }
+                bArrayXml = bArrayXmlTmp;
+            </script-->
 
             <!-- Carga PDF -->
             <set field="archivoPdf" from="pdf.getName()"/>
+            <set field="bArray2"/>
             <if condition="archivoPdf">
                 <set field="contentLocationPdf" value="${fileRoot}/${archivoPdf}"/>
                 <set field="docRrPdf" from="ec.resource.getLocationReference(contentLocationPdf)"/>
@@ -3327,8 +3372,20 @@ return
                     fileStream = pdf.getInputStream()
                     try { docRrPdf.putStream(fileStream) } finally { fileStream.close() }
                 </script>
+                <!-- Lectura y conversión a arreglo de bytes de PDF temporal -->
+                <!--script>
+                    FileInputStream fis = null;
+                    byte[] bArray = new byte[(int) pdf.getSize()];
+                    try {
+                        fis = pdf.getInputStream();
+                        fis.read(bArray);
+                        fis.close();
+                    } catch (IOException ioExp) {
+                        ioExp.printStackTrace();
+                    }
+                    bArray2 = bArray;
+                </script-->
             </if>
-
             <set field="rutEmisor" value=""/>
             <set field="rutReceptor" value=""/>
             <set field="razonSocialEmisor" value=""/>
@@ -3575,10 +3632,10 @@ return
                         receiverPartyId:activeOrgId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]"/>
                     <service-call name="create#mchile.dte.FiscalTaxDocument" out-map="mapOut" in-map="createMap"/>
                     <!-- Se guarda contenido asociado a la DTE, todas las DTE que vienen en el mismo envío comparten el mismo XML -->
-                    <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts]"/>
+                    <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts, contentData:xml.get()]"/>
                     <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
                     <if condition="contentLocationPdf">
-                        <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts]"/>
+                        <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts, contentData:pdf.get()]"/>
                         <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
                     </if>
             <script>
@@ -6031,12 +6088,14 @@ return
         </in-parameters>
         <out-parameters>
             <parameter name="content"/>
+            <parameter name="contentData"/>
         </out-parameters>
         <actions>
             <set field="content" from="null"/>
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="contentField"/>
             <if condition="contentField">
                 <set field="content" from="contentField.contentLocation"/>
+                <set field="contentData" from="contentField.contentData"/>
             </if>
         </actions>
     </service>
@@ -6258,6 +6317,7 @@ return
                 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE;
                 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula;
                 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula.SubTotDTE;
+                import org.apache.commons.io.IOUtils;
 
                 int folio;
                 //DTEType doc;
@@ -6282,10 +6342,12 @@ return
                 XmlOptions opts = new XmlOptions();
                 opts.setLoadSubstituteNamespaces(namespaces);
 
-                caf = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts).getAUTORIZACION();
+                //caf = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts).getAUTORIZACION();
+
+                // Recuperación de archivo CAF desde BD
+                caf = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts).getAUTORIZACION();
 
                 BOLETADefType boleta; // boleta tiene cargada toda la información correspondiente
-
 
                 // (emisor, receptor, detalle, totales, etc)
                 boleta = BOLETADefType.Factory.newInstance();
@@ -6405,10 +6467,15 @@ return
                     <!-- TODO: obtener precio de productId -->
                     <set field="priceItem" from="detailEntry.amount" type="Integer"/>
                     <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+                    <set field="unmdItem"/>
+                    <if condition="detailEntry.quantityUomId">
+                        <set field="unmdItem" from="detailEntry.quantityUomId"/>
+                    </if>
                     <!-- TODO: Verificar si item es afecto o exento -->
                     <service-call name="mchile.DTEServices.check#Afecto" in-map="[productId:detailEntry.productId]" out-map="afectoOutMap"/>
                     <set field="itemAfecto" from="afectoOutMap.afecto" type="String"/>
                     <log message="Item afecto: $itemAfecto, $totalItem" level="warn"/>
+
                     <script>
                         // Agrego detalles
                         det[i] = Detalle.Factory.newInstance();
@@ -6428,6 +6495,8 @@ return
                         det[i].setNroLinDet(i+1);
                         det[i].setNmbItem(nombreItem);
                         det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                        if(unmdItem.equals("WT_kg"))
+                            det[i].setUnmdItem("Kg.");
                         det[i].setPrcItem(BigDecimal.valueOf(priceItem));
                         det[i].setMontoItem( totalItem );
                         totalInvoice = totalInvoice + totalItem
@@ -6502,8 +6571,9 @@ return
                     <!-- TODO: obtener precio de productId -->
                     <set field="priceItem" from="detailEntry.amount" type="Integer"/>
                     <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
+                    <set field="unmdItem"/>
                     <if condition="detailEntry.quantityUomId">
-                        <set field="uom" value="Hora"/>
+                        <set field="unmdItem" from="detailEntry.quantityUomId"/>
                     </if>
 
                     <!--service-call name="mchile.DTEServices.escape#Characters" in-map="[cadenaString:nombreItem]" out-map="context"/>
@@ -6521,8 +6591,10 @@ return
                         det[i].setPrcItem(BigDecimal.valueOf(priceItem));
                         det[i].setMontoItem( totalItem );
                         det[i].setIndExe(1);
-                        if(uom != null)
-                            det[i].setUnmdItem(uom);
+                        //if(unm != null)
+                        //    det[i].setUnmdItem(uom);
+                        if(unmdItem.equals("WT_kg"))
+                            det[i].setUnmdItem("Kg.");
                         totalInvoice = totalInvoice + totalItem
                         montoNeto = 0
                         montoExento = totalInvoice
@@ -6689,6 +6761,23 @@ return
             <set field="pdf" value="${pathPdf}BOL${tipoFactura}-${folio}.pdf"/>
             <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, activeOrgId:activeOrgId, boleta:true]" out-map="context"/>
 
+            <set field="bArray2"/>
+            <!-- Lectura y conversión a arreglo de bytes de PDF temporal -->
+            <script>
+                File file = new File(pdf);
+                FileInputStream fis = null;
+                byte[] bArray = new byte[(int) file.length()];
+                try {
+                fis = new FileInputStream(file);
+                fis.read(bArray);
+                fis.close();
+                } catch (IOException ioExp) {
+                ioExp.printStackTrace();
+                }
+                logger.warn("pdf largo: " + file.length());
+                bArray2 = bArray;
+            </script>
+
             <!-- Creación de registro en FiscalTaxDocument -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
                 <field-map field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
@@ -6727,10 +6816,10 @@ return
             <service-call name="create#mchile.dte.FiscalTaxDocumentAttributes" out-map="context" in-map="updateMap"/>
 
             <!-- Creacion de registros en FiscalTaxDocumentContent -->
-            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xml, contentDate:ts]"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xml, contentDate:ts, contentData:salida]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
 
-            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts]"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts, contentData:bArray2]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
 
             <set field="fiscalTaxDocumentId" from="dteField.fiscalTaxDocumentId"/>
@@ -6752,11 +6841,6 @@ return
             <parameter name="dirReceptor"/>
             <parameter name="cmnaReceptor"/>
             <parameter name="ciudadReceptor" default-value="${cmnaReceptor}"/>
-            <!--parameter name="detailList" type="List" required="false"/>
-            <parameter name="invoiceId" required="true"/>
-            <parameter name="medioPago" required="false"/>
-            <parameter name="formaPago" required="false" type="String"/>
-            <parameter name="referenciaList" type="List"/-->
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
@@ -6771,11 +6855,8 @@ return
             </if>
             <set field="emisorS" from="partyIdentificationList.idValue[0]"/>
 
-
-
             <!-- Validación rut -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutReceptor]"/>
-
 
             <!-- Recuperacion de parametros de la organizacion -->
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
@@ -6887,6 +6968,7 @@ return
                 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE;
                 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula;
                 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula.SubTotDTE;
+                import org.apache.commons.io.IOUtils;
 
                 int folio;
                 AutorizacionType caf;
@@ -6915,7 +6997,10 @@ return
                 XmlOptions opts = new XmlOptions();
                 opts.setLoadSubstituteNamespaces(namespaces);
 
-                caf = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts).getAUTORIZACION();
+                // caf = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts).getAUTORIZACION();
+
+                // Recuperación de archivo CAF desde BD
+                caf = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts).getAUTORIZACION();
 
                 BOLETADefType boleta; // boleta tiene cargada toda la información correspondiente
 
@@ -7093,7 +7178,10 @@ return
                 XmlOptions opts2 = new XmlOptions();
                 opts2.setLoadSubstituteNamespaces(namespaces2);
 
-                caf2 = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts2).getAUTORIZACION();
+                //caf2 = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts2).getAUTORIZACION();
+
+                // Recuperación de archivo CAF desde BD
+                caf2 = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts2).getAUTORIZACION();
 
                 BOLETADefType boleta2; // boleta tiene cargada toda la información correspondiente
 
@@ -7259,7 +7347,10 @@ return
                 XmlOptions opts3 = new XmlOptions();
                 opts3.setLoadSubstituteNamespaces(namespaces3);
 
-                caf3 = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts3).getAUTORIZACION();
+                //caf3 = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts3).getAUTORIZACION();
+
+                // Recuperación de archivo CAF desde BD
+                caf3 = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts3).getAUTORIZACION();
 
                 BOLETADefType boleta3;
 
@@ -7415,7 +7506,10 @@ return
                 XmlOptions opts4 = new XmlOptions();
                 opts4.setLoadSubstituteNamespaces(namespaces4);
 
-                caf4 = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts4).getAUTORIZACION();
+                //caf4 = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts4).getAUTORIZACION();
+
+                // Recuperación de archivo CAF desde BD
+                caf4 = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts4).getAUTORIZACION();
 
                 BOLETADefType boleta4;
 
@@ -7571,7 +7665,10 @@ return
                 XmlOptions opts5 = new XmlOptions();
                 opts5.setLoadSubstituteNamespaces(namespaces5);
 
-                caf5 = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts5).getAUTORIZACION();
+                //caf5 = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts5).getAUTORIZACION();
+
+                // Recuperación de archivo CAF desde BD
+                caf5 = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts5).getAUTORIZACION();
 
                 BOLETADefType boleta5;
 
@@ -7665,6 +7762,7 @@ return
                 <!-- TODO: Verificar si item es afecto o exento  -->
                 <service-call name="mchile.DTEServices.check#Afecto" in-map="[productId:detailEntry.productId]" out-map="afectoOutMap"/>
                 <set field="itemAfecto" from="afectoOutMap.afecto" type="String"/>
+
                 <script>
                     // Agrego detalles
                     det[i] = Detalle.Factory.newInstance();
@@ -7678,6 +7776,7 @@ return
                     det[i].setNmbItem(nombreItem);
                     det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
                     det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+
                     det[i].setMontoItem( totalItem );
                     totalInvoice = totalInvoice + totalItem
 
@@ -7704,6 +7803,9 @@ return
                 // Fin Boleta5
                 // *********************************************************************
 
+                // *********************************************************************
+                // Preparación de Envio Boleta con 5 boletas
+                // *********************************************************************
 
                 logger.warn("Generando Envio Boleta\n");
 
@@ -7714,6 +7816,9 @@ return
 
                 BOLETADefType[] bolArr = new BOLETADefType[5];
                 bolArr[0] = boleta;
+
+                BOLETADefType boleta0 = boleta;
+
                 bolArr[1] = boleta2;
                 bolArr[2] = boleta3;
                 bolArr[3] = boleta4;
@@ -7787,22 +7892,450 @@ return
                 doc2 = XMLUtil.parseDocument(salida);
 
                 if (Signer.verify(doc2, "Documento")) {
-                    Path path = Paths.get(resultS + "BOL" + tipoFactura + "-" + folio + ".xml");
+                    Path path = Paths.get(resultS + "BOL-Envio.xml");
                     Files.write(path, salida);
                     logger.warn("Factura "+path+" folio "+folio+" generada OK");
                 } else {
-                    Path path = Paths.get(resultS + "BOL" + tipoFactura + "-" + folio + "-mala.xml");
+                    Path path = Paths.get(resultS + "BOL-Envio-mala.xml");
                     Files.write(path, salida);
                     logger.warn("Error al generar boleta folio "+folio);
                 }
 
+                // **************************************************************
+                // Creación de PDF en base a EnvioBOLETA con boletaN aaaaa
+                // PDF Boleta 1
+                // **************************************************************
+                // ajustes para el formato (MAGIA) antes de firmar
+
+                cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument1 = EnvioBOLETADocument.Factory.newInstance();
+                EnvioBOLETA eb1 = EnvioBOLETA.Factory.newInstance();
+                SetDTE sdte1 = SetDTE.Factory.newInstance();
+
+                BOLETADefType[] bolArr1 = new BOLETADefType[1];
+                bolArr1[0] = boleta0;
+
+                folio = "1";
+
+                sdte1.setDTEArray(bolArr1);
+                sdte1.setID("envio-boleta");// doc.getDTE().getDocumento().setID("N" + System.nanoTime());
+                sdte1.setID("envboleta-" + System.nanoTime());
+
+                // Datos de carátula
+                Caratula caratula1 = sdte1.addNewCaratula();
+                caratula1.setRutEmisor(rutEmisor);
+                caratula1.setRutEnvia(rutEnvia);
+                Date dateFchResol1 = new SimpleDateFormat("yyyy-MM-dd").parse(fchResol);
+                caratula1.xsetFchResol(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol1)));
+
+                caratula1.setNroResol(Integer.valueOf(nroResol));
+                now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                caratula1.xsetTmstFirmaEnv(now);
+
+                // Subtotales
+                SubTotDTE[] subtDtes1 = new SubTotDTE[1];
+                SubTotDTE subt1 = SubTotDTE.Factory.newInstance();
+                subt1.setTpoDTE(new BigInteger(tipoFactura.toString()));
+                subt1.setNroDTE(new BigInteger(5));
+                subtDtes1[0] = subt1;
+                caratula1.setSubTotDTEArray(subtDtes1);
+
+                eb1.setSetDTE(sdte1);
+                eb1.setVersion(new BigDecimal("1.0"));
+                envioBoletaDocument1.setEnvioBOLETA(eb1);
+
+                opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces);
+                opts.setLoadSubstituteNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(0);
+
+                try {
+                    //envioBoletaDocument1 = EnvioBOLETADocument.Factory.parse(envioBoletaDocument1.newInputStream(opts), opts);
+                } catch (Exception e) {
+                    logger.warn("Error al parsear XML");
+                    return
+                }
+                // No es necesario de nuevo
+                //boleta = envioBoletaDocument.getEnvioBOLETA().getSetDTE().getDTEArray(0);
+
+                String uri1 = "";
+                //FechaHoraType now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                uri = boleta0.getDocumento().getID();
+                boleta0.getDocumento().xsetTmstFirma(now);
+
+                uri = "#" + uri;
+
+                logger.warn("URI: " + uri)
+
+                ByteArrayOutputStream out1 = new ByteArrayOutputStream();
+                envioBoletaDocument1.save(new File(resultS + "BOLPDF" + tipoFactura + "-1-sinfirma.xml"), opts);
+                envioBoletaDocument1.save(out1, opts);
+
+                Document doc1 = XMLUtil.parseDocument(out1.toByteArray());
+
+                byte[] salida1 = Signer.sign(doc1, uri, key, cert, uri, "Documento");
+                doc1 = XMLUtil.parseDocument(salida1);
+
+                if (Signer.verify(doc1, "Documento")) {
+                    Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-1.xml");
+                    Files.write(path, salida1);
+                    logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                } else {
+                    Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-1-mala.xml");
+                    Files.write(path, salida1);
+                    logger.warn("Error al generar boleta folio "+folio);
+                }
+                // ******************************************************************
+
+                // PDF Boleta 2
+                // **************************************************************
+                // ajustes para el formato (MAGIA) antes de firmar
+
+                cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument2 = EnvioBOLETADocument.Factory.newInstance();
+                EnvioBOLETA eb2 = EnvioBOLETA.Factory.newInstance();
+                SetDTE sdte2 = SetDTE.Factory.newInstance();
+
+                BOLETADefType[] bolArr2 = new BOLETADefType[1];
+                bolArr2[0] = boleta2;
+
+                folio = "2";
+
+                sdte2.setDTEArray(bolArr2);
+                sdte2.setID("envio-boleta");
+                sdte2.setID("envboleta-" + System.nanoTime());
+
+                // Datos de carátula
+                Caratula caratula2 = sdte2.addNewCaratula();
+                caratula2.setRutEmisor(rutEmisor);
+                caratula2.setRutEnvia(rutEnvia);
+                Date dateFchResol2 = new SimpleDateFormat("yyyy-MM-dd").parse(fchResol);
+                caratula2.xsetFchResol(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol2)));
+
+                caratula2.setNroResol(Integer.valueOf(nroResol));
+                //now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                caratula2.xsetTmstFirmaEnv(now);
+
+                // Subtotales
+                SubTotDTE[] subtDtes2 = new SubTotDTE[1];
+                SubTotDTE subt2 = SubTotDTE.Factory.newInstance();
+                subt2.setTpoDTE(new BigInteger(tipoFactura.toString()));
+                subt2.setNroDTE(new BigInteger(5));
+                subtDtes2[0] = subt2;
+                caratula2.setSubTotDTEArray(subtDtes2);
+
+                eb2.setSetDTE(sdte2);
+                eb2.setVersion(new BigDecimal("1.0"));
+                envioBoletaDocument2.setEnvioBOLETA(eb2);
+
+                opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces);
+                opts.setLoadSubstituteNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(0);
+
+                try {
+                //envioBoletaDocument1 = EnvioBOLETADocument.Factory.parse(envioBoletaDocument1.newInputStream(opts), opts);
+                } catch (Exception e) {
+                logger.warn("Error al parsear XML");
+                return
+                }
+                //FechaHoraType now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                uri = boleta2.getDocumento().getID();
+                boleta2.getDocumento().xsetTmstFirma(now);
+
+                uri = "#" + uri;
+
+                logger.warn("URI: " + uri)
+
+                ByteArrayOutputStream out2 = new ByteArrayOutputStream();
+                envioBoletaDocument2.save(new File(resultS + "BOLPDF" + tipoFactura + "-2-sinfirma.xml"), opts);
+                envioBoletaDocument2.save(out2, opts);
+
+                Document doc22 = XMLUtil.parseDocument(out2.toByteArray());
+
+                byte[] salida2 = Signer.sign(doc22, uri, key, cert, uri, "Documento");
+                doc22 = XMLUtil.parseDocument(salida2);
+
+                if (Signer.verify(doc22, "Documento")) {
+                Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-2.xml");
+                Files.write(path, salida2);
+                logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                } else {
+                Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-2-mala.xml");
+                Files.write(path, salida2);
+                logger.warn("Error al generar boleta folio "+folio);
+                }
+                // *****************************************************************
+
+
+                // ******************************************************************
+
+                // PDF Boleta 3
+                // **************************************************************
+                // ajustes para el formato (MAGIA) antes de firmar
+
+                cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument3 = EnvioBOLETADocument.Factory.newInstance();
+                EnvioBOLETA eb3 = EnvioBOLETA.Factory.newInstance();
+                SetDTE sdte3 = SetDTE.Factory.newInstance();
+
+                BOLETADefType[] bolArr3 = new BOLETADefType[1];
+                bolArr3[0] = boleta3;
+
+                folio = "3";
+
+                sdte3.setDTEArray(bolArr3);
+                sdte3.setID("envio-boleta");
+                sdte3.setID("envboleta-" + System.nanoTime());
+
+                // Datos de carátula
+                Caratula caratula3 = sdte3.addNewCaratula();
+                caratula3.setRutEmisor(rutEmisor);
+                caratula3.setRutEnvia(rutEnvia);
+                Date dateFchResol3 = new SimpleDateFormat("yyyy-MM-dd").parse(fchResol);
+                caratula3.xsetFchResol(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol3)));
+
+                caratula3.setNroResol(Integer.valueOf(nroResol));
+                caratula3.xsetTmstFirmaEnv(now);
+
+                // Subtotales
+                SubTotDTE[] subtDtes3 = new SubTotDTE[1];
+                SubTotDTE subt3 = SubTotDTE.Factory.newInstance();
+                subt3.setTpoDTE(new BigInteger(tipoFactura.toString()));
+                subt3.setNroDTE(new BigInteger(5));
+                subtDtes3[0] = subt3;
+                caratula3.setSubTotDTEArray(subtDtes3);
+
+                eb3.setSetDTE(sdte3);
+                eb3.setVersion(new BigDecimal("1.0"));
+                envioBoletaDocument3.setEnvioBOLETA(eb3)
+
+                opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces);
+                opts.setLoadSubstituteNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(0);
+
+                try {
+                //envioBoletaDocument1 = EnvioBOLETADocument.Factory.parse(envioBoletaDocument1.newInputStream(opts), opts);
+                } catch (Exception e) {
+                logger.warn("Error al parsear XML");
+                return
+                }
+                uri = boleta3.getDocumento().getID();
+                boleta3.getDocumento().xsetTmstFirma(now);
+
+                uri = "#" + uri;
+
+                logger.warn("URI: " + uri)
+
+                ByteArrayOutputStream out3 = new ByteArrayOutputStream();
+                envioBoletaDocument3.save(new File(resultS + "BOLPDF" + tipoFactura + "-3-sinfirma.xml"), opts);
+                envioBoletaDocument3.save(out3, opts);
+
+                Document doc33 = XMLUtil.parseDocument(out3.toByteArray());
+
+                byte[] salida3 = Signer.sign(doc33, uri, key, cert, uri, "Documento");
+                doc33 = XMLUtil.parseDocument(salida3);
+
+                if (Signer.verify(doc33, "Documento")) {
+                Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-3.xml");
+                Files.write(path, salida3);
+                logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                } else {
+                Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-3-mala.xml");
+                Files.write(path, salida3);
+                logger.warn("Error al generar boleta folio "+folio);
+                }
+                // *****************************************************************
+
+                // ******************************************************************
+
+                // PDF Boleta 4
+                // **************************************************************
+                // ajustes para el formato (MAGIA) antes de firmar
+
+                cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument4 = EnvioBOLETADocument.Factory.newInstance();
+                EnvioBOLETA eb4 = EnvioBOLETA.Factory.newInstance();
+                SetDTE sdte4 = SetDTE.Factory.newInstance();
+
+                BOLETADefType[] bolArr4 = new BOLETADefType[1];
+                bolArr4[0] = boleta4;
+
+                folio = "4";
+
+                sdte4.setDTEArray(bolArr4);
+                sdte4.setID("envio-boleta");
+                sdte4.setID("envboleta-" + System.nanoTime());
+
+                // Datos de carátula
+                Caratula caratula4 = sdte4.addNewCaratula();
+                caratula4.setRutEmisor(rutEmisor);
+                caratula4.setRutEnvia(rutEnvia);
+                Date dateFchResol4 = new SimpleDateFormat("yyyy-MM-dd").parse(fchResol);
+                caratula4.xsetFchResol(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol4)));
+
+                caratula4.setNroResol(Integer.valueOf(nroResol));
+                caratula4.xsetTmstFirmaEnv(now);
+
+                // Subtotales
+                SubTotDTE[] subtDtes4 = new SubTotDTE[1];
+                SubTotDTE subt4 = SubTotDTE.Factory.newInstance();
+                subt4.setTpoDTE(new BigInteger(tipoFactura.toString()));
+                subt4.setNroDTE(new BigInteger(5));
+                subtDtes4[0] = subt4;
+                caratula4.setSubTotDTEArray(subtDtes4);
+
+                eb4.setSetDTE(sdte4);
+                eb4.setVersion(new BigDecimal("1.0"));
+                envioBoletaDocument4.setEnvioBOLETA(eb4)
+
+                opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces);
+                opts.setLoadSubstituteNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(0);
+
+                try {
+                //envioBoletaDocument1 = EnvioBOLETADocument.Factory.parse(envioBoletaDocument1.newInputStream(opts), opts);
+                } catch (Exception e) {
+                logger.warn("Error al parsear XML");
+                return
+                }
+                uri = boleta4.getDocumento().getID();
+                boleta4.getDocumento().xsetTmstFirma(now);
+
+                uri = "#" + uri;
+
+                logger.warn("URI: " + uri)
+
+                ByteArrayOutputStream out4 = new ByteArrayOutputStream();
+                envioBoletaDocument4.save(new File(resultS + "BOLPDF" + tipoFactura + "-4-sinfirma.xml"), opts);
+                envioBoletaDocument4.save(out4, opts);
+
+                Document doc44 = XMLUtil.parseDocument(out4.toByteArray());
+
+                byte[] salida4 = Signer.sign(doc44, uri, key, cert, uri, "Documento");
+                doc44 = XMLUtil.parseDocument(salida4);
+
+                if (Signer.verify(doc44, "Documento")) {
+                    Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-4.xml");
+                    Files.write(path, salida4);
+                    logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                } else {
+                    Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-4-mala.xml");
+                    Files.write(path, salida4);
+                    logger.warn("Error al generar boleta folio "+folio);
+                }
+                // *****************************************************************
+
+                // ******************************************************************
+
+                // PDF Boleta5
+                // **************************************************************
+                // ajustes para el formato (MAGIA) antes de firmar
+
+                cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument5 = EnvioBOLETADocument.Factory.newInstance();
+                EnvioBOLETA eb5 = EnvioBOLETA.Factory.newInstance();
+                SetDTE sdte5 = SetDTE.Factory.newInstance();
+
+                BOLETADefType[] bolArr5 = new BOLETADefType[1];
+                bolArr5[0] = boleta5;
+
+                folio = "5";
+
+                sdte5.setDTEArray(bolArr5);
+                sdte5.setID("envio-boleta");
+                sdte5.setID("envboleta-" + System.nanoTime());
+
+                // Datos de carátula
+                Caratula caratula5 = sdte5.addNewCaratula();
+                caratula5.setRutEmisor(rutEmisor);
+                caratula5.setRutEnvia(rutEnvia);
+                Date dateFchResol5 = new SimpleDateFormat("yyyy-MM-dd").parse(fchResol);
+                caratula5.xsetFchResol(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol5)));
+
+                caratula5.setNroResol(Integer.valueOf(nroResol));
+                caratula5.xsetTmstFirmaEnv(now);
+
+                // Subtotales
+                SubTotDTE[] subtDtes5 = new SubTotDTE[1];
+                SubTotDTE subt5 = SubTotDTE.Factory.newInstance();
+                subt5.setTpoDTE(new BigInteger(tipoFactura.toString()));
+                subt5.setNroDTE(new BigInteger(5));
+                subtDtes5[0] = subt5;
+                caratula5.setSubTotDTEArray(subtDtes5);
+
+                eb5.setSetDTE(sdte5);
+                eb5.setVersion(new BigDecimal("1.0"));
+                envioBoletaDocument5.setEnvioBOLETA(eb5)
+
+                opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces);
+                opts.setLoadSubstituteNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(0);
+
+                try {
+                //envioBoletaDocument1 = EnvioBOLETADocument.Factory.parse(envioBoletaDocument1.newInputStream(opts), opts);
+                } catch (Exception e) {
+                logger.warn("Error al parsear XML");
+                return
+                }
+                uri = boleta5.getDocumento().getID();
+                boleta5.getDocumento().xsetTmstFirma(now);
+
+                uri = "#" + uri;
+
+                logger.warn("URI: " + uri)
+
+                ByteArrayOutputStream out5 = new ByteArrayOutputStream();
+                envioBoletaDocument5.save(new File(resultS + "BOLPDF" + tipoFactura + "-5-sinfirma.xml"), opts);
+                envioBoletaDocument5.save(out5, opts);
+
+                Document doc55 = XMLUtil.parseDocument(out5.toByteArray());
+
+                byte[] salida5 = Signer.sign(doc55, uri, key, cert, uri, "Documento");
+                doc55 = XMLUtil.parseDocument(salida5);
+
+                if (Signer.verify(doc55, "Documento")) {
+                    Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-5.xml");
+                    Files.write(path, salida5);
+                    logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                } else {
+                    Path path = Paths.get(resultS + "BOLPDF" + tipoFactura + "-5-mala.xml");
+                    Files.write(path, salida5);
+                    logger.warn("Error al generar boleta folio "+folio);
+                }
+                // *****************************************************************
+
+
             </script>
             <!-- Registro de DTE en base de datos y generación de PDF -->
 
-            <!--set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/>
-            <set field="xml" value="${resultS}BOL${tipoFactura}-${folio}.xml"/>
-            <set field="pdf" value="${pathPdf}BOL${tipoFactura}-${folio}.pdf"/>
-            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, activeOrgId:activeOrgId, boleta:true]" out-map="context"/-->
+            <!--set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/-->
+            <set field="xml1" value="${resultS}BOLPDF${tipoFactura}-1.xml"/>
+            <set field="pdf1" value="${pathPdf}BOLPDF${tipoFactura}-1.pdf"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf1, dte:xml1, activeOrgId:activeOrgId, boleta:true]" out-map="context"/>
+
+            <set field="xml1" value="${resultS}BOLPDF${tipoFactura}-2.xml"/>
+            <set field="pdf1" value="${pathPdf}BOLPDF${tipoFactura}-2.pdf"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf1, dte:xml1, activeOrgId:activeOrgId, boleta:true]" out-map="context"/>
+
+            <set field="xml1" value="${resultS}BOLPDF${tipoFactura}-3.xml"/>
+            <set field="pdf1" value="${pathPdf}BOLPDF${tipoFactura}-3.pdf"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf1, dte:xml1, activeOrgId:activeOrgId, boleta:true]" out-map="context"/>
+
+            <set field="xml1" value="${resultS}BOLPDF${tipoFactura}-4.xml"/>
+            <set field="pdf1" value="${pathPdf}BOLPDF${tipoFactura}-4.pdf"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf1, dte:xml1, activeOrgId:activeOrgId, boleta:true]" out-map="context"/>
+
+            <set field="xml1" value="${resultS}BOLPDF${tipoFactura}-5.xml"/>
+            <set field="pdf1" value="${pathPdf}BOLPDF${tipoFactura}-5.pdf"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf1, dte:xml1, activeOrgId:activeOrgId, boleta:true]" out-map="context"/>
 
             <!-- Creación de registro en FiscalTaxDocument -->
             <!--entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
@@ -7837,14 +8370,13 @@ return
         </actions>
     </service>
 
-    <!-- TODO: RCOF -->
     <service verb="genera" noun="RCOF">
         <description>
-            Generación de Boletas para Caso de Prueba
+            Generación de Registro de Consumo de Folios
         </description>
         <in-parameters>
             <parameter name="activeOrgId" required="true"/>
-            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <!--parameter name="fiscalTaxDocumentTypeEnumId" required="true"/-->
             <parameter name="fechaInicio" required="false"/>
             <parameter name="fechaFin" required="false"/>
         </in-parameters>
