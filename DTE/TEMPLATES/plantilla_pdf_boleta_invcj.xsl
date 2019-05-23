@@ -515,7 +515,7 @@
 			</fo:block>
 			<fo:block font-size="8pt" font-family="sans-serif"
 				text-align="center">
-				Res. 99 de 2014 - Verifique Documento: https://moqui.moit.cl/INVCJ
+				Res. 99 de 2014 - Verifique Documento: https://mtest.moit.cl/dte
 			</fo:block>
 		</fo:block-container>
 	</xsl:template>
