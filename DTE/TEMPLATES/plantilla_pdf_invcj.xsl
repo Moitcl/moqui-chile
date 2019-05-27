@@ -10,6 +10,13 @@
 	<xsl:output method="xml" version="1.0" omit-xml-declaration="no"
 		indent="yes" />
 
+	<xsl:decimal-format name="us" decimal-separator='.' grouping-separator=',' />
+        <xsl:decimal-format name="european" decimal-separator=',' grouping-separator='.' />
+        <xsl:decimal-format name="example" decimal-separator="." grouping-separator=","
+           infinity="INFINITY" minus-sign="-" NaN="Not a Number" percent="%"
+           per-mille="m" zero-digit="0" digit="#" pattern-separator=";" />
+
+
 	<xsl:param name="versionParam" select="'1.0'" />
 	<xsl:template match="/">
 		<fo:root xmlns:fo="http://www.w3.org/1999/XSL/Format">
@@ -283,7 +290,7 @@
 									border-width="0.5pt" border-style="solid" column-number="4" display-align="center" height="1cm">
 									<fo:block>
 										<fo:inline font-weight="bold">
-											<xsl:value-of select="Encabezado/Totales/MntNeto"/>
+											<xsl:value-of select="format-number(Encabezado/Totales/MntNeto, '###.###','european')"/>
 										</fo:inline>
 									</fo:block>
 								</fo:table-cell>
@@ -301,7 +308,7 @@
 									border-width="0.5pt" border-style="solid" column-number="4" display-align="center" height="1cm">
 									<fo:block>
 										<fo:inline font-weight="bold">
-											<xsl:value-of select="Encabezado/Totales/IVA"/>
+											<xsl:value-of select="format-number(Encabezado/Totales/IVA, '###.###', 'european')"/>
 										</fo:inline>
 									</fo:block>
 								</fo:table-cell>
@@ -319,7 +326,7 @@
 									border-width="0.5pt" border-style="solid" column-number="4" display-align="center" height="1cm">
 									<fo:block>
 										<fo:inline font-weight="bold">
-											<xsl:value-of select="Encabezado/Totales/MntTotal"/>
+											<xsl:value-of select="format-number(Encabezado/Totales/MntTotal, '###.###', 'european')"/>
 										</fo:inline>
 									</fo:block>
 								</fo:table-cell>
@@ -654,14 +661,14 @@
 				border-left-style="solid" border-right-width="0.5pt"
 				border-right-style="solid" margin-right="2mm"  height="0.8cm">
 				<fo:block>
-						<xsl:value-of select="PrcItem" />
+						<xsl:value-of select="format-number(PrcItem, '###.###', 'european')" />
 				</fo:block>
 			</fo:table-cell>
 			<fo:table-cell text-align="right" border-left-width="0.5pt"
 				border-left-style="solid" border-right-width="0.5pt"
 				border-right-style="solid" margin-right="2mm" height="0.8cm" >
 				<fo:block>
-						<xsl:value-of select="MontoItem"/>
+						<xsl:value-of select="format-number(MontoItem, '###.###', 'european')"/>
 				</fo:block>
 			</fo:table-cell>
 		</fo:table-row>
