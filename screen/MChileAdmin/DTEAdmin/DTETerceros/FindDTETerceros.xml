@@ -29,7 +29,6 @@
         <default-response url="."/>
     </transition>
 
-    <!-- TODO: Enviar aceptación a tercero -->
     <transition name="enviarAceptacion">
         <parameter name="fiscalTaxDocumentId"/>
         <parameter name="fiscalTaxDocumentTypeEnumId"/>
@@ -37,6 +36,30 @@
         <parameter name="activeOrgId"/>
         <actions>
             <service-call name="mchile.DTEServices.enviar#Aceptacion"
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, activeOrgId:activeOrgId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber ]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="resultadoAprobacionComercial">
+        <parameter name="fiscalTaxDocumentId"/>
+        <parameter name="fiscalTaxDocumentTypeEnumId"/>
+        <parameter name="fiscalTaxDocumentNumber"/>
+        <parameter name="activeOrgId"/>
+        <actions>
+            <service-call name="mchile.DTEServices.enviar#ResultadoAprobacionComercial"
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, activeOrgId:activeOrgId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber ]"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="recibirMercaderia">
+        <parameter name="fiscalTaxDocumentId"/>
+        <parameter name="fiscalTaxDocumentTypeEnumId"/>
+        <parameter name="fiscalTaxDocumentNumber"/>
+        <parameter name="activeOrgId"/>
+        <actions>
+            <service-call name="mchile.DTEServices.recibir#Mercaderia"
                           in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, activeOrgId:activeOrgId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber ]"/>
         </actions>
         <default-response url="."/>
@@ -104,7 +127,7 @@
             <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in"
                         from="['Ftdt-30','Ftdt-32','Ftdt-33','Ftdt-34','Ftdt-60','Ftdt-61','Ftdt-56','Ftdt-52','Ftdt-39','PvtBoleta', 'PvtFactEl']"/>
             <econdition field-name="receiverPartyId" operator="equals" from="activeOrgId"/>
-            <order-by field-name="-invoiceDate"/>
+            <order-by field-name="-date"/>
             <!--econdition field-name="statusId" operator="not-equals" value="InvoiceCancelled"/-->
         </entity-find>
     </actions>
@@ -124,13 +147,22 @@
                 <set field="pdfFilename" from="pdfContext.content"/>
                 
                 <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoiceField"/>
-                <log message="Leyendo: $invoiceField.invoiceId" level="warn"/>
-                <set field="statusId" from="invoiceField.statusId"/>
+                <!--log message="Leyendo: $invoiceField.invoiceId" level="warn"/-->
+                <set field="statusId"/>
+                <if condition="invoiceField">
+                    <set field="statusId" from="invoiceField.statusId"/>
+                </if>
             </row-actions>
             <field name="_useRowSubmit"><default-field><hidden default-value="true"/></default-field></field>
             <field name="fiscalTaxDocumentId"><default-field><hidden default-value="true"/></default-field></field>
+            <field name="idEnvio">
+                <header-field title="ID Envío" show-order-by="true"><text-line size="6"/></header-field>
+                <default-field>
+                    <display format="########"/>
+                </default-field>
+            </field>
             <field name="fiscalTaxDocumentNumber">
-                <header-field title="Folio o Identificador" show-order-by="true"><text-line size="6"/></header-field>
+                <header-field title="Folio" show-order-by="true"><text-line size="6"/></header-field>
                 <default-field>
                     <display format="########"/>
                 </default-field>
@@ -165,7 +197,7 @@
             </field>
 
             <field name="statusId">
-                <header-field/>
+                <header-field title="Estado Orden"/>
                 <default-field><display/></default-field>
             </field>
 
@@ -173,12 +205,6 @@
                 <header-field show-order-by="true" title="Fecha Emisión"><text-find/></header-field>
                 <default-field><display/> </default-field>
             </field>
-
-            <!--field name="xml">
-                <default-field title=" ">
-                    <link url="xml/${xmlFilename}" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="XML" link-type="anchor" condition="xmlFilename != null"/>
-                </default-field>
-            </field-->
             <field name="xml">
                 <default-field title=" ">
                     <link url="downloadDocument" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fileType:'Ftdct-Xml']" text="XML" link-type="anchor"/>
@@ -189,29 +215,37 @@
                     <link url="downloadDocument" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fileType:'Ftdct-Pdf']" text="PDF" link-type="anchor"/>
                 </default-field>
             </field>
-            <!--field name="pdf">
-                <default-field title=" ">
-                    <link url="pdf/${pdfFilename}" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="PDF" link-type="anchor" condition="pdfFilename != null"/>
-                </default-field>
-            </field-->
-            <!--field name="verificarEnSII">
-                <default-field title=" ">
-                    <link url="verificarEnSII" tooltip="Verificar Estado en SII"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" text="Verificar en SII"/>
-                </default-field>
-            </field-->
-
             <field name="eliminarDTETercero">
                 <default-field title=" ">
-                    <link url="eliminarDTETercero" tooltip="Eliminar"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="Eliminar"/>
+                    <link url="eliminarDTETercero" tooltip="Eliminar"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="Eliminar/Rechazar" confirmation="El documento será eliminado del sistema .¿Desea continuar?"/>
                 </default-field>
             </field>
 
             <field name="enviarAceptacion">
                 <default-field title=" ">
-                    <link url="enviarAceptacion" tooltip="Enviar Aceptación"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, emisor:emisor, xml:xml]" text="Enviar Aceptación"
+                    <link url="enviarAceptacion" tooltip="Recepcionar"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, emisor:emisor, xml:xml]" text="Recepcionar"
                           condition="xmlFilename != null"/>
                 </default-field>
             </field>
+            <!--field name="enviarRechazo">
+                <default-field title=" ">
+                    <link url="enviarAceptacion" tooltip="Rechazar"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, emisor:emisor, xml:xml]" text="Rechazar"
+                          condition="xmlFilename != null"/>
+                </default-field>
+            </field-->
+            <field name="recibirMercaderia">
+                <default-field title=" ">
+                    <link url="recibirMercaderia" tooltip="Recibir Mercadería"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, emisor:emisor, xml:xml]" text="Recibir Mercadería"
+                          condition="xmlFilename != null"/>
+                </default-field>
+            </field>
+            <field name="resultadoAprobacionComercial">
+                <default-field title=" ">
+                    <link url="resultadoAprobacionComercial" tooltip="Aprobación Comercial"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, emisor:emisor, xml:xml]" text="Aprobación Comercial"
+                          condition="xmlFilename != null"/>
+                </default-field>
+            </field>
+
         </form-list>
     </widgets>
 </screen>

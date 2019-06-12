@@ -647,7 +647,7 @@
 				border-left-style="solid" border-right-width="0.5pt"
 				border-right-style="solid" margin-right="2mm"  height="0.8cm">
 				<fo:block>
-						<xsl:value-of select="QtyItem" />
+						<xsl:value-of select="QtyItem" />&#160;<xsl:value-of select="UnmdItem" />
 				</fo:block>
 			</fo:table-cell>
 			<fo:table-cell text-align="left" border-left-width="0.5pt"
