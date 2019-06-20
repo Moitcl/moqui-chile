@@ -24,15 +24,22 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
             <script><![CDATA[
-                ec.logger.info("Loading records from ${location}")
-                if (ec.resource.getLocationReference(location) == null) {
-                    if (location.matches('^file:[^/]'))
-                        location = 'file://opt/moqui/' + location.substring(5)
+                ec.logger.warn("Loading records from ${location}")
+                try {
+                    ec.resource.getLocationStream(location).close()
+                } catch (Exception e) {
+                    if (location.matches('^file:[^/].*')) {
+                        String newLocation = location.substring(5)
+                        if (newLocation.charAt(0) == '/') newLocation = newLocation.substring(1)
+                        if (newLocation.charAt(0) == '/') newLocation = newLocation.substring(1)
+                        location = 'classpath://' + newLocation
+                    }
                 }
-                if (ec.resource.getLocationReference(location) == null) {
+                try {
+                    ec.resource.getLocationStream(location).close()
+                } catch (Exception e) {
                     ec.logger.error("Skipping unfound location ${location}")
-                    return;
-
+                    return
                 }
                 org.moqui.entity.EntityDataLoader edl = ec.entity.makeDataLoader()
                 String source = ""
@@ -41,7 +48,7 @@ along with this software (see the LICENSE.md file). If not, see
                 List<String> messages = new LinkedList<>()
                 long recordsLoaded = edl.load(messages)
                 ec.logger.info("Loaded ${recordsLoaded} records from ${location}")
-            ]]></script>
+                ]]></script>
         </actions>
     </service>
 
