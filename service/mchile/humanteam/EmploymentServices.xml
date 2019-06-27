@@ -213,4 +213,33 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="create#mchile.humanteam.payroll.EmployeeAffiliation" in-map="context"/>
         </actions>
     </service>
+
+    <service verb="get" noun="LeaveDisplayInfo">
+        <in-parameters>
+            <parameter name="partyRelationshipId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="accruedVacationDays"/>
+            <parameter name="plannedLeaves"/>
+            <parameter name="leaveHistory"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.humanteam.payroll.LeaveAccrued" value-field="accruedVacation" auto-field-map="[partyRelationshipId:partyRelationshipId, leaveTypeEnumId:'PltFeriadoLegal']"/>
+            <if condition="accruedVacation">
+                <if condition="accruedVacation.uomId != 'TF_day'"><return error="true" message="Unsupported vacation Uom ${accruedVacation.uomId}"/></if>
+                <set field="accruedVacationDays" from="accruedVacation.quantityAvailable"/>
+            </if>
+            <entity-find entity-name="mchile.humanteam.payroll.LeaveDetail" list="leaveHistory">
+                <econdition field-name="partyRelationshipId"/>
+                <econdition field-name="fromDate" operator="less-equals" from="ec.user.nowTimestamp"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <entity-find entity-name="mchile.humanteam.payroll.LeaveDetail" list="plannedLeaves">
+                <econdition field-name="partyRelationshipId"/>
+                <econdition field-name="thruDate" operator="greater" from="ec.user.nowTimestamp"/>
+                <order-by field-name="fromDate"/>
+            </entity-find>
+        </actions>
+    </service>
+
 </services>
