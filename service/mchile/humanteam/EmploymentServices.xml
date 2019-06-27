@@ -111,11 +111,105 @@ along with this software (see the LICENSE.md file). If not, see
                     <script>pensionFundOrganizationNamesById.put(pfah.organizationPartyId, pd.organizationName)</script>
                 </if>
             </iterate>
+        </actions>
+    </service>
+
             <if condition="pensionFundAffiliationHistory.size() > 0 &amp;&amp; ( pensionFundAffiliationHistory.first.thruDate == null || pensionFundAffiliationHistory.first.thruDate > ec.user.nowTimestamp)">
                 <set field="currentPensionFundAffiliation" from="pensionFundAffiliationHistory.first"/>
                 <script>pensionFundAffiliationHistory.remove(currentPlanIsapre)</script>
+    <service verb="modify" noun="EmploymentSalary">
+        <in-parameters>
+            <parameter name="partyRelationshipId" required="true"/>
+            <parameter name="newSalary" required="true" type="BigDecimal"/>
+            <parameter name="fromDate" required="true" type="Timestamp"/>
+            <parameter name="comments"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.humanres.employment.Employment" value-field="employment"/>
+            <set field="partyRel" from="employment.partyRel"/>
+            <entity-find-one entity-name="mantle.ledger.config.PartyAcctgPreference" value-field="acctgPref" auto-field-map="[organizationPartyId:partyRel.toPartyId]"/>
+            <if condition="!acctgPref"><return error="true" message="Could not find AcctgPref for party ${partyRel.toPartyId}"/></if>
+            <entity-find entity-name="mantle.humanres.employment.EmploymentSalary" list="salaryHistory" limit="1" for-update="true">
+                <econdition field-name="partyRelationshipId" from="employment.partyRelationshipId"/>
+                <econdition field-name="timePeriodTypeId" from="employment.timePeriodTypeId"/>
+                <econdition field-name="thruDate" or-null="true" operator="greater-equals" from="fromDate"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <if condition="salaryHistory">
+                <set field="currentSalary" from="salaryHistory.first"/>
+                <if condition="currentSalary.fromDate >= fromDate">
+                    <return error="true" message="Current salary has fromDate before new fromDate"/>
+                </if>
+                <set field="currentSalary.thruDate" from="fromDate"/>
+                <entity-update value-field="currentSalary"/>
             </if>
+            <service-call name="create#mantle.humanres.employment.EmploymentSalary" in-map="[partyRelationshipId:employment.partyRelationshipId, timePeriodTypeId:employment.timePeriodTypeId, fromDate:fromDate, amount:newSalary, currencyUomId:acctgPref.baseCurrencyUomId, comments:comments]"/>
+        </actions>
+    </service>
 
+    <service verb="modify" noun="PayrollAdjustment">
+        <in-parameters>
+            <parameter name="partyRelationshipId" required="true"/>
+            <parameter name="itemTypeEnumId" required="true"/>
+            <parameter name="flatAmount" required="true" type="BigDecimal"/>
+            <parameter name="fromDate" required="true" type="Timestamp"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.humanres.employment.Employment" value-field="employment"/>
+            <entity-find entity-name="mantle.humanres.employment.PayrollAdjustment" list="existingList" limit="1">
+                <econdition field-name="partyRelationshipId" from="employment.partyRelationshipId"/>
+                <econdition field-name="timePeriodTypeId" from="employment.timePeriodTypeId"/>
+                <econdition field-name="thruDate" or-null="true" operator="greater-equals" from="fromDate"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <if condition="existingList">
+                <set field="existing" from="existingList.first"/>
+                <if condition="existing.fromDate >= fromDate">
+                    <return error="true" message="Found existing adjustment has fromDate after new fromDate"/>
+                </if>
+                <set field="existing.thruDate" from="fromDate"/>
+                <entity-update value-field="existing"/>
+            </if>
+            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="itemTypeEnum" auto-field-map="[enumId:itemTypeEnumId]"/>
+            <service-call name="create#mantle.humanres.employment.PayrollAdjustment" in-map="[description:itemTypeEnum.description, partyRelationshipId:partyRelationshipId, itemTypeEnumId:itemTypeEnumId, exclusiveByItemType:'Y', payrollPhaseEnumId:'PrphExpenses', timePeriodTypeId:employment.timePeriodTypeId, fromDate:fromDate, isTax:'N', isTaxable:'N', isSocialTaxable:'N', isMedicalTaxable:'N', isEmployerPaid:'N', applyStdDeduction:'N']" out-map="context"/>
+            <service-call name="create#mantle.humanres.employment.PayrollAdjustmentDetail" in-map="[payrollAdjustmentId:payrollAdjustmentId, detailSeqId:'01', flatAmount:flatAmount]"/>
+        </actions>
+    </service>
+
+    <service verb="modify" noun="EmployeeAffiliation">
+        <in-parameters>
+            <parameter name="partyRelationshipId" required="true"/>
+            <parameter name="employeePartyId" required="true"/>
+            <parameter name="affiliationTypeEnumId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="amount" type="BigDecimal"/>
+            <parameter name="currencyUomId"/>
+            <parameter name="fromDate" required="true" type="Timestamp"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="partyRelationshipId"/>
+        </out-parameters>
+        <actions>
+            <if condition="affiliationTypeEnumId == 'MchCeaHealth'">
+                <if condition="!amount"><message type="danger">Health insurance affiliation requires amount</message></if>
+                <if condition="!currencyUomId"><message type="danger">Health insurance affiliation requires curency</message></if>
+            </if>
+            <check-errors/>
+            <entity-find entity-name="mchile.humanteam.payroll.EmployeeAffiliation" list="existingList" for-update="true">
+                <econdition field-name="employeePartyId"/>
+                <econdition field-name="affiliationTypeEnumId"/>
+                <econdition field-name="thruDate" or-null="true" operator="greater" from="fromDate"/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <if condition="existingList">
+                <set field="existing" from="existingList.first"/>
+                <if condition="existing.fromDate >= fromDate">
+                    <return error="true" message="Found existing affiliation with fromDate after new fromDate"/>
+                </if>
+                <set field="existing.thruDate" from="fromDate"/>
+                <entity-update value-field="existing"/>
+            </if>
+            <service-call name="create#mchile.humanteam.payroll.EmployeeAffiliation" in-map="context"/>
         </actions>
     </service>
 </services>
