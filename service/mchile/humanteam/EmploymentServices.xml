@@ -63,21 +63,25 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <if condition="salaryHistory"><set field="currentSalary" from="salaryHistory.first"/></if>
 
-            <!-- Colación -->
+            <!-- Movilización -->
             <entity-find entity-name="mantle.humanres.employment.PayrollAdjustmentAndDetail" list="commutingAdjustmentHistory">
                 <econdition field-name="partyRelationshipId" from="employment.partyRelationshipId"/>
                 <econdition field-name="itemTypeEnumId" value="ItemPayrollCommuting"/>
                 <order-by field-name="-fromDate"/>
             </entity-find>
-            <if condition="commutingAdjustmentHistory"><set field="currentCommutingAdjustment" from="commutingAdjustmentHistory.first"/></if>
+            <iterate entry="adjustment" list="commutingAdjustmentHistory">
+                <if condition="adjustment.fromDate &lt;= ec.user.nowTimestamp &amp;&amp; (adjustment.thruDate == null || adjustment.thruDate >= ec.user.nowTimestamp)"><set field="currentCommutingAdjustment" from="adjustment"/></if>
+            </iterate>
 
-            <!-- Movilización -->
+            <!-- Colación -->
             <entity-find entity-name="mantle.humanres.employment.PayrollAdjustmentAndDetail" list="nourishmentAdjustmentHistory">
                 <econdition field-name="partyRelationshipId" from="employment.partyRelationshipId"/>
                 <econdition field-name="itemTypeEnumId" value="ItemPayrollNourishment"/>
                 <order-by field-name="-fromDate"/>
             </entity-find>
-            <if condition="nourishmentAdjustmentHistory"><set field="currentNourishmentAdjustment" from="nourishmentAdjustmentHistory.first"/></if>
+            <iterate entry="adjustment" list="nourishmentAdjustmentHistory">
+                <if condition="adjustment.fromDate &lt;= ec.user.nowTimestamp &amp;&amp; (adjustment.thruDate == null || adjustment.thruDate >= ec.user.nowTimestamp)"><set field="currentNourishmentAdjustment" from="adjustment"/></if>
+            </iterate>
 
             <!-- Isapre -->
             <entity-find entity-name="mchile.humanteam.payroll.EmployeeAffiliation" list="healthInsuranceAffiliationHistory">
@@ -92,11 +96,9 @@ along with this software (see the LICENSE.md file). If not, see
                     <entity-find-one entity-name="mantle.party.PartyDetail" value-field="pd" auto-field-map="[partyId:hiah.organizationPartyId]"/>
                     <script>healthInsuranceOrganizationNamesById.put(hiah.organizationPartyId, pd.organizationName)</script>
                 </if>
+                <if condition="currentHealthInsuranceAffiliation == null &amp;&amp; hiah.fromDate &lt;= ec.user.nowTimestamp &amp;&amp; ( hiah.thruDate == null || hiah.thruDate > ec.user.nowTimestamp)">
+                    <set field="currentHealthInsuranceAffiliation" from="hiah"/></if>
             </iterate>
-            <if condition="healthInsuranceAffiliationHistory.size() > 0 &amp;&amp; ( healthInsuranceAffiliationHistory.first.thruDate == null || healthInsuranceAffiliationHistory.first.thruDate > ec.user.nowTimestamp)">
-                <set field="currentHealthInsuranceAffiliation" from="healthInsuranceAffiliationHistory.first"/>
-                <script>healthInsuranceAffiliationHistory.remove(currentPlanIsapre)</script>
-            </if>
 
             <!-- Afp -->
             <entity-find entity-name="mchile.humanteam.payroll.EmployeeAffiliation" list="pensionFundAffiliationHistory">
@@ -110,13 +112,12 @@ along with this software (see the LICENSE.md file). If not, see
                     <entity-find-one entity-name="mantle.party.PartyDetail" value-field="pd" auto-field-map="[partyId:pfah.organizationPartyId]"/>
                     <script>pensionFundOrganizationNamesById.put(pfah.organizationPartyId, pd.organizationName)</script>
                 </if>
+                <if condition="currentPensionFundAffiliation == null &amp;&amp; pfah.fromDate &lt;= ec.user.nowTimestamp &amp;&amp; ( pfah.thruDate == null || pfah.thruDate > ec.user.nowTimestamp)">
+                    <set field="currentPensionFundAffiliation" from="pfah"/></if>
             </iterate>
         </actions>
     </service>
 
-            <if condition="pensionFundAffiliationHistory.size() > 0 &amp;&amp; ( pensionFundAffiliationHistory.first.thruDate == null || pensionFundAffiliationHistory.first.thruDate > ec.user.nowTimestamp)">
-                <set field="currentPensionFundAffiliation" from="pensionFundAffiliationHistory.first"/>
-                <script>pensionFundAffiliationHistory.remove(currentPlanIsapre)</script>
     <service verb="modify" noun="EmploymentSalary">
         <in-parameters>
             <parameter name="partyRelationshipId" required="true"/>
