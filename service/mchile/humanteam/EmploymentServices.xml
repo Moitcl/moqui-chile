@@ -262,18 +262,65 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="!employment"><return error="true" message="Did not find employment for LeaveDetail ${leaveDetailId}"/></if>
             <entity-find-one entity-name="mchile.humanteam.employment.LeaveAccrued" value-field="accrued"/>
             <if condition="accrued"><then>
-                <log message="existing accrued: ${accrued}"/>
+                <!--<log message="existing accrued: ${accrued}"/>-->
                 <if condition="accrued.uomId != amountUomId">
                     <return error="true" message="UomId mismatch, existing (${accrued.uomId}) is different from Detail (${amountUomId})"/>
                 </if>
                 <set field="newAvailable" from="accrued.quantityAvailable + diffAmount"/>
-                <log message="Setting quantityAvailable to ${newAvailable}"/>
+                <!--<log message="Setting quantityAvailable to ${newAvailable}"/>-->
                 <set field="accrued.quantityAvailable" from="newAvailable"/>
                 <entity-update value-field="accrued"/>
             </then><else>
-                <log message="creating new LeaveAccrued"/>
+                <!--<log message="creating new LeaveAccrued"/>-->
                 <service-call name="create#mchile.humanteam.employment.LeaveAccrued" in-map="context+[quantityAvailable:diffAmount, uomId:amountUomId]"/>
             </else></if>
+        </actions>
+    </service>
+
+    <service verb="add" noun="EmploymentAccruedLeaveForPeriod" authenticate="anonymous-all">
+        <in-parameters>
+            <parameter name="employerPartyId"/>
+            <parameter name="timePeriodTypeId" default-value="PayrollMonth"/>
+            <parameter name="leaveTypeEnumId" default-value="PltFeriadoLegal"/>
+        </in-parameters>
+        <actions>
+            <if condition="timePeriodTypeId != 'PayrollMonth'"><return error="true" message="Cannot handle Time Period Type ${timePeriodTypeId}"/></if>
+            <if condition="leaveTypeEnumId != 'PltFeriadoLegal'"><return error="true" message="Cannot handle Leave Type ${leaveTypeEnumId}"/></if>
+            <set field="changeReasonEnumId" value="PltPeriodAccrued"/>
+            <set field="diffAmount" from="1.25"/>
+            <set field="amountUomId" value="TF_day"/>
+            <entity-find entity-name="mantle.humanres.employment.EmploymentAndRelationship" list="currentEmployments">
+                <econdition field-name="toPartyId" ignore-if-empty="true" from="employerPartyId"/>
+                <econdition field-name="timePeriodTypeId"/>
+                <date-filter/>
+            </entity-find>
+            <iterate list="currentEmployments" entry="employment">
+                <entity-find-one entity-name="mantle.party.PartyDetail" auto-field-map="[partyId:employment.fromPartyId]" value-field="partyDetail"/>
+                <!--<log message="Evaluating employee ${ec.resource.expand('PartyNameOnlyTemplate', null, partyDetail)}"/>-->
+                <entity-find entity-name="mchile.humanteam.employment.LeaveDetail" list="lastLeaveDetail" limit="1">
+                    <econdition field-name="partyRelationshipId" from="employment.partyRelationshipId"/>
+                    <econdition field-name="leaveTypeEnumId"/>
+                    <econdition field-name="changeReasonEnumId"/>
+                    <order-by field-name="-fromDate"/>
+                </entity-find>
+                <set field="accruedThruDate" from="lastLeaveDetail ? (lastLeaveDetail.first.thruDate) : employment.fromDate"/>
+                <!--<log message="accruedThruDate: ${accruedThruDate}"/>-->
+                <script><![CDATA[
+                    Calendar cal = Calendar.instance
+                    cal.setTimeInMillis(accruedThruDate.time)
+                ]]></script>
+                <while condition="cal.time.time &lt; ec.user.nowTimestamp.time">
+                    <script>
+                        fromDate = new Timestamp(cal.time.time)
+                        cal.add(Calendar.MONTH, 1)
+                        thruDate = new Timestamp(cal.time.time)
+                    </script>
+                    <if condition="thruDate &lt; ec.user.nowTimestamp">
+                        <!--<log message="Adding LeaveDetail for period from ${fromDate} to ${thruDate}"/>-->
+                        <service-call name="create#mchile.humanteam.employment.LeaveDetail" in-map="context+[partyRelationshipId:employment.partyRelationshipId, registrationDate:ec.user.nowTimestamp]"/>
+                    </if>
+                </while>
+            </iterate>
         </actions>
     </service>
 
