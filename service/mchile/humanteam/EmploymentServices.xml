@@ -84,7 +84,7 @@ along with this software (see the LICENSE.md file). If not, see
             </iterate>
 
             <!-- Isapre -->
-            <entity-find entity-name="mchile.humanteam.payroll.EmployeeAffiliation" list="healthInsuranceAffiliationHistory">
+            <entity-find entity-name="mchile.humanteam.employment.EmployeeAffiliation" list="healthInsuranceAffiliationHistory">
                 <econdition field-name="employeePartyId" from="employeeParty.partyId"/>
                 <econdition field-name="affiliationTypeEnumId" value="MchCeaHealth"/>
                 <order-by field-name="-fromDate"/>
@@ -101,7 +101,7 @@ along with this software (see the LICENSE.md file). If not, see
             </iterate>
 
             <!-- Afp -->
-            <entity-find entity-name="mchile.humanteam.payroll.EmployeeAffiliation" list="pensionFundAffiliationHistory">
+            <entity-find entity-name="mchile.humanteam.employment.EmployeeAffiliation" list="pensionFundAffiliationHistory">
                 <econdition field-name="employeePartyId" from="employeeParty.partyId"/>
                 <econdition field-name="affiliationTypeEnumId" value="MchCeaPensionFund"/>
                 <order-by field-name="-fromDate"/>
@@ -196,7 +196,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <if condition="!currencyUomId"><message type="danger">Health insurance affiliation requires curency</message></if>
             </if>
             <check-errors/>
-            <entity-find entity-name="mchile.humanteam.payroll.EmployeeAffiliation" list="existingList" for-update="true">
+            <entity-find entity-name="mchile.humanteam.employment.EmployeeAffiliation" list="existingList" for-update="true">
                 <econdition field-name="employeePartyId"/>
                 <econdition field-name="affiliationTypeEnumId"/>
                 <econdition field-name="thruDate" or-null="true" operator="greater" from="fromDate"/>
@@ -210,7 +210,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="existing.thruDate" from="fromDate"/>
                 <entity-update value-field="existing"/>
             </if>
-            <service-call name="create#mchile.humanteam.payroll.EmployeeAffiliation" in-map="context"/>
+            <service-call name="create#mchile.humanteam.employment.EmployeeAffiliation" in-map="context"/>
         </actions>
     </service>
 
@@ -224,21 +224,107 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="leaveHistory"/>
         </out-parameters>
         <actions>
-            <entity-find-one entity-name="mchile.humanteam.payroll.LeaveAccrued" value-field="accruedVacation" auto-field-map="[partyRelationshipId:partyRelationshipId, leaveTypeEnumId:'PltFeriadoLegal']"/>
+            <entity-find-one entity-name="mchile.humanteam.employment.LeaveAccrued" value-field="accruedVacation" auto-field-map="[partyRelationshipId:partyRelationshipId, leaveTypeEnumId:'PltFeriadoLegal']"/>
             <if condition="accruedVacation">
                 <if condition="accruedVacation.uomId != 'TF_day'"><return error="true" message="Unsupported vacation Uom ${accruedVacation.uomId}"/></if>
                 <set field="accruedVacationDays" from="accruedVacation.quantityAvailable"/>
             </if>
-            <entity-find entity-name="mchile.humanteam.payroll.LeaveDetail" list="leaveHistory">
+            <entity-find entity-name="mchile.humanteam.employment.LeaveDetail" list="leaveHistory">
                 <econdition field-name="partyRelationshipId"/>
                 <econdition field-name="fromDate" operator="less-equals" from="ec.user.nowTimestamp"/>
                 <order-by field-name="-fromDate"/>
             </entity-find>
-            <entity-find entity-name="mchile.humanteam.payroll.LeaveDetail" list="plannedLeaves">
+            <entity-find entity-name="mchile.humanteam.employment.LeaveDetail" list="plannedLeaves">
                 <econdition field-name="partyRelationshipId"/>
                 <econdition field-name="thruDate" operator="greater" from="ec.user.nowTimestamp"/>
                 <order-by field-name="fromDate"/>
             </entity-find>
+        </actions>
+    </service>
+
+    <service verb="update" noun="AccruedLeaveFromDetail">
+        <in-parameters>
+            <parameter name="leaveDetailId"/>
+            <parameter name="partyRelationshipId"/>
+            <parameter name="leaveTypeEnumId"/>
+            <parameter name="changeReasonEnumId"/>
+            <parameter name="registrationDate"/>
+            <parameter name="fromDate" type="Timestamp"/>
+            <parameter name="thruDate" type="Timestamp"/>
+            <parameter name="diffAmount" type="BigDecimal"/>
+            <parameter name="description"/>
+            <parameter name="amountUomId"/>
+        </in-parameters>
+        <actions>
+            <!-- Only maintain AccruedLeave for specified leave types -->
+            <if condition="!leaveTypeEnumId in ['PltFeriadoLegal']"><return/></if>
+            <entity-find-one entity-name="mantle.humanres.employment.Employment" value-field="employment"/>
+            <if condition="!employment"><return error="true" message="Did not find employment for LeaveDetail ${leaveDetailId}"/></if>
+            <entity-find-one entity-name="mchile.humanteam.employment.LeaveAccrued" value-field="accrued"/>
+            <if condition="accrued"><then>
+                <!--<log message="existing accrued: ${accrued}"/>-->
+                <if condition="accrued.uomId != amountUomId">
+                    <return error="true" message="UomId mismatch, existing (${accrued.uomId}) is different from Detail (${amountUomId})"/>
+                </if>
+                <set field="newAvailable" from="accrued.quantityAvailable + diffAmount"/>
+                <!--<log message="Setting quantityAvailable to ${newAvailable}"/>-->
+                <set field="accrued.quantityAvailable" from="newAvailable"/>
+                <entity-update value-field="accrued"/>
+            </then><else>
+                <!--<log message="creating new LeaveAccrued"/>-->
+                <service-call name="create#mchile.humanteam.employment.LeaveAccrued" in-map="context+[quantityAvailable:diffAmount, uomId:amountUomId]"/>
+            </else></if>
+        </actions>
+    </service>
+
+    <service verb="add" noun="EmploymentAccruedLeaveForPeriod" authenticate="anonymous-all">
+        <in-parameters>
+            <parameter name="employerPartyId"/>
+            <parameter name="timePeriodTypeId" default-value="PayrollMonth"/>
+            <parameter name="leaveTypeEnumId" default-value="PltFeriadoLegal"/>
+            <parameter name="maxAccrueDays" default="50">
+                <description>Maximum days to consider</description>
+            </parameter>
+        </in-parameters>
+        <actions>
+            <if condition="timePeriodTypeId != 'PayrollMonth'"><return error="true" message="Cannot handle Time Period Type ${timePeriodTypeId}"/></if>
+            <if condition="leaveTypeEnumId != 'PltFeriadoLegal'"><return error="true" message="Cannot handle Leave Type ${leaveTypeEnumId}"/></if>
+            <set field="changeReasonEnumId" value="PltPeriodAccrued"/>
+            <set field="diffAmount" from="1.25"/>
+            <set field="amountUomId" value="TF_day"/>
+            <entity-find entity-name="mantle.humanres.employment.EmploymentAndRelationship" list="currentEmployments">
+                <econdition field-name="toPartyId" ignore-if-empty="true" from="employerPartyId"/>
+                <econdition field-name="timePeriodTypeId"/>
+                <date-filter/>
+            </entity-find>
+            <iterate list="currentEmployments" entry="employment">
+                <entity-find-one entity-name="mantle.party.PartyDetail" auto-field-map="[partyId:employment.fromPartyId]" value-field="partyDetail"/>
+                <!--<log message="Evaluating employee ${ec.resource.expand('PartyNameOnlyTemplate', null, partyDetail)}"/>-->
+                <entity-find entity-name="mchile.humanteam.employment.LeaveDetail" list="lastLeaveDetail" limit="1">
+                    <econdition field-name="partyRelationshipId" from="employment.partyRelationshipId"/>
+                    <econdition field-name="leaveTypeEnumId"/>
+                    <econdition field-name="changeReasonEnumId"/>
+                    <order-by field-name="-fromDate"/>
+                </entity-find>
+                <set field="accruedThruDate" from="lastLeaveDetail ? (lastLeaveDetail.first.thruDate) : employment.fromDate"/>
+                <set field="maxAccrueDate" from="new Timestamp(ec.user.nowTimestamp.time - maxAccrueDays*24*60*60*1000)"/>
+                <if condition="accruedThruDate.before(maxAccrueDate)"><set field="accruedThruDate" from="maxAccrueDate"/></if>
+                <script><![CDATA[
+                    Calendar cal = Calendar.instance
+                    cal.setTimeInMillis(accruedThruDate.time)
+                ]]></script>
+                <while condition="cal.time.time &lt; ec.user.nowTimestamp.time">
+                    <script>
+                        fromDate = new Timestamp(cal.time.time)
+                        cal.add(Calendar.MONTH, 1)
+                        thruDate = new Timestamp(cal.time.time)
+                    </script>
+                    <if condition="thruDate &lt; ec.user.nowTimestamp">
+                        <!--<log message="Adding LeaveDetail for period from ${fromDate} to ${thruDate}"/>-->
+                        <service-call name="create#mchile.humanteam.employment.LeaveDetail" in-map="context+[partyRelationshipId:employment.partyRelationshipId, registrationDate:ec.user.nowTimestamp]"/>
+                    </if>
+                </while>
+            </iterate>
         </actions>
     </service>
 
