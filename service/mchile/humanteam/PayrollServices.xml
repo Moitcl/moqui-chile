@@ -590,4 +590,48 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="calculate" noun="DaysWorkedAdjustment">
+        <implements service="mantle.humanres.PayrollServices.calculate#Adjustment"/>
+        <out-parameters>
+            <parameter name="adjustmentList" type="List"/>
+            <parameter name="taxablePayAmount" type="BigDecimal"/>
+            <parameter name="medicalTaxablePayAmount" type="BigDecimal"/>
+            <parameter name="socialTaxablePayAmount" type="BigDecimal"/>
+        </out-parameters>
+        <actions>
+            <set field="employeePartyId" from="employee.partyId"/>
+            <entity-find entity-name="mchile.humanteam.employment.LeaveDetail" list="leaveList">
+                <econdition field-name="partyRelationshipId"/>
+                <econdition field-name="fromDate" operator="less-equals" from="timePeriod.thruDate"/>
+                <econdition field-name="thruDate" operator="greater-equals" from="timePeriod.fromDate"/>
+                <econdition field-name="changeReasonEnumId" operator="in" from="['PltLeave', 'PltIllness']"/>
+            </entity-find>
+            <set field="totalLeaveDays" from="0" type="BigDecimal"/>
+            <set field="totalIllnessDays" from="0" type="BigDecimal"/>
+            <iterate list="leaveList" entry="leave">
+                <if condition="leave.amountUomId != 'TF_day'"><return error="true" message="Leaves currently only support days as UOM"/></if>
+                <if condition="leave.changeReasonEnumId == 'PltLeave'"><then>
+                    <script>totalLeaveDays += leave.diffAmount</script>
+                </then><else-if condition="leave.changeReasonEnumId == 'PltIllness'">
+                    <script>totalIllnessDays += leave.diffAmount</script>
+                </else-if></if>
+            </iterate>
+            <set field="leaveReduceAmount" from="ec.l10n.roundCurrency(totalLeaveDays/30*taxablePayAmount, currencyUomId)"/>
+            <set field="illnessReduceAmount" from="ec.l10n.roundCurrency(totalIllnessDays/30*taxablePayAmount, currencyUomId)"/>
+            <script>
+                adjustmentList = priorAdjustmentList
+                if (leaveReduceAmount != 0) {
+                    adjustmentList.add([isEmployerPaid: 'N', quantity: 1, isTax: 'N', isTaxable: 'Y', isSocialTax: 'N', isSocialTaxable: 'Y', isMedicalTax: 'N', isMedicalTaxable: 'N', rateBasisEnumId: 'PrbsIncome', adjustmentApplies: true, itemTypeEnumId: 'ItemSalary', amount: leaveReduceAmount, description: description])
+                    taxablePayAmount = taxablePayAmount - leaveReduceAmount
+                    socialTaxablePayAmount = socialTaxablePayAmount - leaveReduceAmount
+                }
+                if (illnessReduceAmount != 0) {
+                    adjustmentList.add([isEmployerPaid: 'N', quantity: 1, isTax: 'N', isTaxable: 'Y', isSocialTax: 'N', isSocialTaxable: 'N', isMedicalTax: 'N', isMedicalTaxable: 'N', rateBasisEnumId: 'PrbsIncome', adjustmentApplies: true, itemTypeEnumId: 'ItemSalary', amount: illnessReduceAmount, description: description])
+                    taxablePayAmount = taxablePayAmount - illnessReduceAmount
+                }
+            </script>
+        </actions>
+
+    </service>
+
 </services>
