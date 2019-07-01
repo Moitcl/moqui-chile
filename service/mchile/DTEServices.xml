@@ -721,9 +721,9 @@ along with this software (see the LICENSE.md file). If not, see
                             montoIVARecuperable = montoIva;
                             amount = montoTotal;
                         } else {
-                            logger.warn("IF3:" );
-                            tot.setMntExe(montoNeto);
-                            tot.setMntTotal(montoNeto);
+                            logger.warn("IF3: montoNeto: " +montoNeto + ", montoExento: " + montoExento);
+                            tot.setMntExe(montoExento);
+                            tot.setMntTotal(montoExento);
                             montoExento = montoNeto;
                             montoIVARecuperable = 0;
                             amount = montoNeto;
@@ -3685,9 +3685,9 @@ return
                                                     </entity-find-one>
                                                     <if condition="productField"><then>
                                                         <set field="productId" from="productField.productId"/>
-                                                        <log message="Agregando producto preexistente $productId, cantidad $quantity ***************"/>
                                                         <service-call name="mantle.order.OrderServices.add#OrderProductQuantity" out-map="context" in-map="[orderId:purchaseOutMap.orderId,
                                                             orderPartSeqId:purchaseOutMap.orderPartSeqId, productId:productId, description:itemDescription, quantity:quantity, unitAmount:price]"/>
+                                                        <log message="Agregando producto preexistente $productId, cantidad $quantity *************** orderId: $orderId"/>
                                                     </then><else>
                                                         <log level="warn" message="Producto $itemDescription no existe en el sistema, se creará como genérico"/>
                                                         <service-call name="mantle.order.OrderServices.create#OrderItem" out-map="context" in-map="[orderId:purchaseOutMap.orderId,
@@ -3713,14 +3713,21 @@ return
                                                         itemTypeEnumId:'ItemVatTax']"/>
                         </if>
                         <!-- Cierre de orden de compra -->
+
                         <service-call name="mchile.PurchaseServices.place#Order" in-map="[orderId:purchaseOutMap.orderId,
-                                    orderPartSeqId:purchaseOutMap.orderPartSeqId,]" out-map="placePurchaseOut"/>
+                                    orderPartSeqId:purchaseOutMap.orderPartSeqId]" out-map="placePurchaseOut"/>
+
+                        <service-call name="mantle.order.OrderServices.autoApprove#Order" in-map="[orderId:purchaseOutMap.orderId,
+                                    orderPartSeqId:purchaseOutMap.orderPartSeqId]" out-map="approveMap"/>
 
                         <!-- Creación de Invoice -->
                         <service-call name="mantle.account.InvoiceServices.create#EntireOrderPartInvoice" in-map="[orderId:purchaseOutMap.orderId, orderPartSeqId:purchaseOutMap.orderPartSeqId]" out-map="invoiceOutMap"/>
+                        <log level="warn" message="Invoice $invoiceOutMap.invoiceId creada para factura XML"/>
+
 
                         <service-call name="mchile.PurchaseServices.receive#Order" in-map="[orderId:purchaseOutMap.orderId,
-                                    orderPartSeqId:purchaseOutMap.orderPartSeqId,]" out-map="receiveOrderOut"/>
+                                    orderPartSeqId:purchaseOutMap.orderPartSeqId,facilityId:facilityId, activeOrgId:activeOrgId]" out-map="receiveOrderOut"/>
+
                         <set field="invoiceId" from="invoiceOutMap.invoiceId"/>
                     </if>
 
