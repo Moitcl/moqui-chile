@@ -19,55 +19,36 @@ along with this software (see the LICENSE.md file). If not, see
 <#if original! == "true"><#assign showOrig = true><#else><#assign showOrig = false></#if>
 
 <#macro encodeText textValue>${(Static["org.moqui.util.StringUtilities"].encodeForXmlAttribute(textValue!"", false))!""}</#macro>
-<#macro productItemRow invoiceItem invoiceItemList itemIndex>
-    <#assign childItemList = invoiceItemList.cloneList().filterByAnd("parentItemSeqId", invoiceItem.invoiceItemSeqId)>
-    <#assign itemTypeEnum = invoiceItem.type!>
-    <#assign product = invoiceItem.product!>
-    <#assign asset = invoiceItem.asset!>
-    <#assign lot = asset.lot!>
+<#macro itemHeader itemTypeDescription>
+    <fo:table table-layout="fixed" width="7.5in" margin-top="0.3in"><fo:table-body>
     <fo:table-row font-size="8pt" border-bottom="thin solid black">
-        <fo:table-cell padding="${cellPadding}"><fo:block text-align="center"><#if (itemIndex > 0)>${itemIndex}<#else> </#if></fo:block></fo:table-cell>
-        <fo:table-cell padding="${cellPadding}"><fo:block>${(product.pseudoId)!(invoiceItem.productId)!""}</fo:block></fo:table-cell>
-        <fo:table-cell padding="${cellPadding}"><fo:block>${(lot.lotNumber)!(asset.lotId)!""}</fo:block></fo:table-cell>
+        <fo:table-cell padding="${cellPadding}" width="6in"><fo:block font-size="12pt" font-weight="bold"><@encodeText (itemTypeDescription)!""/></fo:block></fo:table-cell>
+        <fo:table-cell padding="${cellPadding}" width="1.5in"><fo:block font-size="12pt" font-weight="bold" text-align="right">Valor</fo:block></fo:table-cell>
+    </fo:table-row>
+</#macro>
+<#macro itemFooter itemTotalDescription itemTotal currencyUomId>
+    <fo:table-row font-size="8pt" border-bottom="thin solid black">
+        <fo:table-cell padding="${cellPadding}"><fo:block font-weight="bold"><@encodeText (itemTotalDescription)!""/></fo:block></fo:table-cell>
+        <#if 0 &gt; itemTotal>
+            <fo:table-cell padding="${cellPadding}"><fo:block font-weight="bold" text-align="right">(${ec.l10n.format(-itemTotal!0, '#,###')})</fo:block></fo:table-cell>
+        <#else>
+            <fo:table-cell padding="${cellPadding}"><fo:block font-weight="bold" text-align="right">${ec.l10n.format(itemTotal!0, '#,###')}</fo:block></fo:table-cell>
+        </#if>
+    </fo:table-row>
+    </fo:table-body></fo:table>
+</#macro>
+<#macro itemRow invoiceItem currencyUomId>
+    <#assign itemTypeEnum = invoiceItem.type!>
+    <fo:table-row font-size="8pt" border-bottom="thin solid black">
         <fo:table-cell padding="${cellPadding}">
             <fo:block><@encodeText (invoiceItem.description)!(itemTypeEnum.description)!""/></fo:block>
-            <#if invoiceItem.otherPartyProductId?has_content><fo:block>Your Product: ${invoiceItem.otherPartyProductId}</fo:block></#if>
         </fo:table-cell>
-        <fo:table-cell padding="${cellPadding}"><fo:block text-align="center">${invoiceItem.quantity!"1"}</fo:block></fo:table-cell>
-        <fo:table-cell padding="${cellPadding}"><fo:block text-align="right">${ec.l10n.formatCurrency(invoiceItem.amount!0, invoice.currencyUomId, 3)}</fo:block></fo:table-cell>
-        <fo:table-cell padding="${cellPadding}"><fo:block text-align="right">${ec.l10n.formatCurrency(((invoiceItem.quantity!1) * (invoiceItem.amount!0)), invoice.currencyUomId, 3)}</fo:block></fo:table-cell>
+        <#if 0 &gt; invoiceItem.amount>
+            <fo:table-cell padding="${cellPadding}"><fo:block text-align="right">(${ec.l10n.format(((invoiceItem.quantity!1) * (-invoiceItem.amount!0)), '#,###')})</fo:block></fo:table-cell>
+        <#else>
+            <fo:table-cell padding="${cellPadding}"><fo:block text-align="right">${ec.l10n.format(((invoiceItem.quantity!1) * (invoiceItem.amount!0)), '#,###')}</fo:block></fo:table-cell>
+        </#if>
     </fo:table-row>
-    <#if childItemList?has_content><#list childItemList as childItem>
-        <@productItemRow childItem invoiceItemList negOne/>
-    </#list></#if>
-</#macro>
-<#macro otherItemRow invoiceItem invoiceItemList itemIndex>
-    <#assign childItemList = invoiceItemList.cloneList().filterByAnd("parentItemSeqId", invoiceItem.invoiceItemSeqId)>
-    <#assign itemTypeEnum = invoiceItem.type!>
-    <#assign timeEntry = invoiceItem.findRelatedOne("mantle.work.time.TimeEntry", false, false)!>
-    <#assign rateTypeEnum = ""><#assign workEffort = "">
-    <#if timeEntry?has_content>
-        <#assign rateTypeEnum = timeEntry.findRelatedOne("RateType#moqui.basic.Enumeration", true, false)!>
-        <#assign workEffort = timeEntry.findRelatedOne("mantle.work.effort.WorkEffort", false, false)!>
-    </#if>
-    <fo:table-row font-size="8pt" border-bottom="thin solid black">
-        <fo:table-cell padding="${cellPadding}"><fo:block text-align="center"><#if (itemIndex > 0)>${itemIndex}<#else> </#if></fo:block></fo:table-cell>
-        <fo:table-cell padding="${cellPadding}"><fo:block>${(itemTypeEnum.description)!""}</fo:block></fo:table-cell>
-        <fo:table-cell padding="${cellPadding}"><fo:block>${ec.l10n.format(invoiceItem.itemDate, dateFormat)}</fo:block></fo:table-cell>
-        <fo:table-cell padding="${cellPadding}">
-            <fo:block><@encodeText invoiceItem.description!""/></fo:block>
-            <#if (timeEntry.workEffortId)?has_content><fo:block>Task: ${timeEntry.workEffortId} - <@encodeText workEffort.workEffortName!""/></fo:block></#if>
-            <#if rateTypeEnum?has_content><fo:block>Rate: ${rateTypeEnum.description}</fo:block></#if>
-            <#if timeEntry?has_content><fo:block>${ec.l10n.format(timeEntry.fromDate, "dd MMM yyyy hh:mm")} to ${ec.l10n.format(timeEntry.thruDate, "dd MMM yyyy hh:mm")}, Break ${timeEntry.breakHours!"0"}h</fo:block></#if>
-            <#if invoiceItem.otherPartyProductId?has_content><fo:block>Your Product: ${invoiceItem.otherPartyProductId}</fo:block></#if>
-        </fo:table-cell>
-        <fo:table-cell padding="${cellPadding}"><fo:block text-align="center">${invoiceItem.quantity!"1"}</fo:block></fo:table-cell>
-        <fo:table-cell padding="${cellPadding}"><fo:block text-align="right">${ec.l10n.formatCurrency(invoiceItem.amount!0, invoice.currencyUomId, 3)}</fo:block></fo:table-cell>
-        <fo:table-cell padding="${cellPadding}"><fo:block text-align="right">${ec.l10n.formatCurrency(((invoiceItem.quantity!1) * (invoiceItem.amount!0)), invoice.currencyUomId, 3)}</fo:block></fo:table-cell>
-    </fo:table-row>
-    <#if childItemList?has_content><#list childItemList as childItem>
-        <@otherItemRow childItem invoiceItemList negOne/>
-    </#list></#if>
 </#macro>
 
 <fo:root xmlns:fo="http://www.w3.org/1999/XSL/Format" font-family="Helvetica, sans-serif" font-size="10pt">
@@ -97,6 +78,7 @@ along with this software (see the LICENSE.md file). If not, see
         <#-- body starts 0.5in + 0.7in = 1.2in from top, 0.5in from left -->
         <fo:flow flow-name="xsl-region-body">
             <#list employeeReceiptList as employeeReceipt>
+                <#list employeeReceipt.copyList as copy>
                 <fo:block-container width="7.5in">
                     <fo:table table-layout="fixed" width="7.5in"><fo:table-body>
                         <fo:table-row>
@@ -172,123 +154,52 @@ along with this software (see the LICENSE.md file). If not, see
                     </fo:table-body></fo:table>
                 </fo:block-container>
 
-                <#if hasProductItems && !hasTimeEntryItems>
-                    <fo:table table-layout="fixed" width="100%">
-                        <fo:table-header font-size="9pt" border-bottom="solid black">
-                            <fo:table-cell width="0.4in" padding="${cellPadding}"><fo:block text-align="center">Item</fo:block></fo:table-cell>
-                            <fo:table-cell width="1in" padding="${cellPadding}"><fo:block>Product</fo:block></fo:table-cell>
-                            <fo:table-cell width="1in" padding="${cellPadding}"><fo:block>Lot</fo:block></fo:table-cell>
-                            <fo:table-cell width="2.5in" padding="${cellPadding}"><fo:block>Description</fo:block></fo:table-cell>
-                            <fo:table-cell width="0.6in" padding="${cellPadding}"><fo:block text-align="center">Qty</fo:block></fo:table-cell>
-                            <fo:table-cell width="0.9in" padding="${cellPadding}"><fo:block text-align="right">Amount</fo:block></fo:table-cell>
-                            <fo:table-cell width="1in" padding="${cellPadding}"><fo:block text-align="right">Total</fo:block></fo:table-cell>
-                        </fo:table-header>
-                        <fo:table-body>
-                            <#list topItemList as invoiceItem>
-                                <#if !(invoiceItem.parentItemSeqId?has_content)><@productItemRow invoiceItem invoiceItemList invoiceItem_index+1/></#if>
-                            </#list>
-                            <fo:table-row font-size="9pt" border-top="solid black">
-                                <fo:table-cell padding="${cellPadding}"><fo:block> </fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block> </fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block> </fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block> </fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block> </fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block text-align="right" font-weight="bold">Total</fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block text-align="right" font-weight="bold">${ec.l10n.formatCurrency(noAdjustmentTotal, invoice.currencyUomId)}</fo:block></fo:table-cell>
-                            </fo:table-row>
-                        </fo:table-body>
-                    </fo:table>
-                <#else>
-                    <fo:table table-layout="fixed" width="100%">
-                        <fo:table-header font-size="9pt" border-bottom="solid black">
-                            <fo:table-cell width="0.3in" padding="${cellPadding}"><fo:block text-align="center">Item</fo:block></fo:table-cell>
-                            <fo:table-cell width="1in" padding="${cellPadding}"><fo:block>Type</fo:block></fo:table-cell>
-                            <fo:table-cell width="0.8in" padding="${cellPadding}"><fo:block>Date</fo:block></fo:table-cell>
-                            <fo:table-cell width="2.8in" padding="${cellPadding}"><fo:block>Description</fo:block></fo:table-cell>
-                            <fo:table-cell width="0.6in" padding="${cellPadding}"><fo:block text-align="center">Qty</fo:block></fo:table-cell>
-                            <fo:table-cell width="0.9in" padding="${cellPadding}"><fo:block text-align="right">Amount</fo:block></fo:table-cell>
-                            <fo:table-cell width="1in" padding="${cellPadding}"><fo:block text-align="right">Total</fo:block></fo:table-cell>
-                        </fo:table-header>
-                        <fo:table-body>
-                        <#list topItemList as invoiceItem>
-                            <#if !(invoiceItem.parentItemSeqId?has_content)><@otherItemRow invoiceItem invoiceItemList invoiceItem_index+1/></#if>
-                        </#list>
-                            <fo:table-row font-size="9pt" border-top="solid black">
-                                <fo:table-cell padding="${cellPadding}"><fo:block> </fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block> </fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block> </fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block> </fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block> </fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block text-align="right" font-weight="bold">Total</fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block text-align="right" font-weight="bold">${ec.l10n.formatCurrency(noAdjustmentTotal, invoice.currencyUomId)}</fo:block></fo:table-cell>
-                            </fo:table-row>
-                        </fo:table-body>
-                    </fo:table>
-                </#if>
-
-                <fo:table table-layout="fixed" width="100%" margin-top="0.1in">
-                    <fo:table-header font-size="9pt" border-bottom="solid black">
-                        <fo:table-cell width="2.0in" padding="${cellPadding}"><fo:block>Type</fo:block></fo:table-cell>
-                        <#if hasTimeEntryItems><fo:table-cell width="1.2in" padding="${cellPadding}"><fo:block text-align="right">Amount</fo:block></fo:table-cell></#if>
-                        <fo:table-cell width="1.0in" padding="${cellPadding}"><fo:block text-align="center">Qty</fo:block></fo:table-cell>
-                        <fo:table-cell width="1.2in" padding="${cellPadding}"><fo:block text-align="right">Total</fo:block></fo:table-cell>
-                    </fo:table-header>
-                    <fo:table-body>
-                    <#list itemTypeSummaryMapList as itemTypeSummaryMap>
-                        <#assign itemTypeEnum = ec.entity.find("moqui.basic.Enumeration").condition("enumId", itemTypeSummaryMap.itemTypeEnumId).useCache(true).one()>
-                        <fo:table-row font-size="9pt" border-bottom="thin solid black">
-                            <fo:table-cell padding="${cellPadding}"><fo:block>${(itemTypeEnum.description)!""}</fo:block></fo:table-cell>
-                            <fo:table-cell padding="${cellPadding}"><fo:block text-align="center">${itemTypeSummaryMap.quantity}</fo:block></fo:table-cell>
-                            <#if hasTimeEntryItems><fo:table-cell padding="${cellPadding}"><fo:block text-align="right">${ec.l10n.formatCurrency(itemTypeSummaryMap.amount, invoice.currencyUomId)}</fo:block></fo:table-cell></#if>
-                            <fo:table-cell padding="${cellPadding}"><fo:block text-align="right">${ec.l10n.formatCurrency(itemTypeSummaryMap.total, invoice.currencyUomId)}</fo:block></fo:table-cell>
-                        </fo:table-row>
+                <fo:block-container width="7.5in">
+                    <@itemHeader "Haberes Imponibles"/>
+                    <#list employeeReceipt.haberesImponibles as haberImponible>
+                        <@itemRow haberImponible employeeReceipt.currencyUomId/>
                     </#list>
-                    <fo:table-row font-size="9pt">
-                        <fo:table-cell padding="${cellPadding}"><fo:block text-align="center"> </fo:block></fo:table-cell>
-                        <fo:table-cell padding="${cellPadding}" font-weight="bold"><fo:block text-align="right">Total</fo:block></fo:table-cell>
-                        <#if hasTimeEntryItems><fo:table-cell padding="${cellPadding}"><fo:block text-align="right"> </fo:block></fo:table-cell></#if>
-                        <fo:table-cell padding="${cellPadding}"><fo:block text-align="right" font-weight="bold">${ec.l10n.formatCurrency(noAdjustmentTotal, invoice.currencyUomId)}</fo:block></fo:table-cell>
-                    </fo:table-row>
-                    </fo:table-body>
-                </fo:table>
+                    <@itemFooter "Total Haberes Imponibles" employeeReceipt.totalHaberesImponibles!0 employeeReceipt.currencyUomId/>
+                </fo:block-container>
 
-                <#if !showOrig && adjustmentItemList?has_content>
-                    <fo:table table-layout="fixed" width="100%" margin-top="0.1in">
-                        <fo:table-header font-size="9pt" border-bottom="solid black">
-                            <fo:table-cell width="1in" padding="${cellPadding}"><fo:block text-align="center">Adjustment</fo:block></fo:table-cell>
-                            <fo:table-cell width="4in" padding="${cellPadding}"><fo:block>Description</fo:block></fo:table-cell>
-                            <fo:table-cell width="1in" padding="${cellPadding}"><fo:block text-align="center">Date</fo:block></fo:table-cell>
-                            <fo:table-cell width="1in" padding="${cellPadding}"><fo:block text-align="right">Amount</fo:block></fo:table-cell>
-                        </fo:table-header>
-                        <fo:table-body>
-                            <#list adjustmentItemList as invoiceItem>
-                                <#assign itemTypeEnum = invoiceItem.type!>
-                                <fo:table-row font-size="8pt" border-bottom="thin solid black">
-                                    <fo:table-cell padding="${cellPadding}"><fo:block text-align="center">${invoiceItem_index}</fo:block></fo:table-cell>
-                                    <fo:table-cell padding="${cellPadding}">
-                                        <fo:block><@encodeText (invoiceItem.description)!(itemTypeEnum.description)!""/></fo:block>
-                                        <#if invoiceItem.otherPartyProductId?has_content><fo:block>Your Product: ${invoiceItem.otherPartyProductId}</fo:block></#if>
-                                    </fo:table-cell>
-                                    <fo:table-cell padding="${cellPadding}"><fo:block text-align="center">${ec.l10n.format(invoiceItem.itemDate!, dateFormat)}</fo:block></fo:table-cell>
-                                    <fo:table-cell padding="${cellPadding}"><fo:block text-align="right">${ec.l10n.formatCurrency(((invoiceItem.quantity!1) * (invoiceItem.amount!0)), invoice.currencyUomId, 3)}</fo:block></fo:table-cell>
-                                </fo:table-row>
-                            </#list>
-                            <fo:table-row font-size="9pt" border-top="solid black">
-                                <fo:table-cell padding="${cellPadding}"><fo:block> </fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block text-align="right" font-weight="bold">Adjustments Total</fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block> </fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block text-align="right" font-weight="bold">${ec.l10n.formatCurrency(adjustmentTotal, invoice.currencyUomId)}</fo:block></fo:table-cell>
-                            </fo:table-row>
-                            <fo:table-row font-size="9pt" border-top="solid black">
-                                <fo:table-cell padding="${cellPadding}"><fo:block> </fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block text-align="right" font-weight="bold">Invoice Total</fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block> </fo:block></fo:table-cell>
-                                <fo:table-cell padding="${cellPadding}"><fo:block text-align="right" font-weight="bold">${ec.l10n.formatCurrency(invoiceTotal, invoice.currencyUomId)}</fo:block></fo:table-cell>
-                            </fo:table-row>
-                        </fo:table-body>
-                    </fo:table>
-                </#if>
+                <fo:block-container width="7.5in">
+                    <@itemHeader "Haberes No Imponibles"/>
+                    <#list employeeReceipt.haberesNoImponibles as haberNoImponible>
+                        <@itemRow haberNoImponible employeeReceipt.currencyUomId/>
+                    </#list>
+                    <@itemFooter "Total Haberes No Imponibles" employeeReceipt.totalHaberesNoImponibles!0 employeeReceipt.currencyUomId/>
+                </fo:block-container>
+
+                <fo:block-container width="7.5in">
+                    <@itemHeader "Descuentos"/>
+                    <#list employeeReceipt.descuentos as descuento>
+                        <@itemRow descuento employeeReceipt.currencyUomId/>
+                    </#list>
+                    <@itemFooter "Total Descuentos" employeeReceipt.totalDescuentos!0 employeeReceipt.currencyUomId/>
+                </fo:block-container>
+
+                <fo:table table-layout="fixed" width="7.5in" margin-top="0.3in"><fo:table-body>
+                    <fo:table-row font-size="8pt" border-bottom="thin solid black">
+                        <fo:table-cell padding="${cellPadding}" width="6in"><fo:block font-size="12pt" font-weight="bold">Saldo Líquido a Pagar</fo:block></fo:table-cell>
+                        <fo:table-cell padding="${cellPadding}" width="1.5in"><fo:block font-size="12pt" font-weight="bold" text-align="right">${employeeReceipt.invoice.invoiceTotal}</fo:block></fo:table-cell>
+                    </fo:table-row>
+                </fo:table-body></fo:table>
+
+                <fo:block margin-top="0.3in">Certifico que he recibido de mi empleador, ${ec.resource.expand('PartyNameOnlyTemplate', null, employeeReceipt.employerPartyDetail)}, a mi total y entera satisfacción, el saldo líquido indicado en la presente liquidación, sin tener cargo ni cobro posterior alguno que hacer, por los conceptos de esta liquidación. </fo:block>
+
+                <fo:table table-layout="fixed" width="7.5in" margin-top="0.5in"><fo:table-body>
+                    <fo:table-row font-size="8pt">
+                        <fo:table-cell padding="${cellPadding}" width="0.51in"><fo:block font-size="12pt" font-weight="bold">Fecha</fo:block></fo:table-cell>
+                        <fo:table-cell padding="${cellPadding}" width="1.5in"><fo:block font-size="12pt" border-bottom="solid black">:</fo:block></fo:table-cell>
+                        <fo:table-cell padding="${cellPadding}" width="2.5in"><fo:block font-size="12pt" font-weight="bold" text-align="right">Firma Trabajador </fo:block></fo:table-cell>
+                        <fo:table-cell padding="${cellPadding}" width="2.9in"><fo:block font-size="12pt" border-bottom="solid black">:</fo:block></fo:table-cell>
+                    </fo:table-row>
+                </fo:table-body></fo:table>
+
                 <fo:block break-after="page"/>
+
+                </#list>
+
             </#list>
         </fo:flow>
     </fo:page-sequence>

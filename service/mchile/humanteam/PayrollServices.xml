@@ -495,6 +495,7 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="timePeriodId"/>
             <parameter name="partyIdList"/>
+            <parameter name="copies" default="2" type="Integer"/>
         </in-parameters>
         <out-parameters>
             <parameter name="timePeriodTypeDescription"/>
@@ -502,47 +503,32 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="timePeriodYear"/>
             <parameter name="employeeReceiptList" type="List">
                 <parameter name="employee" type="Map"/>
+                <parameter name="invoice" type="Map"/>
                 <parameter name="employeeRut"/>
                 <parameter name="employerRut"/>
-                <parameter name="ingresosImponibles" type="List"/>
-                <parameter name="ingresosNoImponibles" type="List"/>
+                <parameter name="currencyUomId"/>
+                <parameter name="haberesImponibles" type="List"/>
+                <parameter name="haberesNoImponibles" type="List"/>
                 <parameter name="descuentos" type="List"/>
                 <parameter name="baseSalary" type="BigDecimal"/>
                 <parameter name="daysWorked" type="BigDecimal"/>
                 <parameter name="baseSalaryWorked" type="BigDecimal"/>
+                <parameter name="totalHaberesImponibles" type="BigDecimal"/>
+                <parameter name="totalHaberesNoImponibles" type="BigDecimal"/>
+                <parameter name="totalDescuentos" type="BigDecimal"/>
+                <parameter name="copyList"/>
             </parameter>
-
-            <parameter name="invoice" type="Map"/>
-            <parameter name="currentStatus" type="Map"/>
-            <parameter name="invoiceTotal" type="BigDecimal"/>
-            <parameter name="appliedPaymentsTotal" type="BigDecimal"/>
-            <parameter name="unpaidTotal" type="BigDecimal"/>
-            <parameter name="noAdjustmentTotal" type="BigDecimal"/>
-            <parameter name="adjustmentTotal" type="BigDecimal"/>
-            <parameter name="settlementTerm" type="Map"/>
-            <parameter name="orderIdSet" type="Set"><parameter name="orderId"/></parameter>
-            <parameter name="paymentApplicationList" type="List"><parameter name="paymentApplication" type="Map"/></parameter>
-
-            <parameter name="invoiceItemList" type="List"><parameter name="invoiceItem" type="Map"/></parameter>
-            <parameter name="topItemList" type="List"><parameter name="invoiceItem" type="Map"/></parameter>
-            <parameter name="adjustmentItemList" type="List"><parameter name="invoiceItem" type="Map"/></parameter>
-            <parameter name="itemTypeSummaryMapList" type="List"><parameter name="itemTypeSummary" type="Map"/></parameter>
-            <parameter name="hasProductItems" type="Boolean"/>
-            <parameter name="hasTimeEntryItems" type="Boolean"/>
-
-            <parameter name="fromParty" type="Map"/>
-            <parameter name="fromContactInfo" type="Map"><description>From the mantle.party.ContactServices.get#PartyContactInfo service.</description></parameter>
-            <parameter name="logoImageLocation"/>
-            <parameter name="toParty" type="Map"/>
-            <parameter name="toContactInfo" type="Map"><description>From the mantle.party.ContactServices.get#PartyContactInfo service.</description></parameter>
-            <parameter name="toBillingRep" type="Map"/>
-
-            <parameter name="finalizedStatusHistoryList" type="List"><parameter name="entityAuditLog" type="Map"/></parameter>
-
-            <parameter name="templateLocation"><description>Looked up from ProductStoreSetting and if no setting found for store or
-                no stores are associated with the Invoice then from PartySetting (for fromPartyId).</description></parameter>
         </out-parameters>
         <actions>
+            <set field="currentCopy" from="1"/>
+            <if condition="copies &lt; 1"><return error="true" message="Copies has to be a positive Integer"/></if>
+            <set field="copyList" from="[]"/>
+            <while condition="currentCopy &lt;= copies">
+                <script>
+                    copyList.add(currentCopy)
+                    currentCopy++
+                </script>
+            </while>
             <entity-find-one entity-name="mantle.party.time.TimePeriodAndType" value-field="timePeriod"/>
             <set field="timePeriodMonth" from="ec.l10n.format(timePeriod.fromDate, 'MMMM')"/>
             <set field="timePeriodYear" from="ec.l10n.format(timePeriod.fromDate, 'yyyy')"/>
@@ -553,6 +539,7 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <set field="employeeReceiptList" from="[]"/>
             <iterate list="invoiceList" entry="invoice">
+                <set field="currencyUomId" from="invoice.currencyUomId"/>
                 <entity-find entity-name="mantle.humanres.employment.EmploymentSalary" list="employmentSalaryList">
                     <econdition field-name="partyRelationshipId" from="invoice.partyRelationshipId"/>
                     <econdition field-name="fromDate" operator="less-equals" from="timePeriod.thruDate"/>
@@ -580,7 +567,43 @@ along with this software (see the LICENSE.md file). If not, see
                     <econdition field-name="changeReasonEnumId" operator="in" from="['PltLeave', 'PltIllness']"/>
                 </entity-find>
                 <set field="daysWorked" from="30+(leaveList.diffAmount.sum()?:0)"/>
-                <script>employeeReceiptList.add([employeeRut:employeeRut, employee:employee, employeePartyDetail:employeePartyDetail, employerPartyDetail:employerPartyDetail, employerRut:employerRut, baseSalary:baseSalary, daysWorked:daysWorked, baseSalaryWorked:baseSalaryWorked])</script>
+                <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItems">
+                    <econdition field-name="invoiceId" from="invoice.invoiceId"/>
+                    <order-by field-name="invoiceItemSeqId"/>
+                </entity-find>
+                <set field="haberesImponibles" from="[]"/>
+                <set field="totalHaberesImponibles" from="0" type="BigDecimal"/>
+                <set field="haberesNoImponibles" from="[]"/>
+                <set field="totalHaberesNoImponibles" from="0" type="BigDecimal"/>
+                <set field="descuentos" from="[]"/>
+                <set field="totalDescuentos" from="0" type="BigDecimal"/>
+                <iterate entry="item" list="invoiceItems">
+                    <if condition="item.itemTypeEnumId == 'ItemSalary'"><then>
+                        <set field="existingSalary" from="haberesImponibles.findAll { it.itemTypeEnumId == 'ItemSalary' }[0]"/>
+                        <if condition="existingSalary"><then>
+                            <set field="existingSalary.amount" from="existingSalary.amount + item.amount"/>
+                        </then><else>
+                            <script>haberesImponibles.add(item)</script>
+                        </else></if>
+                        <set field="totalHaberesImponibles" from="totalHaberesImponibles + item.quantity*item.amount"/>
+                    </then><else-if condition="item.itemTypeEnumId in ['ItemAsignacionFamiliar', 'ItemPayrollNourishment', 'ItemPayrollCommuting']">
+                        <script>
+                            haberesNoImponibles.add(item)
+                            totalHaberesNoImponibles += item.quantity*item.amount
+                        </script>
+                    </else-if><else-if condition="item.amount > 0">
+                        <script>
+                            haberesImponibles.add(item)
+                            totalHaberesImponibles += item.quantity*item.amount
+                        </script>
+                    </else-if><else>
+                        <script>
+                            descuentos.add(item)
+                            totalDescuentos += item.quantity*item.amount
+                        </script>
+                    </else></if>
+                </iterate>
+                <script>employeeReceiptList.add([employeeRut:employeeRut, employee:employee, employeePartyDetail:employeePartyDetail, employerPartyDetail:employerPartyDetail, employerRut:employerRut, baseSalary:baseSalary, daysWorked:daysWorked, baseSalaryWorked:baseSalaryWorked, totalHaberesImponibles:totalHaberesImponibles, totalHaberesNoImponibles:totalHaberesNoImponibles, totalDescuentos:totalDescuentos, currencyUomId:currencyUomId, haberesImponibles:haberesImponibles, haberesNoImponibles:haberesNoImponibles, descuentos:descuentos, invoice:invoice, copyList:copyList])</script>
             </iterate>
             <set field="invoiceId" from="invoiceList.first.invoiceId"/>
             <service-call name="mantle.account.InvoiceServices.get#InvoicePrintInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
