@@ -566,7 +566,16 @@ along with this software (see the LICENSE.md file). If not, see
                     <econdition field-name="thruDate" operator="greater-equals" from="timePeriod.fromDate"/>
                     <econdition field-name="changeReasonEnumId" operator="in" from="['PltLeave', 'PltIllness']"/>
                 </entity-find>
-                <set field="daysWorked" from="30+(leaveList.diffAmount.sum()?:0)"/>
+                <set field="daysMissed" from="0" type="BigDecimal"/>
+                <iterate entry="leave" list="leaveList">
+                    <set field="fromDate" from="leave.fromDate.before(timePeriod.fromDate)? timePeriod.fromDate: leave.fromDate"/>
+                    <set field="thruDate" from="leave.thruDate.after(timePeriod.thruDate)? timePeriod.thruDate: leave.thruDate"/>
+                    <set field="diffAmount" from="leave.diffAmount*(thruDate.time-fromDate.time)/(leave.thruDate.time-leave.fromDate.time)"/>
+                    <log message="leave.diffAmount: ${leave.diffAmount}"/>
+                    <log message="diffAmount: ${diffAmount}"/>
+                    <script>daysMissed += diffAmount</script>
+                </iterate>
+                <set field="daysWorked" from="30+daysMissed"/>
                 <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItems">
                     <econdition field-name="invoiceId" from="invoice.invoiceId"/>
                     <order-by field-name="invoiceItemSeqId"/>
@@ -632,11 +641,15 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="totalLeaveDays" from="0" type="BigDecimal"/>
             <set field="totalIllnessDays" from="0" type="BigDecimal"/>
             <iterate list="leaveList" entry="leave">
+                <set field="fromDate" from="leave.fromDate.before(timePeriod.fromDate)? timePeriod.fromDate: leave.fromDate"/>
+                <set field="thruDate" from="leave.thruDate.after(timePeriod.thruDate)? timePeriod.thruDate: leave.thruDate"/>
+                <set field="diffAmount" from="leave.diffAmount*(thruDate.time - fromDate.time)/(leave.thruDate.time - leave.fromDate.time)"/>
+                <log message="diffAmount: ${diffAmount}"/>
                 <if condition="leave.amountUomId != 'TF_day'"><return error="true" message="Leaves currently only support days as UOM"/></if>
                 <if condition="leave.changeReasonEnumId == 'PltLeave'"><then>
-                    <script>totalLeaveDays += leave.diffAmount</script>
+                    <script>totalLeaveDays += diffAmount</script>
                 </then><else-if condition="leave.changeReasonEnumId == 'PltIllness'">
-                    <script>totalIllnessDays += leave.diffAmount</script>
+                    <script>totalIllnessDays += diffAmount</script>
                 </else-if></if>
             </iterate>
             <set field="leaveReduceAmount" from="ec.l10n.roundCurrency(totalLeaveDays/30*taxablePayAmount, currencyUomId)"/>
