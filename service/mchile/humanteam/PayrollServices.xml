@@ -306,7 +306,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="taxRateClp" from="taxRateUtm.getMap()+[payrollAdjustmentId:clpPayrollAdjustmentId, periodMin:periodMin, periodMax:periodMax,
                                                    fromDate:timePeriod.fromDate, thruDate:timePeriod.thruDate, flatAmount:-flatAmount,
                                                    itemTypeEnumId:'ItemTaxClImpuestoSegundaCatClp',
-                                                   payrollPhaseEnumId:'PrphTax', description:'Impuesto de Segunda Categoría, en Pesos']"/>
+                                                   payrollPhaseEnumId:'PrphTax', description:'Impuesto de Segunda Categoría']"/>
                     <service-call name="store#mantle.humanres.employment.PayrollAdjustment" in-map="taxRateClp"/>
                     <service-call name="create#mantle.humanres.employment.PayrollAdjustmentDetail" in-map="taxRateClp"/>
                 </iterate>
@@ -365,7 +365,7 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <set field="affiliationTypeEnumId" value="MchCeaPensionFund"/>
             <set field="employeePartyId" from="employee.partyId"/>
-            <entity-find entity-name="mchile.humanteam.payroll.EmployeeAffiliation" list="emplAffList">
+            <entity-find entity-name="mchile.humanteam.employment.EmployeeAffiliation" list="emplAffList">
                 <econdition field-name="fromDate" operator="less-equals" from="timePeriod.thruDate"/>
                 <econdition field-name="thruDate" operator="greater-equals" from="timePeriod.fromDate" or-null="true"/>
                 <econdition field-name="affiliationTypeEnumId"/>
@@ -438,7 +438,7 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <set field="employeePartyId" from="employment.fromPartyId"/>
             <set field="affiliationTypeEnumId" value="MchCeaHealth"/>
-            <entity-find entity-name="mchile.humanteam.payroll.EmployeeAffiliation" list="emplAffList">
+            <entity-find entity-name="mchile.humanteam.employment.EmployeeAffiliation" list="emplAffList">
                 <econdition field-name="fromDate" operator="less-equals" from="timePeriod.thruDate"/>
                 <econdition field-name="thruDate" operator="greater-equals" from="timePeriod.fromDate" or-null="true"/>
                 <econdition field-name="affiliationTypeEnumId"/>
@@ -489,6 +489,184 @@ along with this software (see the LICENSE.md file). If not, see
                 </else></if>
             </else></if>
         </actions>
+    </service>
+
+    <service verb="get" noun="EmployeeReceiptDisplayInfo">
+        <in-parameters>
+            <parameter name="timePeriodId"/>
+            <parameter name="partyIdList"/>
+            <parameter name="copies" default="2" type="Integer"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="timePeriodTypeDescription"/>
+            <parameter name="timePeriodMonth"/>
+            <parameter name="timePeriodYear"/>
+            <parameter name="employeeReceiptList" type="List">
+                <parameter name="employee" type="Map"/>
+                <parameter name="invoice" type="Map"/>
+                <parameter name="employeeRut"/>
+                <parameter name="employerRut"/>
+                <parameter name="currencyUomId"/>
+                <parameter name="haberesImponibles" type="List"/>
+                <parameter name="haberesNoImponibles" type="List"/>
+                <parameter name="descuentos" type="List"/>
+                <parameter name="baseSalary" type="BigDecimal"/>
+                <parameter name="daysWorked" type="BigDecimal"/>
+                <parameter name="baseSalaryWorked" type="BigDecimal"/>
+                <parameter name="totalHaberesImponibles" type="BigDecimal"/>
+                <parameter name="totalHaberesNoImponibles" type="BigDecimal"/>
+                <parameter name="totalDescuentos" type="BigDecimal"/>
+                <parameter name="copyList"/>
+            </parameter>
+        </out-parameters>
+        <actions>
+            <set field="currentCopy" from="1"/>
+            <if condition="copies &lt; 1"><return error="true" message="Copies has to be a positive Integer"/></if>
+            <set field="copyList" from="[]"/>
+            <while condition="currentCopy &lt;= copies">
+                <script>
+                    copyList.add(currentCopy)
+                    currentCopy++
+                </script>
+            </while>
+            <entity-find-one entity-name="mantle.party.time.TimePeriodAndType" value-field="timePeriod"/>
+            <set field="timePeriodMonth" from="ec.l10n.format(timePeriod.fromDate, 'MMMM')"/>
+            <set field="timePeriodYear" from="ec.l10n.format(timePeriod.fromDate, 'yyyy')"/>
+            <entity-find entity-name="mantle.account.invoice.Invoice" list="invoiceList">
+                <econdition field-name="timePeriodId"/>
+                <econdition field-name="invoiceTypeEnumId" value="InvoicePayroll"/>
+                <econdition field-name="fromPartyId" operator="in" ignore-if-empty="true" from="partyIdList"/>
+            </entity-find>
+            <set field="employeeReceiptList" from="[]"/>
+            <iterate list="invoiceList" entry="invoice">
+                <set field="currencyUomId" from="invoice.currencyUomId"/>
+                <entity-find entity-name="mantle.humanres.employment.EmploymentSalary" list="employmentSalaryList">
+                    <econdition field-name="partyRelationshipId" from="invoice.partyRelationshipId"/>
+                    <econdition field-name="fromDate" operator="less-equals" from="timePeriod.thruDate"/>
+                    <econdition field-name="thruDate" operator="greater-equals" from="timePeriod.fromDate" or-null="true"/>
+                </entity-find>
+                <if condition="employmentSalaryList.size() > 1"><return error="true" message="Unsupported salary change mid-period"/></if>
+                <set field="baseSalary" from="employmentSalaryList.first.amount"/>
+                <set field="employee" from="invoice.fromParty"/>
+                <set field="employeeRutRaw" from="employee.identifications.findAll { it.partyIdTypeEnumId == 'PtidNationalTaxId' }.first.idValue"/>
+                <service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:employeeRutRaw]" out-map="formattedRut"/>
+                <set field="employeeRut" from="formattedRut.rut"/>
+                <set field="employerRutRaw" from="invoice.toParty.identifications.findAll { it.partyIdTypeEnumId == 'PtidNationalTaxId' }.first.idValue"/>
+                <service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:employerRutRaw]" out-map="formattedRut"/>
+                <set field="employerRut" from="formattedRut.rut"/>
+                <entity-find-one entity-name="mantle.party.PartyDetail" value-field="employeePartyDetail" auto-field-map="[partyId:employee.partyId]"/>
+                <if condition="!employeeRut"><return error="true" message="No RUT for ${ec.resource.expand('PartyNameTemplate', null, employeePartyDetail)}"/></if>
+                <entity-find-one entity-name="mantle.party.PartyDetail" value-field="employerPartyDetail" auto-field-map="[partyId:invoice.toPartyId]"/>
+                <!-- Calculate base salary to be paid according to days worked -->
+                <set field="baseSalaryWorked" from="invoice.items.findAll { it.itemTypeEnumId == 'ItemSalary'}.amount.sum()"/>
+                <!-- Find days worked -->
+                <entity-find entity-name="mchile.humanteam.employment.LeaveDetail" list="leaveList">
+                    <econdition field-name="partyRelationshipId" from="invoice.partyRelationshipId"/>
+                    <econdition field-name="fromDate" operator="less-equals" from="timePeriod.thruDate"/>
+                    <econdition field-name="thruDate" operator="greater-equals" from="timePeriod.fromDate"/>
+                    <econdition field-name="changeReasonEnumId" operator="in" from="['PltLeave', 'PltIllness']"/>
+                </entity-find>
+                <set field="daysMissed" from="0" type="BigDecimal"/>
+                <iterate entry="leave" list="leaveList">
+                    <set field="fromDate" from="leave.fromDate.before(timePeriod.fromDate)? timePeriod.fromDate: leave.fromDate"/>
+                    <set field="thruDate" from="leave.thruDate.after(timePeriod.thruDate)? timePeriod.thruDate: leave.thruDate"/>
+                    <set field="diffAmount" from="leave.diffAmount*(thruDate.time-fromDate.time)/(leave.thruDate.time-leave.fromDate.time)"/>
+                    <script>daysMissed += diffAmount</script>
+                </iterate>
+                <set field="daysWorked" from="30+daysMissed"/>
+                <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItems">
+                    <econdition field-name="invoiceId" from="invoice.invoiceId"/>
+                    <order-by field-name="invoiceItemSeqId"/>
+                </entity-find>
+                <set field="haberesImponibles" from="[]"/>
+                <set field="totalHaberesImponibles" from="0" type="BigDecimal"/>
+                <set field="haberesNoImponibles" from="[]"/>
+                <set field="totalHaberesNoImponibles" from="0" type="BigDecimal"/>
+                <set field="descuentos" from="[]"/>
+                <set field="totalDescuentos" from="0" type="BigDecimal"/>
+                <iterate entry="item" list="invoiceItems">
+                    <if condition="item.itemTypeEnumId == 'ItemSalary'"><then>
+                        <set field="existingSalary" from="haberesImponibles.findAll { it.itemTypeEnumId == 'ItemSalary' }[0]"/>
+                        <if condition="existingSalary"><then>
+                            <set field="existingSalary.amount" from="existingSalary.amount + item.amount"/>
+                        </then><else>
+                            <script>haberesImponibles.add(item)</script>
+                        </else></if>
+                        <set field="totalHaberesImponibles" from="totalHaberesImponibles + item.quantity*item.amount"/>
+                    </then><else-if condition="item.itemTypeEnumId in ['ItemAsignacionFamiliar', 'ItemPayrollNourishment', 'ItemPayrollCommuting']">
+                        <script>
+                            haberesNoImponibles.add(item)
+                            totalHaberesNoImponibles += item.quantity*item.amount
+                        </script>
+                    </else-if><else-if condition="item.amount > 0">
+                        <script>
+                            haberesImponibles.add(item)
+                            totalHaberesImponibles += item.quantity*item.amount
+                        </script>
+                    </else-if><else>
+                        <script>
+                            descuentos.add(item)
+                            totalDescuentos += item.quantity*item.amount
+                        </script>
+                    </else></if>
+                </iterate>
+                <script>employeeReceiptList.add([employeeRut:employeeRut, employee:employee, employeePartyDetail:employeePartyDetail, employerPartyDetail:employerPartyDetail, employerRut:employerRut, baseSalary:baseSalary, daysWorked:daysWorked, baseSalaryWorked:baseSalaryWorked, totalHaberesImponibles:totalHaberesImponibles, totalHaberesNoImponibles:totalHaberesNoImponibles, totalDescuentos:totalDescuentos, currencyUomId:currencyUomId, haberesImponibles:haberesImponibles, haberesNoImponibles:haberesNoImponibles, descuentos:descuentos, invoice:invoice, copyList:copyList])</script>
+            </iterate>
+            <set field="invoiceId" from="invoiceList.first.invoiceId"/>
+            <service-call name="mantle.account.InvoiceServices.get#InvoicePrintInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
+
+            <set field="timePeriodTypeDescriptionMap" from="[PayrollMonth:'Mensual', PayrollBiWeek:'Quincenal', PayrollDay:'Diaria', PayrollWeek:'Semanal']"/>
+            <set field="timePeriodTypeDescription" from="timePeriodTypeDescriptionMap[timePeriod.timePeriodTypeId]"/>
+        </actions>
+    </service>
+
+    <service verb="calculate" noun="DaysWorkedAdjustment">
+        <implements service="mantle.humanres.PayrollServices.calculate#Adjustment"/>
+        <out-parameters>
+            <parameter name="adjustmentList" type="List"/>
+            <parameter name="taxablePayAmount" type="BigDecimal"/>
+            <parameter name="medicalTaxablePayAmount" type="BigDecimal"/>
+            <parameter name="socialTaxablePayAmount" type="BigDecimal"/>
+        </out-parameters>
+        <actions>
+            <set field="employeePartyId" from="employee.partyId"/>
+            <entity-find entity-name="mchile.humanteam.employment.LeaveDetail" list="leaveList">
+                <econdition field-name="partyRelationshipId"/>
+                <econdition field-name="fromDate" operator="less-equals" from="timePeriod.thruDate"/>
+                <econdition field-name="thruDate" operator="greater-equals" from="timePeriod.fromDate"/>
+                <econdition field-name="changeReasonEnumId" operator="in" from="['PltLeave', 'PltIllness']"/>
+            </entity-find>
+            <set field="totalLeaveDays" from="0" type="BigDecimal"/>
+            <set field="totalIllnessDays" from="0" type="BigDecimal"/>
+            <iterate list="leaveList" entry="leave">
+                <set field="fromDate" from="leave.fromDate.before(timePeriod.fromDate)? timePeriod.fromDate: leave.fromDate"/>
+                <set field="thruDate" from="leave.thruDate.after(timePeriod.thruDate)? timePeriod.thruDate: leave.thruDate"/>
+                <set field="diffAmount" from="leave.diffAmount*(thruDate.time - fromDate.time)/(leave.thruDate.time - leave.fromDate.time)"/>
+                <if condition="leave.amountUomId != 'TF_day'"><return error="true" message="Leaves currently only support days as UOM"/></if>
+                <if condition="leave.changeReasonEnumId == 'PltLeave'"><then>
+                    <script>totalLeaveDays += diffAmount</script>
+                </then><else-if condition="leave.changeReasonEnumId == 'PltIllness'">
+                    <script>totalIllnessDays += diffAmount</script>
+                </else-if></if>
+            </iterate>
+            <set field="leaveReduceAmount" from="ec.l10n.roundCurrency(totalLeaveDays/30*taxablePayAmount, currencyUomId)"/>
+            <set field="illnessReduceAmount" from="ec.l10n.roundCurrency(totalIllnessDays/30*taxablePayAmount, currencyUomId)"/>
+            <script>
+                adjustmentList = priorAdjustmentList
+                if (leaveReduceAmount != 0) {
+                    adjustmentList.add([isEmployerPaid: 'N', quantity: 1, isTax: 'N', isTaxable: 'Y', isSocialTax: 'N', isSocialTaxable: 'Y', isMedicalTax: 'N', isMedicalTaxable: 'N', rateBasisEnumId: 'PrbsIncome', adjustmentApplies: true, itemTypeEnumId: 'ItemSalary', amount: leaveReduceAmount, description: description])
+                    taxablePayAmount = taxablePayAmount + leaveReduceAmount
+                    socialTaxablePayAmount = socialTaxablePayAmount + leaveReduceAmount
+                    medicalTaxablePayAmount = medicalTaxablePayAmount + leaveReduceAmount
+                }
+                if (illnessReduceAmount != 0) {
+                    adjustmentList.add([isEmployerPaid: 'N', quantity: 1, isTax: 'N', isTaxable: 'Y', isSocialTax: 'N', isSocialTaxable: 'N', isMedicalTax: 'N', isMedicalTaxable: 'N', rateBasisEnumId: 'PrbsIncome', adjustmentApplies: true, itemTypeEnumId: 'ItemSalary', amount: illnessReduceAmount, description: description])
+                    taxablePayAmount = taxablePayAmount + illnessReduceAmount
+                    medicalTaxablePayAmount = medicalTaxablePayAmount + leaveReduceAmount
+                }
+            </script>
+        </actions>
+
     </service>
 
 </services>
