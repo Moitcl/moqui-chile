@@ -523,7 +523,7 @@ along with this software (see the LICENSE.md file). If not, see
             <iterate list="transactionList" entry="transactionField">
                 <log message="Recorriendo: $transactionField" level="warn"/>
                 <set field="createMap" from="[bankTransactionId:bankTransactionId, movementDate:transactionField.movementDate, amount:transactionField.amount,
-                            description:transactionField.description, transactionType:transactionField.transactionType]"/>
+                            description:transactionField.description, transactionType:transactionField.transactionType, ownerPartyId:activeOrgId]"/>
                 <service-call name="create#mchile.financial.BankTransactionDetail" out-map="context" in-map="createMap"/>
             </iterate>
         </actions>
@@ -537,15 +537,92 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find entity-name="mchile.financial.BankTransactionDetail" list="btdList" for-update="true">
                 <econdition field-name="bankTransactionId" from="bankTransactionId"/>
             </entity-find>
-            
+
             <iterate list="btdList" entry="btdField">
                 <entity-delete value-field="btdField"/>
             </iterate>
-            
+
             <entity-find-one entity-name="mchile.financial.BankTransaction" value-field="btField">
                 <field-map field-name="bankTransactionId" from="bankTransactionId"/>
             </entity-find-one>
             <entity-delete value-field="btField"/>
+        </actions>
+    </service>
+
+    <service verb="delete" noun="BankTransactionDetail">
+        <in-parameters>
+            <parameter name="bankTransactionDetailId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.financial.BankTransactionDetail" list="btdList" for-update="true">
+                <econdition field-name="bankTransactionDetailId" from="bankTransactionDetailId"/>
+            </entity-find>
+            <iterate list="btdList" entry="btdField">
+                <entity-delete value-field="btdField"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="get" noun="PaymentsToReconciliate">
+        <in-parameters>
+            <parameter name="activeOrgId" required="true"/>
+            <parameter name="transactionType" required="true"/>
+            <parameter name="amount" required="true" type="BigDecimal"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="paymentList" type="List"/>
+        </out-parameters>
+        <actions>
+            <!-- TODO: Si monto es negativo, pasarlo a positivo -->
+            <if condition="transactionType == 'C'"><then>
+                <script>
+                    amount = amount * -1;
+                </script>
+                <entity-find entity-name="mchile.financial.ReconciliatedPayments" list="paymentList">
+                    <econdition field-name="fromPartyId" from="activeOrgId"/>
+                    <econdition field-name="amount" from="amount"/>
+                </entity-find>
+            </then><else>
+                <entity-find entity-name="mchile.financial.ReconciliatedPayments" list="paymentList">
+                    <econdition field-name="toPartyId" from="activeOrgId"/>
+                    <econdition field-name="amount" from="amount"/>
+                </entity-find>
+            </else></if>
+        </actions>
+    </service>
+
+    <service verb="preReconciliate" noun="Payment">
+        <in-parameters>
+            <parameter name="bankTransactionDetailId" required="true"/>
+            <parameter name="paymentId" required="true"/>
+        </in-parameters>
+        <actions>
+            <log level="warn" message="$bankTransactionDetailId - $paymentId"/>
+            <entity-find entity-name="mchile.financial.BankTransactionDetail" list="btdList" for-update="true">
+                <econdition field-name="bankTransactionDetailId" from="bankTransactionDetailId"/>
+            </entity-find>
+            <iterate list="btdList" entry="btdField">
+                <set field="btdField.paymentId" from="paymentId"/>
+                <entity-update value-field="btdField"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="get" noun="TotalBankReconciliate">
+        <description>
+            Servicio que devuelve el monto total de pagos sin conciliar
+        </description>
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.financial.ReconciliatedPayments" list="paymentList">
+                <econdition field-name="bankTransactionDetailId" from="bankTransactionDetailId"/>
+            </entity-find>
+            <iterate list="btdList" entry="btdField">
+                <set field="btdField.paymentId" from="paymentId"/>
+                <entity-update value-field="btdField"/>
+            </iterate>
         </actions>
     </service>
 
