@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd"
+        default-menu-title="Reconciliate"
+        default-menu-index="20">
+
+
+    <parameter name="bankTransactionDetailId" required="true"/>
+    <parameter name="bankTransactionId"/>
+    <parameter name="transactionDescription"/>
+    <parameter name="transactionType"/>
+    <parameter name="transactionAmount"/>
+
+    <transition name="prereconciliate">
+        <parameter name="activeOrgId"/>
+        <actions>
+            <service-call name="mchile.FinancialTasksServices.preReconciliate#Payment" in-map="[bankTransactionDetailId:bankTransactionDetailId, paymentId:paymentId]" out-map="outMap"/>
+        </actions>
+        <default-response url="../Transactions" parameter-map="[bankTransactionId:bankTransactionId]"/>
+    </transition>
+
+
+    <actions>
+        <!-- TODO; Servicio que devuelve paymentList -->
+        <set field="noPayments"/>
+        <service-call name="mchile.FinancialTasksServices.get#PaymentsToReconciliate" in-map="[bankTransactionDetailId:bankTransactionDetailId, transactionType:transactionType, activeOrgId:activeOrgId, amount:transactionAmount]" out-map="context"/>
+        <log level="warn" message="Lista: $paymentList"/>
+        <if condition="!paymentList">
+            <set field="noPayments" value="'Not payments available to reconciliate'"/>
+        </if>
+    </actions>
+    <widgets>
+
+        <label text="Payments not yet reconciliated and candidates for transaction ${bankTransactionDetailId} - $transactionDescription" type="h3"/>
+        <label text="${noPayments}"/>
+
+        <form-list name="PaymentForm" list="paymentList" skip-form="true" header-dialog="true" select-columns="true"
+                   saved-finds="true" show-csv-button="true">
+            <row-actions>
+                <!-- Nombre de toPartyId -->
+                <entity-find-one entity-name="mantle.party.Party" value-field="partyField">
+                    <field-map field-name="partyId" from="toPartyId"/>
+                </entity-find-one>
+                <set field="toOrgName" value="'N/A'"/>
+                <set field="partyTypeEnumId" from="partyField.partyTypeEnumId"/>
+                <if condition="partyTypeEnumId == 'PtyOrganization'">
+                    <then>
+                        <entity-find-one entity-name="mantle.party.Organization" value-field="orgField">
+                            <field-map field-name="partyId" from="toPartyId"/>
+                        </entity-find-one>
+                        <set field="toOrgName" from="orgField.organizationName"/>
+                    </then>
+                    <else>
+                        <entity-find-one entity-name="mantle.party.Person" value-field="personField">
+                            <field-map field-name="partyId" from="toPartyId"/>
+                        </entity-find-one>
+                        <set field="toOrgName" from="personField.firstName + ' ' + personField.lastName"/>
+                    </else>
+                </if>
+                <!-- Nombre de fromPartyId -->
+                <entity-find-one entity-name="mantle.party.Party" value-field="partyField">
+                    <field-map field-name="partyId" from="fromPartyId"/>
+                </entity-find-one>
+                <set field="fromOrgName" value="'N/A'"/>
+                <set field="partyTypeEnumId" from="partyField.partyTypeEnumId"/>
+                <if condition="partyTypeEnumId == 'PtyOrganization'">
+                    <then>
+                        <entity-find-one entity-name="mantle.party.Organization" value-field="orgField">
+                            <field-map field-name="partyId" from="fromPartyId"/>
+                        </entity-find-one>
+                        <set field="fromOrgName" from="orgField.organizationName"/>
+                    </then>
+                    <else>
+                        <entity-find-one entity-name="mantle.party.Person" value-field="personField">
+                            <field-map field-name="partyId" from="fromPartyId"/>
+                        </entity-find-one>
+                        <if condition="personField">
+                            <set field="fromOrgName" from="personField.firstName + ' ' + personField.lastName"/>
+                        </if>
+                    </else>
+                </if>
+            </row-actions>
+            <!--field name="bankTransactionDetailId">
+                <header-field title="ID" show-order-by="case-insensitive"><text-find size="10" hide-options="true"/></header-field>
+                <default-field><display/></default-field>
+            </field-->
+            <field name="effectiveDate">
+                <header-field show-order-by="case-insensitive"><text-find size="25" hide-options="true"/></header-field>
+                <default-field><display/></default-field>
+            </field>
+            <field name="fromOrgName">
+                <header-field show-order-by="case-insensitive"><text-find size="25" hide-options="true"/></header-field>
+                <default-field><display/></default-field>
+            </field>
+            <field name="toOrgName">
+                <header-field show-order-by="case-insensitive"><text-find size="25" hide-options="true"/></header-field>
+                <default-field><display/></default-field>
+            </field>
+            <field name="amount">
+                <header-field show-order-by="case-insensitive"><text-find size="25" hide-options="true"/></header-field>
+                <default-field><display/></default-field>
+            </field>
+            <field name="paymentTypeEnumId">
+                <header-field show-order-by="case-insensitive"><text-find size="25" hide-options="true"/></header-field>
+                <default-field><display-entity entity-name="moqui.basic.Enumeration"/></default-field>
+            </field>
+            <field name="statusId">
+                <header-field show-order-by="case-insensitive"><text-find size="25" hide-options="true"/></header-field>
+                <default-field><display-entity entity-name="moqui.basic.StatusItem"/></default-field>
+            </field>
+            <field name="transactions">
+                <default-field title=" ">
+                    <link url="prereconciliate" tooltip="Pre Reconciliate"  parameter-map="[bankTransactionId:bankTransactionId, ownerPartyId:ownerPartyId, paymentId:paymentId]" text="Pre-Reconciliate" url-type="transition"/>
+                </default-field>
+            </field>
+        </form-list>
+    </widgets>
+</screen>
