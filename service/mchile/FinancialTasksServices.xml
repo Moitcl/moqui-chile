@@ -455,5 +455,220 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="import" noun="BankAccountStatement">
+        <description>
+            Carga de cartola en sistema para conciliación bancaria
+        </description>
+        <in-parameters>
+            <parameter name="filename" type="org.apache.commons.fileupload.FileItem" required="true"/>
+            <parameter name="activeOrgId" required="true"/>
+            <parameter name="uomId" required="true"/>
+            <parameter name="uploadDate" type="Timestamp" default="ec.user.nowTimestamp"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="transactionList" type="List"><parameter name="transMap" type="Map"/>
+            </parameter>
+        </out-parameters>
+        <actions>
+            <set field="transactionList" from="[]"/>
+            <script>
+                import org.apache.commons.io.FileUtils;
+                import java.io.*;
+                import java.text.SimpleDateFormat;
+                import java.util.Date;
+                import java.text.DateFormat;
+
+                fileStream = filename.getInputStream()
+                DataInputStream din = new DataInputStream(fileStream);
+                BufferedReader br = new BufferedReader(new InputStreamReader(din));
+
+                while((line = br.readLine()) != null) {
+                    logger.warn("*******************************");
+                    logger.warn("Cuenta corriente: " + line.substring(0,11));
+                    logger.warn("Fecha del movimiento: " + line.substring(11,19));
+                    logger.warn("Código de Transacción: " + line.substring(19,28));
+                    logger.warn("Serial: " + line.substring(28,36));
+                    logger.warn("Monto del movimiento: " + line.substring(36,47));
+                    logger.warn("Signo: " + line.substring(47,48));
+                    logger.warn("Código sucursal: " + line.substring(48,51));
+                    logger.warn("Descripción movimiento: " + line.substring(51,96));
+                    logger.warn("Tipo de transacción: " + line.substring(96,97));
+                    logger.warn("Fecha de emisión: " + line.substring(97,105));
+                    logger.warn("Nro. de folio: " + line.substring(105,110));
+                    long amount = Long.parseLong(line.substring(36,47));
+                    if(line.substring(96,97).equals("C")) {
+                        amount = -amount;
+                    }
+                    // Corrección de fecha
+                    final String OLD_FORMAT = "yyyyMMdd";
+                    final String NEW_FORMAT = "yyyy-MM-dd HH:mm:ss.SSS";
+                    String oldDateString = line.substring(11,19);
+                    String newDateString;
+
+                    DateFormat formatter = new SimpleDateFormat(OLD_FORMAT);
+                    Date d = formatter.parse(oldDateString);
+                    ((SimpleDateFormat) formatter).applyPattern(NEW_FORMAT);
+                    newDateString = formatter.format(d);
+                    System.out.println(newDateString);
+
+                    Timestamp ts = Timestamp.valueOf(newDateString);
+
+
+                    transMap = [:]
+                    transMap = [movementDate:ts, amount:amount, description:line.substring(51,96), transactionType:line.substring(96,97)];
+                    transactionList.add(transMap);
+                }
+            </script>
+            <service-call name="create#mchile.financial.BankTransaction" in-map="[uploadDate:uploadDate, ownerPartyId:activeOrgId]" out-map="context"/>
+            <iterate list="transactionList" entry="transactionField">
+                <set field="createMap" from="[bankTransactionId:bankTransactionId, movementDate:transactionField.movementDate, amount:transactionField.amount,
+                            description:transactionField.description, transactionType:transactionField.transactionType, ownerPartyId:activeOrgId]"/>
+                <service-call name="create#mchile.financial.BankTransactionDetail" out-map="context" in-map="createMap"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="delete" noun="BankTransaction">
+        <in-parameters>
+            <parameter name="bankTransactionId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.financial.BankTransactionDetail" list="btdList" for-update="true">
+                <econdition field-name="bankTransactionId" from="bankTransactionId"/>
+            </entity-find>
+
+            <iterate list="btdList" entry="btdField">
+                <entity-delete value-field="btdField"/>
+            </iterate>
+
+            <entity-find-one entity-name="mchile.financial.BankTransaction" value-field="btField">
+                <field-map field-name="bankTransactionId" from="bankTransactionId"/>
+            </entity-find-one>
+            <entity-delete value-field="btField"/>
+        </actions>
+    </service>
+
+    <service verb="delete" noun="BankTransactionDetail">
+        <in-parameters>
+            <parameter name="bankTransactionDetailId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.financial.BankTransactionDetail" list="btdList" for-update="true">
+                <econdition field-name="bankTransactionDetailId" from="bankTransactionDetailId"/>
+            </entity-find>
+            <iterate list="btdList" entry="btdField">
+                <entity-delete value-field="btdField"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="get" noun="PaymentsToReconciliate">
+        <in-parameters>
+            <parameter name="activeOrgId" required="true"/>
+            <parameter name="transactionType" required="true"/>
+            <parameter name="amount" required="true" type="BigDecimal"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="paymentList" type="List"/>
+        </out-parameters>
+        <actions>
+            <!-- TODO: Si monto es negativo, pasarlo a positivo -->
+            <if condition="transactionType == 'C'"><then>
+                <script>
+                    amount = amount * -1;
+                </script>
+                <entity-find entity-name="mchile.financial.ReconciliatedPayments" list="paymentList">
+                    <econdition field-name="fromPartyId" from="activeOrgId"/>
+                    <econdition field-name="amount" from="amount"/>
+                </entity-find>
+            </then><else>
+                <entity-find entity-name="mchile.financial.ReconciliatedPayments" list="paymentList">
+                    <econdition field-name="toPartyId" from="activeOrgId"/>
+                    <econdition field-name="amount" from="amount"/>
+                </entity-find>
+            </else></if>
+        </actions>
+    </service>
+
+    <service verb="preReconciliate" noun="Payment">
+        <in-parameters>
+            <parameter name="bankTransactionDetailId" required="true"/>
+            <parameter name="paymentId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.financial.BankTransactionDetail" list="btdList" for-update="true">
+                <econdition field-name="bankTransactionDetailId" from="bankTransactionDetailId"/>
+            </entity-find>
+            <iterate list="btdList" entry="btdField">
+                <set field="btdField.paymentId" from="paymentId"/>
+                <entity-update value-field="btdField"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="get" noun="TotalOutgoingPaymentsToReconciliate">
+        <description>
+            Servicio que devuelve el monto total de pagos a terceros sin conciliar
+        </description>
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="totalToReconciliate" type="BigDecimal"/>
+        </out-parameters>
+        <actions>
+            <set field="totalToReconciliate" value="0" type="BigDecimal"/>
+            <entity-find entity-name="mchile.financial.ReconciliatedPayments" list="paymentList">
+                <econdition field-name="fromPartyId" from="partyId"/>
+                <econdition field-name="transactionBankTransactionDetailId" operator="is-null"/>
+            </entity-find>
+            <iterate list="paymentList" entry="paymentField">
+                <script>
+                    totalToReconciliate = totalToReconciliate + paymentField.amount;
+                </script>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="get" noun="TotalIncomingPaymentsToReconciliate">
+        <description>
+            Servicio que devuelve el monto total de pagos a terceros sin conciliar
+        </description>
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="totalToReconciliate" type="BigDecimal"/>
+        </out-parameters>
+        <actions>
+            <set field="totalToReconciliate" value="0" type="BigDecimal"/>
+            <entity-find entity-name="mchile.financial.ReconciliatedPayments" list="paymentList">
+                <econdition field-name="toPartyId" from="partyId"/>
+                <econdition field-name="transactionBankTransactionDetailId" operator="is-null"/>
+            </entity-find>
+            <iterate list="paymentList" entry="paymentField">
+                <script>
+                    totalToReconciliate = totalToReconciliate + paymentField.amount;
+                </script>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="accept" noun="Reconciliation">
+        <in-parameters>
+            <parameter name="bankTransactionDetailId" required="true"/>
+            <parameter name="reconciliatedDate" type="Timestamp" default="ec.user.nowTimestamp"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.financial.BankTransactionDetail" list="btdList" for-update="true">
+                <econdition field-name="bankTransactionDetailId" from="bankTransactionDetailId"/>
+            </entity-find>
+            <iterate list="btdList" entry="btdField">
+                <set field="btdField.reconciliatedDate" from="reconciliatedDate"/>
+                <entity-update value-field="btdField"/>
+            </iterate>
+        </actions>
+    </service>
+
 
 </services>

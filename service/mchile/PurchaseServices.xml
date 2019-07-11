@@ -152,11 +152,18 @@ along with this software (see the LICENSE.md file). If not, see
                                      order-by-list="['orderItemSeqId']"/>
                 <if condition="orderItemList.find({ it.product?.productTypeEnumId in ['PtAsset', 'PtDigitalAsset', 'PtAssetUse'] })">
                     <then>
+                        <set field="destinationFacilityId" value="NODO_WH"/>
                         <service-call name="mantle.shipment.ShipmentServices.create#OrderPartShipment"
                                       in-map="[orderId:orderId, orderPartSeqId:orderPart.orderPartSeqId, destinationFacilityId:destinationFacilityId]"
                                       out-map="context"/>
+                        <log level="warn" message="shipment: $shipmentId, $destinationFacilityId"/>
+                        <entity-find entity-name="mantle.shipment.ShipmentRouteSegment" list="routeSegList">
+                            <econdition field-name="shipmentId"/><select-field field-name="shipmentRouteSegmentSeqId"/></entity-find>
+
+                        <log level="warn" message="route: $routeSegList"/>
                     </then>
                     <else>
+                        <log level="warn" message="Entrado a no crear orderpart"/>
                         <service-call name="mantle.order.OrderServices.update#OrderStatus" in-map="[orderId:orderId, statusId:'OrderCompleted']"/>
                     </else>
                 </if>
@@ -166,12 +173,39 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="receive" noun="Order">
         <in-parameters>
-            <parameter name="orderId"/>
-            <parameter name="orderPartSeqId"/>
-            <!-- TODO: Usar facilityId -->
+            <parameter name="orderId" required="true"/>
+            <parameter name="orderPartSeqId" required="true"/>
             <parameter name="facilityId"/>
+            <parameter name="activeOrgId"/>
         </in-parameters>
         <actions>
+            <if condition="!facilityId &amp;&amp; activeOrgId">
+                <service-call name="mantle.facility.FacilityServices.get#FacilitiesByOwner" in-map="[ownerPartyId:activeOrgId, facilityTypeEnumId:'FcTpWarehouse']" out-map="facilityMap"/>
+                <log level="warn" message="Bodega encontrada para $activeOrgId - $facilityMap.resultList.facilityId"/>
+                <set field="facilityId" from="facilityMap.resultList.facilityId.first()"/>
+            </if>
+
+            <!-- Recuperación de vendorParty -->
+            <entity-find-one entity-name="mantle.order.OrderPart" value-field="orderPartField">
+                <field-map field-name="orderId" from="orderId"/>
+                <field-map field-name="orderPartSeqId" from="orderPartSeqId"/>
+            </entity-find-one>
+
+            <set field="fromPartyId" from="orderPartField.vendorPartyId"/>
+
+            <if condition="isIncoming &amp;&amp; fromPartyId">
+                <service-call name="mantle.party.ContactServices.get#PartyContactInfoList" out-map="fromPartyShippingInfo"
+                              in-map="[partyId:fromPartyId, postalContactMechPurposeId:'PostalShippingDest']"/>
+                <set field="shippingPostalAddressList" from="fromPartyShippingInfo.postalAddressList ?: []"/>
+
+                <if condition="firstRouteSegment.originPostalContactMechId">
+                    <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="curOriginPaInfo"
+                                  in-map="[partyId:fromPartyId, postalContactMechId:firstRouteSegment.originPostalContactMechId]"/>
+                    <if condition="!(firstRouteSegment.originPostalContactMechId in shippingPostalAddressList*.postalContactMechId)">
+                        <script>shippingPostalAddressList.add(0, curOriginPaInfo)</script></if>
+                </if>
+            </if>
+
             <entity-find entity-name="mantle.shipment.ShipmentItemSource" list="shipmentItemSourceList">
                 <econdition field-name="orderId"/></entity-find>
             <set field="shipmentIdSet" from="new TreeSet()"/>
@@ -179,15 +213,18 @@ along with this software (see the LICENSE.md file). If not, see
                 <script>shipmentIdSet.add(shipmentItemSource.shipmentId)</script>
             </iterate>
             <iterate list="shipmentIdSet" entry="shipmentId">
-                <service-call name="mantle.shipment.ShipmentServices.ship#Shipment"
-                              in-map="[shipmentId:shipmentId]"/>
-                <if condition="facilityId"><then>
+                <log level="warn" message="Shipping: $shipmentId"/>
+                <!--service-call name="update#mantle.shipment.Shipment" in-map="[shipmentId:shipmentId, statusId:'ShipShipped']" out-map="context"/-->
+                <set field="shipmentId" value="100822"/>
+                <!--service-call name="mantle.shipment.ShipmentServices.ship#Shipment" in-map="[shipmentId:shipmentId]"/-->
+
+                <!--if condition="facilityId"><then>
                     <service-call name="mantle.shipment.ShipmentServices.receive#EntireShipment"
-                              in-map="[shipmentId:shipmentId, statusId:'AstAvailable', facilityId:facilityId]"/>
+                                  in-map="[shipmentId:shipmentId, statusId:'AstAvailable', facilityId:facilityId]"/>
                 </then><else>
                     <service-call name="mantle.shipment.ShipmentServices.receive#EntireShipment"
                                   in-map="[shipmentId:shipmentId, statusId:'AstAvailable']"/>
-                </else></if>
+                </else></if-->
             </iterate>
         </actions>
     </service>
