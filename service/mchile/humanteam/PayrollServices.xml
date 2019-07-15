@@ -454,7 +454,7 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <service-call name="mchile.humanteam.PayrollServices.get#PeriodParameters" in-map="[timePeriodId:timePeriodId]" out-map="pp"/>
 
-            <set field="adjustmentBasisAmount" from="medicalTaxablePayAmount &lt;= pp.topeImponibleAfp ? medicalTaxablePayAmount : pp.topeImponibleAfp" type="BigDecimal"/>
+            <set field="adjustmentBasisAmount" from="taxablePayAmount &lt;= pp.topeImponibleAfp ? taxablePayAmount : pp.topeImponibleAfp" type="BigDecimal"/>
             <set field="legalAmount" from="(adjustmentBasisAmount * 7 / 100).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
             <set field="baseMap" from="[isEmployerPaid:'N', quantity:1, isTax:'N', isTaxable:'Y', isSocialTax:'N', isSocialTaxable:'N', isMedicalTax:'N', isMedicalTaxable:'N',
                                             rateBasisEnumId:'PrbsIncome', adjustmentApplies:true, payeeDueDays:13, itemTypeEnumId:'ItemClIsapre']"/>
@@ -502,21 +502,47 @@ along with this software (see the LICENSE.md file). If not, see
         <implements service="mantle.humanres.PayrollServices.calculate#Adjustment"/>
         <out-parameters>
             <parameter name="adjustmentList" type="List"/>
-            <parameter name="taxablePayAmount" type="BigDecimal"/>
-            <parameter name="medicalTaxablePayAmount" type="BigDecimal"/>
-            <parameter name="socialTaxablePayAmount" type="BigDecimal"/>
         </out-parameters>
         <actions>
-            <!-- Buscar afiliación mutual empleador (default: CL_IPS -->
+            <entity-find entity-name="mchile.humanteam.employment.EmployerAffiliation" list="employerMutualList">
+                <econdition field-name="employerPartyId" from="employment.toPartyId"/>
+                <econdition field-name="affiliationTypeEnumId" value="MchCeaMutual"/>
+                <date-filter/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <set field="payeePartyId" from="(employerMutualList.first?.organizationPartyId) ?: 'CL_IPS'"/>
+            <set field="additionalRate" from="(employerMutualList.first?.additionalRate) ?: 0"/>
+            <set field="baseMap" from="[isEmployerPaid:'Y', quantity:1, isTax:'N', isTaxable:'N', isSocialTax:'N', isSocialTaxable:'N', isMedicalTax:'N', isMedicalTaxable:'N', rateBasisEnumId:'PrbsMedical', adjustmentApplies:true, payeeDueDays:13, itemTypeEnumId:'ItemClMutual', payeePartyId:payeePartyId]"/>
+            <service-call name="mchile.humanteam.PayrollServices.get#ParameterValue" in-map="[adjCalcServiceId:'MChile.Payroll.MutualAdjustment',
+                          parameterNameList:['TasaSeguroAccidentestrabajoOrdinaria', 'TasaSeguroAccidentestrabajoExtraordinaria', 'TasaSanna'],
+                          validDate:periodFromDate, type:'Number']" out-map="pv"/>
+            <script>ec.context.putAll(pv.valueMap)</script>
+
+            <!-- Prepare data for calculation -->
+            <set field="adjustmentList" from="priorAdjustmentList"/>
+            <service-call name="mchile.humanteam.PayrollServices.get#PeriodParameters" in-map="[timePeriodId:timePeriodId]" out-map="pp"/>
+            <set field="adjustmentBasisAmount" from="medicalTaxablePayAmount &lt;= pp.topeImponibleAfp ? medicalTaxablePayAmount : pp.topeImponibleAfp" type="BigDecimal"/>
+            <set field="totalAmount" from="0" type="BigDecimal"/>
+
             <!-- Aplicar TasaSeguroAccidentestrabajoOrdinaria -->
+            <set field="amount" from="(adjustmentBasisAmount*tasaSeguroAccidentestrabajoOrdinaria/100).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
+            <script>totalAmount += amount</script>
+
             <!-- Aplicar TasaSeguroAccidentestrabajoExtraordinaria -->
+            <set field="amount" from="(adjustmentBasisAmount*tasaSeguroAccidentestrabajoExtraordinaria/100).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
+            <script>totalAmount += amount</script>
+
             <!-- Aplicar TasaSanna -->
+            <set field="amount" from="(adjustmentBasisAmount*tasaSanna/100).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
+            <script>totalAmount += amount</script>
+
             <!-- Aplicar TasaAdicional (depende de cada empleador): mchile.humanteam.payroll.WorkAccidentInsuranceAdditionalRate -->
-            <!--
-    <mantle.humanres.employment.PayrollAdjustment payrollAdjustmentId="ItemClSatBasica" description="Seguro de Accidentes del Trabajo, Cotización Básica" itemTypeEnumId="ItemClSat" payrollPhaseEnumId="PrphTax" fromDate="2009-04-03" isTax="Y" rateBasisEnumId="PrbsIncome" taxAuthorityId="CL_IPS" payeePartyId="CL_IPS">
-    <mantle.humanres.employment.PayrollAdjustment payrollAdjustmentId="ItemClSatExtraordinaria" description="Seguro de Accidentes del Trabajo, Cotización Extraordinaria" itemTypeEnumId="ItemClSat" payrollPhaseEnumId="PrphTax" fromDate="2017-04-01" thruDate="2017-12-31 23:59:59.999" isTax="Y" rateBasisEnumId="PrbsIncome" taxAuthorityId="CL_IPS" payeePartyId="CL_IPS">
-    <mantle.humanres.employment.PayrollAdjustment payrollAdjustmentId="ItemClSanna" description="Seguro para el Acompañamiento de Niños y Niñas que padezcan enfermedades graves (Ley SANNA)" itemTypeEnumId="ItemClSanna" payrollPhaseEnumId="PrphTax" fromDate="2017-04-01" thruDate="2017-12-31 23:59:59.999" isTax="Y" rateBasisEnumId="PrbsMedical" taxAuthorityId="CL_IPS" payeePartyId="CL_IPS">
-            -->
+            <set field="amount" from="(adjustmentBasisAmount*additionalRate/100).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
+            <script>totalAmount += amount</script>
+
+            <set field="description" value="Seguro de Accidentes del Trabajo y SANNA"/>
+            <log message="adding adjustment with amount ${totalAmount}"/>
+            <script>if(totalAmount) adjustmentList.add(baseMap+[itemTypeEnumId:'ItemClMutual', description:description, amount:totalAmount])</script>
         </actions>
     </service>
 
