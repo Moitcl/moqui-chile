@@ -703,30 +703,73 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="ownerPartyId" required="true"/>
         </in-parameters>
         <actions>
-            <script><![CDATA[
-                import org.moqui.context.ExecutionContext
-                //ExecutionContext ec = context.ec
-                //ec.user.loginUser("monthlyorders", "5687Moit_")
 
-                def nm = ec.makeNotificationMessage()
-                //nm.topic((String) document._type).message((Map<String, Object>) document)
-                nm.topic('MantleTask').type('success').message([workEffortId:100000, name:'Prueba', status:'OK', type:'success'] as Map<String, Object>)//.send()
-                nm.send()
-
-            ]]></script>
             <entity-find entity-name="mchile.financial.PeriodicPayment" list="ppList">
                 <econdition field-name="ownerPartyId" from="ownerPartyId"/>
             </entity-find>
 
             <log level="warn" message="pp list: $ppList"/>
 
+            <script><![CDATA[
+                    import org.moqui.context.ExecutionContext
+                    import java.text.SimpleDateFormat
+                    import java.util.Calendar
 
+                    ExecutionContext ec = context.ec
+                    ec.user.loginUser("monthlyorders", "5687Moit_")
+
+
+                ]]></script>
             <iterate list="ppList" entry="ppField">
                 <log message="Chequeando payment $ppField.periodicPaymentId" level="warn"/>
+                <!--script>ec.message.addMessage("Created ${numCreated} values, ignored ${numDuplicated} duplicates and got ${numErrors} errors.")</script-->
+                <!--script><![CDATA[
+                    //import org.moqui.context.ExecutionContext
+                    //ExecutionContext ec = context.ec
+                    ec.user.loginUser("monthlyorders", "5687Moit_")
+
+                    def nm = ec.makeNotificationMessage()
+                    //nm.topic((String) document._type).message((Map<String, Object>) document)
+                    nm.topic('PeriodicPayment').type('success').message([paymentId:ppField.periodicPaymentId, name:'Prueba', status:'OK', type:'success', orgName:'ENEL'] as Map<String, Object>).
+                    //type('success').message([paymentId:ppField.periodicPaymentId, name:'Prueba', status:'OK', type:'success', orgName:'ENEL'] as Map<String, Object>).
+                    send()
+
+                ]]></script-->
                 <!-- TODO:
                     Verificar que el pago, de acuerdo al período y uom corresponda ser pagado.
                     Si es así, generar notificación/email
+
+                    - Buscar pagos con fecha de último pago mayor al tiempo desde el último pago+período * UOM
                 -->
+                <set field="period" from="ppField.period" type="Integer"/>
+                <set field="intervalUomId" from="ppField.intervalUomId"/>
+                <set field="lastPaymentDate" from="ppField.lastPaymentDate" type="Timestamp"/>
+
+                <script>
+                    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-M-dd");
+                    if(lastPaymentDate != null) {
+                        Calendar calendar = Calendar.getInstance();
+                        //calendar.set(2017, Calendar.AUGUST, 31, 9, 30, 15);
+                        Calendar next = Calendar.getInstance();
+                        next.setTimeInMillis(lastPaymentDate.getTime());
+                        next.add(Calendar.MONTH, period);
+                        next.add(Calendar.DATE, -3);
+
+                        logger.warn("Fecha último pago:" + lastPaymentDate);
+                        logger.warn("Fecha con período adicional:" + next.getTime());
+
+                        // si fecha actual es menor a fecha de pago considerando el período - 3 días, entonces hay que pagar
+                        if(calendar.compareTo(next) &gt; 0 ) {
+                            logger.warn("comparacion mayor que 0");
+                        } else {
+                            logger.warn("comparación menor que 0");
+                        }
+
+                    }
+
+                </script>
+
+
                 <!--set field="bodyParameters" from="[fiscalTaxDocumentId:'11', nmbContacto:'prueba', mailContacto:'cherrera@moit.cl', fonoContacto:'123456']"/>
                 <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" async="true">
                     <field-map field-name="fiscalTaxDocumentId" from="ppField.periodicPaymentId"/>
