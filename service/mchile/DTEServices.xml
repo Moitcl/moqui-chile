@@ -126,6 +126,8 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="folioS" from="folio" type="Integer"/>
             <set field="codRef" value="0" type="Integer"/>
 
+
+
             <script>
                 cafS = cafS + caf
             </script>
@@ -192,13 +194,12 @@ along with this software (see the LICENSE.md file). If not, see
                 XmlOptions opts = new XmlOptions();
                 opts.setLoadSubstituteNamespaces(namespaces);
 
-                //caf = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts).getAUTORIZACION();
-
                 // Recuperación de archivo CAF desde BD
                 caf = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts).getAUTORIZACION();
 
                 // Construyo base a partir del template
-                doc = DTEDocument.Factory.parse(new File(plantillaS), opts);
+                //doc = DTEDocument.Factory.parse(new File(plantillaS), opts);
+                doc = DTEDocument.Factory.parse(ec.resource.getLocationStream(plantillaS), opts);
 
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
@@ -392,7 +393,7 @@ along with this software (see the LICENSE.md file). If not, see
                     // Descuento Global
                     if(globalDiscount != null &amp;&amp; Integer.valueOf(globalDiscount) > 0) {
                         logger.warn("Descuento global:" + globalDiscount);
-                        long descuento = totalNeto * Integer.valueOf(globalDiscount) / 100;
+                        long descuento = Math.round(totalNeto * (Long.valueOf(globalDiscount) / 100));
                         logger.warn("Descuento::" + descuento);
                         totalNeto = totalNeto - descuento
                         // Creación entradas en XML
@@ -1160,13 +1161,13 @@ along with this software (see the LICENSE.md file). If not, see
                 logger.warn("URI: " + uri)
 
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
-                doc.save(new File(resultS + "DTE" + tipoFactura + "-" + folio + "-sinfirma.xml"), opts);
+                //doc.save(new File(resultS + "DTE" + tipoFactura + "-" + folio + "-sinfirma.xml"), opts);
                 doc.save(out, opts);
                 Document doc2 = XMLUtil.parseDocument(out.toByteArray());
                 byte[] salida = Signer.sign(doc2, uri, key, cert, uri, "Documento");
                 doc2 = XMLUtil.parseDocument(salida);
 
-                if (Signer.verify(doc2, "Documento")) {
+                /*if (Signer.verify(doc2, "Documento")) {
                     Path path = Paths.get(resultS + "DTE" + tipoFactura + "-" + folio + ".xml");
                     Files.write(path, salida);
                     logger.warn("Factura "+path+" folio "+folio+" generada OK");
@@ -1174,7 +1175,7 @@ along with this software (see the LICENSE.md file). If not, see
                     Path path = Paths.get(resultS + "DTE" + tipoFactura + "-" + folio + "-mala.xml");
                     Files.write(path, salida);
                     logger.warn("Error al generar factura folio "+folio);
-                }
+                }*/
 
                 // Subir XML a base de datos
 
@@ -1350,7 +1351,8 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.sii.siiDte.EnvioDTEDocument.EnvioDTE.SetDTE.Caratula.SubTotDTE;
 
                 // Construyo Envio
-                EnvioDTEDocument envio = EnvioDTEDocument.Factory.parse(new FileInputStream(plantillaEnvio));
+                //EnvioDTEDocument envio = EnvioDTEDocument.Factory.parse(new FileInputStream(plantillaEnvio));
+                EnvioDTEDocument envio = EnvioDTEDocument.Factory.parse(ec.resource.getLocationStream(plantillaEnvio)));
 
                 // Debo agregar el schema location (Sino SII rechaza)
                 XmlCursor cursor = envio.newCursor();
@@ -1390,7 +1392,6 @@ along with this software (see the LICENSE.md file). If not, see
                 HashMap&lt;Integer, Integer&gt; hashTot = new HashMap&lt;Integer, Integer&gt;();
 
                 for (int i = 0; i &lt; DTEList.length; i++) {
-                    //dtes[i] = DTEDocument.Factory.parse(new FileInputStream(DTEList[i]), opts).getDTE();
                     dtes[i] = DTEDocument.Factory.parse(DTEList[i].getBinaryStream(), opts).getDTE();
                     // armar hash para totalizar por tipoDTE
                     if (hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) != null) {
@@ -2162,7 +2163,8 @@ return
                 import cl.nic.dte.util.Utilities;
                 import cl.sii.siiDte.RECEPCIONDTEDocument;
 
-                Utilities.generatePDF(new FileInputStream(dte), new FileInputStream(template), new FileOutputStream(pdf));
+                //Utilities.generatePDF(new FileInputStream(dte), new FileInputStream(template), new FileOutputStream(pdf));
+                Utilities.generatePDF(new FileInputStream(dte), ec.resource.getLocationStream(template), new FileOutputStream(pdf));
 
                 logger.warn("---------------");
                 logger.warn("PDF Generado: " + pdf);
@@ -2550,7 +2552,6 @@ return
             <script>
                 dirReceptor = dirReceptor + " " + contactPostalAddressField.unitNumber
             </script>
-            <!--return error="true" message="aaaaa $contactMechId"/-->
             <!-- Comuna -->
             <entity-find-one entity-name="moqui.basic.Geo" value-field="geoField">
                 <field-map field-name="geoId" from="contactPostalAddressField.stateProvinceGeoId"/>
@@ -5406,8 +5407,6 @@ return
                 <return error="true" message="Receptor de aceptación no tiene contacto tributario asignado"/>
             </if>
 
-            <!--return error="true" message="PPP: $rutEmisor, partyId: $partyAceptacionField.partyId - $contactOut.emailAddress"/-->
-
             <set field="emailAceptacion" from="contactOut.emailAddress"/>
 
             <!-- Recuperación de algunos datos desde FiscalTaxDocument -->
@@ -7853,7 +7852,7 @@ return
             <entity-update value-field="dteField"/>
 
             <!-- Creación de registro en FiscalTaxDocumentAttributes -->
-            <!-- montoNeto aaaaaa-->
+            <!-- montoNeto -->
             <!-- montoIVARecuperable -->
             <!-- montoExento -->
             <!-- Amount -->
@@ -8957,7 +8956,7 @@ return
                 }
 
                 // **************************************************************
-                // Creación de PDF en base a EnvioBOLETA con boletaN aaaaa
+                // Creación de PDF en base a EnvioBOLETA con boletaN
                 // PDF Boleta 1
                 // **************************************************************
                 // ajustes para el formato (MAGIA) antes de firmar
@@ -10515,7 +10514,7 @@ return
                 }
 
                 // **************************************************************
-                // Creación de PDF en base a EnvioBOLETA con boletaN aaaaa
+                // Creación de PDF en base a EnvioBOLETA con boletaN
                 // PDF Boleta 1
                 // **************************************************************
                 // ajustes para el formato (MAGIA) antes de firmar
