@@ -1179,14 +1179,13 @@ along with this software (see the LICENSE.md file). If not, see
                     logger.warn("Error al generar factura folio "+folio);
                 }
 
-                // Subir XML a base de datos
-
             </script>
             <!-- Registro de DTE en base de datos y generación de PDF -->
             <set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/>
             <set field="xml" value="${resultS}DTE${tipoFactura}-${folio}.xml"/>
             <set field="pdf" value="${pathPdf}DTE${tipoFactura}-${folio}.pdf"/>
-            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, activeOrgId:activeOrgId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.genera#PDFdeprecated" in-map="[pdf:pdf, dte:xml, activeOrgId:activeOrgId]" out-map="context"/>
+            <!--service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:salida, activeOrgId:activeOrgId]" out-map="context"/-->
             <set field="bArray2"/>
 
             <!-- Lectura y conversión a arreglo de bytes de PDF temporal -->
@@ -2033,12 +2032,7 @@ return
                 <select-field field-name="ciudadOrigen"/>
                 <select-field field-name="pathCert"/>
                 <select-field field-name="certData"/>
-                <select-field field-name="pathResults"/>
-                <select-field field-name="pathAceptaciones"/>
-                <select-field field-name="pathRecibidas"/>
-                <select-field field-name="pathPdf"/>
                 <select-field field-name="pathTemp"/>
-                <select-field field-name="pathCaf"/>
                 <select-field field-name="passCert"/>
                 <select-field field-name="nmbContacto"/>
                 <select-field field-name="mailContacto"/>
@@ -2072,12 +2066,12 @@ return
             <set field="cmnaOrigen" from="orgField.cmnaOrigen"/>
             <set field="ciudadOrigen" from="orgField.ciudadOrigen"/>
             <set field="pathCert" from="orgField.pathCert"/>
-            <set field="pathResults" from="orgField.pathResults"/>
-            <set field="pathAceptaciones" from="orgField.pathAceptaciones"/>
-            <set field="pathRecibidas" from="orgField.pathRecibidas"/>
-            <set field="pathPdf" from="orgField.pathPdf"/>
+            <set field="pathResults" from="orgField.pathTemp"/>
+            <set field="pathAceptaciones" from="orgField.pathTemp"/>
+            <set field="pathRecibidas" from="orgField.pathTemp"/>
+            <set field="pathPdf" from="orgField.pathTemp"/>
             <set field="pathTemp" from="orgField.pathTemp"/>
-            <set field="pathCaf" from="orgField.pathCaf"/>
+            <set field="pathCaf" from="orgField.pathTemp"/>
             <set field="certData" from="orgField.certData"/>
             <set field="passCert" from="orgField.passCert"/>
             <set field="nmbContacto" from="orgField.nmbContacto"/>
@@ -2127,7 +2121,7 @@ return
         </actions>
     </service>
 
-    <service verb="genera" noun="PDF">
+    <service verb="genera" noun="PDFdeprecated">
         <description>
             Genera archivo PDF de Factura (envio).
             Dejarlo en BD probablemente no es buena idea.
@@ -2176,6 +2170,86 @@ return
 
                 //Utilities.generatePDF(new FileInputStream(dte), new FileInputStream(template), new FileOutputStream(pdf));
                 Utilities.generatePDF(new FileInputStream(dte), ec.resource.getLocationStream(template), new FileOutputStream(pdf));
+
+                logger.warn("---------------");
+                logger.warn("PDF Generado: " + pdf);
+                logger.warn("---------------");
+            </script>
+        </actions>
+    </service>
+
+    <service verb="genera" noun="PDF">
+        <description>
+            Genera archivo PDF de Factura (envio).
+            Dejarlo en BD probablemente no es buena idea.
+        </description>
+        <in-parameters>
+            <parameter name="pdf" required="true"/>
+            <parameter name="dte" required="true" type="Object"/>
+            <parameter name="activeOrgId" required="true"/>
+            <parameter name="boleta"/>
+        </in-parameters>
+        <actions>
+            <!-- Recuperacion de parametros de la organizacion -->
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <set field="certS" from="pathCert"/>
+            <set field="passS" from="passCert"/>
+            <set field="pathResults" from="pathResults"/>
+            <set field="template" from="templatePdf"/>
+            <set field="pathPdf" from="pathPdf"/>
+            <set field="giro" from="giroEmisor"/>
+            <set field="templateFactura" from="templateFactura"/>
+            <set field="templatePdf" from="templatePdf"/>
+            <set field="templatePdfBoleta" from="templatePdfBoleta"/>
+            <set field="templateEnvio" from="templateEnvio"/>
+            <set field="templateAceptaciones" from="templateAceptaciones"/>
+            <set field="templateLibro" from="templateLibro"/>
+            <set field="logo" from="logo"/>
+            <set field="fchResol" from="fchResol"/>
+            <set field="nroResol" from="nroResol"/>
+
+            <if condition="boleta">
+                <set field="template" from="templatePdfBoleta"/>
+            </if>
+
+            <script>
+                import java.io.File;
+                import java.io.FileInputStream;
+                import java.io.FileOutputStream;
+                import javax.xml.transform.Result;
+                import javax.xml.transform.Source;
+                import javax.xml.transform.Transformer;
+                import javax.xml.transform.TransformerException;
+                import javax.xml.transform.TransformerFactory;
+                import javax.xml.transform.sax.SAXResult;
+                import javax.xml.transform.stream.StreamSource;
+
+                import org.apache.fop.apps.FOPException;
+                import org.apache.fop.apps.FOUserAgent;
+                import org.apache.fop.apps.Fop;
+                import org.apache.fop.apps.FopFactory;
+                import org.apache.fop.apps.MimeConstants;
+
+
+                //public static void generatePDF(InputStream xmlFile, InputStream xslFile, OutputStream pdfFile)
+
+                //Utilities.generatePDF(new FileInputStream(dte), ec.resource.getLocationStream(template), new FileOutputStream(pdf));
+
+                InputStream xmlFile = new ByteArrayInputStream(dte);//dte;//new FileInputStream(dte);
+                OutputStream pdfFile = pdf;//new FileOutputStream(pdf);
+                InputStream xslFile = ec.resource.getLocationStream(template);
+
+                FopFactory fopFactory = FopFactory.newInstance(new File(".").toURI());
+                FOUserAgent foUserAgent = fopFactory.newFOUserAgent();
+
+                Fop fop = fopFactory.newFop(MimeConstants.MIME_PDF, foUserAgent, pdfFile);
+                TransformerFactory factory = TransformerFactory.newInstance();
+                Transformer transformer = factory.newTransformer(new StreamSource(xslFile));
+
+                transformer.setParameter("versionParam", "2.0");
+                Source src = new StreamSource(xmlFile);
+                Result res = new SAXResult(fop.getDefaultHandler());
+                transformer.transform(src, res);
 
                 logger.warn("---------------");
                 logger.warn("PDF Generado: " + pdf);
