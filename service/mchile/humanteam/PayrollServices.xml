@@ -127,8 +127,7 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="get" noun="ParameterValue">
         <in-parameters>
-            <parameter name="adjCalcServiceId" default-value="MChile.PayrollPeriodAdjustments"/>
-            <parameter name="parameterNameList" required="true" type="List"/>
+            <parameter name="parameterTypeList" required="true" type="List"/>
             <parameter name="validDate" type="Timestamp"/>
             <parameter name="type" default-value="Number"/>
         </in-parameters>
@@ -138,18 +137,29 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <set field="locale" from="new Locale('en','US')"/>
             <set field="valueMap" from="[:]"/>
-            <iterate entry="parameterName" list="parameterNameList">
-                <script>outName = parameterName.toLowerCase()[0] + parameterName.substring(1)</script>
-                <entity-find entity-name="mantle.humanres.employment.PayrollAdjCalcParameter" list="parameterList">
-                    <econdition field-name="adjCalcServiceId"/>
-                    <econdition field-name="parameterName"/>
+            <iterate entry="parameterType" list="parameterTypeList">
+                <script>outName = parameterType.toLowerCase()[0] + parameterType.substring(1)</script>
+                <entity-find entity-name="mchile.humanteam.payroll.PayrollParameter" list="parameterList">
+                    <econdition field-name="payrollParameterTypeEnumId" from="parameterType"/>
                     <date-filter valid-date="validDate?:ec.user.nowTimestamp"/>
                 </entity-find>
-                <if condition="parameterList.size() &lt; 1 || parameterList.first.parameterValue == null"><return error="true" message="Could not find parameter ${parameterName} at date ${validDate?:ec.user.nowTimestamp}"/></if>
-                <script>
-                    if (type == 'Number') valueMap.put(outName, ec.l10n.parseNumber(parameterList.first.parameterValue, null, locale))
-                    else valueMap.put(parameterName, parameterList.first.parameterValue)
-                </script>
+                <set field="found" from="false"/>
+                <if condition="parameterList">
+                    <set field="pv" from="parameterList.first"/>
+                    <if condition="pv.details">
+                        <set field="found" from="true"/>
+                        <set field="ev" from="pv.details.first"/>
+                        <set field="value" from="ev.rate"/>
+                        <if condition="value == null"><set field="value" from="ev.flatAmount"/></if>
+                        <if condition="value == null"><set field="value" from="ev.periodMin"/></if>
+                        <if condition="value == null"><set field="value" from="ev.periodMax"/></if>
+                        <if condition="value == null"><return error="true" message="No value found for parameter ${key}"/></if>
+                        <script>valueMap.put(outName, new BigDecimal(value))</script>
+                    </if>
+                </if>
+                <if condition="!found">
+                    <return error="true" message="Could not find parameter ${parameterName} at date ${validDate?:ec.user.nowTimestamp}"/>
+                </if>
             </iterate>
         </actions>
     </service>
@@ -222,7 +232,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="previousUfValue" from="previousUf.value"/>
             <set field="previousUfTitle" from="ec.l10n.format(previousThruDate, '\'al\' dd \'de\' MMMM yyyy')"/>
 
-            <service-call name="mchile.humanteam.PayrollServices.get#ParameterValue" in-map="[parameterNameList:['TopeImponibleAfpCLF', 'TopeImponibleIpsCLF',
+            <service-call name="mchile.humanteam.PayrollServices.get#ParameterValue" in-map="[parameterTypeList:['TopeImponibleAfpCLF', 'TopeImponibleIpsCLF',
                           'TopeImponibleAfcCLF', 'RentaMinimaGeneralCLP', 'RentaMinimaMenoresCLP', 'RentaMinimaCasaCLP', 'RentaMinimaNoremCLP',
                           'TopeApvMensualCLF', 'TopeApvAnualCLF', 'TopeDepositoConvenidoAnualCLF', 'TasaAfcContratoIndefinidoEmpleador',
                           'TasaAfcContratoIndefinidoTrabajador', 'TasaAfcContratoFijoEmpleador', 'TasaAfcContratoFijoTrabajador',
@@ -284,14 +294,17 @@ along with this software (see the LICENSE.md file). If not, see
                     <return error="true" message="Unsupported timePeriodTypeId ${timePeriod.timePeriodTypeId}"/>
                 </if>
                 <set field="fromDate" from="new java.sql.Timestamp(timePeriod.fromDate.time)"/>
-                <entity-find entity-name="mantle.humanres.employment.PayrollAdjustmentAndDetail" list="taxRateListUtm">
-                    <econdition field-name="itemTypeEnumId" value="ItemTaxClImpuestoSegundaCatUtm"/>
+                <entity-find entity-name="mchile.humanteam.payroll.PayrollParameter" list="taxRateParameterUtm">
+                    <econdition field-name="payrollParameterTypeEnumId" value="ImpuestoSegundaCatUtm"/>
                     <date-filter valid-date="fromDate"/>
+                </entity-find>
+                <if condition="!taxRateParameterUtm">
+                    <return error="true" message="Could not find taxrate for type ImpuestoSegundaCatUtm"/>
+                </if>
+                <entity-find entity-name="mchile.humanteam.payroll.PayrollParameterDetail" list="taxRateListUtm">
+                    <econdition field-name="payrollParameterId" from="taxRateParameterUtm.first.payrollParameterId"/>
                     <order-by field-name="periodMin"/>
                 </entity-find>
-                <if condition="!taxRateListUtm">
-                    <return error="true" message="Could not find taxrate for type ItemTaxClImpuestoSegundaCatUtm"/>
-                </if>
                 <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CL_UTM', date:fromDate]" out-map="utmMap"/>
                 <set field="utmValue" from="utmMap.value"/>
                 <set field="cumulatedAccruedAmount" from="0" type="BigDecimal"/>
@@ -513,9 +526,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="payeePartyId" from="(employerMutualList.first?.organizationPartyId) ?: 'CL_IPS'"/>
             <set field="additionalRate" from="(employerMutualList.first?.additionalRate) ?: 0"/>
             <set field="baseMap" from="[isEmployerPaid:'Y', quantity:1, isTax:'N', isTaxable:'N', isSocialTax:'N', isSocialTaxable:'N', isMedicalTax:'N', isMedicalTaxable:'N', rateBasisEnumId:'PrbsMedical', adjustmentApplies:true, payeeDueDays:13, itemTypeEnumId:'ItemClMutual', payeePartyId:payeePartyId]"/>
-            <service-call name="mchile.humanteam.PayrollServices.get#ParameterValue" in-map="[adjCalcServiceId:'MChile.Payroll.MutualAdjustment',
-                          parameterNameList:['TasaSeguroAccidentestrabajoOrdinaria', 'TasaSeguroAccidentestrabajoExtraordinaria', 'TasaSanna'],
-                          validDate:periodFromDate, type:'Number']" out-map="pv"/>
+            <service-call name="mchile.humanteam.PayrollServices.get#ParameterValue" in-map="[
+                          parameterTypeList:['TasaSeguroAccidentesOrdinaria', 'TasaSeguroAccidentesExtraordinaria', 'TasaSanna'],
+                          validDate:periodFromDate]" out-map="pv"/>
             <script>ec.context.putAll(pv.valueMap)</script>
 
             <!-- Prepare data for calculation -->
@@ -525,11 +538,11 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="totalAmount" from="0" type="BigDecimal"/>
 
             <!-- Aplicar TasaSeguroAccidentestrabajoOrdinaria -->
-            <set field="amount" from="(adjustmentBasisAmount*tasaSeguroAccidentestrabajoOrdinaria/100).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
+            <set field="amount" from="(adjustmentBasisAmount*tasaSeguroAccidentesOrdinaria/100).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
             <script>totalAmount += amount</script>
 
             <!-- Aplicar TasaSeguroAccidentestrabajoExtraordinaria -->
-            <set field="amount" from="(adjustmentBasisAmount*tasaSeguroAccidentestrabajoExtraordinaria/100).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
+            <set field="amount" from="(adjustmentBasisAmount*tasaSeguroAccidentesExtraordinaria/100).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
             <script>totalAmount += amount</script>
 
             <!-- Aplicar TasaSanna -->
