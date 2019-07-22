@@ -207,6 +207,9 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="tasaTrabajoPesadoTrabajador" type="BigDecimal"/>
             <parameter name="tasaTrabajoMenosPesadoEmpleador" type="BigDecimal"/>
             <parameter name="tasaTrabajoMenosPesadoTrabajador" type="BigDecimal"/>
+            <parameter name="tasaSeguroAccidentesOrdinaria" type="BigDecimal"/>
+            <parameter name="tasaSeguroAccidentesExtraordinaria" type="BigDecimal"/>
+            <parameter name="tasaSanna" type="BigDecimal"/>
             <parameter name="afpRateList" type="List"/>
             <parameter name="asignacionFamiliarList" type="List"/>
             <parameter name="taxRateListMap" type="List">
@@ -237,7 +240,8 @@ along with this software (see the LICENSE.md file). If not, see
                           'TopeApvMensualCLF', 'TopeApvAnualCLF', 'TopeDepositoConvenidoAnualCLF', 'TasaAfcContratoIndefinidoEmpleador',
                           'TasaAfcContratoIndefinidoTrabajador', 'TasaAfcContratoFijoEmpleador', 'TasaAfcContratoFijoTrabajador',
                           'TasaAfcContrato11AnosEmpleador', 'TasaAfcContrato11AnosTrabajador',  'TasaSis', 'TasaTrabajoPesadoEmpleador',
-                          'TasaTrabajoPesadoTrabajador', 'TasaTrabajoMenosPesadoEmpleador', 'TasaTrabajoMenosPesadoTrabajador'],
+                          'TasaTrabajoPesadoTrabajador', 'TasaTrabajoMenosPesadoEmpleador', 'TasaTrabajoMenosPesadoTrabajador', 'TasaSeguroAccidentesOrdinaria',
+                          'TasaSeguroAccidentesExtraordinaria', 'TasaSanna'],
                           validDate:periodFromDate]" out-map="pv"/>
             <script>context.putAll(pv.valueMap)</script>
 
@@ -356,19 +360,11 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="prepare" noun="PayrollPeriodAdjustments">
+    <service verb="calculate" noun="PensionFundAdjustment">
         <implements service="mantle.humanres.PayrollServices.calculate#Adjustment"/>
         <in-parameters>
             <parameter name="timePeriodId"/>
         </in-parameters>
-        <actions>
-            <log message="check#PayrollPeriodAdjustments"/>
-            <!--<service-call name="mchile.humanteam.PayrollServices.get#PayrollPeriodTaxRate" in-map="context"/>-->
-        </actions>
-    </service>
-
-    <service verb="calculate" noun="PensionFundAdjustment">
-        <implements service="mantle.humanres.PayrollServices.calculate#Adjustment"/>
         <out-parameters>
             <parameter name="adjustmentList" type="List"/>
             <parameter name="taxablePayAmount" type="BigDecimal"/>
@@ -431,7 +427,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="afcRateEmpleador" from="pp.tasaAfcContrato11AnosEmpleador"/>
                 <set field="afcRateTrabajador" from="pp.tasaAfcContrato11AnosTrabajador"/>
             </else-if><else>
-                <return error="true" message="Unknown employmentDurationType ${empoymentDurationTypeEnumId}"/>
+                <return error="true" message="Unknown employmentDurationType ${employment.employmentDurationTypeEnumId}"/>
             </else></if>
             <set field="afcBaseMap" from="[quantity:1, isTax:'N', isTaxable:'Y', isSocialTax:'N', isSocialTaxable:'Y', isMedicalTax:'N', isMedicalTaxable:'Y',
                                           rateBasisEnumId:'PrbsIncome', adjustmentApplies:true, payeeDueDays:13, payeePartyId:afpPartyId]"/>
@@ -512,50 +508,36 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="calculate" noun="MutualAdjustment">
-        <implements service="mantle.humanres.PayrollServices.calculate#Adjustment"/>
+        <in-parameters>
+            <parameter name="timePeriodId" required="true"/>
+            <parameter name="tasaSeguroAccidentesOrdinaria" required="true" type="BigDecimal"/>
+            <parameter name="tasaSeguroAccidentesExtraordinaria" required="true" type="BigDecimal"/>
+            <parameter name="tasaSanna" required="true" type="BigDecimal"/>
+        </in-parameters>
         <out-parameters>
             <parameter name="adjustmentList" type="List"/>
         </out-parameters>
         <actions>
+            <entity-find-one entity-name="mantle.party.time.TimePeriod" value-field="timePeriod"/>
+            <set field="partyId" from="timePeriod.partyId"/>
             <entity-find entity-name="mchile.humanteam.employment.EmployerAffiliation" list="employerMutualList">
-                <econdition field-name="employerPartyId" from="employment.toPartyId"/>
+                <econdition field-name="employerPartyId" from="partyId"/>
                 <econdition field-name="affiliationTypeEnumId" value="MchCeaMutual"/>
                 <date-filter/>
                 <order-by field-name="-fromDate"/>
             </entity-find>
             <set field="payeePartyId" from="(employerMutualList.first?.organizationPartyId) ?: 'CL_IPS'"/>
             <set field="additionalRate" from="(employerMutualList.first?.additionalRate) ?: 0"/>
-            <set field="baseMap" from="[isEmployerPaid:'Y', quantity:1, isTax:'N', isTaxable:'N', isSocialTax:'N', isSocialTaxable:'N', isMedicalTax:'N', isMedicalTaxable:'N', rateBasisEnumId:'PrbsMedical', adjustmentApplies:true, payeeDueDays:13, itemTypeEnumId:'ItemClMutual', payeePartyId:payeePartyId]"/>
-            <service-call name="mchile.humanteam.PayrollServices.get#ParameterValue" in-map="[
-                          parameterTypeList:['TasaSeguroAccidentesOrdinaria', 'TasaSeguroAccidentesExtraordinaria', 'TasaSanna'],
-                          validDate:periodFromDate]" out-map="pv"/>
-            <script>ec.context.putAll(pv.valueMap)</script>
+            <set field="baseMap" from="[fromDate:timePeriod.fromDate, thruDate:timePeriod.thruDate, organizationPartyId:timePeriod.partyId, isEmployerPaid:'Y',
+                                        isTax:'N', isTaxable:'N', isSocialTax:'N', timePeriodTypeId:timePeriod.timePeriodTypeId,
+                                        isSocialTaxable:'N', isMedicalTax:'N', isMedicalTaxable:'N', rateBasisEnumId:'PrbsMedical', payeeDueDays:13,
+                                        itemTypeEnumId:'ItemClMutual', payeePartyId:payeePartyId, isAutoGenerated:'Y', itemTypeEnumId:'ItemClMutual',
+                                        description:'Seguro de Accidentes del Trabajo y Sanna']"/>
 
-            <!-- Prepare data for calculation -->
-            <set field="adjustmentList" from="priorAdjustmentList"/>
-            <service-call name="mchile.humanteam.PayrollServices.get#PeriodParameters" in-map="[timePeriodId:timePeriodId]" out-map="pp"/>
-            <set field="adjustmentBasisAmount" from="medicalTaxablePayAmount &lt;= pp.topeImponibleAfp ? medicalTaxablePayAmount : pp.topeImponibleAfp" type="BigDecimal"/>
-            <set field="totalAmount" from="0" type="BigDecimal"/>
+            <set field="rate" from="tasaSeguroAccidentesOrdinaria + tasaSeguroAccidentesExtraordinaria + tasaSanna + additionalRate" type="BigDecimal"/>
 
-            <!-- Aplicar TasaSeguroAccidentestrabajoOrdinaria -->
-            <set field="amount" from="(adjustmentBasisAmount*tasaSeguroAccidentesOrdinaria/100).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
-            <script>totalAmount += amount</script>
-
-            <!-- Aplicar TasaSeguroAccidentestrabajoExtraordinaria -->
-            <set field="amount" from="(adjustmentBasisAmount*tasaSeguroAccidentesExtraordinaria/100).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
-            <script>totalAmount += amount</script>
-
-            <!-- Aplicar TasaSanna -->
-            <set field="amount" from="(adjustmentBasisAmount*tasaSanna/100).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
-            <script>totalAmount += amount</script>
-
-            <!-- Aplicar TasaAdicional (depende de cada empleador): mchile.humanteam.payroll.WorkAccidentInsuranceAdditionalRate -->
-            <set field="amount" from="(adjustmentBasisAmount*additionalRate/100).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
-            <script>totalAmount += amount</script>
-
-            <set field="description" value="Seguro de Accidentes del Trabajo y SANNA"/>
-            <log message="adding adjustment with amount ${totalAmount}"/>
-            <script>if(totalAmount) adjustmentList.add(baseMap+[itemTypeEnumId:'ItemClMutual', description:description, amount:totalAmount])</script>
+            <service-call name="create#mantle.humanres.employment.PayrollAdjustment" in-map="baseMap" out-map="adj"/>
+            <service-call name="create#mantle.humanres.employment.PayrollAdjustmentDetail" in-map="[payrollAdjustmentId:adj.payrollAdjustmentId, detailSeqId:'01', rate:rate/100]"/>
         </actions>
     </service>
 
@@ -735,6 +717,44 @@ along with this software (see the LICENSE.md file). If not, see
             </script>
         </actions>
 
+    </service>
+
+    <service verb="process" noun="TimePeriodPay">
+        <in-parameters>
+            <parameter name="timePeriodId" required="true"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mchile.humanteam.PayrollServices.get#PeriodParameters" in-map="[timePeriodId:timePeriodId]" out-map="context"/>
+
+            <!-- Add employer-wide mutual adjustment -->
+            <service-call name="mchile.humanteam.PayrollServices.calculate#MutualAdjustment" in-map="context"/>
+
+            <service-call name="mantle.humanres.PayrollServices.process#TimePeriodPay" in-map="context+[validatePeriodEnded:false]" out-map="context"/>
+
+        </actions>
+    </service>
+
+    <service verb="reopen" noun="PayrollPeriod">
+        <in-parameters>
+            <parameter name="timePeriodId" required="true"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mantle.humanres.PayrollServices.reopen#PayrollPeriod" in-map="context" out-map="context"/>
+            <entity-find-one entity-name="mantle.party.time.TimePeriod" value-field="timePeriod"/>
+            <entity-find entity-name="mantle.humanres.employment.PayrollAdjustment" list="autoAdjustmentList" for-update="true">
+                <econdition field-name="isAutoGenerated" value="Y"/>
+                <econdition field-name="fromDate" from="timePeriod.fromDate"/>
+                <econdition field-name="thruDate" from="timePeriod.thruDate"/>
+                <econdition field-name="timePeriodTypeId" from="timePeriod.timePeriodTypeId"/>
+            </entity-find>
+            <iterate list="autoAdjustmentList" entry="adj">
+                <set field="detailList" from="adj.details"/>
+                <iterate list="detailList" entry="detail">
+                    <entity-delete value-field="detail"/>
+                </iterate>
+                <entity-delete value-field="adj"/>
+            </iterate>
+        </actions>
     </service>
 
 </services>
