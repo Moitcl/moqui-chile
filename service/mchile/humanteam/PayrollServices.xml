@@ -223,11 +223,17 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="Did not find Payroll Time Period"/>
             </if>
             <set field="periodFromDate" from="new java.sql.Timestamp(timePeriod.fromDate.time)"/>
-            <set field="periodThruDate" from="new java.sql.Timestamp(timePeriod.thruDate.time)"/>
-            <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CLF', date:periodThruDate]" out-map="periodUf"/>
+            <script>
+                Calendar cal = Calendar.instance
+                cal.setTimeInMillis(timePeriod.thruDate.time)
+                cal.add(Calendar.DAY_OF_MONTH, 1)
+                cal.add(Calendar.MILLISECOND, -1)
+                periodThruDate = new java.sql.Timestamp(cal.time.time)
+            </script>
+            <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CLF', date:timePeriod.thruDate]" out-map="periodUf"/>
             <set field="periodUfValue" from="periodUf.value"/>
             <set field="periodUfTitle" from="ec.l10n.format(periodThruDate, '\'al\' dd \'de\' MMMM yyyy')"/>
-            <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CL_UTM', date:periodThruDate]" out-map="periodUtm"/>
+            <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:'CL_UTM', date:timePeriod.thruDate]" out-map="periodUtm"/>
             <set field="periodUtmValue" from="periodUtm.value"/>
             <set field="periodUtaValue" from="periodUtmValue*12"/>
             <set field="previousThruDate" from="new java.sql.Timestamp(timePeriod.fromDate.time-10)"/>
@@ -513,6 +519,8 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="tasaSeguroAccidentesOrdinaria" required="true" type="BigDecimal"/>
             <parameter name="tasaSeguroAccidentesExtraordinaria" required="true" type="BigDecimal"/>
             <parameter name="tasaSanna" required="true" type="BigDecimal"/>
+            <parameter name="periodFromDate" type="Timestamp"/>
+            <parameter name="periodThruDate" type="Timestamp"/>
         </in-parameters>
         <out-parameters>
             <parameter name="adjustmentList" type="List"/>
@@ -528,13 +536,6 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <set field="payeePartyId" from="(employerMutualList.first?.organizationPartyId) ?: 'CL_IPS'"/>
             <set field="additionalRate" from="(employerMutualList.first?.additionalRate) ?: 0"/>
-            <script>
-                Calendar cal = Calendar.instance
-                cal.setTimeInMillis(timePeriod.thruDate.time)
-                cal.add(Calendar.DAY_OF_MONTH, 1)
-                cal.add(Calendar.MILLISECOND, -1)
-                thruDate = new java.sql.Timestamp(cal.time.time)
-            </script>
             <set field="baseMap" from="[fromDate:timePeriod.fromDate, thruDate:thruDate, organizationPartyId:timePeriod.partyId, isEmployerPaid:'Y',
                                         isTax:'N', isTaxable:'N', isSocialTax:'N', timePeriodTypeId:timePeriod.timePeriodTypeId,
                                         isSocialTaxable:'N', isMedicalTax:'N', isMedicalTaxable:'N', rateBasisEnumId:'PrbsMedical', payeeDueDays:13,
