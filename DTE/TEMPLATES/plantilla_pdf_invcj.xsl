@@ -40,7 +40,6 @@
 		</fo:root>
 	</xsl:template>
 
-
 	<xsl:template match="DTE/Documento">
 		<fo:block>
 			<xsl:apply-templates select="Encabezado/Emisor">
