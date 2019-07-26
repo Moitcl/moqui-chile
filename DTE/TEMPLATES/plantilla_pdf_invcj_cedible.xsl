@@ -411,6 +411,13 @@
 			</fo:block-container>
 
 			<xsl:apply-templates select="TED" />
+			<fo:block-container absolute-position="absolute" top="24cm" left="12cm"
+                        width="7cm">
+        	                <fo:block font-size="12pt" font-family="sans-serif"
+                	                text-align="right">
+                        	        CEDIBLE
+                        </fo:block>
+	                </fo:block-container>
 		</fo:block>
 	</xsl:template>
 
