@@ -693,7 +693,12 @@
 				border-left-style="solid" border-right-width="0.5pt"
 				border-right-style="solid" margin-right="2mm"  height="0.8cm">
 				<fo:block>
+					<xsl:choose>
+						<xsl:when test="string(number(PrcItem))='NaN'">0</xsl:when>
+					<xsl:otherwise>
 						<xsl:value-of select="format-number(PrcItem, '###.###', 'european')" />
+					</xsl:otherwise>
+					</xsl:choose>
 				</fo:block>
 			</fo:table-cell>
 			<fo:table-cell text-align="right" border-left-width="0.5pt"
