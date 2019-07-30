@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd" default-menu-include="false">
+
+    <actions>
+        <log message="payrollPeriod: ${timePeriod}"/>
+        <entity-find-one entity-name="mantle.party.PartyDetail" value-field="employer" auto-field-map="[partyId:timePeriod.partyId]"/>
+        <entity-find entity-name="mantle.humanres.employment.EmploymentAndRelationship" list="employmentList">
+            <econdition field-name="toPartyId" from="timePeriod.partyId"/>
+            <econditions combine="or">
+                <econdition field-name="fromDate" operator="less-equals" from="timePeriod.thruDate"/>
+                <econdition field-name="thruDate" operator="greater-equals" from="timePeriod.fromDate"/>
+            </econditions>
+        </entity-find>
+        <set field="employmentIdList" from="employmentList.partyRelationshipId"/>
+        <set field="employeeList" from="[]"/>
+        <iterate list="employmentList" entry="employment">
+            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="partyDetail" auto-field-map="[partyId:employment.fromPartyId]"/>
+            <log message="partyDetail: ${partyDetail}"/>
+            <set field="employeeName" from="ec.resource.expand('PartyNameOnlyTemplate', null, partyDetail)"/>
+            <log message="employeeName: ${employeeName}"/>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIds">
+                <econdition field-name="partyId" from="employment.fromPartyId"/>
+                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+                <order-by field-name="-expireDate"/>
+            </entity-find>
+            <set field="rut" from="partyIds.first?.idValue"/>
+            <if condition="rut"><service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:rut]" out-map="context"/></if>
+            <script>employeeList.add([partyRelationshipId:employment.partyRelationshipId, employeeName:employeeName, rut:rut])</script>
+        </iterate>
+
+        <entity-find entity-name="mchile.humanteam.employment.LeaveDetail" list="existingLeaves">
+            <econdition field-name="partyRelationshipId" operator="in" from="employmentIdList"/>
+            <econditions combine="or">
+                <econdition field-name="fromDate" operator="less-equals" from="timePeriod.thruDate"/>
+                <econdition field-name="thruDate" operator="greater-equals" from="timePeriod.fromDate"/>
+            </econditions>
+            <econdition field-name="changeReasonEnumId" operator="not-equals" value="PltPeriodAccrued"/>
+        </entity-find>
+
+    </actions>
+    <widgets>
+        <!--
+        Employments:
+          * End employment
+          * New employment
+
+        Leaves:
+          * Add illness leave
+          * Add vacation leave
+          * Add permitted leave
+          * Add unplanned leave
+
+        Period Adjustments:
+          * Bonos
+          * Descuentos
+          * Préstamos
+        -->
+
+        <container-row>
+            <row-col lg="6">
+                <section name="AdjustmentsSection">
+                    <widgets>
+                        <container-box>
+                            <box-header title="Manage Leaves"></box-header>
+                            <box-body>
+                                <container-dialog id="AddIllnessLeave" button-text="Add Illness Leave">
+                                    <form-single name="AddIllnessLeave" transition="addIllnessLeave">
+                                        <field name="employmentId"><default-field><drop-down>
+                                            <list-options list="employmentList" key="${partyRelationshipId}" text="${employeeName} (Rut ${rut})"/>
+                                        </drop-down></default-field></field>
+                                    </form-single>
+                                </container-dialog>
+                            </box-body>
+                        </container-box>
+                    </widgets>
+                </section>
+            </row-col>
+        </container-row>
+    </widgets>
+</screen>

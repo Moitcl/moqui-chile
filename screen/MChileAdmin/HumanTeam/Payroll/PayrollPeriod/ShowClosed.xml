@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd" default-menu-include="false">
+
+    <always-actions><log message="Always Actions in ShowClosed"/></always-actions>
+    <transition name="PrintPayrollReceipts.pdf">
+        <actions>
+            <entity-find-one value-field="timePeriod" entity-name="mantle.party.time.TimePeriod"/>
+        </actions>
+        <default-response url="${ec.web.getWebappRootUrl(false, null)}/fop/apps/${appRoot}/HumanTeam/Payroll/PayrollPeriod/PrintReceipts" url-type="plain">
+            <parameter name="renderMode" value="xsl-fo"/><parameter name="pageNoLimit" value="true"/>
+            <parameter name="timePeriodId"/>
+            <parameter name="filename" value="Liquidaciones ${timePeriod.periodName}.pdf"/>
+        </default-response>
+    </transition>
+
+    <pre-actions><log message="Pre Actions in ShowClosed"/></pre-actions>
+    <actions><log message="Actions in ShowClosed"/></actions>
+    <widgets>
+        <section name="Totals" condition="timePeriod.isClosed == 'Y'">
+            <widgets>
+                <container-row><row-col lg="6" md="9" sm="12"><container-box>
+                    <box-header title="Totals"></box-header>
+                    <box-body>
+                        <container-row>
+                            <row-col lg="6" md="4"><label text="Payee" type="h4"/></row-col>
+                            <row-col lg="2" md="4" style="text-right"><label text="Amount" type="h4"/></row-col>
+                            <row-col lg="2" md="4" style="text-right"><label text="Unpaid" type="h4"/></row-col>
+                        </container-row>
+                        <section-iterate name="TotalByParty" list="totalsByCategory.keySet()" entry="key">
+                            <actions>
+                                <set field="totalsMap" from="totalsByCategory[key]"/>
+                                <set field="categoryName" from="categoryDescr[key]"/>
+                                <if condition="!categoryName">
+                                    <entity-find-one value-field="partyDetail" entity-name="mantle.party.PartyDetail" auto-field-map="[partyId:key]"/>
+                                    <set field="categoryName" from="ec.resource.expand('PartyNameOnlyTemplate', null, partyDetail)"/>
+                                </if>
+                            </actions>
+                            <widgets>
+                                <container-row>
+                                    <row-col lg="6" md="4"><label text="${categoryName}"/></row-col>
+                                    <row-col lg="2" md="4" style="text-right"><label text="${ec.l10n.formatCurrency(totalsMap.total, currencyUomId)}"/></row-col>
+                                    <row-col lg="2" md="4" style="text-right"><label text="${ec.l10n.formatCurrency(totalsMap.unpaid, currencyUomId)}"/></row-col>
+                                </container-row>
+                            </widgets>
+                        </section-iterate>
+                        <container-row>
+                            <row-col lg="6" md="4"><label text="Total" type="h4"/></row-col>
+                            <row-col lg="2" md="4" style="text-right"><label text="${ec.l10n.formatCurrency(total, currencyUomId)}" type="h4"/></row-col>
+                            <row-col lg="2" md="4" style="text-right"><label text="${ec.l10n.formatCurrency(unpaidTotal, currencyUomId)}" type="h4"/></row-col>
+                        </container-row>
+                    </box-body>
+                </container-box></row-col></container-row>
+            </widgets>
+        </section>
+        <link url="PrintPayrollReceipts.pdf" text="Liquidaciones (PDF)"/>
+
+        <section name="Invoices" condition="timePeriod.isClosed == 'Y'">
+            <widgets>
+                <container-row><row-col lg="6" md="9" sm="12"><container-box>
+                    <box-header title="Invoices"/>
+                    <box-body>
+                        <form-list name="PayrollPeriodInvoices" list="periodInvoiceList">
+                            <field name="invoiceTypeEnumId">
+                                <header-field title="Invoice Type" show-order-by="true"><drop-down allow-empty="true" allow-multiple="true"><entity-options>
+                                    <entity-find entity-name="moqui.basic.Enumeration"><econdition field-name="enumTypeId" value="InvoiceType"/></entity-find>
+                                </entity-options></drop-down></header-field>
+                                <default-field><display-entity entity-name="moqui.basic.Enumeration"/></default-field></field>
+                            <field name="fromPartyId">
+                                <default-field>
+                                    <display-entity entity-name="mantle.party.PartyDetail" text="PartyNameOnlyTemplate"/>
+                                </default-field>
+                            </field>
+                        </form-list>
+
+                    </box-body>
+                </container-box>
+                </row-col></container-row>
+            </widgets>
+        </section>
+    </widgets>
+</screen>

@@ -465,7 +465,7 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <actions>
             <entity-find-one entity-name="mantle.party.time.TimePeriod" value-field="timePeriod"/>
-            <service-call name="mchile.humanteam.PayrollServices.get#DaysWorked" in-map="[partyRelationshipId:partyRelationshipId, timeperiodId:timePeriodId]" out-map="context"/>
+            <service-call name="mchile.humanteam.PayrollServices.get#DaysWorked" in-map="[partyRelationshipId:partyRelationshipId, timePeriodId:timePeriodId]" out-map="context"/>
             <set field="workedProportion" from="(30-daysMissedIllness)/30"/>
 
             <set field="employeePartyId" from="employment.fromPartyId"/>
@@ -664,7 +664,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <entity-find-one entity-name="mantle.party.PartyDetail" value-field="employerPartyDetail" auto-field-map="[partyId:invoice.toPartyId]"/>
                 <!-- Calculate base salary to be paid according to days worked -->
                 <set field="baseSalaryWorked" from="invoice.items.findAll { it.itemTypeEnumId == 'ItemSalary'}.amount.sum()"/>
-                <service-call name="mchile.humanteam.PayrollServices.get#DaysWorked" in-map="[partyRelationshipId:invoice.partyRelationshipId, timeperiodId:timePeriodId]" out-map="context"/>
+                <service-call name="mchile.humanteam.PayrollServices.get#DaysWorked" in-map="[partyRelationshipId:invoice.partyRelationshipId, timePeriodId:timePeriodId]" out-map="context"/>
                 <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItems">
                     <econdition field-name="invoiceId" from="invoice.invoiceId"/>
                     <order-by field-name="invoiceItemSeqId"/>
@@ -719,7 +719,7 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <actions>
             <set field="employeePartyId" from="employment.fromPartyId"/>
-            <service-call name="mchile.humanteam.PayrollServices.get#DaysWorked" in-map="[partyRelationshipId:partyRelationshipId, timeperiodId:timePeriodId]" out-map="context"/>
+            <service-call name="mchile.humanteam.PayrollServices.get#DaysWorked" in-map="[partyRelationshipId:partyRelationshipId, timePeriodId:timePeriodId]" out-map="context"/>
             <set field="leaveReduceRate" from="daysMissedLeave/30"/>
             <set field="illnessReduceRate" from="daysMissedIllness/30"/>
             <set field="baseMap" from="[fromDate:periodFromDate, thruDate:periodThruDate, partyRelationshipId:partyRelationshipId,
@@ -791,6 +791,75 @@ along with this software (see the LICENSE.md file). If not, see
                 </iterate>
                 <entity-delete value-field="adj"/>
             </iterate>
+        </actions>
+    </service>
+
+    <service verb="get" noun="PayrollPeriodDisplayData">
+        <in-parameters>
+            <parameter name="timePeriodId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="totalsByCategory" type="Map"/>
+            <parameter name="periodInvoiceList" type="List"/>
+            <parameter name="timePeriod" type="Map"/>
+            <parameter name="employerDetail" type="Map"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.party.time.TimePeriodAndType" value-field="timePeriod"/>
+            <log message="timePeriod: ${timePeriod}"/>
+            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="employerDetail" auto-field-map="[partyId:timePeriod.partyId]"/>
+            <entity-find entity-name="mantle.account.invoice.Invoice" list="invoiceList">
+                <econdition field-name="timePeriodId"/>
+            </entity-find>
+            <set field="totalsByCategory" from="[:]"/>
+            <set field="amountEmployees" from="0"/>
+            <set field="total" from="0" type="BigDecimal"/>
+            <set field="unpaidTotal" from="0" type="BigDecimal"/>
+            <iterate list="invoiceList" entry="invoice">
+                <entity-find entity-name="mantle.party.PartyRole" list="partyRoleList">
+                    <econdition field-name="partyId" from="invoice.fromPartyId"/>
+                </entity-find>
+                <set field="partyRoleIds" from="partyRoleList.roleTypeId"/>
+                <if condition="invoice.invoiceTypeEnumId == 'InvoicePayroll'"><then>
+                    <set field="key" value="employeePayroll"/>
+                </then><else-if condition="partyRoleIds.contains('CHLAfp')">
+                    <set field="key" value="AFP"/>
+                </else-if><else-if condition="partyRoleIds.contains('CHLIsapre') || partyRoleList.contains('CHLFonasa')">
+                    <set field="key" value="ISAPRE-FONASA"/>
+                </else-if><else-if condition="partyRoleIds.contains('CHLAfc')">
+                    <set field="key" value="AFC"/>
+                </else-if><else>
+                    <set field="key" from="invoice.fromPartyId"/>
+                </else></if>
+                <set field="totalsMap" from="totalsByCategory[key]"/>
+                <if condition="currencyUomId &amp;&amp; currencyUomId != invoice.currencyUomId"><return error="true" message="Currency mismatch, have both ${currencyUomId} and ${invoice.currencyUomId}"/></if>
+                <set field="currencyUomId" from="invoice.currencyUomId"/>
+                <if condition="totalsMap == null">
+                    <set field="totalsMap" from="[total:new BigDecimal(0), unpaid:new BigDecimal(0)]"/>
+                    <set field="totalsByCategory[key]" from="totalsMap"/>
+                </if>
+                <script>
+                    totalsMap['total'] = totalsMap['total'] + invoice.invoiceTotal
+                    totalsMap['unpaid'] = totalsMap['unpaid'] + invoice.unpaidTotal
+                    total += invoice.invoiceTotal
+                    unpaidTotal += invoice.unpaidTotal
+                </script>
+            </iterate>
+            <set field="categoryDescr" from="[employeePayroll:'Trabajadores', AFP:'AFPs', 'ISAPRE-FONASA':'Isapre/Fonasa', AFC:'AFC']"/>
+
+            <entity-find entity-name="mantle.account.invoice.Invoice" list="periodInvoiceList">
+                <search-form-inputs/>
+                <econdition field-name="timePeriodId"/>
+            </entity-find>
+        </actions>
+    </service>
+
+    <service verb="check" noun="TimePeriod" authenticate="anonymous-view">
+        <in-parameters><parameter name="timePeriodId"/></in-parameters>
+        <out-parameters><parameter name="isClosed" type="Boolean"/></out-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.party.time.TimePeriod" value-field="timePeriod"/>
+            <set field="isClosed" from="timePeriod.isClosed == 'Y'"/>
         </actions>
     </service>
 
