@@ -321,8 +321,13 @@
 									border-width="0.5pt" border-style="solid" column-number="5" display-align="center" height="1cm">
 									<fo:block>
 										<fo:inline font-weight="bold">
-											<xsl:value-of select="format-number(Encabezado/Totales/MntNeto, '###.###','european')"/>
-										</fo:inline>
+											<xsl:choose>
+                                                                                        <xsl:when test="Encabezado/Totales/MntNeto">
+                                                                                                <xsl:value-of select="format-number(Encabezado/Totales/MntNeto, '###.###','european')"/>
+                                                                                        </xsl:when>
+                                                                                                <xsl:otherwise>0</xsl:otherwise>
+                                                                                        </xsl:choose>
+                                                                                </fo:inline>
 									</fo:block>
 								</fo:table-cell>
 							</fo:table-row>
@@ -340,7 +345,12 @@
 									border-width="0.5pt" border-style="solid" column-number="5" display-align="center" height="1cm">
 									<fo:block>
 										<fo:inline font-weight="bold">
-											<xsl:value-of select="format-number(Encabezado/Totales/IVA, '###.###', 'european')"/>
+											<xsl:choose>
+                                                                                        <xsl:when test="Encabezado/Totales/IVA">
+                                                                                                <xsl:value-of select="format-number(Encabezado/Totales/IVA, '###.###','european')"/>
+                                                                                        </xsl:when>
+                                                                                                <xsl:otherwise>0</xsl:otherwise>
+                                                                                        </xsl:choose>
 										</fo:inline>
 									</fo:block>
 								</fo:table-cell>
@@ -759,7 +769,7 @@
 										</xsl:when>
 									</xsl:choose>
 									Nro.
-								    <xsl:value-of select="FolioRef" /> de <xsl:value-of select="FchRef"/>, RUT <xsl:value-of select="RUTOtr" />: <xsl:value-of select="RazonRef"/>
+								    <xsl:value-of select="FolioRef" /> de <xsl:value-of select="FchRef"/><!--, RUT <xsl:value-of select="RUTOtr" /-->: <xsl:value-of select="RazonRef"/>
 							</fo:block>
                         </fo:table-cell>
 

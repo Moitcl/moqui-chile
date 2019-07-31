@@ -321,8 +321,13 @@
 									border-width="0.5pt" border-style="solid" column-number="5" display-align="center" height="1cm">
 									<fo:block>
 										<fo:inline font-weight="bold">
-											<xsl:value-of select="format-number(Encabezado/Totales/MntNeto, '###.###','european')"/>
-										</fo:inline>
+											<xsl:choose>
+                                                                                        <xsl:when test="Encabezado/Totales/MntNeto">
+                                                                                                <xsl:value-of select="format-number(Encabezado/Totales/MntNeto, '###.###','european')"/>
+                                                                                        </xsl:when>
+                                                                                                <xsl:otherwise>0</xsl:otherwise>
+                                                                                        </xsl:choose>
+                                                                                </fo:inline>
 									</fo:block>
 								</fo:table-cell>
 							</fo:table-row>
@@ -340,7 +345,12 @@
 									border-width="0.5pt" border-style="solid" column-number="5" display-align="center" height="1cm">
 									<fo:block>
 										<fo:inline font-weight="bold">
-											<xsl:value-of select="format-number(Encabezado/Totales/IVA, '###.###', 'european')"/>
+											<xsl:choose>
+                                                                                        <xsl:when test="Encabezado/Totales/IVA">
+                                                                                                <xsl:value-of select="format-number(Encabezado/Totales/IVA, '###.###','european')"/>
+                                                                                        </xsl:when>
+                                                                                                <xsl:otherwise>0</xsl:otherwise>
+                                                                                        </xsl:choose>
 										</fo:inline>
 									</fo:block>
 								</fo:table-cell>
@@ -375,7 +385,7 @@
 						  color="black" text-align="left" space-before="8pt">
 					<fo:table table-layout="fixed" width="100%"
 							  border-collapse="collapse">
-						<fo:table-column column-width="10cm" />
+						<fo:table-column column-width="10.0cm" />
 
 						<fo:table-body>
 							<fo:table-row>
@@ -411,13 +421,6 @@
 			</fo:block-container>
 
 			<xsl:apply-templates select="TED" />
-			<fo:block-container absolute-position="absolute" top="24.5cm" left="12cm"
-                        width="7cm">
-        	                <fo:block font-size="12pt" font-family="sans-serif"
-                	                text-align="right">
-                        	        CEDIBLE
-                        </fo:block>
-	                </fo:block-container>
 		</fo:block>
 	</xsl:template>
 
@@ -701,11 +704,11 @@
 				border-right-style="solid" margin-right="2mm"  height="0.8cm">
 				<fo:block>
 					<xsl:choose>
-                                                <xsl:when test="string(number(PrcItem))='NaN'">0</xsl:when>
-                                        <xsl:otherwise>
-                                                <xsl:value-of select="format-number(PrcItem, '###.###', 'european')" />
-                                        </xsl:otherwise>
-                                        </xsl:choose>
+						<xsl:when test="string(number(PrcItem))='NaN'">0</xsl:when>
+					<xsl:otherwise>
+						<xsl:value-of select="format-number(PrcItem, '###.###', 'european')" />
+					</xsl:otherwise>
+					</xsl:choose>
 				</fo:block>
 			</fo:table-cell>
 			<fo:table-cell text-align="right" border-left-width="0.5pt"
@@ -766,7 +769,7 @@
 										</xsl:when>
 									</xsl:choose>
 									Nro.
-								    <xsl:value-of select="FolioRef" /> de <xsl:value-of select="FchRef"/>, RUT <xsl:value-of select="RUTOtr" />: <xsl:value-of select="RazonRef"/>
+								    <xsl:value-of select="FolioRef" /> de <xsl:value-of select="FchRef"/><!--, RUT <xsl:value-of select="RUTOtr" /-->: <xsl:value-of select="RazonRef"/>
 							</fo:block>
                         </fo:table-cell>
 
