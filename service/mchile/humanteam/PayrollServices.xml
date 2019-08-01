@@ -863,4 +863,60 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="add" noun="Leave">
+        <in-parameters>
+            <parameter name="partyRelationshipId" required="true"/>
+            <parameter name="leaveTypeEnumId" required="true"/>
+            <parameter name="changeReasonEnumId" required="true"/>
+            <parameter name="fromDate" type="Timestamp" required="true"/>
+            <parameter name="thruDate" type="Timestamp" required="true"/>
+            <parameter name="diffAmount" type="BigDecimal"/>
+            <parameter name="amountUomId" required="true"/>
+            <parameter name="description"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="leaveDetailId"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.humanres.employment.EmploymentAndRelationship" value-field="employment"/>
+            <entity-find entity-name="mantle.party.time.TimePeriod" list="timePeriodList">
+                <econdition field-name="partyId" from="employment.toPartyId"/>
+                <econdition field-name="timePeriodTypeId" from="employment.timePeriodTypeId"/>
+                <econdition field-name="fromDate" operator="less-equals" from="thruDate"/>
+                <econdition field-name="thruDate" operator="greater-equals" from="fromDate"/>
+                <order-by field-name="fromDate"/>
+            </entity-find>
+            <if condition="timePeriodList.size() &lt; 1"><return error="true" message="Could not find TimePeriod for employment ${partyRelationshipId} for dates ${fromDate} - ${thruDate}"/></if>
+            <iterate entry="timePeriod" list="timePeriodList">
+                <if condition="timePeriod.isClosed == 'Y'"><return error="true" message="Cannot add Leave within a closed timePeriod (${timePeriod.timePeriodId} from ${timePeriod.fromDate} - ${timePeriod.thruDate})"/></if>
+            </iterate>
+            <set field="registrationDate" from="ec.user.nowTimestamp"/>
+            <set field="diffAmount" from="diffAmount > 0? -diffAmount: diffAmount"/>
+            <service-call name="create#mchile.humanteam.employment.LeaveDetail" in-map="context" out-map="context"/>
+        </actions>
+    </service>
+
+    <service verb="remove" noun="Leave">
+        <in-parameters>
+            <parameter name="leaveDetailId"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.humanteam.employment.LeaveDetail" value-field="leaveDetail"/>
+            <entity-find-one entity-name="mantle.party.PartyRelationship" value-field="employment" auto-field-map="leaveDetail"/>
+            <entity-find entity-name="mantle.party.time.TimePeriod" list="timePeriodList">
+                <econdition field-name="partyId" from="employment.toPartyId"/>
+                <econdition field-name="fromDate" operator="less-equals" from="leaveDetail.thruDate"/>
+                <econdition field-name="thruDate" operator="greater-equals" from="leaveDetail.fromDate"/>
+                <order-by field-name="fromDate"/>
+            </entity-find>
+            <iterate list="timePeriodList" entry="timePeriod">
+                <if condition="timePeriod.isClosed == 'Y'">
+                    <message type="warning" error="true">Cannot remove leave affecting closed time period ${timePeriod.timePeriodId} from ${timePeriod.fromDate} to ${timePeriod.thruDate}</message>
+                </if>
+            </iterate>
+            <check-errors/>
+            <service-call name="delete#mchile.humanteam.employment.LeaveDetail" in-map="context"/>
+        </actions>
+    </service>
+
 </services>
