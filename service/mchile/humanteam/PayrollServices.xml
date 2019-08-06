@@ -570,9 +570,11 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="daysWorked" type="BigDecimal"/>
             <parameter name="daysMissedIllness" type="BigDecimal"/>
             <parameter name="daysMissedLeave" type="BigDecimal"/>
+            <parameter name="daysMissedEmployment" type="BigDecimal"/>
         </out-parameters>
         <actions>
             <entity-find-one entity-name="mantle.party.time.TimePeriodAndType" value-field="timePeriod"/>
+            <entity-find-one entity-name="mantle.humanres.employment.EmploymentAndRelationship" value-field="employment"/>
             <!-- Find days worked -->
             <entity-find entity-name="mchile.humanteam.employment.LeaveDetail" list="leaveList">
                 <econdition field-name="partyRelationshipId"/>
@@ -586,9 +588,6 @@ along with this software (see the LICENSE.md file). If not, see
             <iterate entry="leave" list="leaveList">
                 <set field="fromDate" from="leave.fromDate.before(timePeriod.fromDate)? timePeriod.fromDate: leave.fromDate"/>
                 <set field="thruDate" from="leave.thruDate.after(timePeriod.thruDate)? timePeriod.thruDate: leave.thruDate"/>
-                <!--
-                <set field="diffAmount" from="(leave.diffAmount*(thruDate.time-fromDate.time)/(leave.thruDate.time-leave.fromDate.time)).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
-                -->
                 <set field="diffAmount" from="(leave.diffAmount*(thruDate.time-fromDate.time)/(leave.thruDate.time-leave.fromDate.time)).setScale(1, BigDecimal.ROUND_HALF_UP)"/>
                 <script>
                     daysMissed += diffAmount
@@ -597,6 +596,12 @@ along with this software (see the LICENSE.md file). If not, see
                     else ec.message.addError("Unknown changeReasonEnumId: ${leave.changeReasonEnumId}")
                 </script>
             </iterate>
+            <if condition="employment.fromDate &gt; timePeriod.fromDate || (employment.thruDate &amp;&amp; employment.thruDate &lt; timePeriod.thruDate)">
+                <set field="effectiveFromDate" from="employment.fromDate &gt; timePeriod.fromDate? employment.fromDate: timePeriod.fromDate"/>
+                <set field="effectiveThruDate" from="(employment.thruDate &amp;&amp; employment.thruDate &lt; timePeriod.thruDate)? employment.thruDate: new java.sql.Timestamp(timePeriod.thruDate.time+24*60*60*1000-1)"/>
+                <set field="daysMissedEmployment" from="((effectiveThruDate.time - effectiveFromDate.time) / (24*60*60*1000) - 30).setScale(1, BigDecimal.ROUND_HALF_UP)" type="BigDecimal"/>
+                <set field="daysMissed" from="daysMissed + daysMissedEmployment"/>
+            </if>
             <set field="daysWorked" from="30+daysMissed"/>
         </actions>
     </service>
