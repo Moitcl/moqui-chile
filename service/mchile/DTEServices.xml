@@ -92,7 +92,8 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Recuperacion de parametros de la organizacion -->
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
+            <!--set field="certS" from="pathCert"/-->
+            <set field="certS" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="resultS" from="pathResults"/>
             <set field="pathTemp" from="pathTemp"/>
@@ -102,6 +103,7 @@ along with this software (see the LICENSE.md file). If not, see
             <!--set field="giro" from="giroEmisor"/-->
             <set field="templateFactura" from="templateFactura"/>
             <set field="templatePdf" from="templatePdf"/>
+            <set field="templatePdfCedible" from="templatePdfCedible"/>
             <set field="templateEnvio" from="templateEnvio"/>
             <set field="templateAceptaciones" from="templateAceptaciones"/>
             <set field="templateLibro" from="templateLibro"/>
@@ -125,6 +127,8 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="folioS" from="folio" type="Integer"/>
             <set field="codRef" value="0" type="Integer"/>
+
+
 
             <script>
                 cafS = cafS + caf
@@ -192,17 +196,17 @@ along with this software (see the LICENSE.md file). If not, see
                 XmlOptions opts = new XmlOptions();
                 opts.setLoadSubstituteNamespaces(namespaces);
 
-                //caf = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts).getAUTORIZACION();
-
                 // Recuperación de archivo CAF desde BD
                 caf = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts).getAUTORIZACION();
 
                 // Construyo base a partir del template
-                doc = DTEDocument.Factory.parse(new File(plantillaS), opts);
+                //doc = DTEDocument.Factory.parse(new File(plantillaS), opts);
+                doc = DTEDocument.Factory.parse(ec.resource.getLocationStream(plantillaS), opts);
 
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
-                ks.load(new FileInputStream(certS), passS.toCharArray());
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
                 String alias = ks.aliases().nextElement();
 
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
@@ -262,7 +266,10 @@ along with this software (see the LICENSE.md file). If not, see
                 Receptor recp = doc.getDTE().getDocumento().getEncabezado().addNewReceptor();
                 recp.setRUTRecep(rutReceptor.trim());
                 recp.setRznSocRecep(rznSocReceptor);
-                recp.setGiroRecep(giroReceptor);
+                if(giroReceptor.length() &gt; 39)
+                    recp.setGiroRecep(giroReceptor.substring(0,39));
+                else
+                    recp.setGiroRecep(giroReceptor);
                 recp.setContacto(contactoReceptor);
                 recp.setDirRecep(dirReceptor);
                 recp.setCmnaRecep(cmnaReceptor);
@@ -278,6 +285,7 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Campo para guardar resumen atributos -->
             <set field="amount" value="0" type="Long"/>
 
+            <set field="uom"/>
 
             <if condition="tipoFactura == 33">
                 <script>
@@ -294,6 +302,12 @@ along with this software (see the LICENSE.md file). If not, see
                     <service-call name="mchile.DTEServices.check#Afecto" in-map="[productId:detailEntry.productId]" out-map="afectoOutMap"/>
                     <set field="itemAfecto" from="afectoOutMap.afecto" type="String"/>
                     <set field="pctDiscount" from="detailEntry.pctDiscount"/>
+                    <if condition="detailEntry.quantityUomId.equals('TF_hr')">
+                        <set field="uom" value="Hora"/>
+                    </if>
+                    <if condition="detailEntry.quantityUomId.equals('TF_mon')">
+                        <set field="uom" value="Mes"/>
+                    </if>
                     <script>
 
                         // Agrego detalles
@@ -301,6 +315,8 @@ along with this software (see the LICENSE.md file). If not, see
                         det[i].setNroLinDet(i+1);
                         det[i].setNmbItem(nombreItem);
                         det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                        if(uom != null)
+                            det[i].setUnmdItem(uom);
                         if((pctDiscount != null) &amp;&amp; (pctDiscount &gt; 0)) {
                             logger.warn("Aplicando descuento " + pctDiscount+"% a precio "+ priceItem );
                             descuento = totalItem * pctDiscount / 100;
@@ -347,7 +363,7 @@ along with this software (see the LICENSE.md file). If not, see
                         // Agrego referencias
                         ref[i] = Referencia.Factory.newInstance();
                         ref[i].setNroLinRef(i+1);
-                        if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('0')) { // Used for Set de Pruebas SII
+                        if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('Ftdt-0')) { // Used for Set de Pruebas SII
                             ref[i].setTpoDocRef('SET');
                             ref[i].setFolioRef(referenciaEntry.folio.toString());
                             ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
@@ -380,7 +396,7 @@ along with this software (see the LICENSE.md file). If not, see
                     // Descuento Global
                     if(globalDiscount != null &amp;&amp; Integer.valueOf(globalDiscount) > 0) {
                         logger.warn("Descuento global:" + globalDiscount);
-                        long descuento = totalNeto * Integer.valueOf(globalDiscount) / 100;
+                        long descuento = Math.round(totalNeto * (Long.valueOf(globalDiscount) / 100));
                         logger.warn("Descuento::" + descuento);
                         totalNeto = totalNeto - descuento
                         // Creación entradas en XML
@@ -434,8 +450,11 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="qtyItem" from="detailEntry.quantity" type="Integer"/>
                     <set field="priceItem" from="detailEntry.amount" type="Integer"/>
                     <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
-                    <if condition="detailEntry.quantityUomId">
+                    <if condition="detailEntry.quantityUomId.equals('TF_hr')">
                         <set field="uom" value="Hora"/>
+                    </if>
+                    <if condition="detailEntry.quantityUomId.equals('TF_mon')">
+                        <set field="uom" value="Mes"/>
                     </if>
 
                     <!--service-call name="mchile.DTEServices.escape#Characters" in-map="[cadenaString:nombreItem]" out-map="context"/>
@@ -483,7 +502,7 @@ along with this software (see the LICENSE.md file). If not, see
                         // Agrego referencias
                         ref[i] = Referencia.Factory.newInstance();
                         ref[i].setNroLinRef(i+1);
-                        if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('0')) { // Used for Set de Pruebas SII
+                        if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('Ftdt-0')) { // Used for Set de Pruebas SII
                             ref[i].setTpoDocRef('SET');
                             ref[i].setFolioRef(referenciaEntry.folio.toString());
                             ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
@@ -555,7 +574,7 @@ along with this software (see the LICENSE.md file). If not, see
                         ref[i] = Referencia.Factory.newInstance();
                         ref[i].setNroLinRef(i+1);
 
-                        if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('0')) {
+                        if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('Ftdt-0')) {
                             ref[i].setTpoDocRef('SET');
                             ref[i].setCodRef(codRef);
                             ref[i].setFolioRef(referenciaEntry.folio.toString());
@@ -594,6 +613,7 @@ along with this software (see the LICENSE.md file). If not, see
                 </iterate>
                 <script>
                     i = 0;
+                    boolean alreadyPassed = false;
                 </script>
                 <iterate list="detailList" entry="detailEntry">
                     <set field="nombreItem" from="detailEntry.description"/>
@@ -605,69 +625,83 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="priceItem" from="detailEntry.returnPrice" type="Integer"/>
                     <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
 
+                    <!-- No es necesario escapar los caracteres, incluso provoca que el SII los rechace -->
                     <!--service-call name="mchile.DTEServices.escape#Characters" in-map="[cadenaString:nombreItem]" out-map="context"/>
                     <set field="nombreItem" from="outString"/-->
                     <set field="pctDiscount" from="detailEntry.pctDiscount"/>
                     <log message="Descuento item: $pctDiscount" level="warn"/>
                     <script><![CDATA[
                         // Agrego detalles
-                        det[i] = Detalle.Factory.newInstance();
-                        det[i].setNroLinDet(i+1);
-                        det[i].setNmbItem(nombreItem);
-                        if(dteExenta) {
-                            det[i].setIndExe(1);
-                        }
-                        if((pctDiscount != null) && (BigDecimal.valueOf(pctDiscount) > 0)) {
-                            logger.warn("Aplicando descuento " + pctDiscount+"% a precio "+ priceItem );
-                            descuento = totalItem * pctDiscount / 100;
-                            logger.warn("Descuento:" + descuento);
-                            //totalInvoice = totalInvoice + totalItem - descuento
-                            det[i].setDescuentoPct(pctDiscount);
-                            det[i].setDescuentoMonto(Math.round(descuento));
-                            totalItem = totalItem - Math.round(descuento)
-                        }
+                        if(!alreadyPassed) {
+                            det[i] = Detalle.Factory.newInstance();
+                            det[i].setNroLinDet(i+1);
+                            det[i].setNmbItem(nombreItem);
+                            if(dteExenta) {
+                                det[i].setIndExe(1);
+                            }
+                            if((pctDiscount != null) && (BigDecimal.valueOf(pctDiscount) > 0)) {
+                                logger.warn("Aplicando descuento " + pctDiscount+"% a precio "+ priceItem );
+                                descuento = totalItem * pctDiscount / 100;
+                                logger.warn("Descuento:" + descuento);
+                                //totalInvoice = totalInvoice + totalItem - descuento
+                                det[i].setDescuentoPct(pctDiscount);
+                                det[i].setDescuentoMonto(Math.round(descuento));
+                                totalItem = totalItem - Math.round(descuento)
+                            }
 
 
-                        if(BigDecimal.valueOf(codRef) != 2 && BigDecimal.valueOf(codRef) != 1) { // Corrige montos o anula documento
-                            logger.warn("codRef == 1 o codRef == 2");
-                            if(BigDecimal.valueOf(qtyItem) > 0) {
+                            if(BigDecimal.valueOf(codRef) != 2 && BigDecimal.valueOf(codRef) != 1) { // Corrige montos o anula documento
+                                logger.warn("codRef == 1 o codRef == 2 :" + codRef);
+                                if(BigDecimal.valueOf(qtyItem) > 0) {
+                                    det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                                }
+                                if(BigDecimal.valueOf(priceItem) > 0) {
+                                    det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                                }
+                                det[i].setMontoItem( totalItem );
+                            } else if (BigDecimal.valueOf(codRef) == 2){ // codRef == 2 (Corrige giro) no lleva montos
+                                logger.warn("codRef = 2");
+                                //det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                                //det[i].setPrcItem( BigDecimal.valueOf(priceItem));
+                                //det[i].setMontoItem(totalItem);
+                                det[i].setNmbItem("CORRIGE GIROS");
+                                det[i].setMontoItem(0);
+                                alreadyPassed = true;
+                                //totalItem = 0
+                            } else if( BigDecimal.valueOf(codRef) == 1 ){ // Cod ref == 1
+                                logger.warn("codigo ref == 1");
                                 det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
+                                det[i].setPrcItem( BigDecimal.valueOf(priceItem));
+                                det[i].setMontoItem(totalItem);
+                                //totalItem = 0
                             }
-                            if(BigDecimal.valueOf(priceItem) > 0) {
-                                det[i].setPrcItem(BigDecimal.valueOf(priceItem));
+                            totalInvoice = totalInvoice + totalItem
+                            if(itemAfecto.equals("true") && !dteExenta) {
+                                logger.warn("IFFFF1");
+                                totalNeto = totalNeto + totalItem
+                                montoNeto = totalNeto
+                            } else {
+                                totalExento = totalExento + totalItem
+                                montoExento = totalExento
+                                det[i].setIndExe(1);
+                                logger.warn("IFFFF2, monto exento: "+ montoExento);
                             }
-                            det[i].setMontoItem( totalItem );
-                        } else if (BigDecimal.valueOf(codRef) == 2 ){ // codRef == 2 (Corrige giro) no lleva montos
-                            logger.warn("codRef = 2");
-                            //det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
-                            //det[i].setPrcItem( BigDecimal.valueOf(priceItem));
-                            //det[i].setMontoItem(totalItem);
-                            det[i].setNmbItem("CORRIGE GIROS");
-                            det[i].setMontoItem(0);
-                            //totalItem = 0
-                        } else if( BigDecimal.valueOf(codRef) == 1 ){ // Cod ref == 1
-                            logger.warn("codigo ref == 1");
-                            det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
-                            det[i].setPrcItem( BigDecimal.valueOf(priceItem));
-                            det[i].setMontoItem(totalItem);
-                            //totalItem = 0
+                            i = i + 1
                         }
-                        totalInvoice = totalInvoice + totalItem
-                        if(itemAfecto.equals("true")) {
-                            totalNeto = totalNeto + totalItem
-                            montoNeto = totalNeto
-                        } else {
-                            totalExento = totalExento + totalItem
-                            montoExento = totalExento
-                            det[i].setIndExe(1);
-                        }
-                        i = i + 1
                     ]]></script>
                 </iterate>
                 <script>
                     doc.getDTE().getDocumento().setReferenciaArray(ref);
 
-                    doc.getDTE().getDocumento().setDetalleArray(det);
+                    // Corrección de arreglo para sacar items nulos
+                    if (BigDecimal.valueOf(codRef) == 2){
+                        logger.warn("Corrigiendo lista de detalles");
+                        Detalle[] detFixed = new Detalle[1]
+                        detFixed[0] = det[0];
+                        doc.getDTE().getDocumento().setDetalleArray(detFixed);
+                    } else {
+                        doc.getDTE().getDocumento().setDetalleArray(det);
+                    }
                     // Totales
                     Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
 
@@ -681,27 +715,27 @@ along with this software (see the LICENSE.md file). If not, see
                     if(BigDecimal.valueOf(codRef) == 1) { // Anulación
                         logger.warn("IF:" );
                         if(!dteExenta) {
-                    logger.warn("IF2:" + montoIva);
+                            logger.warn("IF2:" + montoIva);
                             tot.setTasaIVA(BigDecimal.valueOf(19));
                             tot.setMntExe(totalExento);
                             tot.setIVA(montoIva);
                             tot.setMntNeto(montoNeto);
                             tot.setMntTotal(montoTotal);
-                            //montoExento = montoExe;
                             montoExento = totalExento;
                             montoIVARecuperable = montoIva;
                             amount = montoTotal;
                         } else {
-                    logger.warn("IF3:" );
-                            tot.setMntExe(montoNeto);
-                            //tot.setMntNeto(montoNeto);
-                            tot.setMntTotal(montoNeto);
+                            logger.warn("IF3: montoNeto: " +montoNeto + ", montoExento: " + montoExento);
+                            tot.setMntExe(montoExento);
+                            tot.setMntTotal(montoExento);
                             montoExento = montoNeto;
                             montoIVARecuperable = 0;
                             amount = montoNeto;
                         }
                     } else if(BigDecimal.valueOf(codRef) != 2) {
+                        logger.warn("codRef != 2");
                         if(!dteExenta) {
+                            logger.warn("DTE no Exenta");
                             tot.setTasaIVA(BigDecimal.valueOf(19));
                             tot.setMntExe(totalExento);
                             tot.setIVA(montoIva);
@@ -711,10 +745,13 @@ along with this software (see the LICENSE.md file). If not, see
                             montoIVARecuperable = montoIva;
                             amount = montoTotal;
                         } else {
-                            tot.setMntExe(montoNeto);
-                            //tot.setMntNeto(montoNeto);
-                            tot.setMntTotal(montoNeto);
-                            montoExento = montoNeto;
+                            logger.warn("DTE Exenta, monto neto:"+ montoNeto);
+                            //tot.setMntTotal(montoNeto);
+                            if(!dteExenta) {
+                                montoExento = montoNeto;
+                            }
+                            tot.setMntExe(montoExento);
+                            tot.setMntTotal(montoExento);
                             montoIVARecuperable = 0;
                             amount = montoNeto;
                         }
@@ -759,8 +796,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="totalInvoice" value="0" type="Long"/>
                 <set field="totalItempTmp" value="0" type="Long"/>
 
-                <!-- TODO: En este caso la lista de detalles es lo que hay que modificar -->
-                <!-- TODO: detailList:[01-1-100.000-102193, 02-1-100.000-11092] -->
                 <set field="dteExenta" value="false" type="Boolean"/>
                 <script>
                     Referencia[] ref = null;
@@ -788,7 +823,7 @@ along with this software (see the LICENSE.md file). If not, see
                     ref[i] = Referencia.Factory.newInstance();
                     ref[i].setNroLinRef(i+1);
 
-                    if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('0')) {
+                    if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('Ftdt-0')) {
                         ref[i].setTpoDocRef('SET');
                         ref[i].setCodRef(codRef);
                         ref[i].setFolioRef(referenciaEntry.folio.toString());
@@ -851,6 +886,8 @@ along with this software (see the LICENSE.md file). If not, see
                                 det[i].setMontoItem(Long.valueOf(totalItemTmp));
                             } else {
                                 det[i].setMontoItem(0);
+                                det[i].setNmbItem("ANULA DOCUMENTO DE REFERENCIA");
+                                totalItemTmp = 0;
                                 //det[i].setQtyItem(qtyItem);
                                 //det[i].setPrcItem(0);
                             }
@@ -860,7 +897,9 @@ along with this software (see the LICENSE.md file). If not, see
                                 det[i].setPrcItem(Long.valueOf(priceItem));
                                 det[i].setMontoItem(Long.valueOf(totalItemTmp));
                             } else {
-                                det[i].setMontoItem(0);
+                                det[i].setMontoItem(0);// En simulación debe ser igual a monto de DTE anulada
+                                //det[i].setMontoItem(Long.valueOf(totalItemTmp));// En simulación debe ser igual a monto de DTE anulada
+                                det[i].setNmbItem("ANULA DOCUMENTO DE REFERENCIA");
                             }
                         }
                         totalInvoice = totalInvoice + totalItemTmp
@@ -868,6 +907,16 @@ along with this software (see the LICENSE.md file). If not, see
                     ]]></script>
                 </iterate>
                 <script><![CDATA[
+                    // Corrección de arreglo para sacar items nulos
+                    if (BigDecimal.valueOf(codRef) == 1){
+                        logger.warn("Corrigiendo lista de detalles");
+                        Detalle[] detFixed = new Detalle[1]
+                        detFixed[0] = det[0];
+                        doc.getDTE().getDocumento().setDetalleArray(detFixed);
+                    } else {
+                        doc.getDTE().getDocumento().setDetalleArray(det);
+                    }
+
                     doc.getDTE().getDocumento().setDetalleArray(det);
                     // Totales
                     Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
@@ -907,9 +956,11 @@ along with this software (see the LICENSE.md file). If not, see
                         if(!dteExenta) {
                             //tot.setMntExe(montoNeto);
                             tot.setMntTotal(0);
+                            tot.setMntTotal(montoTotal);
                             amount = 0;
                         } else {
                             tot.setMntTotal(0);
+                            tot.setMntTotal(montoTotal);
                             amount = 0;
                         }
                     }
@@ -951,7 +1002,7 @@ along with this software (see the LICENSE.md file). If not, see
                         ref[i] = Referencia.Factory.newInstance();
                         ref[i].setNroLinRef(i+1);
 
-                        if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('0')) {
+                        if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('Ftdt-0')) {
                         ref[i].setTpoDocRef('SET');
                         //ref[i].setCodRef(codRef);
                         ref[i].setFolioRef(referenciaEntry.folio.toString());
@@ -1123,7 +1174,7 @@ along with this software (see the LICENSE.md file). If not, see
                 logger.warn("URI: " + uri)
 
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
-                doc.save(new File(resultS + "DTE" + tipoFactura + "-" + folio + "-sinfirma.xml"), opts);
+                //doc.save(new File(resultS + "DTE" + tipoFactura + "-" + folio + "-sinfirma.xml"), opts);
                 doc.save(out, opts);
                 Document doc2 = XMLUtil.parseDocument(out.toByteArray());
                 byte[] salida = Signer.sign(doc2, uri, key, cert, uri, "Documento");
@@ -1139,14 +1190,14 @@ along with this software (see the LICENSE.md file). If not, see
                     logger.warn("Error al generar factura folio "+folio);
                 }
 
-                // Subir XML a base de datos
-
             </script>
             <!-- Registro de DTE en base de datos y generación de PDF -->
             <set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/>
-            <set field="xml" value="${resultS}DTE${tipoFactura}-${folio}.xml"/>
-            <set field="pdf" value="${pathPdf}DTE${tipoFactura}-${folio}.pdf"/>
-            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, activeOrgId:activeOrgId]" out-map="context"/>
+            <set field="xml" value="${resultS}/DTE${tipoFactura}-${folio}.xml"/>
+            <set field="pdf" value="${pathPdf}/DTE${tipoFactura}-${folio}.pdf"/>
+            <set field="pdfCedible" value="${pathPdf}/DTE${tipoFactura}-${folio}-cedible.pdf"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, pdfCedible:pdfCedible, activeOrgId:activeOrgId]" out-map="context"/>
+            <!--service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:salida, activeOrgId:activeOrgId]" out-map="context"/-->
             <set field="bArray2"/>
 
             <!-- Lectura y conversión a arreglo de bytes de PDF temporal -->
@@ -1163,6 +1214,17 @@ along with this software (see the LICENSE.md file). If not, see
                 }
                 logger.warn("pdf largo: " + file.length());
                 bArray2 = bArray;
+
+                File fileCedible = new File(pdfCedible);
+                FileInputStream fisCedible = null;
+                byte[] bArrayCedible = new byte[(int) fileCedible.length()];
+                try {
+                    fisCedible = new FileInputStream(fileCedible);
+                    fisCedible.read(bArrayCedible);
+                    fisCedible.close();
+                } catch (IOException ioExp) {
+                    ioExp.printStackTrace();
+                }
             </script>
 
             <!-- Creación de registro en FiscalTaxDocument -->
@@ -1193,7 +1255,9 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts, contentData:bArray2]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
-            <!--return error="true" message="$anulaBoleta - $folioAnulaBoleta - monto: $amount - neto: $montoNeto - exento: $montoExento - montoIva: $montoIVARecuperable"/-->
+
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedible, contentDate:ts, contentData:bArrayCedible]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
             <!-- Creación de registro en FiscalTaxDocumentAttributes -->
             <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, amount:amount, fechaEmision:fechaEmision, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmision,
                                          montoExento:montoExento, montoIVARecuperable:montoIVARecuperable]"/>
@@ -1276,6 +1340,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
             <set field="certS" from="pathCert"/>
+            <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="pathResultS" from="pathResults"/>
             <set field="plantillaEnvio" from="templateEnvio"/>
@@ -1313,7 +1378,8 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.sii.siiDte.EnvioDTEDocument.EnvioDTE.SetDTE.Caratula.SubTotDTE;
 
                 // Construyo Envio
-                EnvioDTEDocument envio = EnvioDTEDocument.Factory.parse(new FileInputStream(plantillaEnvio));
+                //EnvioDTEDocument envio = EnvioDTEDocument.Factory.parse(new FileInputStream(plantillaEnvio));
+                EnvioDTEDocument envio = EnvioDTEDocument.Factory.parse(ec.resource.getLocationStream(plantillaEnvio));
 
                 // Debo agregar el schema location (Sino SII rechaza)
                 XmlCursor cursor = envio.newCursor();
@@ -1322,7 +1388,8 @@ along with this software (see the LICENSE.md file). If not, see
                 }
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
-                ks.load(new FileInputStream(certS), passS.toCharArray());
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
                 String alias = ks.aliases().nextElement();
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS);
 
@@ -1353,7 +1420,6 @@ along with this software (see the LICENSE.md file). If not, see
                 HashMap&lt;Integer, Integer&gt; hashTot = new HashMap&lt;Integer, Integer&gt;();
 
                 for (int i = 0; i &lt; DTEList.length; i++) {
-                    //dtes[i] = DTEDocument.Factory.parse(new FileInputStream(DTEList[i]), opts).getDTE();
                     dtes[i] = DTEDocument.Factory.parse(DTEList[i].getBinaryStream(), opts).getDTE();
                     // armar hash para totalizar por tipoDTE
                     if (hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) != null) {
@@ -1434,7 +1500,7 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="generaEnvio" noun="Boletas">
         <description>
-            Generación de envio documento a partir de facturas ya generadas.
+            Generación de envio documento a partir de boletas ya generadas.
         </description>
         <in-parameters>
             <parameter name="recepS" required="false"/>
@@ -1513,6 +1579,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
             <set field="certS" from="pathCert"/>
+            <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="resultS" from="pathResults"/>
             <set field="pathTemp" from="pathTemp"/>
@@ -1659,7 +1726,8 @@ along with this software (see the LICENSE.md file). If not, see
 
 	    		// carga certificado digital y llave
                 ks = KeyStore.getInstance("PKCS12");
-                ks.load(new FileInputStream(certS), passS.toCharArray());
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
                 alias = ks.aliases().nextElement();
 
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
@@ -1855,6 +1923,7 @@ return
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
             <set field="certS" from="pathCert"/>
+            <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
 
             <set field="trackId" value=""/>
@@ -1874,7 +1943,8 @@ return
                 ConexionSii con = new ConexionSii();
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
-                ks.load(new FileInputStream(certS), passS.toCharArray());
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
                 String alias = ks.aliases().nextElement();
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS);
 
@@ -1928,6 +1998,7 @@ return
             <parameter name="templateFactura"/>
             <parameter name="templateBoleta"/>
             <parameter name="templatePdf"/>
+            <parameter name="templatePdfCedible"/>
             <parameter name="templatePdfBoleta"/>
             <parameter name="templateEnvio"/>
             <parameter name="templateEnvioBoleta"/>
@@ -1954,6 +2025,7 @@ return
             <parameter name="pathPdf"/>
             <parameter name="pathTemp"/>
             <parameter name="pathCaf"/>
+            <parameter name="certData"/>
             <parameter name="passCert"/>
             <parameter name="nmbContacto"/>
             <parameter name="mailContacto"/>
@@ -1965,6 +2037,7 @@ return
                 <select-field field-name="templateFactura"/>
                 <select-field field-name="templateBoleta"/>
                 <select-field field-name="templatePdf"/>
+                <select-field field-name="templatePdfCedible"/>
                 <select-field field-name="templatePdfBoleta"/>
                 <select-field field-name="templateEnvio"/>
                 <select-field field-name="templateEnvioBoleta"/>
@@ -1985,12 +2058,8 @@ return
                 <select-field field-name="cmnaOrigen"/>
                 <select-field field-name="ciudadOrigen"/>
                 <select-field field-name="pathCert"/>
-                <select-field field-name="pathResults"/>
-                <select-field field-name="pathAceptaciones"/>
-                <select-field field-name="pathRecibidas"/>
-                <select-field field-name="pathPdf"/>
+                <select-field field-name="certData"/>
                 <select-field field-name="pathTemp"/>
-                <select-field field-name="pathCaf"/>
                 <select-field field-name="passCert"/>
                 <select-field field-name="nmbContacto"/>
                 <select-field field-name="mailContacto"/>
@@ -2004,6 +2073,7 @@ return
             <set field="templateFactura" from="orgField.templateFactura"/>
             <set field="templateBoleta" from="orgField.templateBoleta"/>
             <set field="templatePdf" from="orgField.templatePdf"/>
+            <set field="templatePdfCedible" from="orgField.templatePdfCedible"/>
             <set field="templatePdfBoleta" from="orgField.templatePdfBoleta"/>
             <set field="templateEnvio" from="orgField.templateEnvio"/>
             <set field="templateEnvioBoleta" from="orgField.templateEnvioBoleta"/>
@@ -2024,12 +2094,13 @@ return
             <set field="cmnaOrigen" from="orgField.cmnaOrigen"/>
             <set field="ciudadOrigen" from="orgField.ciudadOrigen"/>
             <set field="pathCert" from="orgField.pathCert"/>
-            <set field="pathResults" from="orgField.pathResults"/>
-            <set field="pathAceptaciones" from="orgField.pathAceptaciones"/>
-            <set field="pathRecibidas" from="orgField.pathRecibidas"/>
-            <set field="pathPdf" from="orgField.pathPdf"/>
+            <set field="pathResults" from="orgField.pathTemp"/>
+            <set field="pathAceptaciones" from="orgField.pathTemp"/>
+            <set field="pathRecibidas" from="orgField.pathTemp"/>
+            <set field="pathPdf" from="orgField.pathTemp"/>
             <set field="pathTemp" from="orgField.pathTemp"/>
-            <set field="pathCaf" from="orgField.pathCaf"/>
+            <set field="pathCaf" from="orgField.pathTemp"/>
+            <set field="certData" from="orgField.certData"/>
             <set field="passCert" from="orgField.passCert"/>
             <set field="nmbContacto" from="orgField.nmbContacto"/>
             <set field="mailContacto" from="orgField.mailContacto"/>
@@ -2085,6 +2156,7 @@ return
         </description>
         <in-parameters>
             <parameter name="pdf" required="true"/>
+            <parameter name="pdfCedible" required="true"/>
             <parameter name="dte" required="true"/>
             <parameter name="activeOrgId" required="true"/>
             <parameter name="boleta"/>
@@ -2101,6 +2173,70 @@ return
             <set field="giro" from="giroEmisor"/>
             <set field="templateFactura" from="templateFactura"/>
             <set field="templatePdf" from="templatePdf"/>
+            <set field="templatePdfCedible" from="templatePdfCedible"/>
+            <set field="templatePdfBoleta" from="templatePdfBoleta"/>
+            <set field="templatePdfBoletaCedible" from="templatePdfBoletaCedible"/>
+            <set field="templateEnvio" from="templateEnvio"/>
+            <set field="templateAceptaciones" from="templateAceptaciones"/>
+            <set field="templateLibro" from="templateLibro"/>
+            <set field="logo" from="logo"/>
+            <set field="fchResol" from="fchResol"/>
+            <set field="nroResol" from="nroResol"/>
+
+
+            <if condition="boleta">
+                <set field="template" from="templatePdfBoleta"/>
+            </if>
+
+            <if condition="!templatePdf">
+                <return error="true" message="Organización emisora no tiene definida plantilla para generar PDF"/>
+            </if>
+            <if condition="!templatePdfCedible">
+                <return error="true" message="Organización emisora no tiene definida plantilla para generar PDF Cedible"/>
+            </if>
+            <script>
+                import java.io.File;
+                import java.io.FileInputStream;
+                import java.security.KeyStore;
+                import java.security.PrivateKey;
+                import java.security.cert.X509Certificate;
+
+                import cl.nic.dte.net.ConexionSii;
+                import cl.nic.dte.util.Utilities;
+                import cl.sii.siiDte.RECEPCIONDTEDocument;
+
+                //Utilities.generatePDF(new FileInputStream(dte), new FileInputStream(template), new FileOutputStream(pdf));
+                Utilities.generatePDF(new FileInputStream(dte), ec.resource.getLocationStream(template), new FileOutputStream(pdf));
+                Utilities.generatePDF(new FileInputStream(dte), ec.resource.getLocationStream(templatePdfCedible), new FileOutputStream(pdfCedible));
+
+                logger.warn("---------------");
+                logger.warn("PDF Generado: " + pdf);
+                logger.warn("PDF Cedible Generado: " + pdfCedible);
+                logger.warn("---------------");
+            </script>
+        </actions>
+    </service>
+
+
+    <service verb="genera" noun="PDFPrueba">
+        <description>
+            Genera archivo PDF de Factura (envio).
+        </description>
+        <in-parameters>
+            <parameter name="activeOrgId" required="true"/>
+        </in-parameters>
+        <actions>
+
+            <!-- Recuperacion de parametros de la organizacion -->
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <set field="certS" from="pathCert"/>
+            <set field="passS" from="passCert"/>
+            <set field="pathResults" from="pathResults"/>
+            <set field="pathPdf" from="pathPdf"/>
+            <set field="giro" from="giroEmisor"/>
+            <set field="templateFactura" from="templateFactura"/>
+            <set field="templatePdf" from="templatePdf"/>
+            <set field="templatePdfCedible" from="templatePdfCedible"/>
             <set field="templatePdfBoleta" from="templatePdfBoleta"/>
             <set field="templateEnvio" from="templateEnvio"/>
             <set field="templateAceptaciones" from="templateAceptaciones"/>
@@ -2125,11 +2261,22 @@ return
                 import cl.nic.dte.util.Utilities;
                 import cl.sii.siiDte.RECEPCIONDTEDocument;
 
-                Utilities.generatePDF(new FileInputStream(dte), new FileInputStream(template), new FileOutputStream(pdf));
+                dte = "/home/cherrera/git/moqui-moit/moqui-framework/runtime/component/MoquiChile/DTE/DTE33-93.xml";
+                pdf = "/home/cherrera/DTE33-93.pdf";
+                pdfCedible = "/home/cherrera/DTE33-93-cedible.pdf"
+                Utilities.generatePDF(new FileInputStream(dte), new FileInputStream(templatePdf), new FileOutputStream(pdf));
+                Utilities.generatePDF(new FileInputStream(dte), new FileInputStream(templatePdfCedible), new FileOutputStream(pdfCedible));
 
-                logger.warn("---------------");
-                logger.warn("PDF Generado: " + pdf);
-                logger.warn("---------------");
+                dte = "/home/cherrera/git/moqui-moit/moqui-framework/runtime/component/MoquiChile/DTE/DTE33-94.xml";
+                pdf = "/home/cherrera/DTE33-94.pdf";
+                Utilities.generatePDF(new FileInputStream(dte), new FileInputStream(templatePdf), new FileOutputStream(pdf));
+                Utilities.generatePDF(new FileInputStream(dte), new FileInputStream(templatePdfCedible), new FileOutputStream(pdfCedible));
+
+                dte = "/home/cherrera/git/moqui-moit/moqui-framework/runtime/component/MoquiChile/DTE/DTE33-95.xml";
+                pdf = "/home/cherrera/DTE33-95.pdf";
+                Utilities.generatePDF(new FileInputStream(dte), new FileInputStream(templatePdf), new FileOutputStream(pdf));
+                Utilities.generatePDF(new FileInputStream(dte), new FileInputStream(templatePdfCedible), new FileOutputStream(pdfCedible));
+
             </script>
         </actions>
     </service>
@@ -2451,7 +2598,6 @@ return
             <script>
                 dirReceptor = dirReceptor + " " + contactPostalAddressField.unitNumber
             </script>
-            <!--return error="true" message="aaaaa $contactMechId"/-->
             <!-- Comuna -->
             <entity-find-one entity-name="moqui.basic.Geo" value-field="geoField">
                 <field-map field-name="geoId" from="contactPostalAddressField.stateProvinceGeoId"/>
@@ -2892,6 +3038,7 @@ return
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
             <set field="certS" from="pathCert"/>
+            <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
 
             <service-call name="mchile.DTEServices.get#DteContent"
@@ -2933,7 +3080,8 @@ return
 
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
-                ks.load(new FileInputStream(certS), passS.toCharArray());
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
                 String alias = ks.aliases().nextElement();
                 System.out.println("Usando certificado " + alias + " del archivo PKCS12: " + certS);
 
@@ -3588,9 +3736,9 @@ return
                                                     </entity-find-one>
                                                     <if condition="productField"><then>
                                                         <set field="productId" from="productField.productId"/>
-                                                        <log message="Agregando producto preexistente $productId, cantidad $quantity ***************"/>
                                                         <service-call name="mantle.order.OrderServices.add#OrderProductQuantity" out-map="context" in-map="[orderId:purchaseOutMap.orderId,
                                                             orderPartSeqId:purchaseOutMap.orderPartSeqId, productId:productId, description:itemDescription, quantity:quantity, unitAmount:price]"/>
+                                                        <log message="Agregando producto preexistente $productId, cantidad $quantity *************** orderId: $orderId"/>
                                                     </then><else>
                                                         <log level="warn" message="Producto $itemDescription no existe en el sistema, se creará como genérico"/>
                                                         <service-call name="mantle.order.OrderServices.create#OrderItem" out-map="context" in-map="[orderId:purchaseOutMap.orderId,
@@ -3616,14 +3764,21 @@ return
                                                         itemTypeEnumId:'ItemVatTax']"/>
                         </if>
                         <!-- Cierre de orden de compra -->
+
                         <service-call name="mchile.PurchaseServices.place#Order" in-map="[orderId:purchaseOutMap.orderId,
-                                    orderPartSeqId:purchaseOutMap.orderPartSeqId,]" out-map="placePurchaseOut"/>
+                                    orderPartSeqId:purchaseOutMap.orderPartSeqId]" out-map="placePurchaseOut"/>
+
+                        <service-call name="mantle.order.OrderServices.autoApprove#Order" in-map="[orderId:purchaseOutMap.orderId,
+                                    orderPartSeqId:purchaseOutMap.orderPartSeqId]" out-map="approveMap"/>
 
                         <!-- Creación de Invoice -->
                         <service-call name="mantle.account.InvoiceServices.create#EntireOrderPartInvoice" in-map="[orderId:purchaseOutMap.orderId, orderPartSeqId:purchaseOutMap.orderPartSeqId]" out-map="invoiceOutMap"/>
+                        <log level="warn" message="Invoice $invoiceOutMap.invoiceId creada para factura XML"/>
+
 
                         <service-call name="mchile.PurchaseServices.receive#Order" in-map="[orderId:purchaseOutMap.orderId,
-                                    orderPartSeqId:purchaseOutMap.orderPartSeqId,]" out-map="receiveOrderOut"/>
+                                    orderPartSeqId:purchaseOutMap.orderPartSeqId,facilityId:facilityId, activeOrgId:activeOrgId]" out-map="receiveOrderOut"/>
+
                         <set field="invoiceId" from="invoiceOutMap.invoiceId"/>
                     </if>
 
@@ -3811,6 +3966,14 @@ return
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="pdfContentToDelete">
                 <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
                 <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Pdf"/>
+            </entity-find-one>
+            <if condition="pdfContentToDelete">
+                <entity-delete value-field="pdfContentToDelete"/>
+            </if>
+            <!-- Borrado de PDF Cedible -->
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="pdfContentToDelete">
+                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+                <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-PdfCedible"/>
             </entity-find-one>
             <if condition="pdfContentToDelete">
                 <entity-delete value-field="pdfContentToDelete"/>
@@ -4426,8 +4589,6 @@ return
             Envío de respuesta a emisor DTE.
 
             Esta implementación inicialmente responde a un solo envío
-
-            En un paso posterior se puede enviar Aceptación o Rechazo (no implementado)
         </description>
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
@@ -4436,12 +4597,10 @@ return
             <parameter name="activeOrgId" required="true"/>
         </in-parameters>
         <actions>
-
             <!-- No se envían aceptaciones por boletas -->
             <if condition="(fiscalTaxDocumentTypeEnumId == 'Ftdt-39') || (fiscalTaxDocumentTypeEnumId == 'Ftdt-41') || (fiscalTaxDocumentTypeEnumId == 'PvtBoleta')">
                  <return message="Boletas no requieren envío de aceptación" type="warning"/>
             </if>
-
 
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
                 <econdition field-name="partyId" from="activeOrgId"/></entity-find>
@@ -4455,6 +4614,7 @@ return
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
             <set field="certS" from="pathCert"/>
+            <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="resultS" from="pathAceptaciones"/>
             <set field="pathTemp" from="pathTemp"/>
@@ -4607,7 +4767,8 @@ return
                 //CertificadoLlave certLlave = cert.getCertificado(certS, passS);
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
-                ks.load(new FileInputStream(certS), passS.toCharArray());
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
                 String alias = ks.aliases().nextElement();
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
 
@@ -4658,7 +4819,7 @@ return
                         boolean firmaOKDTE = true;
                         if(!resl.isOk()) {
                             logger.warn("Validando DTE ID " + dte.getDocumento().getID() + " : Firma XML Incorrecta: " + resl.getMessage());
-                            firmaOKDTE = false;  // Revisar
+                            firmaOKDTE = false;
                         } else {
                             logger.warn("Validando DTE ID " + dte.getDocumento().getID() + " : Firma XML OK");
                         }
@@ -4678,6 +4839,17 @@ return
                         rDTE.setRUTEmisor(dte.getDocumento().getEncabezado().getEmisor().getRUTEmisor());
                         rDTE.setRUTRecep(dte.getDocumento().getEncabezado().getReceptor().getRUTRecep());
                         rDTE.setMntTotal(dte.getDocumento().getEncabezado().getTotales().getMntTotal());
+                        /*
+                            0 - Envío recibido conforme
+                            1 - Rechazado, error de schema
+                            2 - Rechazado, error de firma
+                            3 - Rechazado, RUT receptor no corresponde
+                            90 - Rechazado, archivo repetido
+                            91 - Rechazado, archivo ilegible
+                            99 - Rechazado, otros
+                        */
+                        //rDTE.setEstadoRecepDTE(0);
+                        //rDTE.setRecepDTEGlosa("Documentos recibidos");
 
                         ResultadoDTE resDTE = ResultadoDTE.Factory.newInstance();
                         resDTE.setFolio(dte.getDocumento().getEncabezado().getIdDoc().getFolio());
@@ -4690,11 +4862,9 @@ return
                         resDTE.setCodEnvio(new Long(idS));
 
                         if( firmaOKDTE &amp;&amp; rutDTEOK) {
-                            //EstadoDTESII estadoDTE = null;
-                            // Validacion en SII no implementada
-                            //estadoDTE = new EstadoDTESII();
-                            //estadoDTE.setEstado("DOK");
                             estadoDTE = "DOK";
+                            rDTE.setEstadoRecepDTE(0);
+                            rDTE.setRecepDTEGlosa("DTE Recibido");
                         } else {
                             if( !firmaOKDTE) {
                                 resDTE.setEstadoDTE(new Integer(2));
@@ -4791,7 +4961,8 @@ return
 
                 // leo certificado y llave privada del archivo pkcs12
                 ks = KeyStore.getInstance("PKCS12");
-                ks.load(new FileInputStream(certS), passS.toCharArray());
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
                 String alias2 = ks.aliases().nextElement();
                 logger.warn("Usando certificado " + alias2 + " del archivo PKCS12: " + certS);
 
@@ -4818,11 +4989,7 @@ return
                     logger.error("Error al firmar respuesta" + e.printStackTrace());
                     return
                 }
-                // releo el doc para que se reflejen los cambios de formato
-                //doc = DTEDocument.Factory.parse(doc.newInputStream(opts), opts);
-                //doc = DTEDocument.Factory.parse(respuesta.newInputStream(opts), opts);
-                //return
-                // Guardo
+
                 opts = new XmlOptions();
                 opts.setCharacterEncoding("ISO-8859-1");
                 opts.setSaveImplicitNamespaces(namespaces);
@@ -4831,20 +4998,7 @@ return
 
                 now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
 
-                //if (respuesta.getDTE().isSetDocumento()) {
-                //    //uri = respuesta.getRespuestaDTE().getDocumento().getID();
-                //    //respuesta.getRespuestaDTE().getDocumento().xsetTmstFirma(now);
-                //    logger.warn("*********************************");
-                //}
-                //else if (doc.getDTE().isSetLiquidacion()) {
-                //    uri = doc.getDTE().getLiquidacion().getID();
-                //    doc.getDTE().getLiquidacion().xsetTmstFirma(now);
-                //} else if (doc.getDTE().isSetExportaciones()) {
-                //    uri = doc.getDTE().getExportaciones().getID();
-                //    doc.getDTE().getExportaciones().xsetTmstFirma(now);
-                //}
                 uri = "#" + uri;
-                //uri = "#RESP-10000";
 
                 opts = new XmlOptions();
                 opts.setCharacterEncoding("ISO-8859-1");
@@ -4916,6 +5070,902 @@ return
         </actions>
     </service>
 
+    <service verb="recibir" noun="Mercaderia">
+        <description>
+            Envío de recepción mercaderia DTE.
+
+            Esta implementación inicialmente responde a un solo envío
+        </description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" required="true"/>
+            <parameter name="activeOrgId" required="true"/>
+        </in-parameters>
+        <actions>
+
+            <!-- No se envían aceptaciones por boletas -->
+            <if condition="(fiscalTaxDocumentTypeEnumId == 'Ftdt-39') || (fiscalTaxDocumentTypeEnumId == 'Ftdt-41') || (fiscalTaxDocumentTypeEnumId == 'PvtBoleta')">
+                <return message="Boletas no requieren envío de aceptación" type="warning"/>
+            </if>
+
+
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
+                <econdition field-name="partyId" from="activeOrgId"/></entity-find>
+
+            <if condition="!partyIdentificationList.idValue[0]">
+                <return error="true" message="Organización no tiene RUT definido"/>
+            </if>
+            <set field="rutResponde" from="partyIdentificationList.idValue[0]"/>
+
+            <!-- Recuperacion de parametros de la organizacion -->
+
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <set field="certS" from="pathCert"/>
+            <set field="certData" from="certData"/>
+            <set field="passS" from="passCert"/>
+            <set field="resultS" from="pathAceptaciones"/>
+            <set field="pathTemp" from="pathTemp"/>
+            <set field="pathPdf" from="pathPdf"/>
+            <set field="cafS" from="pathCaf"/>
+            <set field="plantillaS" from="templateAceptaciones"/>
+            <set field="rutEnviador" from="rutEnvia"/>
+            <set field="dirS" from="pathRecibidas"/>
+            <set field="nmbContacto" from="nmbContacto"/>
+            <set field="mailContacto" from="mailContacto"/>
+            <set field="fonoContacto" from="fonoContacto"/>
+            <set field="giro" from="giroEmisor"/>
+            <set field="templateFactura" from="templateFactura"/>
+            <set field="templatePdf" from="templatePdf"/>
+            <set field="templateEnvio" from="templateEnvio"/>
+            <set field="templateAceptaciones" from="templateAceptaciones"/>
+            <set field="templateLibro" from="templateLibro"/>
+            <set field="logo" from="logo"/>
+            <set field="fchResol" from="fchResol"/>
+            <set field="nroResol" from="nroResol"/>
+
+
+            <!-- Se guarda aceptacion para obtener el aceptacionDteId -->
+            <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nmbContacto:nmbContacto,
+                                        fonoContacto:fonoContacto, mailContacto:mailContacto, issuerPartyId:activeOrgId]"/>
+            <service-call name="create#mchile.dte.AceptacionDte" out-map="context" in-map="createMap"/>
+
+            <!-- Recuperación de datos para emitir aceptación -->
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="dteField">
+                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+                <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
+                <select-field field-name="contentLocation"/>
+            </entity-find-one>
+
+            <set field="envioRecibido" from="dteField.contentLocation"/>
+            <set field="idS" value="" type="String"/>
+            <script>
+                idS =  (int) (System.currentTimeMillis() / 1000L)
+            </script>
+            <set field="nmbEnvio" value=""/>
+            <set field="fchRecep" value=""/>
+            <set field="rutEmisor" value=""/>
+
+            <set field="rutReceptor" value=""/>
+            <set field="estadoRecepEnvEnumId" value=""/>
+
+            <script>
+                import java.io.ByteArrayOutputStream;
+                import java.io.File;
+                import java.io.FileInputStream;
+                import java.io.FileOutputStream;
+                import java.math.BigDecimal;
+                import java.math.BigInteger;
+                import java.nio.file.Files;
+                import java.nio.file.Path;
+                import java.nio.file.Paths;
+                import java.security.KeyStore;
+                import java.security.PrivateKey;
+                import java.security.cert.X509Certificate;
+                import java.util.Calendar;
+                import java.util.Date;
+                import java.util.HashMap;
+                import java.text.ParseException;
+                import java.text.SimpleDateFormat;
+                import java.util.Date;
+                import javax.xml.namespace.QName;
+
+                import org.apache.xmlbeans.XmlOptions;
+                import org.apache.xmlbeans.XmlCursor;
+                import org.w3c.dom.Document;
+                import org.w3c.dom.Element;
+                import org.w3c.dom.NodeList;
+                import javax.xml.crypto.dsig.*;
+                import javax.xml.transform.*;
+                import javax.xml.crypto.dsig.dom.DOMValidateContext;
+
+                import cl.nic.dte.util.Signer;
+                import cl.nic.dte.util.Utilities;
+                import cl.nic.dte.util.XMLUtil;
+                import cl.nic.dte.VerifyResult;
+                import cl.sii.siiDte.AUTORIZACIONDocument;
+                import cl.sii.siiDte.AutorizacionType;
+                import cl.sii.siiDte.DTEDefType;
+                import cl.sii.siiDte.DTEDefType.Documento.Detalle;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.IdDoc;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Receptor;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Totales;
+                import cl.sii.siiDte.DTEDocument;
+                import cl.sii.siiDte.EnvioDTEDocument;
+                import cl.sii.siiDte.EnvioRecibosDocument;
+                import cl.sii.siiDte.ReciboDefType;
+                import cl.sii.siiDte.ReciboDocument;
+                import cl.sii.siiDte.EnvioRecibosDocument.EnvioRecibos;
+                import cl.sii.siiDte.EnvioRecibosDocument.EnvioRecibos.SetRecibos;
+                import cl.sii.siiDte.ReciboDefType.DocumentoRecibo;
+
+
+                import cl.sii.siiDte.FechaHoraType;
+                import cl.sii.siiDte.FechaType;
+                import cl.sii.siiDte.MedioPagoType;
+
+                import javax.xml.parsers.DocumentBuilder;
+                import javax.xml.parsers.DocumentBuilderFactory;
+                import javax.xml.parsers.ParserConfigurationException;
+                javax.xml.crypto.dsig.dom.DOMValidateContext;
+                javax.xml.crypto.dsig.XMLSignatureException;
+                import org.xml.sax.SAXException;
+
+                DTEDocument doc;
+                X509Certificate cert;
+                PrivateKey key;
+
+                EnvioDTEDocument envio = null;
+                try {
+                    envio = EnvioDTEDocument.Factory.parse(new FileInputStream(envioRecibido));
+                } catch (Exception e) {
+                    logger.warn("Error al cargar archivo de envio recepcionado: " + envioRecibido, e);
+                    return;
+                }
+                VerifyResult resl = envio.verifyXML();
+                boolean envioEsquemaOK = true;
+                boolean envioFirmaOK = true;
+                String errorEsquema = "";
+                String errorFirma = "";
+
+                if( !resl.isOk()) {
+                    logger.error("Envio recibido: Estructura XML incorrecta: " + resl.getMessage());
+                    errorEsquema = resl.getMessage();
+                    envioEsquemaOK = false;
+                } else {
+                    logger.warn("Envio recibido: Estructura XML OK");
+                }
+                // Revisar
+                resl = envio.verifySignature();
+                if( !resl.isOk()) {
+                    logger.error("Envio recibido: firma XML incorrecta");
+                    firmaOKDTE = false;
+                } else {
+                    logger.debug("Envio recibido: firma XML OK");
+                }
+                boolean envioRutOK = true;
+
+                String rutContribuyente = rutResponde;
+                rutEmisor = envio.getEnvioDTE().getSetDTE().getCaratula().getRutEmisor();
+
+                if(!rutContribuyente.equals(envio.getEnvioDTE().getSetDTE().getCaratula().getRutReceptor())) {
+                    logger.error("Error: carátula de envioDTE recibido dice que rut de receptor es: " + envio.getEnvioDTE().getSetDTE().getCaratula().getRutReceptor() +
+                    " el cual es distinto al de nuestra empresa: " + rutContribuyente);
+                    envioRutOK = false;
+                }
+
+                //Certificado cert = new Certificado();
+                //CertificadoLlave certLlave = cert.getCertificado(certS, passS);
+                // leo certificado y llave privada del archivo pkcs12
+                KeyStore ks = KeyStore.getInstance("PKCS12");
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
+                String alias = ks.aliases().nextElement();
+                logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
+
+                cert = (X509Certificate) ks.getCertificate(alias);
+                key = (PrivateKey) ks.getKey(alias, passS.toCharArray());
+
+                ReciboDocument recibo = ReciboDocument.Factory.newInstance();
+                ReciboDefType rec = recibo.addNewRecibo();
+
+                EnvioRecibosDocument erd = EnvioRecibosDocument.Factory.newInstance();
+                EnvioRecibos er = EnvioRecibos.Factory.newInstance();
+                er.setVersion(new BigDecimal("1.0"));
+
+                cl.sii.siiDte.EnvioRecibosDocument.EnvioRecibos.SetRecibos.Caratula caratula = cl.sii.siiDte.EnvioRecibosDocument.EnvioRecibos.SetRecibos.Caratula.Factory
+                .newInstance();
+                caratula.setRutResponde(rutContribuyente);
+                caratula.setRutRecibe(rutEmisor);
+                //caratula.setIdRespuesta(new Long(idS));
+                caratula.setVersion(new BigDecimal("1.0"));
+                // Datos en plantilla?
+                caratula.setNmbContacto(nmbContacto);
+                caratula.setMailContacto(mailContacto);
+                caratula.setFonoContacto(fonoContacto);
+
+                Calendar cal = Calendar.getInstance();
+                caratula.setTmstFirmaEnv(cal);
+
+
+                SetRecibos sr = SetRecibos.Factory.newInstance();
+                sr.setCaratula(caratula);
+                sr.setID("SRM-33-1234-60910000-1");
+                ReciboDefType[] recArray = new ReciboDefType[envio.getEnvioDTE().getSetDTE().getDTEArray().size()];
+                int i = 0;
+
+                // Se recorre lista de DTE en el envio
+
+                for (DTEDefType dte : envio.getEnvioDTE().getSetDTE().getDTEArray()) {
+                    logger.warn("Recorriendo dte: " + dte);
+
+
+
+                    boolean firmaOKDTE = true;
+                    if(!resl.isOk()) {
+                        logger.warn("Validando DTE ID " + dte.getDocumento().getID() + " : Firma XML Incorrecta: " + resl.getMessage());
+                        firmaOKDTE = false;
+                    } else {
+                        logger.warn("Validando DTE ID " + dte.getDocumento().getID() + " : Firma XML OK");
+                    }
+                    boolean rutDTEOK = true;
+
+                    if(!rutContribuyente.equals(dte.getDocumento().getEncabezado().getReceptor().getRUTRecep())) {
+                        logger.warn("Error, DTE id: " + dte.getDocumento().getID() + " folio: " + dte.getDocumento().getEncabezado().getIdDoc().getFolio()
+                        + " tipo: " + dte.getDocumento().getEncabezado().getIdDoc().getTipoDTE().toString() + " contiene RUT de receptor ["
+                        + dte.getDocumento().getEncabezado().getReceptor().getRUTRecep() + "] que no corresponde a nuestra empresa [" + rutContribuyente + "]");
+                        rutDTEOK = false;
+                    }
+                    DocumentoRecibo dr;
+                    if( firmaOKDTE &amp;&amp; rutDTEOK) {
+                        dr = rec.addNewDocumentoRecibo();
+                        estadoDTE = "DOK";
+                        dr.setFolio(dte.getDocumento().getEncabezado().getIdDoc().getFolio());
+                        dr.setTipoDoc(dte.getDocumento().getEncabezado().getIdDoc().getTipoDTE());
+                        dr.setFchEmis(dte.getDocumento().getEncabezado().getIdDoc().getFchEmis());
+                        dr.setRUTEmisor(dte.getDocumento().getEncabezado().getEmisor().getRUTEmisor());
+                        dr.setRUTRecep(dte.getDocumento().getEncabezado().getReceptor().getRUTRecep());
+                        dr.setMntTotal(dte.getDocumento().getEncabezado().getTotales().getMntTotal());
+                        dr.setRecinto("No especificado");
+                        dr.setRutFirma(rutEnviador);
+                        dr.setID(dte.getDocumento().getID());
+                        dr.setTmstFirmaRecibo(cal);
+                        dr.setDeclaracion("El acuse de recibo que se declara en este acto, de acuerdo a lo dispuesto en la letra b) del Art. 4, y la letra c) del Art. 5 de la Ley 19.983, acredita que la entrega de mercaderias o servicio(s) prestado(s) ha(n) sido recibido(s).");
+                        i++;
+                    } else {
+                        if( !firmaOKDTE) {
+                            //resDTE.setEstadoDTE(new Integer(2));
+                            //resDTE.setEstadoDTEGlosa("DTE rechazado - Error de Firma");
+                            //estadoRecepEnvEnumId = 2
+                            logger.warn("DTE Rechazado - Error de Firma");
+                            //rDTE.setEstadoRecepDTE(new Integer(1));
+                            //rDTE.setRecepDTEGlosa("DTE No Recibido - Error de Firma");
+                            logger.warn("DTE No Recibido - Error de Firma");
+                        } else if(!rutDTEK) {
+                            //resDTE.setEstadoDTE(new Integer(2));
+                            //resDTE.setEstadoDTEGlosa("DTE rechazado - Error en RUT Receptor");
+                            logger.warn("DTE rechazado - Error en RUT Receptor");
+                            //rDTE.setEstadoRecepDTE(new Integer(3));
+                            //rDTE.setRecepDTEGlosa("DTE No Recibido - Error en RUT Receptor");
+                            logger.warn("DTE No Recibido - Error en RUT Receptor");
+                        }
+                    }
+                    //recArray[i] = recibo.getRecibo();
+                }
+                recArray = recibo.getRecibo();
+                rec.setVersion(new BigDecimal("1.0"));
+
+                namespaces = new HashMap&lt;String, String&gt;();
+                namespaces.put("", "http://www.sii.cl/SiiDte");
+                opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces);
+                opts.setLoadSubstituteNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(0);
+
+                try {
+                    recibo = ReciboDocument.Factory.parse(recibo.newInputStream(opts), opts);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+                // firma del recibo
+                //recibo.getRecibo().sign(key, cert);
+
+
+                // leo certificado y llave privada del archivo pkcs12
+                ks = KeyStore.getInstance("PKCS12");
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
+                String alias2 = ks.aliases().nextElement();
+                logger.warn("Usando certificado " + alias2 + " del archivo PKCS12: " + certS);
+
+                //rec.setDocumentoRecibo(dr);
+                rec.setVersion(new BigDecimal("1.0"));
+                rec.sign(key, cert);
+
+
+                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;();
+                namespaces.put("", "http://www.sii.cl/SiiDte");
+                XmlOptions opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces);
+                opts.setLoadSubstituteNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(0);
+
+                try {
+                    recibo = ReciboDocument.Factory.parse(recibo.newInputStream(opts), opts);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                // Se firma esto?
+                recibo.getRecibo().sign(key, cert);
+
+                sr.setReciboArray(recArray);
+
+                er.setSetRecibos(sr);
+                erd.setEnvioRecibos(er);
+                XmlCursor cursor = erd.newCursor();
+                if (cursor.toFirstChild()) {
+                    cursor.setAttributeText(new QName( "http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioRecibos_v10.xsd");
+                }
+
+                opts = new XmlOptions();
+                opts.setLoadSubstituteNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(0);
+                opts.setUseDefaultNamespace();
+                opts.setSaveSuggestedPrefixes(namespaces);
+                try {
+                    erd = EnvioRecibosDocument.Factory.parse(erd.newInputStream(opts));
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+                erd.sign(key, cert);
+
+                resl = erd.verifyXML();
+                if (!resl.isOk()) {
+                    System.out.println("Documento: Estructura XML Incorrecta: "+ resl.getMessage());
+                } else {
+                    System.out.println("Documento: Estructura XML OK");
+                }
+                //resl = erd.verifySignature();
+                //if (!resl.isOk()) {
+                //    System.out.println("Documento: Firma Incorrecta: " + resl.getMessage());
+                //} else {
+                //    System.out.println("Documento: Firma OK");
+                //}
+
+                logger.warn("XML: " + erd);
+
+                logger.warn("Escribiendo " + resultS + "RESP-" + idS + ".xml");
+                erd.save(new File(resultS + "RECIBO-MERC-" + idS + ".xml"), opts);
+                //erd.save(out2, opts);
+                //logger.warn("Escribiendo archivo temporal para attachment" + resultS + "RECIBO-MERC.xml");
+                //erd.save(new File(resultS + "RECIBO-MERC.xml"), opts);
+                ByteArrayOutputStream outTemp = new ByteArrayOutputStream();
+                erd.save(outTemp, opts);
+
+return
+            </script>
+
+            <!-- Recuperación del email de destinatario de aceptación -->
+            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyAceptacionField">
+                <field-map field-name="idValue" from="rutEmisor"/>
+            </entity-find-one>
+
+            <if condition="!partyAceptacionField">
+                <return error="true" message="Organización a enviar aceptación no tiene RUT definido"/>
+            </if>
+
+            <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
+                          in-map="[partyId:partyAceptacionField.partyId, postalContactMechPurposeId:'PostalTax']"/>
+            <if condition="!contactOut.postalContactMechId">
+                <return error="true" message="Receptor de aceptación no tiene contacto tributario asignado"/>
+            </if>
+
+            <set field="emailAceptacion" from="contactOut.emailAddress"/>
+
+            <!-- Recuperación de algunos datos desde FiscalTaxDocument -->
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="fiscalTaxDocumentField">
+                <field-map field-name="fiscalTaxDocumentId"/>
+            </entity-find-one>
+            <set field="folioAceptacion" from="fiscalTaxDocumentField.fiscalTaxDocumentNumber"/>
+
+
+            <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nmbContacto:nmbContacto,
+                                        fonoContacto:fonoContacto, mailContacto:mailContacto]"/>
+            <service-call name="create#mchile.dte.AceptacionDte" out-map="context" in-map="createMap"/>
+
+            <entity-find-one entity-name="mchile.dte.AceptacionDte" value-field="aceptacionField" for-update="true"/>
+            <!--set field="aceptacionField.nmbEnvio" from="fiscalTaxDocumentField.razonSocial" type="String"/-->
+            <set field="aceptacionField.fchRecep" from="fchRecep" type="String"/>
+            <set field="aceptacionField.codEnvio" from="idS" type="String"/>
+            <set field="aceptacionField.rutEmisor" from="rutEmisor" type="String"/>
+            <set field="aceptacionField.envioDteId" value="RESP-${idS}" type="String"/>
+            <set field="aceptacionField.rutEmisor" from="rutEmisor" type="String"/>
+            <set field="aceptacionField.rutReceptor" from="rutResponde" type="String"/>
+            <set field="aceptacionField.estadoRecepEnvEnumId" from="estadoRecepEnvEnumId" type="String"/>
+            <set field="aceptacionField.nroDetalles" value="1" type="Integer"/>
+            <set field="aceptacionField.xml" value="${resultS}RESP-${idS}.xml" type="String"/>
+            <entity-update value-field="aceptacionField"/>
+
+            <set field="bodyParameters" from="[fiscalTaxDocumentId:folioAceptacion, nmbContacto:nmbContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]"/>
+            <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" async="true">
+                <field-map field-name="fiscalTaxDocumentId" from="folioAceptacion"/>
+                <field-map field-name="emailTypeEnumId" from="emailTypeEnumId"/>
+                <!--field-map field-name="toAddresses" value="cherrera@moit.cl"/-->
+                <field-map field-name="toAddresses" from="emailAceptacion"/>
+                <field-map field-name="emailTemplateId" value="Aceptacion"/>
+                <field-map field-name="bodyParameters" from="bodyParameters"/>
+            </service-call>
+
+        </actions>
+    </service>
+
+    <service verb="enviar" noun="ResultadoAprobacionComercial">
+        <description>
+            Envío de respuesta a emisor DTE.
+
+            Esta implementación inicialmente responde a un solo envío
+
+            En un paso posterior se puede enviar Aceptación o Rechazo (no implementado)
+        </description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" required="true"/>
+            <parameter name="activeOrgId" required="true"/>
+        </in-parameters>
+        <actions>
+
+            <!-- No se envían aceptaciones por boletas -->
+            <if condition="(fiscalTaxDocumentTypeEnumId == 'Ftdt-39') || (fiscalTaxDocumentTypeEnumId == 'Ftdt-41') || (fiscalTaxDocumentTypeEnumId == 'PvtBoleta')">
+                <return message="Boletas no requieren envío de aceptación" type="warning"/>
+            </if>
+
+
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
+                <econdition field-name="partyId" from="activeOrgId"/></entity-find>
+
+            <if condition="!partyIdentificationList.idValue[0]">
+                <return error="true" message="Organización no tiene RUT definido"/>
+            </if>
+            <set field="rutResponde" from="partyIdentificationList.idValue[0]"/>
+
+            <!-- Recuperacion de parametros de la organizacion -->
+
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <set field="certS" from="pathCert"/>
+            <set field="certData" from="certData"/>
+            <set field="passS" from="passCert"/>
+            <set field="resultS" from="pathAceptaciones"/>
+            <set field="pathTemp" from="pathTemp"/>
+            <set field="pathPdf" from="pathPdf"/>
+            <set field="cafS" from="pathCaf"/>
+            <set field="plantillaS" from="templateAceptaciones"/>
+            <set field="rutEnviador" from="rutEnviador"/>
+            <set field="dirS" from="pathRecibidas"/>
+            <set field="nmbContacto" from="nmbContacto"/>
+            <set field="mailContacto" from="mailContacto"/>
+            <set field="fonoContacto" from="fonoContacto"/>
+            <set field="giro" from="giroEmisor"/>
+            <set field="templateFactura" from="templateFactura"/>
+            <set field="templatePdf" from="templatePdf"/>
+            <set field="templateEnvio" from="templateEnvio"/>
+            <set field="templateAceptaciones" from="templateAceptaciones"/>
+            <set field="templateLibro" from="templateLibro"/>
+            <set field="logo" from="logo"/>
+            <set field="fchResol" from="fchResol"/>
+            <set field="nroResol" from="nroResol"/>
+
+
+            <!-- Se guarda aceptacion para obtener el aceptacionDteId -->
+            <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nmbContacto:nmbContacto,
+                                        fonoContacto:fonoContacto, mailContacto:mailContacto, issuerPartyId:activeOrgId]"/>
+            <service-call name="create#mchile.dte.AceptacionDte" out-map="context" in-map="createMap"/>
+
+            <!-- Recuperación de datos para emitir aceptación -->
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="dteField">
+                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+                <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
+                <select-field field-name="contentLocation"/>
+            </entity-find-one>
+
+            <set field="envioRecibido" from="dteField.contentLocation"/>
+            <set field="idS" value="" type="String"/>
+            <script>
+                idS =  (int) (System.currentTimeMillis() / 1000L)
+            </script>
+            <set field="nmbEnvio" value=""/>
+            <set field="fchRecep" value=""/>
+            <set field="rutEmisor" value=""/>
+
+            <set field="rutReceptor" value=""/>
+            <set field="estadoRecepEnvEnumId" value=""/>
+
+            <script>
+                import java.io.ByteArrayOutputStream;
+                import java.io.File;
+                import java.io.FileInputStream;
+                import java.io.FileOutputStream;
+                import java.math.BigDecimal;
+                import java.math.BigInteger;
+                import java.nio.file.Files;
+                import java.nio.file.Path;
+                import java.nio.file.Paths;
+                import java.security.KeyStore;
+                import java.security.PrivateKey;
+                import java.security.cert.X509Certificate;
+                import java.util.Calendar;
+                import java.util.Date;
+                import java.util.HashMap;
+                import java.text.ParseException;
+                import java.text.SimpleDateFormat;
+                import java.util.Date;
+                import javax.xml.namespace.QName;
+
+                import org.apache.xmlbeans.XmlOptions;
+                import org.apache.xmlbeans.XmlCursor;
+                import org.w3c.dom.Document;
+                import org.w3c.dom.Element;
+                import org.w3c.dom.NodeList;
+                import javax.xml.crypto.dsig.*;
+                import javax.xml.transform.*;
+                import javax.xml.crypto.dsig.dom.DOMValidateContext;
+
+                import cl.nic.dte.util.Signer;
+                import cl.nic.dte.util.Utilities;
+                import cl.nic.dte.util.XMLUtil;
+                import cl.nic.dte.VerifyResult;
+                import cl.sii.siiDte.AUTORIZACIONDocument;
+                import cl.sii.siiDte.AutorizacionType;
+                import cl.sii.siiDte.DTEDefType;
+                import cl.sii.siiDte.DTEDefType.Documento.Detalle;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.IdDoc;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Receptor;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Totales;
+                import cl.sii.siiDte.DTEDocument;
+                import cl.sii.siiDte.EnvioDTEDocument;
+                import cl.sii.siiDte.RespuestaDTEDocument;
+                import cl.sii.siiDte.RespuestaDTEDocument.RespuestaDTE;
+                import cl.sii.siiDte.RespuestaDTEDocument.RespuestaDTE.Resultado;
+                import cl.sii.siiDte.RespuestaDTEDocument.RespuestaDTE.Resultado.Caratula;
+                //import cl.sii.siiDte.RespuestaDTEDocument.RespuestaDTE.Resultado.RecepcionEnvio;
+                //import cl.sii.siiDte.RespuestaDTEDocument.RespuestaDTE.Resultado.RecepcionEnvio.RecepcionDTE;
+                import cl.sii.siiDte.RespuestaDTEDocument.RespuestaDTE.Resultado.ResultadoDTE;
+                import cl.sii.siiDte.FechaHoraType;
+                import cl.sii.siiDte.FechaType;
+                import cl.sii.siiDte.MedioPagoType;
+
+                import javax.xml.parsers.DocumentBuilder;
+                import javax.xml.parsers.DocumentBuilderFactory;
+                import javax.xml.parsers.ParserConfigurationException;
+                javax.xml.crypto.dsig.dom.DOMValidateContext;
+                javax.xml.crypto.dsig.XMLSignatureException;
+                import org.xml.sax.SAXException;
+
+                DTEDocument doc;
+                X509Certificate cert;
+                PrivateKey key;
+
+                EnvioDTEDocument envio = null;
+                try {
+                    envio = EnvioDTEDocument.Factory.parse(new FileInputStream(envioRecibido));
+                } catch (Exception e) {
+                    logger.warn("Error al cargar archivo de envio recepcionado: " + envioRecibido, e);
+                    return;
+                }
+                VerifyResult resl = envio.verifyXML();
+                boolean envioEsquemaOK = true;
+                boolean envioFirmaOK = true;
+                String errorEsquema = "";
+                String errorFirma = "";
+
+                if( !resl.isOk()) {
+                    logger.error("Envio recibido: Estructura XML incorrecta: " + resl.getMessage());
+                    errorEsquema = resl.getMessage();
+                    envioEsquemaOK = false;
+                } else {
+                    logger.warn("Envio recibido: Estructura XML OK");
+                }
+                // Revisar
+                resl = envio.verifySignature();
+                if( !resl.isOk()) {
+                    logger.error("Envio recibido: firma XML incorrecta");
+                } else {
+                    logger.debug("Envio recibido: firma XML OK");
+                }
+                boolean envioRutOK = true;
+
+                String rutContribuyente = rutResponde;
+
+                if(!rutContribuyente.equals(envio.getEnvioDTE().getSetDTE().getCaratula().getRutReceptor())) {
+                    logger.error("Error: carátula de envioDTE recibido dice que rut de receptor es: " + envio.getEnvioDTE().getSetDTE().getCaratula().getRutReceptor() + " el cual es distinto al de nuestra empresa: " + rutContribuyente);
+                    envioRutOK = false;
+                }
+                //Certificado cert = new Certificado();
+                //CertificadoLlave certLlave = cert.getCertificado(certS, passS);
+                // leo certificado y llave privada del archivo pkcs12
+                KeyStore ks = KeyStore.getInstance("PKCS12");
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
+                String alias = ks.aliases().nextElement();
+                logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
+
+                cert = (X509Certificate) ks.getCertificate(alias);
+                key = (PrivateKey) ks.getKey(alias, passS.toCharArray());
+
+                //ArrayList&lt;RecepcionDTE&gt; arrRecepcionDTE = new ArrayList&lt;RecepcionDTE&gt;();
+                ArrayList&lt;ResultadoDTE&gt; resultados = new ArrayList&lt;ResultadoDTE&gt;();
+                //RecepcionEnvio rre = RecepcionEnvio.Factory.newInstance();
+
+                /*File f = new File(envioRecibido);
+                rre.setNmbEnvio(f.getName());
+                rre.xsetFchRecep(FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date())));
+                rre.setCodEnvio(idS);
+                rre.setEnvioDTEID(envio.getEnvioDTE().getSetDTE().getID());
+                rre.setEstadoRecepEnv(0);
+                rre.setRecepEnvGlosa("Envio Recibido Conforme");*/
+
+                fchRecep = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date())).toString()
+                envioDteId = envio.getEnvioDTE().getSetDTE().getID()
+                estadoRecepEnvEnumId = 0
+                int nroDetalles = 0;
+
+                if (envioFirmaOK &amp;&amp; envioEsquemaOK &amp;&amp; envioRutOK ) {
+                    X509Certificate x509 = XMLUtil.getCertificate(envio.getEnvioDTE().getSignature());
+                    logger.warn("Firmado por: " + x509.getSubjectX500Principal().getName());
+
+                    for (DTEDefType dte : envio.getEnvioDTE().getSetDTE().getDTEArray()) {
+
+                        x509 = XMLUtil.getCertificate(dte.getSignature());
+                        logger.warn("DTE ID " + dte.getDocumento().getID() + " Firmado por: " + x509.getSubjectX500Principal().getName());
+                        logger.warn("Por almacenar en " + dirS);
+                        String nombreDTE = dirS + "dte-"+dte.getDocumento().getEncabezado().getEmisor().getRUTEmisor()+"-"+dte.getDocumento().getEncabezado().getIdDoc().getFolio()+".xml";
+                        rutEmisor = dte.getDocumento().getEncabezado().getEmisor().getRUTEmisor()
+
+
+                        boolean firmaOKDTE = true;
+                        if(!resl.isOk()) {
+                            logger.warn("Validando DTE ID " + dte.getDocumento().getID() + " : Firma XML Incorrecta: " + resl.getMessage());
+                            firmaOKDTE = false;
+                        } else {
+                            logger.warn("Validando DTE ID " + dte.getDocumento().getID() + " : Firma XML OK");
+                        }
+                        boolean rutDTEOK = true;
+
+                        if(!rutContribuyente.equals(dte.getDocumento().getEncabezado().getReceptor().getRUTRecep())) {
+                            logger.warn("Error, DTE id: " + dte.getDocumento().getID() + " folio: " + dte.getDocumento().getEncabezado().getIdDoc().getFolio() + " tipo: " + dte.getDocumento().getEncabezado().getIdDoc().getTipoDTE().toString() + " contiene RUT de receptor [" + dte.getDocumento().getEncabezado().getReceptor().getRUTRecep() + "] que no corresponde a nuestra empresa [" + rutContribuyente + "]");
+                            rutDTEOK = false;
+                        }
+                        nroDetalles++;
+                        ResultadoDTE resDTE = ResultadoDTE.Factory.newInstance();
+                        resDTE.setFolio(dte.getDocumento().getEncabezado().getIdDoc().getFolio());
+                        resDTE.setTipoDTE(dte.getDocumento().getEncabezado().getIdDoc().getTipoDTE());
+                        resDTE.setFchEmis(dte.getDocumento().getEncabezado().getIdDoc().getFchEmis());
+                        resDTE.setRUTEmisor(dte.getDocumento().getEncabezado().getEmisor().getRUTEmisor());
+                        resDTE.setRUTRecep(dte.getDocumento().getEncabezado().getReceptor().getRUTRecep());
+                        resDTE.setMntTotal(dte.getDocumento().getEncabezado().getTotales().getMntTotal());
+                        /*
+                            0 - Envío recibido conforme
+                            1 - Rechazado, error de schema
+                            2 - Rechazado, error de firma
+                            3 - Rechazado, RUT receptor no corresponde
+                            90 - Rechazado, archivo repetido
+                            91 - Rechazado, archivo ilegible
+                            99 - Rechazado, otros
+                        */
+
+                        // se asocia el ID del envio recepcionado en nuestra BD
+                        resDTE.setCodEnvio(new Long(idS));
+
+                        if( firmaOKDTE &amp;&amp; rutDTEOK) {
+                            estadoDTE = "DOK";
+                            //rDTE.setEstadoRecepDTE(0);
+                            //rDTE.setRecepDTEGlosa("DTE Recibido");
+                            resDTE.setEstadoDTE(0);
+                            resDTE.setEstadoDTEGlosa("Envio recibido conforme");
+                        } else {
+                            if( !firmaOKDTE) {
+                                resDTE.setEstadoDTE(new Integer(2));
+                                resDTE.setEstadoDTEGlosa("DTE rechazado - Error de Firma");
+                                estadoRecepEnvEnumId = 2
+                                logger.warn("DTE Rechazado - Error de Firma");
+                            } else if(!rutDTEK) {
+                                resDTE.setEstadoDTE(new Integer(2));
+                                resDTE.setEstadoDTEGlosa("DTE rechazado - Error en RUT Receptor");
+                                logger.warn("DTE rechazado - Error en RUT Receptor");
+                            }
+                        }
+                        resultados.add(resDTE);
+                        //arrRecepcionDTE.add(rDTE);
+                    }
+                } else {
+                    logger.warn("Envio no cumple con la firma o con esquema XML");
+                    // Revisar si es problema de esquema o de firma
+                    if(!envioEsquemaOK) {
+                        rre.setEstadoRecepEnv(1);
+                        estadoRecepEnvEnumId = 1
+                        rre.setRecepEnvGlosa("Envio Rechazado - Error de schema: " + errorEsquema);
+                    } else if (!envioFirmaOK) {
+                        rre.setEstadoRecepEnv(2);
+                        estadoRecepEnvEnumId = 1
+                        rre.setRecepEnvGlosa("Envio Rechazado - Error de Firma: " + errorFirma);
+                    } else if (!envioRutOK) {
+                        rre.setEstadoRecepEnv(3);
+                        estadoRecepEnvEnumId = 1
+                        rre.setRecepEnvGlosa("Envio Rechazado - RUT receptor no corresponde");
+                    }
+                    logger.warn("Glosa respuesta envío: " + rre.getRecepEnvGlosa());
+                }
+                Caratula caratula = Caratula.Factory.newInstance();
+                Resultado resultado = Resultado.Factory.newInstance();
+
+                /*if (arrRecepcionDTE.size > 0) {
+                    RecepcionDTE[] resultadoDTE = new RecepcionDTE[arrRecepcionDTE.size()];
+                    for(int i = 0; i &lt; arrRecepcionDTE.size(); i++)
+                        resultadoDTE[i] = arrRecepcionDTE.get(i);
+                    rre.setRecepcionDTEArray(resultadoDTE);
+                    caratula.setNroDetalles(arrRecepcionDTE.size());
+                } else {*/
+                    if (resultados.size() > 0) {
+                        ResultadoDTE[] resultadoDTE = new ResultadoDTE[resultados.size()];
+                        for (int i = 0; i &lt; resultados.size(); i++)
+                            resultadoDTE[i] = resultados.get(i);
+                        resultado.setResultadoDTEArray(resultadoDTE);
+                    } else {
+                        caratula.setNroDetalles(1);
+                    }
+                //}
+                caratula.setRutResponde(rutContribuyente);
+                caratula.setRutRecibe(rutEmisor);
+                caratula.setIdRespuesta(new Long(idS));
+                caratula.setVersion(new BigDecimal("1.0"));
+                // Datos en plantilla?
+                caratula.setNmbContacto(nmbContacto);
+                caratula.setMailContacto(mailContacto);
+                caratula.setFonoContacto(fonoContacto);
+                caratula.setNroDetalles(nroDetalles);
+
+                resultado.setCaratula(caratula);
+                resultado.setID("RESP-" + idS);
+
+                /*if(!rre.isNil()) {
+                    logger.warn("Se responde aceptacion");
+                    RecepcionEnvio[] reArray = new RecepcionEnvio[1];
+                    reArray[0] = rre;
+                    resultado.setRecepcionEnvioArray(reArray);
+                }*/
+                RespuestaDTE respDTE = RespuestaDTE.Factory.newInstance();
+                respDTE.setResultado(resultado);
+                respDTE.setVersion(new BigDecimal("1.0"));
+
+                RespuestaDTEDocument respuesta = RespuestaDTEDocument.Factory.newInstance();
+                respuesta.setRespuestaDTE(respDTE);
+
+                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;();
+                namespaces.put("http://www.sii.cl/SiiDte","");
+
+                XmlOptions opts = new XmlOptions();
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(0);
+                opts.setSaveSuggestedPrefixes(namespaces);
+                opts.setCharacterEncoding("ISO-8859-1");
+
+                // leo certificado y llave privada del archivo pkcs12
+                ks = KeyStore.getInstance("PKCS12");
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
+                String alias2 = ks.aliases().nextElement();
+                logger.warn("Usando certificado " + alias2 + " del archivo PKCS12: " + certS);
+
+                X509Certificate x509 = (X509Certificate) ks.getCertificate(alias);
+                String enviadorS = Utilities.getRutFromCertificate(x509);
+                PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray());
+
+                XmlCursor cursor = respuesta.newCursor();
+                if(cursor.toFirstChild()) {
+                    cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte RespuestaEnvioDTE_v10.xsd");
+                }
+                try {
+                    respuesta = RespuestaDTEDocument.Factory.parse(respuesta.newInputStream(opts));
+                } catch (Exception e) {
+                    logger.warn("Error al obtener respuesta con formato antes de firmar", e);
+                }
+                uri = "#RESP-10000";
+                try {
+                    logger.warn("Respuesta antes de firmar: " + new String(respuesta.getBytes()));
+                    //respuesta.sign(certLlave.getPkey(), certLlave.getX509());
+                    respuesta.sign(pKey, x509);
+                    //respDTE.sign(pKey, x509);
+                } catch (Exception e) {
+                    logger.error("Error al firmar respuesta" + e.printStackTrace());
+                    return
+                }
+
+                opts = new XmlOptions();
+                opts.setCharacterEncoding("ISO-8859-1");
+                opts.setSaveImplicitNamespaces(namespaces);
+
+                uri = "";
+
+                now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                uri = "#" + uri;
+
+                opts = new XmlOptions();
+                opts.setCharacterEncoding("ISO-8859-1");
+                ByteArrayOutputStream out2 = new ByteArrayOutputStream();
+                //doc.save(new File(resultS + "APROBCOM-sinfirma.xml"), opts);
+                //doc.save(out2, opts);
+                logger.warn("Escribiendo " + resultS + "APROBCOM-" + idS + ".xml");
+                respuesta.save(new File(resultS + "APROBCOM-" + idS + ".xml"), opts);
+                respuesta.save(out2, opts);
+                logger.warn("Escribiendo archivo temporal para attachment" + resultS + "APROBCOM.xml");
+                respuesta.save(new File(resultS + "APROBCOM.xml"), opts);
+                ByteArrayOutputStream outTemp = new ByteArrayOutputStream();
+                respuesta.save(outTemp, opts);
+
+                return
+            </script>
+
+            <!-- Recuperación del email de destinatario de aceptación -->
+            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyAceptacionField">
+                <field-map field-name="idValue" from="rutEmisor"/>
+            </entity-find-one>
+
+            <if condition="!partyAceptacionField">
+                <return error="true" message="Organización a enviar aceptación no tiene RUT definido"/>
+            </if>
+
+            <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
+                          in-map="[partyId:partyAceptacionField.partyId, postalContactMechPurposeId:'PostalTax']"/>
+            <if condition="!contactOut.postalContactMechId">
+                <return error="true" message="Receptor de aceptación no tiene contacto tributario asignado"/>
+            </if>
+
+            <!--return error="true" message="PPP: $rutEmisor, partyId: $partyAceptacionField.partyId - $contactOut.emailAddress"/-->
+
+            <set field="emailAceptacion" from="contactOut.emailAddress"/>
+
+            <!-- Recuperación de algunos datos desde FiscalTaxDocument -->
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="fiscalTaxDocumentField">
+                <field-map field-name="fiscalTaxDocumentId"/>
+            </entity-find-one>
+            <set field="folioAceptacion" from="fiscalTaxDocumentField.fiscalTaxDocumentNumber"/>
+
+
+            <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nmbContacto:nmbContacto,
+                                        fonoContacto:fonoContacto, mailContacto:mailContacto]"/>
+            <service-call name="create#mchile.dte.AceptacionDte" out-map="context" in-map="createMap"/>
+
+            <entity-find-one entity-name="mchile.dte.AceptacionDte" value-field="aceptacionField" for-update="true"/>
+            <!--set field="aceptacionField.nmbEnvio" from="fiscalTaxDocumentField.razonSocial" type="String"/-->
+            <set field="aceptacionField.fchRecep" from="fchRecep" type="String"/>
+            <set field="aceptacionField.codEnvio" from="idS" type="String"/>
+            <set field="aceptacionField.rutEmisor" from="rutEmisor" type="String"/>
+            <set field="aceptacionField.envioDteId" value="RESP-${idS}" type="String"/>
+            <set field="aceptacionField.rutEmisor" from="rutEmisor" type="String"/>
+            <set field="aceptacionField.rutReceptor" from="rutResponde" type="String"/>
+            <set field="aceptacionField.estadoRecepEnvEnumId" from="estadoRecepEnvEnumId" type="String"/>
+            <set field="aceptacionField.nroDetalles" value="1" type="Integer"/>
+            <set field="aceptacionField.xml" value="${resultS}RESP-${idS}.xml" type="String"/>
+            <entity-update value-field="aceptacionField"/>
+
+            <set field="bodyParameters" from="[fiscalTaxDocumentId:folioAceptacion, nmbContacto:nmbContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]"/>
+            <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" async="true">
+                <field-map field-name="fiscalTaxDocumentId" from="folioAceptacion"/>
+                <field-map field-name="emailTypeEnumId" from="emailTypeEnumId"/>
+                <!--field-map field-name="toAddresses" value="cherrera@moit.cl"/-->
+                <field-map field-name="toAddresses" from="emailAceptacion"/>
+                <field-map field-name="emailTemplateId" value="Aceptacion"/>
+                <field-map field-name="bodyParameters" from="bodyParameters"/>
+            </service-call>
+
+        </actions>
+    </service>
 
     <service verb="genera" noun="LibroVentas">
         <description>
@@ -5026,7 +6076,7 @@ return
                 arrayLineasCaratulas.add(new ArrayList&lt;String&gt;());
                 arrayLineasCaratulas.get(0).add(emisorS);
                 arrayLineasCaratulas.get(0).add(enviadorS);
-                arrayLineasCaratulas.get(0).add('2018-04');
+                arrayLineasCaratulas.get(0).add('2019-05');
                 arrayLineasCaratulas.get(0).add(fchResol);
                 arrayLineasCaratulas.get(0).add(nroResol);
                 arrayLineasCaratulas.get(0).add(tipo);
@@ -5065,10 +6115,10 @@ return
                 TotalesPeriodo totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
                 totalesPeriodo.setTpoDoc(33);
                 totalesPeriodo.setTotDoc(4);
-                totalesPeriodo.setTotMntExe(49015);
-                totalesPeriodo.setTotMntNeto(13187210);
-                totalesPeriodo.setTotMntIVA(2505571);
-                totalesPeriodo.setTotMntTotal(15741796);
+                totalesPeriodo.setTotMntExe(48825);
+                totalesPeriodo.setTotMntNeto(9288349);
+                totalesPeriodo.setTotMntIVA(1764786);
+                totalesPeriodo.setTotMntTotal(11101960);
 
                 // Nota de Debito Electronica (56)
                 totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
@@ -5083,10 +6133,10 @@ return
                 totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
                 totalesPeriodo.setTpoDoc(61);
                 totalesPeriodo.setTotDoc(3);
-                totalesPeriodo.setTotMntExe(35339);
-                totalesPeriodo.setTotMntNeto(5153396);
-                totalesPeriodo.setTotMntIVA(979146);
-                totalesPeriodo.setTotMntTotal(6167881);
+                totalesPeriodo.setTotMntExe(35183);
+                totalesPeriodo.setTotMntNeto(3655247);
+                totalesPeriodo.setTotMntIVA(694497);
+                totalesPeriodo.setTotMntTotal(4384927);
 
                 outPDF=lectorFichero.crearFicheroMMDDFlex(resultadoFirmado, arrayLineasCaratulas.get(0).get(3));
                 outPDF+="/"+arrayLineasCaratulas.get(0).get(5)+"_"+arrayLineasCaratulas.get(0).get(6)+"_"+arrayLineasCaratulas.get(0).get(7)+"_"+idS+".xml";
@@ -5115,6 +6165,7 @@ return
                 FirmaLibro firmaLibro = new FirmaLibro();
 
                 String mensaje=firmaLibro.firmarLibro(certS, passS, resultS + "LIBCV" + idS + "-sinfirma.xml",outPDF,10,"ENVIADO",arrayLineasCaratulas.get(0).get(5),arrayLineasCaratulas.get(0).get(2),"xmlasdas",tipoEnvio);
+                logger.warn("Mensaje: " + mensaje);
 
             </script>
             <!-- Registro de DTE en base de datos y generación de PDF -->
@@ -5233,7 +6284,7 @@ return
                 logger.warn("Enviador:" +enviadorS);
                 arrayLineasCaratulas.get(0).add(emisorS);
                 arrayLineasCaratulas.get(0).add(enviadorS);
-                arrayLineasCaratulas.get(0).add('2018-04');
+                arrayLineasCaratulas.get(0).add('2019-05');
                 arrayLineasCaratulas.get(0).add(fchResol);
                 arrayLineasCaratulas.get(0).add(nroResol);
                 arrayLineasCaratulas.get(0).add(tipo);
@@ -5272,33 +6323,33 @@ return
                 totalesPeriodo.setTpoDoc(30);
                 totalesPeriodo.setTotDoc(2);
                 totalesPeriodo.setTotMntExe(0);
-                totalesPeriodo.setTotMntNeto(83036);
-                totalesPeriodo.setTotMntIVA(10045);
+                totalesPeriodo.setTotMntNeto(57995);
+                totalesPeriodo.setTotMntIVA(5344);
                 totalesPeriodo.setTotOpIVAUsoComun(1);
-                totalesPeriodo.setTotIVAUsoComun(5732);
+                totalesPeriodo.setTotIVAUsoComun(5675);
                 totalesPeriodo.setFctProp(0.6);
-                totalesPeriodo.setTotCredIVAUsoComun(3439);
-                totalesPeriodo.setTotMntTotal(98813);
+                totalesPeriodo.setTotCredIVAUsoComun(3405);
+                totalesPeriodo.setTotMntTotal(69014);
 
 
                 // Factura Electronica (33)
                 totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
                 totalesPeriodo.setTpoDoc(33);
                 totalesPeriodo.setTotDoc(2);
-                totalesPeriodo.setTotMntExe(10611);
-                totalesPeriodo.setTotMntNeto(23524);
-                totalesPeriodo.setTotMntIVA(2169);
+                totalesPeriodo.setTotMntExe(9226);
+                totalesPeriodo.setTotMntNeto(18061);
+                totalesPeriodo.setTotMntIVA(1441);
                 // IVA No Recuperable
                 totIvaNoRec = new ArrayList&lt;TotIVANoRec&gt;();
                 oit = TotIVANoRec.Factory.newInstance();
                 oit.setCodIVANoRec(4);
                 oit.setTotOpIVANoRec(1);
-                oit.setTotMntIVANoRec(2301);
+                oit.setTotMntIVANoRec(1991);
                 totIvaNoRec.add(oit);
                 arrayTot = new TotIVANoRec[totIvaNoRec.size()];
                 totIvaNoRec.toArray(arrayTot);
                 totalesPeriodo.setTotIVANoRecArray(arrayTot);
-                totalesPeriodo.setTotMntTotal(38605);
+                totalesPeriodo.setTotMntTotal(30719);
 
                 // Factura Exenta Electronica (34)
                 //totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
@@ -5323,9 +6374,9 @@ return
                 totalesPeriodo.setTpoDoc(60);
                 totalesPeriodo.setTotDoc(2);
                 totalesPeriodo.setTotMntExe(0);
-                totalesPeriodo.setTotMntNeto(11924);
-                totalesPeriodo.setTotMntIVA(2266);
-                totalesPeriodo.setTotMntTotal(14190);
+                totalesPeriodo.setTotMntNeto(8209);
+                totalesPeriodo.setTotMntIVA(1560);
+                totalesPeriodo.setTotMntTotal(9769);
 
                 // Nota de Credito Electronica (61)
                 //totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
@@ -5360,18 +6411,17 @@ return
                 totalesPeriodo.setTpoDoc(46);
                 totalesPeriodo.setTotDoc(1);
                 totalesPeriodo.setTotMntExe(0);
-                totalesPeriodo.setTotMntNeto(10619);
-                totalesPeriodo.setTotMntIVA(2018);
-
+                totalesPeriodo.setTotMntNeto(9801);
+                totalesPeriodo.setTotMntIVA(1862);
                 ArrayList&lt;TotOtrosImp&gt; totOtrosImp = new ArrayList&lt;TotOtrosImp&gt;();
                 toimp = TotOtrosImp.Factory.newInstance();
                 toimp.setCodImp(15);
-                toimp.setTotMntImp(2018);
+                toimp.setTotMntImp(1862);
                 totOtrosImp.add(toimp);
                 arrayTot = new TotOtrosImp[totOtrosImp.size()];
                 totOtrosImp.toArray(arrayTot);
                 totalesPeriodo.setTotOtrosImpArray(arrayTot);
-                totalesPeriodo.setTotMntTotal(10619);
+                totalesPeriodo.setTotMntTotal(9801);
 
                 // **************************************************
                 // Factura 234
@@ -5381,13 +6431,13 @@ return
                 detalle.setNroDoc(234);
                 detalle.setTasaImp(19);
                 //detalle.setTpoImp(1);
-                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2018-04-20"))
-                detalle.setRUTDoc("78518640-0");
-                detalle.setRznSoc("HORTITEC SPA");
+                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2019-05-21"))
+                detalle.setRUTDoc("96800570-7");
+                detalle.setRznSoc("ENEL DISTRIBUCION");
                 detalle.setMntExe(0);
-                detalle.setMntNeto(52870);
-                detalle.setMntIVA(10045);
-                detalle.setMntTotal(62915);
+                detalle.setMntNeto(28127);
+                detalle.setMntIVA(5344);
+                detalle.setMntTotal(33471);
 
                 // Factura Electrónica 32
                 detalle = envioLibro.addNewDetalle(); // Prueba
@@ -5395,13 +6445,13 @@ return
                 detalle.setNroDoc(32);
                 detalle.setTasaImp(19);
                 //detalle.setTpoImp(1);
-                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2018-04-10"))
-                detalle.setRUTDoc("78518640-0");
-                detalle.setRznSoc("HORTITEC SPA");
-                detalle.setMntExe(10611)
-                detalle.setMntNeto(11414);
-                detalle.setMntIVA(2169);
-                detalle.setMntTotal(24194);
+                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2019-05-10"))
+                detalle.setRUTDoc("96800570-7");
+                detalle.setRznSoc("ENEL DISTRIBUCION");
+                detalle.setMntExe(9226)
+                detalle.setMntNeto(7584);
+                detalle.setMntIVA(1441);
+                detalle.setMntTotal(18251);
 
                 // Factura 781
                 detalle = envioLibro.addNewDetalle(); // Prueba
@@ -5409,13 +6459,13 @@ return
                 detalle.setNroDoc(781);
                 detalle.setTasaImp(19);
                 detalle.setTpoImp(1);
-                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2018-04-21"))
-                detalle.setRUTDoc("78518640-0");
-                detalle.setRznSoc("HORTITEC SPA");
+                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2019-05-21"))
+                detalle.setRUTDoc("96800570-7");
+                detalle.setRznSoc("ENEL DISTRIBUCION");
                 detalle.setMntExe(0);
-                detalle.setMntNeto(30166);
-                detalle.setIVAUsoComun(5732);
-                detalle.setMntTotal(35898);
+                detalle.setMntNeto(29868);
+                detalle.setIVAUsoComun(5675);
+                detalle.setMntTotal(35543);
 
 
                 // Nota de Crédito 451
@@ -5423,13 +6473,13 @@ return
                 detalle.setTpoDoc(60);
                 detalle.setNroDoc(451);
                 detalle.setTasaImp(19);
-                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2018-04-29"))
-                detalle.setRUTDoc("78518640-0");
-                detalle.setRznSoc("HORTITEC SPA");
+                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2019-05-29"))
+                detalle.setRUTDoc("96800570-7");
+                detalle.setRznSoc("ENEL DISTRIBUCION");
                 detalle.setMntExe(0);
-                detalle.setMntNeto(2926);
-                detalle.setMntIVA(556);
-                detalle.setMntTotal(3482);
+                detalle.setMntNeto(2763);
+                detalle.setMntIVA(525);
+                detalle.setMntTotal(3288);
 
                 // Factura Electronica 67
                 detalle = envioLibro.addNewDetalle(); // Prueba
@@ -5437,20 +6487,20 @@ return
                 detalle.setNroDoc(67);
                 detalle.setTasaImp(19);
                 detalle.setTpoImp(1);
-                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2018-04-10"))
-                detalle.setRUTDoc("78518640-0");
-                detalle.setRznSoc("HORTITEC SPA");
+                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2019-05-10"))
+                detalle.setRUTDoc("96800570-7");
+                detalle.setRznSoc("ENEL DISTRIBUCION");
                 detalle.setMntExe(0)
-                detalle.setMntNeto(12110);
+                detalle.setMntNeto(10477);
                 ivaNoRec = new ArrayList&lt;IVANoRec&gt;();
                 oi = IVANoRec.Factory.newInstance();
                 oi.setCodIVANoRec(new BigInteger(4));
-                oi.setMntIVANoRec(2301);
+                oi.setMntIVANoRec(1991);
                 ivaNoRec.add(oi);
                 array = new IVANoRec[ivaNoRec.size()];
                 ivaNoRec.toArray(array);
                 detalle.setIVANoRecArray(array);
-                detalle.setMntTotal(14411);
+                detalle.setMntTotal(12468);
 
                 // Factura de Compra Electrónica 9
                 detalle = envioLibro.addNewDetalle(); // Prueba
@@ -5458,35 +6508,35 @@ return
                 detalle.setNroDoc(9);
                 detalle.setTasaImp(19);
                 //detalle.setTpoImp(1);
-                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2018-04-10"))
-                detalle.setRUTDoc("78518640-0");
-                detalle.setRznSoc("HORTITEC SPA");
+                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2019-05-10"))
+                detalle.setRUTDoc("96800570-7");
+                detalle.setRznSoc("ENEL DISTRIBUCION");
                 detalle.setMntExe(0)
-                detalle.setMntNeto(10619);
-                detalle.setMntIVA(2018);
+                detalle.setMntNeto(9801);
+                detalle.setMntIVA(1862);
                 ArrayList&lt;OtrosImp&gt; otrosImp = new ArrayList&lt;OtrosImp&gt;();
                 oimp = OtrosImp.Factory.newInstance();
                 oimp.setCodImp(15);
                 oimp.setTasaImp(19);
-                oimp.setMntImp(2018);
+                oimp.setMntImp(1862);
                 otrosImp.add(oimp);
                 array = new OtrosImp[otrosImp.size()];
                 otrosImp.toArray(array);
                 detalle.setOtrosImpArray(array);
-                detalle.setMntTotal(10619);
+                detalle.setMntTotal(9801);
 
                 // Nota de Crédito 211
                 detalle = envioLibro.addNewDetalle(); // Prueba
                 detalle.setTpoDoc(60);
                 detalle.setNroDoc(211);
                 detalle.setTasaImp(19);
-                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2018-04-12"))
-                detalle.setRUTDoc("78518640-0");
-                detalle.setRznSoc("HORTITEC SPA");
+                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2019-04-12"))
+                detalle.setRUTDoc("96800570-7");
+                detalle.setRznSoc("ENEL DISTRIBUCION");
                 detalle.setMntExe(0);
-                detalle.setMntNeto(8998);
-                detalle.setMntIVA(1710);
-                detalle.setMntTotal(10708);
+                detalle.setMntNeto(5446);
+                detalle.setMntIVA(1035);
+                detalle.setMntTotal(6481);
 
                 outPDF=lectorFichero.crearFicheroMMDDFlex(resultadoFirmado, arrayLineasCaratulas.get(0).get(3));
                 outPDF+="/"+arrayLineasCaratulas.get(0).get(5)+"_"+arrayLineasCaratulas.get(0).get(6)+"_"+arrayLineasCaratulas.get(0).get(7)+"_"+idS+".xml";
@@ -5541,6 +6591,7 @@ return
         <actions>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
             <set field="certS" from="pathCert"/>
+            <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="resultS" from="pathResults"/>
             <set field="pathTemp" from="pathTemp"/>
@@ -5635,7 +6686,7 @@ return
                 arrayLineasCaratulas.add(new ArrayList&lt;String&gt;());
                 arrayLineasCaratulas.get(0).add(emisorS);
                 arrayLineasCaratulas.get(0).add(enviadorS);
-                arrayLineasCaratulas.get(0).add('2018-04');
+                arrayLineasCaratulas.get(0).add('2019-05');
                 arrayLineasCaratulas.get(0).add(fchResol);
                 arrayLineasCaratulas.get(0).add(nroResol);
                 arrayLineasCaratulas.get(0).add(tipo);
@@ -5671,11 +6722,11 @@ return
                 //Caratula caratula = envioLibro.addNewCaratula();
                 Caratula caratula = envioLibro.getCaratula();
                 caratula.setRutEmisorLibro(emisorS);
-                caratula.setRutEnvia(enviadorS);
+                caratula.setRutEnvia("12857517-0");
                 Calendar cal = Calendar.getInstance();
                 cal.clear();
-                cal.set(Calendar.YEAR, Integer.valueOf('2018'));
-                cal.set(Calendar.MONTH, Integer.valueOf('03'));
+                cal.set(Calendar.YEAR, Integer.valueOf('2019'));
+                cal.set(Calendar.MONTH, Integer.valueOf('05'));
                 caratula.setPeriodoTributario(cal);
                 cal.clear();
                 cal.set(Calendar.YEAR, Integer.valueOf('2018'));
@@ -5693,7 +6744,7 @@ return
                 resumenPeriodo.setTotFolAnulado(0);
                 resumenPeriodo.setTotGuiaAnulada(1);
                 resumenPeriodo.setTotGuiaVenta(1);
-                resumenPeriodo.setTotMntGuiaVta(3283703);
+                resumenPeriodo.setTotMntGuiaVta(5137330);
                 resumenPeriodo.setTotMntModificado(0);
                 ArrayList&lt;TotTraslado&gt; totTraslado = new ArrayList&lt;TotTraslado&gt;();
                 oimp = TotTraslado.Factory.newInstance();
@@ -5701,73 +6752,75 @@ return
                 oimp.setCantGuia(1);
                 oimp.setMntGuia(0);
                 totTraslado.add(oimp);
+                //oimp = TotTraslado.Factory.newInstance();
+                //oimp.setTpoTraslado(2);
+                //oimp.setCantGuia(1);
+                //oimp.setMntGuia(5137330);
+                //totTraslado.add(oimp);
                 array = new TotTraslado[totTraslado.size()];
                 totTraslado.toArray(array);
                 resumenPeriodo.setTotTrasladoArray(array);
 
-                //AgregarCamposLibros addCampos = new AgregarCamposLibros();
-                // Agregar CARATULA
-                //addCampos.addDatosCaratula(envioLibro, arrayLineasCaratulas);
 
 
-                Detalle detalle = envioLibro.addNewDetalle(); // Caso 1025774-1
-                detalle.setFolio(17);
-                detalle.setOperacion(1);
+                Detalle detalle = envioLibro.addNewDetalle(); // Caso 1
+                detalle.setFolio(131);
+                //detalle.setOperacion(1);
                 detalle.setTpoOper(5);
                 cal.clear();
-                cal.set(Calendar.YEAR, Integer.valueOf('2018'));
-                cal.set(Calendar.MONTH, Integer.valueOf('03'));
-                cal.set(Calendar.DAY_OF_MONTH, Integer.valueOf('24'));
+                cal.set(Calendar.YEAR, Integer.valueOf('2019'));
+                cal.set(Calendar.MONTH, Integer.valueOf('06'));
+                cal.set(Calendar.DAY_OF_MONTH, Integer.valueOf('21'));
                 detalle.setFchDoc(cal);
-                detalle.setRUTDoc("78518640-0");
-                detalle.setRznSoc("HORTITEC SPA");
+                detalle.setRUTDoc("96800570-7");
+                detalle.setRznSoc("ENEL DISTRIBUCION");
                 //detalle.setMntExe(0);
                 detalle.setMntNeto(0);
                 detalle.setTasaImp(0);
                 detalle.setIVA(0);
                 detalle.setMntTotal(0);
 
-                detalle = envioLibro.addNewDetalle(); // Caso 1025774-2
-                detalle.setFolio(18);
-                detalle.setOperacion(1);
+                detalle = envioLibro.addNewDetalle(); // Caso 2
+                detalle.setFolio(132);
+                detalle.setOperacion(2);
                 detalle.setTpoOper(1);
                 cal.clear();
-                cal.set(Calendar.YEAR, Integer.valueOf('2018'));
-                cal.set(Calendar.MONTH, Integer.valueOf('03'));
-                cal.set(Calendar.DAY_OF_MONTH, Integer.valueOf('24'));
+                cal.set(Calendar.YEAR, Integer.valueOf('2019'));
+                cal.set(Calendar.MONTH, Integer.valueOf('06'));
+                cal.set(Calendar.DAY_OF_MONTH, Integer.valueOf('21'));
                 detalle.setFchDoc(cal);
-                detalle.setRUTDoc("78518640-0");
-                detalle.setRznSoc("HORTITEC SPA");
+                detalle.setRUTDoc("96800570-7");
+                detalle.setRznSoc("ENEL DISTRIBUCION");
                 //detalle.setMntExe(0);
-                detalle.setMntNeto(2759414);
+                detalle.setMntNeto(4317084);
                 detalle.setTasaImp(19);
-                detalle.setIVA(524289);
-                detalle.setMntTotal(3283703);
+                detalle.setIVA(820246);
+                detalle.setMntTotal(5137330);
                 detalle.setTpoDocRef(33);
                 detalle.setFolioDocRef(18);
                 cal.clear();
-                cal.set(Calendar.YEAR, Integer.valueOf('2018'));
-                cal.set(Calendar.MONTH, Integer.valueOf('04'));
-                cal.set(Calendar.DAY_OF_MONTH, Integer.valueOf('10'));
+                cal.set(Calendar.YEAR, Integer.valueOf('2019'));
+                cal.set(Calendar.MONTH, Integer.valueOf('06'));
+                cal.set(Calendar.DAY_OF_MONTH, Integer.valueOf('20'));
                 detalle.setFchDocRef(cal);
 
-                detalle = envioLibro.addNewDetalle(); // Caso 1025774-3
-                detalle.setFolio(19);
+                detalle = envioLibro.addNewDetalle(); // Caso 3
+                detalle.setFolio(133);
                 detalle.setAnulado(2);
                 detalle.setOperacion(1);
                 detalle.setTpoOper(1);
                 cal.clear();
-                cal.set(Calendar.YEAR, Integer.valueOf('2018'));
-                cal.set(Calendar.MONTH, Integer.valueOf('03'));
-                cal.set(Calendar.DAY_OF_MONTH, Integer.valueOf('24'));
+                cal.set(Calendar.YEAR, Integer.valueOf('2019'));
+                cal.set(Calendar.MONTH, Integer.valueOf('06'));
+                cal.set(Calendar.DAY_OF_MONTH, Integer.valueOf('21'));
                 detalle.setFchDoc(cal);
-                detalle.setRUTDoc("78518640-0");
-                detalle.setRznSoc("HORTITEC SPA");
+                detalle.setRUTDoc("96800570-7");
+                detalle.setRznSoc("ENEL DISTRIBUCION");
                 //detalle.setMntExe(0);
-                detalle.setMntNeto(2053884);
+                detalle.setMntNeto(3189018);
                 detalle.setTasaImp(19);
-                detalle.setIVA(390238);
-                detalle.setMntTotal(2444122);
+                detalle.setIVA(605913);
+                detalle.setMntTotal(3794931);
 
                 //SignatureType signature = libroGuia.addNewSignature();
 
@@ -5788,7 +6841,8 @@ return
 
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
-                ks.load(new FileInputStream(certS), passS.toCharArray());
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
                 String alias = ks.aliases().nextElement();
 
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
@@ -6260,6 +7314,7 @@ return
             <!-- Recuperacion de parametros de la organizacion -->
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
             <set field="certS" from="pathCert"/>
+            <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="resultS" from="pathResults"/>
             <set field="pathTemp" from="pathTemp"/>
@@ -6419,7 +7474,8 @@ return
 
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
-                ks.load(new FileInputStream(certS), passS.toCharArray());
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
                 String alias = ks.aliases().nextElement();
 
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
@@ -6575,7 +7631,7 @@ return
                         // Agrego referencias
                         ref[i] = Referencia.Factory.newInstance();
                         ref[i].setNroLinRef(i+1);
-                        if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('0')) { // Used for Set de Pruebas SII
+                        if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('Ftdt-0')) { // Used for Set de Pruebas SII
                         //ref[i].setTpoDocRef('SET');
                         ref[i].setFolioRef(referenciaEntry.folio.toString());
                         ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
@@ -6682,7 +7738,7 @@ return
                         // Agrego referencias
                         ref[i] = Referencia.Factory.newInstance();
                         ref[i].setNroLinRef(i+1);
-                        if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('0')) { // Used for Set de Pruebas SII
+                        if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('Ftdt-0')) { // Used for Set de Pruebas SII
                         ref[i].setTpoDocRef('SET');
                         ref[i].setFolioRef(referenciaEntry.folio.toString());
                         ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
@@ -6861,7 +7917,7 @@ return
             <entity-update value-field="dteField"/>
 
             <!-- Creación de registro en FiscalTaxDocumentAttributes -->
-            <!-- montoNeto aaaaaa-->
+            <!-- montoNeto -->
             <!-- montoIVARecuperable -->
             <!-- montoExento -->
             <!-- Amount -->
@@ -6918,6 +7974,7 @@ return
             <!-- Recuperacion de parametros de la organizacion -->
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
             <set field="certS" from="pathCert"/>
+            <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="resultS" from="pathResults"/>
             <set field="pathTemp" from="pathTemp"/>
@@ -7074,7 +8131,8 @@ return
 
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
-                ks.load(new FileInputStream(certS), passS.toCharArray());
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
                 String alias = ks.aliases().nextElement();
 
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
@@ -7255,7 +8313,8 @@ return
 
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks2 = KeyStore.getInstance("PKCS12");
-                ks2.load(new FileInputStream(certS), passS.toCharArray());
+                //ks2.load(new FileInputStream(certS), passS.toCharArray());
+                ks2.load(certData.getBinaryStream(), passS.toCharArray());
                 alias2 = ks2.aliases().nextElement();
 
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
@@ -7424,7 +8483,8 @@ return
 
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks3 = KeyStore.getInstance("PKCS12");
-                ks3.load(new FileInputStream(certS), passS.toCharArray());
+                //ks3.load(new FileInputStream(certS), passS.toCharArray());
+                ks3.load(certData.getBinaryStream(), passS.toCharArray());
                 alias3 = ks3.aliases().nextElement();
 
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
@@ -7583,7 +8643,8 @@ return
 
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks4 = KeyStore.getInstance("PKCS12");
-                ks4.load(new FileInputStream(certS), passS.toCharArray());
+                //ks4.load(new FileInputStream(certS), passS.toCharArray());
+                ks4.load(certData.getBinaryStream(), passS.toCharArray());
                 alias4 = ks4.aliases().nextElement();
 
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
@@ -7742,7 +8803,8 @@ return
 
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks5 = KeyStore.getInstance("PKCS12");
-                ks5.load(new FileInputStream(certS), passS.toCharArray());
+                //ks5.load(new FileInputStream(certS), passS.toCharArray());
+                ks5.load(certData.getBinaryStream(), passS.toCharArray());
                 alias5 = ks5.aliases().nextElement();
 
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
@@ -7965,7 +9027,7 @@ return
                 }
 
                 // **************************************************************
-                // Creación de PDF en base a EnvioBOLETA con boletaN aaaaa
+                // Creación de PDF en base a EnvioBOLETA con boletaN
                 // PDF Boleta 1
                 // **************************************************************
                 // ajustes para el formato (MAGIA) antes de firmar
@@ -8468,6 +9530,7 @@ return
             <!-- Recuperacion de parametros de la organizacion -->
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
             <set field="certS" from="pathCert"/>
+            <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="resultS" from="pathResults"/>
             <set field="pathTemp" from="pathTemp"/>
@@ -8636,7 +9699,8 @@ return
 
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
-                ks.load(new FileInputStream(certS), passS.toCharArray());
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
                 String alias = ks.aliases().nextElement();
 
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
@@ -8817,7 +9881,8 @@ return
 
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks2 = KeyStore.getInstance("PKCS12");
-                ks2.load(new FileInputStream(certS), passS.toCharArray());
+                //ks2.load(new FileInputStream(certS), passS.toCharArray());
+                ks2.load(certData.getBinaryStream(), passS.toCharArray());
                 alias2 = ks2.aliases().nextElement();
 
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
@@ -8986,7 +10051,8 @@ return
 
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks3 = KeyStore.getInstance("PKCS12");
-                ks3.load(new FileInputStream(certS), passS.toCharArray());
+                //ks3.load(new FileInputStream(certS), passS.toCharArray());
+                ks3.load(certData.getBinaryStream(), passS.toCharArray());
                 alias3 = ks3.aliases().nextElement();
 
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
@@ -9145,7 +10211,8 @@ return
 
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks4 = KeyStore.getInstance("PKCS12");
-                ks4.load(new FileInputStream(certS), passS.toCharArray());
+                //ks4.load(new FileInputStream(certS), passS.toCharArray());
+                ks4.load(certData.getBinaryStream(), passS.toCharArray());
                 alias4 = ks4.aliases().nextElement();
 
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
@@ -9304,7 +10371,8 @@ return
 
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks5 = KeyStore.getInstance("PKCS12");
-                ks5.load(new FileInputStream(certS), passS.toCharArray());
+                //ks5.load(new FileInputStream(certS), passS.toCharArray());
+                ks5.load(certData.getBinaryStream(), passS.toCharArray());
                 alias5 = ks5.aliases().nextElement();
 
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
@@ -9523,7 +10591,7 @@ return
                 }
 
                 // **************************************************************
-                // Creación de PDF en base a EnvioBOLETA con boletaN aaaaa
+                // Creación de PDF en base a EnvioBOLETA con boletaN
                 // PDF Boleta 1
                 // **************************************************************
                 // ajustes para el formato (MAGIA) antes de firmar
@@ -10023,6 +11091,7 @@ return
             <!-- Recuperacion de parametros de la organizacion -->
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
             <set field="certS" from="pathCert"/>
+            <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="resultS" from="pathResults"/>
             <set field="pathTemp" from="pathTemp"/>
@@ -10164,7 +11233,8 @@ return
 
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
-                ks.load(new FileInputStream(certS), passS.toCharArray());
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
                 String alias = ks.aliases().nextElement();
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS);
 
@@ -10594,6 +11664,20 @@ return
                 dirReceptor = dirReceptor + " " + contactPostalAddressField.unitNumber
             </script>
             <set field="cmnaReceptor" from="contactPostalAddressField.city"/>
+
+            <!-- Obtención de contacto para impuestos en organización -->
+            <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
+                          in-map="[partyId:partyId, postalContactMechPurposeId:'PostalTax']"/>
+            <if condition="!contactOut.postalContactMechId">
+                <return error="true" message="Receptor no tiene contacto tributario asignado"/>
+            </if>
+            <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="postalAddressField">
+                <field-map field-name="contactMechId" from="contactOut.postalContactMechId"/>
+            </entity-find-one>
+
+            <set field="cmnaReceptor" from="postalAddressField.city"/>
+
+
             <!-- ID Contacto receptor -->
             <set field="receptorContactId" from="contactPostalAddressField.telecomContactMechId"/>
 
@@ -11105,6 +12189,78 @@ return
                 <set field="ftdtEntry.contentData" from="filename.get()"/>
                 <entity-update value-field="ftdtEntry"/>
             </iterate>
+        </actions>
+    </service>
+
+    <service verb="update" noun="PartyDteParameters">
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+            <parameter name="templateFactura"/>
+            <parameter name="templateBoleta"/>
+            <parameter name="templatePdf"/>
+            <parameter name="templatePdfCedible"/>
+            <parameter name="templatePdfBoleta"/>
+            <parameter name="templateEnvio"/>
+            <parameter name="templateEnvioBoleta"/>
+            <parameter name="templateAceptaciones"/>
+            <parameter name="templateRcof"/>
+            <parameter name="logo"/>
+            <parameter name="fchResol"/>
+            <parameter name="nroResol"/>
+            <parameter name="rutEmisor"/>
+            <parameter name="rutEnvia"/>
+            <parameter name="rznSocEmisor"/>
+            <parameter name="cdgSIISucur"/>
+            <parameter name="dirOrigen"/>
+            <parameter name="cmnaOrigen"/>
+            <parameter name="ciudadOrigen"/>
+            <parameter name="pathResults"/>
+            <parameter name="pathAceptaciones"/>
+            <parameter name="pathRecibidas"/>
+            <parameter name="pathPdf"/>
+            <parameter name="pathTemp"/>
+            <parameter name="pathCaf"/>
+            <parameter name="pathCert"/>
+            <parameter name="passCert"/>
+            <parameter name="nmbContacto"/>
+            <parameter name="mailContacto"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.PartyDteParams" list="paramsList">
+                <econdition field-name="partyId"/></entity-find>
+
+
+            <if condition="paramsList"><then>
+                    <service-call name="update#mchile.dte.PartyDteParams" in-map="context"/>
+                </then>
+                <else>
+                    <service-call name="create#mchile.dte.PartyDteParams"
+                                  in-map="[partyId:partyId, templateFactura:templateFactura, templateBoleta:templateBoleta, templatePdf:templatePdf, templatePdfCedible:templatePdfCedible, templatePdfBoleta:templatePdfBoleta,
+                    templateEnvio:templateEnvio, templateEnvioBoleta:templateEnvioBoleta, templateAceptaciones:templateAceptaciones, templateRcof:templateRcof, logo:logo, fchResol:fechResol, nroResol:nroResol, rutEmisor:rutEmisor,
+                    rutEnvia:rutEnvia, rznSocEmisor:rznSocEmisor, cdgSIISucur:cdgSIISucur, dirOrigen:dirOrigen, cmnaOrigen:cmnaOrigen, ciudadOrigen:ciudadOrigen, pathResults:pathResults, pathAceptaciones:pathAceptaciones,
+                    pathRecibidas:pathRecibidas, pathPdf:pathPdf, pathTemp:pathTemp, pathCaf:pathCaf, pathCert:pathCert, passCert:passCert, nmbContacto:nmbContacto, mailContacto:mailContacto]"/>
+                </else>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="load" noun="Certificate">
+        <description>
+            Carga Certificado Digital para firmar DTE
+        </description>
+        <in-parameters>
+            <parameter name="filename" type="org.apache.commons.fileupload.FileItem"/>
+            <parameter name="activeOrgId" required="true"/>
+            <parameter name="passCert" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams" for-update="true">
+                <field-map field-name="partyId" from="activeOrgId"/>
+            </entity-find-one>
+            <set field="dteParams.passCert" from="passCert"/>
+            <set field="dteParams.certData" from="filename.get()"/>
+            
+            <entity-update value-field="dteParams"/>
         </actions>
     </service>
 
