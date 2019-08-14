@@ -162,6 +162,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="flatAmount" required="true" type="BigDecimal"/>
             <parameter name="fromDate" required="true" type="Timestamp"/>
         </in-parameters>
+        <out-parameters><parameter name="payrollAdjustmentId"/></out-parameters>
         <actions>
             <entity-find-one entity-name="mantle.humanres.employment.Employment" value-field="employment"/>
             <entity-find entity-name="mantle.humanres.employment.PayrollAdjustment" list="existingList" limit="1">
@@ -365,6 +366,42 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="rutEv.idValue" from="rut"/>
                     <entity-update value-field="rutEv"/></if>
             </iterate>
+        </actions>
+    </service>
+
+    <service verb="create" noun="Employment">
+        <in-parameters>
+            <parameter name="fromPartyId" required="true"/>
+            <parameter name="toPartyId" required="true"/>
+            <parameter name="timePeriodTypeId" required="true"/>
+            <parameter name="emplPositionId" required="true"/>
+            <parameter name="employmentDurationTypeEnumId" required="true"/>
+            <parameter name="employmentEmployeeConditionTypeEnumId" required="true"/>
+            <parameter name="fromDate" required="true" type="Timestamp"/>
+            <parameter name="amount" required="true" type="BigDecimal"/>
+            <parameter name="currencyUomId" default="CLP"/>
+            <parameter name="commutingAssignment" type="BigDecimal" default="0"/>
+            <parameter name="nourishmentAssignment" type="BigDecimal" default="0"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="partyRelationshipId"/>
+        </out-parameters>
+        <actions>
+            <set field="relationshipTypeEnumId" value="PrtEmployee"/>
+            <set field="toRoleTypeId" value="OrgInternal"/>
+            <service-call name="create#mantle.party.PartyRelationship" in-map="context" out-map="context"/>
+            <service-call name="create#mantle.humanres.employment.Employment" in-map="context"/>
+            <service-call name="create#mantle.humanres.employment.EmploymentSalary" in-map="context"/>
+            <if condition="nourishmentAssignment">
+                <service-call name="mchile.humanteam.EmploymentServices.modify#PayrollAdjustment" in-map="[partyRelationshipId:partyRelationshipId, itemTypeEnumId:'ItemPayrollNourishment', flatAmount:nourishmentAssignment, fromDate:fromDate]" out-map="nourishOut"/>
+                <set field="nourishmentAdjustmentId" from="nourishOut.payrollAdjustmentId"/>
+                <log message="nourishmentAdjustmentId: ${nourishmentAdjustmentId}"/>
+            </if>
+            <if condition="commutingAssignment">
+                <service-call name="mchile.humanteam.EmploymentServices.modify#PayrollAdjustment" in-map="[partyRelationshipId:partyRelationshipId, itemTypeEnumId:'ItemPayrollCommuting', flatAmount:commutingAssignment, fromDate:fromDate]" out-map="commutingOut"/>
+                <set field="commutingAdjustmentId" from="commutingOut.payrollAdjustmentId"/>
+                <log message="commutingAdjustmentId: ${commutingAdjustmentId}"/>
+            </if>
         </actions>
     </service>
 
