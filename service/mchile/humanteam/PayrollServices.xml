@@ -935,7 +935,6 @@ along with this software (see the LICENSE.md file). If not, see
                 </else-if><else-if condition="partyRoleIds.contains('CHLFonasa') || partyRoleIds.contains('CHLIps')">
                     <set field="key" value="IPS"/>
                 </else-if><else>
-                    <log level="warn" message="roleIds: ${partyRoleIds}"/>
                     <return error="true" message="Unrecognized invoice ${invoice}"/>
                 </else></if>
                 <set field="totalsMap" from="totalsByCategory[key]"/>
@@ -1165,7 +1164,69 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters><parameter name="invoiceId" required="true"/></in-parameters>
         <out-parameters>
             <parameter name="payeeType"/>
+            <parameter name="payeePartyDetail"/>
+            <parameter name="itemList" type="List">
+                <parameter name="item" type="Map">
+                    <parameter name="rentaImponible" type="BigDecimal"/>
+                    <parameter name="rentaImponible" type="BigDecimal"/>
+                    <parameter name="cotizPension" type="BigDecimal"/>
+                    <parameter name="sis" type="BigDecimal"/>
+                    <parameter name="cotizVol" type="BigDecimal"/>
+                    <parameter name="numContratoApv" type="BigDecimal"/>
+                    <parameter name="depositoConvenido" type="BigDecimal"/>
+                    <parameter name="depositoCtaAhorro" type="BigDecimal"/>
+                    <parameter name="rentaImponibleCesantia" type="BigDecimal"/>
+                    <parameter name="cotizacionCesantiaTrabajador" type="BigDecimal"/>
+                    <parameter name="cotizacionCesantiaEmpleador" type="BigDecimal"/>
+                </parameter>
+            </parameter>
         </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
+            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="payeePartyDetail" auto-field-map="[partyId:invoice.fromPartyId]"/>
+            <set field="timePeriodId" from="invoice.timePeriodId"/>
+            <entity-find entity-name="mantle.party.PartyRole" list="partyRoleList">
+                <econdition field-name="partyId" from="invoice.fromPartyId"/>
+            </entity-find>
+            <set field="partyRoleIds" from="partyRoleList.roleTypeId"/>
+            <if condition="partyRoleIds.contains('CHLAfp') || partyRoleIds.contains('CHLAfc')"><then>
+                <set field="payeeType" value="AFP"/>
+            </then><else-if condition="partyRoleIds.contains('CHLIsapre')">
+                <set field="payeeType" value="ISAPRE"/>
+            </else-if><else-if condition="partyRoleIds.contains('CHLFonasa') || partyRoleIds.contains('CHLIps')">
+                <set field="payeeType" value="IPS"/>
+            </else-if><else>
+                <return error="true" message="Cannot process invoice ${invoiceId}"/>
+            </else></if>
+            <!--
+            <entity-find-one entity-name="mantle.party.time.TimePeriod" value-field="timePeriod"/>
+            <entity-find entity-name="mchile.humanteam.payroll.InvoiceItemPayrollDetail" list="invoiceItems">
+                <econdition field-name="timeperiodId" from="timePeriod.timePeriodId"/>
+            </entity-find>
+            <set field="invoiceItems" from="invoice.items"/>
+            -->
+            <entity-find entity-name="mchile.humanteam.payroll.PayrollItemDetail" list="itemDetailList">
+                <econdition field-name="invoiceId"/>
+            </entity-find>
+            <set field="itemsByRut" from="[:]"/>
+            <set field="itemTypeToFieldMap" from="[ItemClAfcEmpleador:'cotizacionCesantiaEmpleador', ItemClAfcTrabajador:'cotizacionCesantiaTrabajador', ItemClAfp:'cotizPension', ItemClSis:'sis']"/>
+            <iterate list="itemDetailList" entry="item">
+                <script><![CDATA[
+                    itemMap = itemsByRut[item.rut]
+                    if (itemMap == null) {
+                        itemMap = [:]
+                        itemsByRut[item.rut] = itemMap
+                        itemMap.rut = ec.service.sync().name("mchile.GeneralServices.format#Rut").parameter("rut", item.rut).call()['rut']
+                        itemMap.name = ec.resource.expand('PartyNameOnlyTemplate', null, item)
+                    }
+                    itemMap[itemTypeToFieldMap[item.itemTypeEnumId]] = ec.l10n.format(item.amount, '#,###')
+                ]]></script>
+            </iterate>
+            <script>
+                itemList = []
+                itemList.addAll(itemsByRut.values())
+            </script>
+        </actions>
     </service>
 
 </services>
