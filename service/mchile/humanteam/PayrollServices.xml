@@ -905,6 +905,8 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="currencyUomId"/>
             <parameter name="total" type="BigDecimal"/>
             <parameter name="unpaidTotal" type="BigDecimal"/>
+            <parameter name="invoicesByCategory" type="Map"/>
+            <parameter name="nonWorkerTotal" type="BigDecimal"/>
         </out-parameters>
         <actions>
             <entity-find-one entity-name="mantle.party.time.TimePeriodAndType" value-field="timePeriod"/>
@@ -915,24 +917,30 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="totalsByCategory" from="[:]"/>
             <set field="amountEmployees" from="0"/>
             <set field="total" from="0" type="BigDecimal"/>
+            <set field="nonWorkerTotal" from="0" type="BigDecimal"/>
             <set field="unpaidTotal" from="0" type="BigDecimal"/>
+            <set field="invoicesByCategory" from="[AFP:[], employeePayroll:[], ISAPRE:[], IPS:[]]"/>
             <iterate list="invoiceList" entry="invoice">
                 <entity-find entity-name="mantle.party.PartyRole" list="partyRoleList">
                     <econdition field-name="partyId" from="invoice.fromPartyId"/>
                 </entity-find>
                 <set field="partyRoleIds" from="partyRoleList.roleTypeId"/>
+                <set field="contentMap" from="[:]"/>
                 <if condition="invoice.invoiceTypeEnumId == 'InvoicePayroll'"><then>
                     <set field="key" value="employeePayroll"/>
-                </then><else-if condition="partyRoleIds.contains('CHLAfp')">
+                </then><else-if condition="partyRoleIds.contains('CHLAfp') || partyRoleIds.contains('CHLAfc')">
                     <set field="key" value="AFP"/>
-                </else-if><else-if condition="partyRoleIds.contains('CHLIsapre') || partyRoleList.contains('CHLFonasa')">
-                    <set field="key" value="ISAPRE-FONASA"/>
-                </else-if><else-if condition="partyRoleIds.contains('CHLAfc')">
-                    <set field="key" value="AFC"/>
+                </else-if><else-if condition="partyRoleIds.contains('CHLIsapre')">
+                    <set field="key" value="ISAPRE"/>
+                </else-if><else-if condition="partyRoleIds.contains('CHLFonasa') || partyRoleIds.contains('CHLIps')">
+                    <set field="key" value="IPS"/>
                 </else-if><else>
-                    <set field="key" from="invoice.fromPartyId"/>
+                    <log level="warn" message="roleIds: ${partyRoleIds}"/>
+                    <return error="true" message="Unrecognized invoice ${invoice}"/>
                 </else></if>
                 <set field="totalsMap" from="totalsByCategory[key]"/>
+                <set field="invoiceList" from="invoicesByCategory[key]"/>
+                <script>invoiceList.add(invoice)</script>
                 <if condition="currencyUomId &amp;&amp; currencyUomId != invoice.currencyUomId"><return error="true" message="Currency mismatch, have both ${currencyUomId} and ${invoice.currencyUomId}"/></if>
                 <set field="currencyUomId" from="invoice.currencyUomId"/>
                 <if condition="totalsMap == null">
@@ -942,11 +950,12 @@ along with this software (see the LICENSE.md file). If not, see
                 <script>
                     totalsMap['total'] = totalsMap['total'] + invoice.invoiceTotal
                     totalsMap['unpaid'] = totalsMap['unpaid'] + invoice.unpaidTotal
+                    if (key != 'employeePayroll') nonWorkerTotal += invoice.invoiceTotal
                     total += invoice.invoiceTotal
                     unpaidTotal += invoice.unpaidTotal
                 </script>
             </iterate>
-            <set field="categoryDescr" from="[employeePayroll:'Trabajadores', AFP:'AFPs', 'ISAPRE-FONASA':'Isapre/Fonasa', AFC:'AFC']"/>
+            <set field="categoryDescr" from="[employeePayroll:'Trabajadores', AFP:'AFPs', 'ISAPRE':'Isapre', IPS:'IPS / Fonasa', AFC:'AFC']"/>
 
             <entity-find entity-name="mantle.account.invoice.Invoice" list="periodInvoiceList">
                 <econdition field-name="timePeriodId"/>
