@@ -486,10 +486,11 @@ along with this software (see the LICENSE.md file). If not, see
                                         isEmployerPaid:'N', timePeriodTypeId:timePeriod.timePeriodTypeId]"/>
             <set field="emplAff" from="emplAffList.first"/>
             <if condition="emplAff == null"><then>
-                <set field="baseMap.payeePartyId" value="CHLSSAL-FONASA"/>
+                <set field="baseMap.payeePartyId" value="CL_IPS"/>
                 <set field="compulsoryDescription" value="Cotización Salud obligatoria (Fonasa)"/>
                 <set field="compulsoryAmount" from="-legalAmount*workedProportion"/>
                 <set field="voluntaryAmount" from="0"/>
+                <set field="compulsoryItemTypeEnumId" value="ItemClFonasa"/>
             </then><else>
                 <entity-find-one entity-name="mantle.party.Organization" value-field="isapreOrg"><field-map field-name="partyId" from="emplAff.organizationPartyId"/></entity-find-one>
                 <if condition="isapreOrg == null"><return error="true" message="Could not find organization for Affiliation ${emplAff}"/></if>
@@ -497,6 +498,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="baseMap.payeePartyId" from="emplAff.organizationPartyId"/>
                 <set field="compulsoryDescription" value="Cotización Salud obligatoria (Isapre ${isapreName})"/>
                 <set field="voluntaryDescription" value="Cotización Salud adicional (Isapre ${isapreName})"/>
+                <set field="compulsoryItemTypeEnumId" value="ItemClIsapreObl"/>
                 <if condition="emplAff.currencyUomId == 'CLF'"><then>
                     <service-call name="mchile.humanteam.PayrollServices.get#PeriodParameters" in-map="[timePeriodId:timePeriodId]" out-map="pp"/>
                     <set field="totalAmount" from="(pp.periodUfValue*emplAff.amount*workedProportion).setScale(0, BigDecimal.ROUND_HALF_UP)"/>
@@ -514,7 +516,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="voluntaryAmount" from="0"/>
                 </else></if>
             </else></if>
-            <service-call name="create#mantle.humanres.employment.PayrollAdjustment" in-map="baseMap+[itemTypeEnumId:'ItemClIsapreObl', description:compulsoryDescription]" out-map="adj"/>
+            <service-call name="create#mantle.humanres.employment.PayrollAdjustment" in-map="baseMap+[itemTypeEnumId:compulsoryItemTypeEnumId, description:compulsoryDescription]" out-map="adj"/>
             <service-call name="create#mantle.humanres.employment.PayrollAdjustmentDetail" in-map="[payrollAdjustmentId:adj.payrollAdjustmentId, detailSeqId:'01', rate:-0.07, periodMax:topeImponibleAfp]"/>
             <service-call name="create#mantle.humanres.employment.PayrollAdjustmentDetail" in-map="[payrollAdjustmentId:adj.payrollAdjustmentId, detailSeqId:'02', flatAmount:compulsoryAmount, periodMin:topeImponibleAfp]"/>
             <if condition="voluntaryAmount">
@@ -777,7 +779,6 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find-one entity-name="mantle.party.PartyRelationship" value-field="employment"/>
             <set field="employeePartyId" from="employment.fromPartyId"/>
             <service-call name="mchile.humanteam.PayrollServices.get#DaysWorked" in-map="[partyRelationshipId:partyRelationshipId, timePeriodId:timePeriodId]" out-map="context"/>
-            <service-call name="store#mchile.humanteam.payroll.InvoiceItemPayrollDetail" in-map="[timePeriodId:timePeriodId, partyRelationshipId:partyRelationshipId, daysWorked:daysWorked]"/>
             <set field="leaveReduceRate" from="daysMissedLeave/30"/>
             <set field="illnessReduceRate" from="daysMissedIllness/30"/>
             <set field="employmentReduceRate" from="daysMissedEmployment/30"/>
@@ -1173,7 +1174,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <parameter name="rentaImponible" type="BigDecimal"/>
                     <parameter name="cotizPension" type="BigDecimal"/>
                     <parameter name="sis" type="BigDecimal"/>
-                    <parameter name="cotizVol" type="BigDecimal"/>
+                    <parameter name="cotizSaludVol" type="BigDecimal"/>
                     <parameter name="numContratoApv" type="BigDecimal"/>
                     <parameter name="depositoConvenido" type="BigDecimal"/>
                     <parameter name="depositoCtaAhorro" type="BigDecimal"/>
@@ -1206,7 +1207,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="invoiceId"/>
             </entity-find>
             <set field="itemsByRut" from="[:]"/>
-            <set field="itemTypeToFieldMap" from="[ItemClAfcEmpleador:'cotizacionCesantiaEmpleador', ItemClAfcTrabajador:'cotizacionCesantiaTrabajador', ItemClAfp:'cotizPension', ItemClSis:'sis', ItemClMutual:'accidentesTrabajo', ItemClIsapreObl:'cotizObl', ItemClIsapreVol:'cotizAdicional']"/>
+            <set field="itemTypeToFieldMap" from="[ItemClAfcEmpleador:'cotizacionCesantiaEmpleador', ItemClAfcTrabajador:'cotizacionCesantiaTrabajador', ItemClAfp:'cotizPension', ItemClSis:'sis', ItemClMutual:'accidentesTrabajo', ItemClIsapreObl:'cotizSaludObl', ItemClFonasa:'cotizSaludObl', ItemClIsapreVol:'cotizSaludVol']"/>
             <set field="totalsByItem" from="[:]"/>
             <set field="partyIdList" from="[]"/>
             <iterate list="itemDetailList" entry="item">
@@ -1221,7 +1222,7 @@ along with this software (see the LICENSE.md file). If not, see
                     }
                     itemKey = itemTypeToFieldMap[item.itemTypeEnumId]
                     itemMap[itemKey] = item.amount
-                    if (itemKey == 'cotizObl' || itemKey == 'cotizAdicional') {
+                    if (itemKey == 'cotizSaludObl' || itemKey == 'cotizSaludVol') {
                         itemMap.cotizIsapreAPagar = (itemMap.cotizIsapreAPagar ?: 0) + item.amount
                         totalsByItem.cotizIsapreAPagar = (totalsByItem.cotizIsapreAPagar?:0) + item.amount
                     }
