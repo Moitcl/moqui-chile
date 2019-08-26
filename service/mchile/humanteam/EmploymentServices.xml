@@ -440,4 +440,67 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="get" noun="CertificateInfo">
+        <in-parameters>
+            <parameter name="certificateType"/>
+            <parameter name="leaveDetailId"/>
+            <parameter name="certificateDate"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="templateLocation"/>
+            <parameter name="title"/>
+            <parameter name="documentType"/>
+            <parameter name="employeePartyDetail"/>
+            <parameter name="employeeRut"/>
+            <parameter name="employerPartyDetail"/>
+            <parameter name="employerRut"/>
+            <parameter name="fromDate"/>
+            <parameter name="thruDate"/>
+            <parameter name="days"/>
+            <parameter name="accruedAmount"/>
+            <parameter name="certificateDate"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.humanteam.employment.LeaveDetail" value-field="leaveDetail"/>
+            <if condition="leaveDetail.leaveTypeEnumId == 'PltFeriadoLegal' &amp;&amp; leaveDetail.changeReasonEnumId == 'PcrAccruedUsage'"><then>
+                <set field="documentType" value="vacaciones"/>
+                <set field="title" value="Certificado de Feriado Legal"/>
+            </then><else-if condition="leaveDetail.leaveTypeEnumId == 'PltPermisoSinRem'">
+                <set field="documentType" value="permisoSinGoce"/>
+                <set field="title" value="Permiso sin goce de sueldo"/>
+            </else-if><else>
+                <return error="true" message="Don't know how to issue certificate for leaveDetail ${leaveDetail}"/>
+            </else></if>
+            <if condition="!certificateDate">
+                <set field="certificateDate" from="leaveDetail.fromDate.before(ec.user.nowTimestamp)? leaveDetail.fromDate: ec.user.nowTimestamp"/>
+            </if>
+            <set field="partyRelationshipId" from="leaveDetail.partyRelationshipId"/>
+            <entity-find-one entity-name="mantle.humanres.employment.EmploymentAndRelationship" value-field="employment"/>
+            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="employeePartyDetail" auto-field-map="[partyId:employment.fromPartyId]"/>
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:employment.fromPartyId]" out-map="rutMap"/>
+            <set field="employeeRut" from="rutMap.rut"/>
+            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="employerPartyDetail" auto-field-map="[partyId:employment.toPartyId]"/>
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:employment.fromPartyId]" out-map="rutMap"/>
+            <set field="employerRut" from="rutMap.rut"/>
+            <set field="fromDate" from="leaveDetail.fromDate"/>
+            <set field="thruDate" from="leaveDetail.thruDate"/>
+            <set field="days" from="-leaveDetail.diffAmount"/>
+            <if condition="documentType == 'vacaciones'">
+                <entity-find entity-name="mchile.humanteam.employment.LeaveDetail" list="previousLeaves">
+                    <econdition field-name="partyRelationshipId"/>
+                    <econdition field-name="amountUomId" value="TF_day"/>
+                    <econdition field-name="leaveTypeEnumId" value="PltFeriadoLegal"/>
+                    <econdition field-name="thruDate" operator="less-equals" from="certificateDate"/>
+                    <order-by field-name="thruDate"/>
+                </entity-find>
+                <set field="accruedAmount" from="0" type="BigDecimal"/>
+                <iterate entry="leave" list="previousLeaves">
+                    <set field="accruedAmount" from="accruedAmount + leave.diffAmount"/></iterate>
+                <set field="accruedDate" from="previousLeaves? previousLeaves.get(previousLeaves.size()-1).thruDate: certificateDate"/>
+            </if>
+            <set field="templateLocation" value="component://MoquiChile/template/humanteam/CertificadoAusencia.xsl-fo.ftl"/>
+
+        </actions>
+    </service>
+
 </services>
