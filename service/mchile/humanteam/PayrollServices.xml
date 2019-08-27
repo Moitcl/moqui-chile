@@ -911,6 +911,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="invoicesByCategory" type="Map"/>
             <parameter name="nonWorkerTotal" type="BigDecimal"/>
             <parameter name="employeeInvoiceList" type="List"/>
+            <parameter name="pagablePrevired" type="Boolean"/>
         </out-parameters>
         <actions>
             <entity-find-one entity-name="mantle.party.time.TimePeriodAndType" value-field="timePeriod"/>
@@ -925,7 +926,11 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="unpaidTotal" from="0" type="BigDecimal"/>
             <set field="invoicesByCategory" from="[AFP:[], employeePayroll:[], ISAPRE:[], IPS:[]]"/>
             <set field="employeeInvoiceList" from="[]"/>
+            <set field="pagablePrevired" from="false"/>
             <iterate list="invoiceList" entry="invoice">
+                <if condition="invoice.statusId in ['InvoiceReceived', 'InvoiceApproved']">
+                    <set field="pagablePrevired" from="true"/>
+                </if>
                 <entity-find entity-name="mantle.party.PartyRole" list="partyRoleList">
                     <econdition field-name="partyId" from="invoice.fromPartyId"/>
                 </entity-find>
@@ -1296,6 +1301,30 @@ along with this software (see the LICENSE.md file). If not, see
                 itemList = []
                 itemList.addAll(itemsByRut.values())
             </script>
+        </actions>
+    </service>
+
+    <service verb="add" noun="PreviredPayment">
+        <in-parameters>
+            <parameter name="timePeriodId"/>
+            <parameter name="paymentStatusId" default-value="PmntConfirmed"/>
+            <parameter name="paymentInstrumentEnum" default-value="PiWireTransfer"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mantle.account.invoice.Invoice" list="invoiceList">
+                <econdition field-name="timePeriodId"/>
+            </entity-find>
+            <set field="roles" from="['CHLAfp', 'CHLAfc', 'CHLIsapre', 'CHLFonasa', 'CHLIps']"/>
+            <iterate entry="invoice" list="invoiceList">
+                <if condition="invoice.invoiceTypeEnumId == 'InvoicePayroll'"><continue/></if>
+                <entity-find entity-name="mantle.party.PartyRole" list="partyRoleList">
+                    <econdition field-name="partyId" from="invoice.fromPartyId"/>
+                </entity-find>
+                <set field="partyRoleIds" from="partyRoleList.roleTypeId"/>
+                <if condition="partyRoleIds.intersect(roles)">
+                    <service-call name="mantle.account.PaymentServices.create#InvoicePayment" in-map="[invoiceId:invoice.invoiceId, statusId:paymentStatusId, paymentInstrumentEnumId:paymentInstrumentEnumId, effectiveDate:ec.user.nowTimestamp]"/>
+                </if>
+            </iterate>
         </actions>
     </service>
 
