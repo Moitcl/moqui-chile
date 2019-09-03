@@ -22,8 +22,8 @@ along with this software (see the LICENSE.md file). If not, see
 <#macro itemHeader itemTypeDescription>
     <fo:table table-layout="fixed" width="7.5in" margin-top="0.3in"><fo:table-body>
     <fo:table-row font-size="8pt" border-bottom="thin solid black">
-        <fo:table-cell padding="${cellPadding}" width="6in"><fo:block font-size="12pt" font-weight="bold"><@encodeText (itemTypeDescription)!""/></fo:block></fo:table-cell>
-        <fo:table-cell padding="${cellPadding}" width="1.5in"><fo:block font-size="12pt" font-weight="bold" text-align="right">Valor</fo:block></fo:table-cell>
+        <fo:table-cell padding="${cellPadding}" width="6in"><fo:block font-size="10pt" font-weight="bold"><@encodeText (itemTypeDescription)!""/></fo:block></fo:table-cell>
+        <fo:table-cell padding="${cellPadding}" width="1.5in"><fo:block font-size="10pt" font-weight="bold" text-align="right">Valor</fo:block></fo:table-cell>
     </fo:table-row>
 </#macro>
 <#macro itemFooter itemTotalDescription itemTotal currencyUomId>
@@ -154,29 +154,61 @@ along with this software (see the LICENSE.md file). If not, see
                     </fo:table-body></fo:table>
                 </fo:block-container>
 
-                <fo:block-container width="7.5in">
-                    <@itemHeader "Haberes Imponibles"/>
-                    <#list employeeReceipt.haberesImponibles as haberImponible>
-                        <@itemRow haberImponible employeeReceipt.currencyUomId/>
-                    </#list>
-                    <@itemFooter "Total Haberes Imponibles" employeeReceipt.totalHaberesImponibles!0 employeeReceipt.currencyUomId/>
-                </fo:block-container>
+                <#if employeeReceipt.totalHaberesImponibles != 0>
+                    <fo:block-container width="7.5in">
+                        <@itemHeader "Haberes Imponibles"/>
+                        <#list employeeReceipt.haberesImponibles as haberImponible>
+                            <@itemRow haberImponible employeeReceipt.currencyUomId/>
+                        </#list>
+                        <@itemFooter "Total Haberes Imponibles" employeeReceipt.totalHaberesImponibles!0 employeeReceipt.currencyUomId/>
+                    </fo:block-container>
+                </#if>
 
-                <fo:block-container width="7.5in">
-                    <@itemHeader "Haberes No Imponibles"/>
-                    <#list employeeReceipt.haberesNoImponibles as haberNoImponible>
-                        <@itemRow haberNoImponible employeeReceipt.currencyUomId/>
-                    </#list>
-                    <@itemFooter "Total Haberes No Imponibles" employeeReceipt.totalHaberesNoImponibles!0 employeeReceipt.currencyUomId/>
-                </fo:block-container>
+                <#if employeeReceipt.totalHaberesNoImponibles != 0>
+                    <fo:block-container width="7.5in">
+                        <@itemHeader "Haberes No Imponibles"/>
+                        <#list employeeReceipt.haberesNoImponibles as haberNoImponible>
+                            <@itemRow haberNoImponible employeeReceipt.currencyUomId/>
+                        </#list>
+                        <@itemFooter "Total Haberes No Imponibles" employeeReceipt.totalHaberesNoImponibles!0 employeeReceipt.currencyUomId/>
+                    </fo:block-container>
+                </#if>
 
-                <fo:block-container width="7.5in">
-                    <@itemHeader "Descuentos"/>
-                    <#list employeeReceipt.descuentos as descuento>
-                        <@itemRow descuento employeeReceipt.currencyUomId/>
-                    </#list>
-                    <@itemFooter "Total Descuentos" employeeReceipt.totalDescuentos!0 employeeReceipt.currencyUomId/>
-                </fo:block-container>
+                <fo:table table-layout="fixed" width="7.5in" margin-top="0.3in"><fo:table-body>
+                    <fo:table-row font-size="8pt" border-bottom="thin solid black">
+                        <fo:table-cell padding="${cellPadding}" width="6in"><fo:block font-size="11pt" font-weight="bold">Total Haberes</fo:block></fo:table-cell>
+                        <fo:table-cell padding="${cellPadding}" width="1.5in"><fo:block font-size="11pt"
+                        font-weight="bold" text-align="right">${ec.l10n.format((employeeReceipt.totalHaberes!0), '#,###')}</fo:block></fo:table-cell>
+                    </fo:table-row>
+                </fo:table-body></fo:table>
+
+                <#if employeeReceipt.totalDescuentosPrevisionales != 0>
+                    <fo:block-container width="7.5in">
+                        <@itemHeader "Descuentos Previsionales"/>
+                        <#list employeeReceipt.descuentosPrevisionales as descuento>
+                            <@itemRow descuento employeeReceipt.currencyUomId/>
+                        </#list>
+                        <@itemFooter "Total Descuentos Previsionales" employeeReceipt.totalDescuentosPrevisionales!0 employeeReceipt.currencyUomId/>
+                    </fo:block-container>
+                </#if>
+
+                <#if employeeReceipt.totalDescuentosOtros != 0>
+                    <fo:block-container width="7.5in">
+                        <@itemHeader "Otros Descuentos"/>
+                        <#list employeeReceipt.descuentosOtros as descuento>
+                            <@itemRow descuento employeeReceipt.currencyUomId/>
+                        </#list>
+                        <@itemFooter "Total Otros Descuentos" employeeReceipt.totalDescuentosOtros!0 employeeReceipt.currencyUomId/>
+                    </fo:block-container>
+                </#if>
+
+                <fo:table table-layout="fixed" width="7.5in" margin-top="0.3in"><fo:table-body>
+                    <fo:table-row font-size="8pt" border-bottom="thin solid black">
+                        <fo:table-cell padding="${cellPadding}" width="6in"><fo:block font-size="11pt" font-weight="bold">Total Descuentos</fo:block></fo:table-cell>
+                        <fo:table-cell padding="${cellPadding}" width="1.5in"><fo:block font-size="11pt"
+                        font-weight="bold" text-align="right">(${ec.l10n.format((-employeeReceipt.totalDescuentos!0), '#,###')})</fo:block></fo:table-cell>
+                    </fo:table-row>
+                </fo:table-body></fo:table>
 
                 <fo:table table-layout="fixed" width="7.5in" margin-top="0.3in"><fo:table-body>
                     <fo:table-row font-size="8pt" border-bottom="thin solid black">

@@ -671,13 +671,17 @@ along with this software (see the LICENSE.md file). If not, see
                 <parameter name="currencyUomId"/>
                 <parameter name="haberesImponibles" type="List"/>
                 <parameter name="haberesNoImponibles" type="List"/>
-                <parameter name="descuentos" type="List"/>
+                <parameter name="descuentosPrevisionales" type="List"/>
+                <parameter name="descuentosOtros" type="List"/>
                 <parameter name="baseSalary" type="BigDecimal"/>
                 <parameter name="daysWorked" type="BigDecimal"/>
                 <parameter name="daysMissedIllness" type="BigDecimal"/>
                 <parameter name="baseSalaryWorked" type="BigDecimal"/>
                 <parameter name="totalHaberesImponibles" type="BigDecimal"/>
                 <parameter name="totalHaberesNoImponibles" type="BigDecimal"/>
+                <parameter name="totalHaberes" type="BigDecimal"/>
+                <parameter name="totalDescuentosPrevisionales" type="BigDecimal"/>
+                <parameter name="totalDescuentosOtros" type="BigDecimal"/>
                 <parameter name="totalDescuentos" type="BigDecimal"/>
                 <parameter name="copyList"/>
             </parameter>
@@ -731,8 +735,10 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="totalHaberesImponibles" from="0" type="BigDecimal"/>
                 <set field="haberesNoImponibles" from="[]"/>
                 <set field="totalHaberesNoImponibles" from="0" type="BigDecimal"/>
-                <set field="descuentos" from="[]"/>
-                <set field="totalDescuentos" from="0" type="BigDecimal"/>
+                <set field="descuentosPrevisionales" from="[]"/>
+                <set field="descuentosOtros" from="[]"/>
+                <set field="totalDescuentosPrevisionales" from="0" type="BigDecimal"/>
+                <set field="totalDescuentosOtros" from="0" type="BigDecimal"/>
                 <iterate entry="item" list="invoiceItems">
                     <if condition="item.itemTypeEnumId == 'ItemSalary'"><then>
                         <set field="existingSalary" from="haberesImponibles.findAll { it.itemTypeEnumId == 'ItemSalary' }[0]"/>
@@ -752,14 +758,21 @@ along with this software (see the LICENSE.md file). If not, see
                             haberesImponibles.add(item)
                             totalHaberesImponibles += item.quantity*item.amount
                         </script>
+                    </else-if><else-if condition="item.itemTypeEnumId in ['ItemClIsapreVol', 'ItemClAfp', 'ItemClIsapreObl', 'ItemClAfcTrabajador', 'ItemClFonasa']">
+                        <script>
+                            descuentosPrevisionales.add(item)
+                            totalDescuentosPrevisionales += item.quantity*item.amount
+                        </script>
                     </else-if><else>
                         <script>
-                            descuentos.add(item)
-                            totalDescuentos += item.quantity*item.amount
+                            descuentosOtros.add(item)
+                            totalDescuentosOtros += item.quantity*item.amount
                         </script>
                     </else></if>
                 </iterate>
-                <script>employeeReceiptList.add([employeeRut:employeeRut, employee:employee, employeePartyDetail:employeePartyDetail, employerPartyDetail:employerPartyDetail, employerRut:employerRut, baseSalary:baseSalary, daysWorked:daysWorked, daysMissedIllness:daysMissedIllness, baseSalaryWorked:baseSalaryWorked, totalHaberesImponibles:totalHaberesImponibles, totalHaberesNoImponibles:totalHaberesNoImponibles, totalDescuentos:totalDescuentos, currencyUomId:currencyUomId, haberesImponibles:haberesImponibles, haberesNoImponibles:haberesNoImponibles, descuentos:descuentos, invoice:invoice, copyList:copyList])</script>
+                <set field="totalDescuentos" from="totalDescuentosPrevisionales + totalDescuentosOtros" type="BigDecimal"/>
+                <set field="totalHaberes" from="totalHaberesImponibles + totalHaberesNoImponibles" type="BigDecimal"/>
+                <script>employeeReceiptList.add([employeeRut:employeeRut, employee:employee, employeePartyDetail:employeePartyDetail, employerPartyDetail:employerPartyDetail, employerRut:employerRut, baseSalary:baseSalary, daysWorked:daysWorked, daysMissedIllness:daysMissedIllness, baseSalaryWorked:baseSalaryWorked, totalHaberesImponibles:totalHaberesImponibles, totalHaberesNoImponibles:totalHaberesNoImponibles, totalHaberes:totalHaberes, totalDescuentosPrevisionales:totalDescuentosPrevisionales, totalDescuentosOtros:totalDescuentosOtros, totalDescuentos:totalDescuentos, currencyUomId:currencyUomId, haberesImponibles:haberesImponibles, haberesNoImponibles:haberesNoImponibles, descuentosPrevisionales:descuentosPrevisionales, descuentosOtros:descuentosOtros, invoice:invoice, copyList:copyList])</script>
             </iterate>
             <set field="invoiceId" from="invoiceList.first.invoiceId"/>
             <service-call name="mantle.account.InvoiceServices.get#InvoicePrintInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
@@ -1180,7 +1193,8 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="itemList" type="List">
                 <parameter name="item" type="Map">
                     <parameter name="rentaImponible" type="BigDecimal"/>
-                    <parameter name="rentaImponible" type="BigDecimal"/>
+                    <parameter name="totalHaberes" type="BigDecimal"/>
+                    <parameter name="totalDescuentos" type="BigDecimal"/>
                     <parameter name="cotizPension" type="BigDecimal"/>
                     <parameter name="sis" type="BigDecimal"/>
                     <parameter name="cotizSaludVol" type="BigDecimal"/>
