@@ -213,7 +213,10 @@ along with this software (see the LICENSE.md file). If not, see
                 <fo:table table-layout="fixed" width="7.5in" margin-top="0.3in"><fo:table-body>
                     <fo:table-row font-size="8pt" border-bottom="thin solid black">
                         <fo:table-cell padding="${cellPadding}" width="6in"><fo:block font-size="12pt" font-weight="bold">Saldo Líquido a Pagar</fo:block></fo:table-cell>
-                        <fo:table-cell padding="${cellPadding}" width="1.5in"><fo:block font-size="12pt" font-weight="bold" text-align="right">${employeeReceipt.invoice.invoiceTotal}</fo:block></fo:table-cell>
+                        <fo:table-cell padding="${cellPadding}" width="1.5in"><fo:block font-size="12pt" font-weight="bold" text-align="right">${employeeReceipt.liquidoAPagar}</fo:block></fo:table-cell>
+                    </fo:table-row>
+                    <fo:table-row font-size="8pt" border-bottom="thin solid black">
+                        <fo:table-cell padding="${cellPadding}" width="7.5in"><fo:block font-size="8pt">Son: ${employeeReceipt.liquidoAPagarPalabras} pesos.</fo:block></fo:table-cell>
                     </fo:table-row>
                 </fo:table-body></fo:table>
 

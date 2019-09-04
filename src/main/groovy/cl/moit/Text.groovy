@@ -3,15 +3,19 @@ package cl.moit
 class Text {
 
     public static void main(String[] argv) {
-        print numberToText(Long.parseLong(argv[0]))
+        print numberToText(new BigInteger(argv[0]))
     }
 
-    public static String numberToText(Long number) {
+    public static String numberToText(BigDecimal number) {
+        return numberToText(number.toBigInteger())
+    }
+
+    public static String numberToText(BigInteger number) {
         if (number == 0) return "cero"
-        return numberToTextInternal(number).toString()
+        return numberToTextInternal(number)
     }
 
-    public static String numberToTextInternal(Long number) {
+    public static String numberToTextInternal(BigInteger number) {
         if (number < 0) return "menos " + numberToTextInternal(-number)
         if (number < 16) {
             switch(number) {
