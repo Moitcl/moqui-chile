@@ -11,8 +11,6 @@ along with this software (see the LICENSE.md file). If not, see
 <http://creativecommons.org/publicdomain/zero/1.0/>.
 -->
 
-<#-- See the mchile.humanteam.PayrollServices.get#EmployeeReceiptDisplayInfo service for data preparation -->
-
 <#assign cellPadding = "1pt">
 <#assign dateFormat = dateFormat!"dd MMM yyyy">
 <#assign negOne = -1>
