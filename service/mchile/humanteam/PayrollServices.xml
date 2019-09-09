@@ -684,6 +684,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <parameter name="employeeRut"/>
                 <parameter name="employerRut"/>
                 <parameter name="currencyUomId"/>
+                <parameter name="employmentFacilityName"/>
                 <parameter name="haberesImponibles" type="List"/>
                 <parameter name="haberesNoImponibles" type="List"/>
                 <parameter name="descuentosPrevisionales" type="List"/>
@@ -724,13 +725,21 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="employeeReceiptList" from="[]"/>
             <iterate list="invoiceList" entry="invoice">
                 <set field="currencyUomId" from="invoice.currencyUomId"/>
+                <set field="partyRelationshipId" from="invoice.partyRelationshipId"/>
                 <entity-find entity-name="mantle.humanres.employment.EmploymentSalary" list="employmentSalaryList">
-                    <econdition field-name="partyRelationshipId" from="invoice.partyRelationshipId"/>
+                    <econdition field-name="partyRelationshipId"/>
                     <econdition field-name="fromDate" operator="less-equals" from="timePeriod.thruDate"/>
                     <econdition field-name="thruDate" operator="greater-equals" from="timePeriod.fromDate" or-null="true"/>
                 </entity-find>
                 <if condition="employmentSalaryList.size() > 1"><return error="true" message="Unsupported salary change mid-period"/></if>
                 <set field="baseSalary" from="employmentSalaryList.first.amount"/>
+                <entity-find entity-name="mchile.humanteam.employment.EmploymentFacility" list="facilityList">
+                    <econdition field-name="partyRelationshipId"/>
+                    <date-filter/>
+                    <order-by field-name="-fromDate"/>
+                </entity-find>
+                <entity-find-one entity-name="mantle.facility.Facility" value-field="employmentFacility" auto-field-map="[facilityId:facilityList.first?.facilityId]"/>
+                <set field="employmentFacilityName" from="employmentFacility? employmentFacility.facilityName: 'N/A'"/>
                 <set field="employee" from="invoice.fromParty"/>
                 <set field="employeeRutRaw" from="employee.identifications.findAll { it.partyIdTypeEnumId == 'PtidNationalTaxId' }.first.idValue"/>
                 <service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:employeeRutRaw]" out-map="formattedRut"/>
@@ -791,7 +800,7 @@ along with this software (see the LICENSE.md file). If not, see
                 </iterate>
                 <set field="totalDescuentos" from="totalDescuentosPrevisionales + totalDescuentosOtros" type="BigDecimal"/>
                 <set field="totalHaberes" from="totalHaberesImponibles + totalHaberesNoImponibles" type="BigDecimal"/>
-                <script>employeeReceiptList.add([employeeRut:employeeRut, employee:employee, employeePartyDetail:employeePartyDetail, employerPartyDetail:employerPartyDetail, employerRut:employerRut, baseSalary:baseSalary, daysWorked:daysWorked, daysMissedIllness:daysMissedIllness, baseSalaryWorked:baseSalaryWorked, totalHaberesImponibles:totalHaberesImponibles, totalHaberesNoImponibles:totalHaberesNoImponibles, totalHaberes:totalHaberes, totalDescuentosPrevisionales:totalDescuentosPrevisionales, totalDescuentosOtros:totalDescuentosOtros, totalDescuentos:totalDescuentos, currencyUomId:currencyUomId, haberesImponibles:haberesImponibles, haberesNoImponibles:haberesNoImponibles, descuentosPrevisionales:descuentosPrevisionales, descuentosOtros:descuentosOtros, invoice:invoice, copyList:copyList, liquidoAPagar:liquidoAPagar, liquidoAPagarPalabras:liquidoAPagarPalabras])</script>
+                <script>employeeReceiptList.add([employeeRut:employeeRut, employee:employee, employeePartyDetail:employeePartyDetail, employerPartyDetail:employerPartyDetail, employerRut:employerRut, baseSalary:baseSalary, daysWorked:daysWorked, daysMissedIllness:daysMissedIllness, baseSalaryWorked:baseSalaryWorked, totalHaberesImponibles:totalHaberesImponibles, totalHaberesNoImponibles:totalHaberesNoImponibles, totalHaberes:totalHaberes, totalDescuentosPrevisionales:totalDescuentosPrevisionales, totalDescuentosOtros:totalDescuentosOtros, totalDescuentos:totalDescuentos, currencyUomId:currencyUomId, haberesImponibles:haberesImponibles, haberesNoImponibles:haberesNoImponibles, descuentosPrevisionales:descuentosPrevisionales, descuentosOtros:descuentosOtros, invoice:invoice, copyList:copyList, liquidoAPagar:liquidoAPagar, liquidoAPagarPalabras:liquidoAPagarPalabras, employmentFacilityName:employmentFacilityName])</script>
             </iterate>
             <set field="invoiceId" from="invoiceList.first.invoiceId"/>
             <service-call name="mantle.account.InvoiceServices.get#InvoicePrintInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
@@ -1082,10 +1091,9 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="add" noun="Overtime">
         <in-parameters>
-            <parameter name="partyRelationshipId" required="true"/>
-            <parameter name="fromDate" type="Timestamp" required="true"/>
-            <parameter name="thruDate" type="Timestamp" required="true"/>
-            <parameter name="overtimeHours" type="BigDecimal" required="true"/>
+            <auto-parameters entity-name="mchile.humanteam.employment.Overtime">
+                <exclude field-name="overtimeId"/>
+            </auto-parameters>
         </in-parameters>
         <out-parameters>
             <parameter name="overtimeId"/>
