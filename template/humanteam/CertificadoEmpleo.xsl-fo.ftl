@@ -52,7 +52,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <fo:block margin-top="0.3in" font-size="12pt">${ec.resource.expand('PartyNameOnlyTemplate', null,
                 employeePartyDetail)}, Cédula de Identidad N° ${employeeRut}, declara que hace uso de permiso sin goce
                 de sueldo por ${days} días hábiles, entre el día ${ec.l10n.format(fromDate, 'd\' de \'MMMM\' de \'yyyy')} y el día ${ec.l10n.format(thruDate, 'd\' de \'MMMM\' de \'yyyy')}, ambos días inclusive, que serán descontados del sueldo de(l) (los) período(s) correspondiente(s) por parte el empleador,  ${ec.resource.expand('PartyNameOnlyTemplate', null, employerPartyDetail)}, RUT ${employerRut}.</fo:block>
-            </#if>
 
                 <fo:table table-layout="fixed" width="7.5in" margin-top="1in"><fo:table-body>
                     <fo:table-row font-size="8pt">
@@ -68,6 +67,31 @@ along with this software (see the LICENSE.md file). If not, see
                         <fo:table-cell padding="${cellPadding}" width="2.5in"><fo:block font-size="12pt" font-weight="bold">Trabajador</fo:block></fo:table-cell>
                     </fo:table-row>
                 </fo:table-body></fo:table>
+            </#if>
+            <#if documentType == 'antiguedad'>
+                <fo:block margin-top="0.3in" font-size="12pt">${employerText} que ${ec.resource.expand
+                ('PartyNameOnlyTemplate', null, employeePartyDetail)}, Cédula de Identidad N° ${employeeRut}, se encuentra prestando servicios desde el ${ec.l10n.format(employmentFromDate, 'd\' de \'MMMM\' de \'yyyy')} y permanece con un contrato ${contractDurationText}.</fo:block>
+                <fo:block margin-top="0.3in" font-size="12pt">Se entrega este certificado para presentar el trámite que estime conveniente el trabajador.</fo:block>
+
+                <fo:table table-layout="fixed" width="7.5in" margin-top="1in"><fo:table-body>
+                    <fo:table-row font-size="8pt">
+                        <fo:table-cell padding="${cellPadding}" width="2.9in"><fo:block font-size="12pt" border-bottom="solid black"></fo:block></fo:table-cell>
+                    </fo:table-row>
+                    <fo:table-row font-size="8pt">
+                        <fo:table-cell padding="${cellPadding}" width="2.5in"><fo:block font-size="12pt"
+                        font-weight="bold">${ec.resource.expand('PartyNameOnlyTemplate', null, employerRepresentativePartyDetail)}</fo:block></fo:table-cell>
+                    </fo:table-row>
+                    <fo:table-row font-size="8pt">
+                        <fo:table-cell padding="${cellPadding}" width="2.5in"><fo:block font-size="12pt" font-weight="bold">Representante legal</fo:block></fo:table-cell>
+                    </fo:table-row>
+                    <fo:table-row font-size="8pt">
+                        <fo:table-cell padding="${cellPadding}" width="2.5in"><fo:block font-size="12pt" font-weight="bold">${ec.resource.expand('PartyNameOnlyTemplate', null, employerPartyDetail)}</fo:block></fo:table-cell>
+                    </fo:table-row>
+                    <fo:table-row font-size="8pt">
+                        <fo:table-cell padding="${cellPadding}" width="2.5in"><fo:block font-size="12pt" font-weight="bold">RUT: ${employerRut}</fo:block></fo:table-cell>
+                    </fo:table-row>
+                </fo:table-body></fo:table>
+            </#if>
 
                 <fo:block break-after="page"/>
 
