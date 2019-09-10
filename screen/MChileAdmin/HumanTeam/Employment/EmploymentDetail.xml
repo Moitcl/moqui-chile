@@ -31,6 +31,16 @@ along with this software (see the LICENSE.md file). If not, see
         <default-response url="."/>
     </transition>
 
+    <transition name="updateEmployee">
+        <service-call name="mchile.humanteam.EmploymentServices.update#Employee"/>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="endEmployment">
+        <service-call name="mchile.humanteam.EmploymentServices.end#Employment"/>
+        <default-response url="."/>
+    </transition>
+
     <actions>
         <service-call name="mchile.humanteam.EmploymentServices.get#EmploymentDisplayInfo" in-map="context" out-map="context"/>
         <service-call name="mchile.humanteam.EmploymentServices.get#LeaveDisplayInfo" in-map="context" out-map="context"/>
@@ -39,26 +49,61 @@ along with this software (see the LICENSE.md file). If not, see
         <container-row>
             <row-col lg="6"><section name="EmployeeInfoSection"><widgets>
                 <container-box><box-header title="Employment"></box-header><box-body>
-                    <label text="Employment Start: ${ec.l10n.format(employment.fromDate, 'dd/MM/yyyy')}"/>
-                    <label text="Employment End: ${ec.l10n.format(employment.thruDate, 'dd/MM/yyyy')}" condition="employment.thruDate"/>
+                    <label text="Duración Contrato: ${employmentDurationType}" type="p"/>
+                    <label text="Condición Empleado: ${employmentEmployeeConditionType}" type="p"/>
+                    <label text="Employment Start: ${ec.l10n.format(employment.fromDate, 'MMM dd yyyy')}" type="p"/>
+                    <section name="EmploymentEnd" condition="employment.thruDate">
+                        <widgets>
+                            <label text="Employment End: ${ec.l10n.format(employment.thruDate, 'MMM dd yyyy')}" type="p"/>
+                            <label text="Employment End Type: ${employmentTerminationType.description}" type="p"/>
+                            <label text="Employment End Reason: ${employmentTerminationReason.description}" type="p"/>
+                            <label text="Employment Facility: ${employmentFacility?.facilityName}" type="p"/>
+                        </widgets>
+                        <fail-widgets>
+                            <container-dialog id="EndEmployment" button-text="End Employment">
+                                <form-single name="EndEmploymentForm" transition="endEmployment">
+                                    <field name="partyRelationshipId"><default-field><hidden/></default-field></field>
+                                    <field name="thruDate"><default-field><date-time type="date"/></default-field></field>
+                                    <field name="terminationTypeEnumId"><default-field title="Termination Type">
+                                        <widget-template-include location="component://webroot/template/screen/BasicWidgetTemplates.xml#enumDropDown">
+                                            <set field="enumTypeId" value="TerminationType"/></widget-template-include>
+                                    </default-field></field>
+                                    <field name="terminationReasonEnumId"><default-field title="Termination Reason">
+                                        <widget-template-include location="component://webroot/template/screen/BasicWidgetTemplates.xml#enumDropDown">
+                                            <set field="enumTypeId" value="TerminationReason"/></widget-template-include>
+                                    </default-field></field>
+                                    <field name="update"><default-field><submit/></default-field></field>
+                                </form-single>
+                            </container-dialog>
+                            <link url="${ec.web.getWebappRootUrl(false, null)}/fop/apps/${appRoot}/HumanTeam/Employment/Certificate" parameter-map="[certificateType:'antiguedad', partyRelationshipId:partyRelationshipId]" url-type="plain" text="Certificado Antigüedad"/>
+                        </fail-widgets>
+                    </section>
                 </box-body></container-box>
                 <container-box><box-header title="Employee"></box-header><box-body>
-                <form-single name="EmployeeForm" map="employeeParty">
-                    <field name="partyId"><default-field title="Name">
-                        <display-entity entity-name="mantle.party.PartyDetail" text="PartyNameOnlyTemplate"/></default-field></field>
-                    <field name="rut"><default-field><display/></default-field></field>
-                    <field name="birthDate"><default-field><display/></default-field></field>
-                    <field name="disabled"><default-field><display text="${disabled?:'N'}"/></default-field></field>
-                    <field name="ownerPartyId"><default-field title="Owned By Org"><display/></default-field></field>
-                    <field name="comments"><default-field title="Internal Comments"><text-area rows="3" cols="80" read-only="true"/></default-field></field>
-                    <field-layout>
-                        <fields-not-referenced/>
-                        <field-row><field-ref name="partyId"/><field-ref name="rut"/></field-row>
-                        <field-row><field-ref name="birthDate"/><field-ref name="disabled"/></field-row>
-                        <field-ref name="ownerPartyId"/>
-                        <field-ref name="comments"/>
-                    </field-layout>
-                </form-single>
+                    <form-single name="EmployeeForm" map="employeeParty">
+                        <field name="partyId"><default-field title="Name">
+                            <display-entity entity-name="mantle.party.PartyDetail" text="PartyNameOnlyTemplate"/></default-field></field>
+                        <field name="rut"><default-field><display/></default-field></field>
+                        <field name="birthDate"><default-field><display/></default-field></field>
+                        <field name="disabled"><default-field><display text="${disabled?:'N'}"/></default-field></field>
+                        <field name="comments"><default-field title="Internal Comments"><text-area rows="3" cols="80" read-only="true"/></default-field></field>
+                        <field-layout>
+                            <fields-not-referenced/>
+                            <field-row><field-ref name="partyId"/><field-ref name="rut"/></field-row>
+                            <field-row><field-ref name="birthDate"/><field-ref name="disabled"/></field-row>
+                            <field-ref name="comments"/>
+                        </field-layout>
+                    </form-single>
+                    <container-dialog id="UpdateComments" button-text="Update">
+                        <form-single name="UpdateEmployeeCommentsForm" map="employeeParty" transition="updateEmployee">
+                            <field name="partyRelationshipId"><default-field><hidden/></default-field></field>
+                            <field name="partyId"><default-field><hidden/></default-field></field>
+                            <field name="birthDate"><default-field><date-time type="date"/></default-field></field>
+                            <field name="comments"><default-field title="Internal Comments"><text-area rows="3" cols="80"/></default-field></field>
+                            <field name="update"><default-field><submit/></default-field></field>
+                        </form-single>
+                    </container-dialog>
+
             </box-body></container-box></widgets></section></row-col>
             <row-col lg="6"><section name="EmployerInfoSection"><widgets>
                 <container-box><box-header title="Employer"></box-header><box-body>
@@ -105,7 +150,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <row-col lg="4">
                         <container-box><box-header title="Commuting"/>
                         <box-body>
-                            <container><label text="${ec.l10n.formatCurrency(currentCommutingAdjustment.flatAmount, 'CLP')}"/></container>
+                            <container><label text="${ec.l10n.formatCurrency(currentCommutingAdjustment?.flatAmount, 'CLP')}"/></container>
                             <container-dialog id="CommutingAdjustmentHistoryDialog" button-text="History" title="Commuting Adjustment History"><widgets>
                                 <section-iterate name="CommutingAdjustmentHistorySection" list="commutingAdjustmentHistory" entry="cah"><widgets><container-row>
                                     <row-col lg="4" style="text-right"><label text="${ec.l10n.formatCurrency(cah.flatAmount, 'CLP')}"/></row-col>
@@ -117,7 +162,7 @@ along with this software (see the LICENSE.md file). If not, see
                                 <form-single name="ModifyCommutingForm" transition="modifyPayrollAdjustment">
                                     <field name="partyRelationshipId"><default-field><hidden/></default-field></field>
                                     <field name="itemTypeEnumId"><default-field><hidden default-value="ItemPayrollCommuting"/></default-field></field>
-                                    <field name="flatAmount"><default-field><text-line/></default-field></field>
+                                    <field name="flatAmount"><default-field title="Amount"><text-line size="10"/></default-field></field>
                                     <field name="fromDate"><default-field><date-time type="date"/></default-field></field>
                                     <field name="set"><default-field><submit/></default-field></field>
                                 </form-single>
@@ -128,7 +173,7 @@ along with this software (see the LICENSE.md file). If not, see
 
                         <container-box><box-header title="Nourishment"/>
                         <box-body>
-                            <container><label text="${ec.l10n.formatCurrency(currentNourishmentAdjustment.flatAmount, 'CLP')}"/></container>
+                            <container><label text="${ec.l10n.formatCurrency(currentNourishmentAdjustment?.flatAmount, 'CLP')}"/></container>
                             <container-dialog id="NourishmentAdjustmentHistoryDialog" button-text="History" title="Nourishment Adjustment History"><widgets>
                                 <section-iterate name="NourishmentAdjustmentHistorySection" list="nourishmentAdjustmentHistory" entry="cnh"><widgets><container-row>
                                     <row-col lg="4" style="text-right"><label text="${ec.l10n.formatCurrency(cnh.flatAmount, 'CLP')}"/></row-col>
@@ -140,7 +185,7 @@ along with this software (see the LICENSE.md file). If not, see
                                 <form-single name="ModifyNourishmentForm" transition="modifyPayrollAdjustment">
                                     <field name="partyRelationshipId"><default-field><hidden/></default-field></field>
                                     <field name="itemTypeEnumId"><default-field><hidden default-value="ItemPayrollNourishment"/></default-field></field>
-                                    <field name="flatAmount"><default-field><text-line/></default-field></field>
+                                    <field name="flatAmount"><default-field title="Amount"><text-line size="10"/></default-field></field>
                                     <field name="fromDate"><default-field><date-time type="date"/></default-field></field>
                                     <field name="set"><default-field><submit/></default-field></field>
                                 </form-single>
@@ -176,18 +221,19 @@ along with this software (see the LICENSE.md file). If not, see
                                         <field name="partyRelationshipId"><default-field><hidden/></default-field></field>
                                         <field name="affiliationTypeEnumId"><default-field><hidden default-value="MchCeaHealth"/></default-field></field>
                                         <field name="employeePartyId" from="employeeParty.partyId"><default-field><hidden/></default-field></field>
-                                        <field name="organizationPartyId"><default-field>
-                                            <drop-down no-current-selected-key="${currentHealthInsuranceAffiliation.organizationPartyId}"><entity-options text="PartyNameOnlyTemplate" key="${partyId}">
+                                        <field name="organizationPartyId"><default-field title="Isapre">
+                                            <drop-down no-current-selected-key="${currentHealthInsuranceAffiliation?.organizationPartyId}"><entity-options text="PartyNameOnlyTemplate" key="${partyId}">
                                                 <entity-find entity-name="mantle.party.PartyDetailAndRole">
                                                     <econdition field-name="roleTypeId" value="CHLIsapre"/>
                                                 </entity-find>
                                             </entity-options></drop-down>
                                         </default-field></field>
                                         <field name="amount"><default-field><text-line size="10"/></default-field></field>
-                                        <field name="currencyUomId"><default-field>
+                                        <field name="currencyUomId"><default-field title="Currency">
                                                 <drop-down no-current-selected-key="CLF"><option key="CLF" text="Unidad de Fomento"/><option key="CLP" text="Pesos"/></drop-down>
                                         </default-field></field>
                                         <field name="fromDate"><default-field><date-time type="date"/></default-field></field>
+                                        <field name="folioFun"><default-field><text-line size="15"/></default-field></field>
                                         <field name="set"><default-field><submit/></default-field></field>
                                     </form-single>
                                 </container-dialog>
@@ -268,6 +314,11 @@ along with this software (see the LICENSE.md file). If not, see
                             <field name="changeReasonEnumId"><default-field title="Reason"><display-entity entity-name="moqui.basic.Enumeration"/></default-field></field>
                             <field name="diffAmount"><default-field title="Difference"><display/></default-field></field>
                             <field name="amountUomId"><default-field title="Unit"><display-entity entity-name="moqui.basic.Uom"/></default-field></field>
+                            <field name="certificate">
+                                <conditional-field condition="changeReasonEnumId == 'PcrAccruedUsage' || leaveTypeEnumId == 'PltPermisoSinRem'">
+                                    <link url="${ec.web.getWebappRootUrl(false, null)}/fop/apps/${appRoot}/HumanTeam/Employment/Certificate" parameter-map="[certificateType:'leave', leaveDetailId:leaveDetailId]" url-type="plain" text="Certificate"/>
+                                </conditional-field>
+                            </field>
                         </form-list>
                     </container-dialog>
                 </box-body>
