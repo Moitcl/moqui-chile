@@ -20,14 +20,14 @@ along with this software (see the LICENSE.md file). If not, see
 
 <#macro encodeText textValue>${(Static["org.moqui.util.StringUtilities"].encodeForXmlAttribute(textValue!"", false))!""}</#macro>
 <#macro itemHeader itemTypeDescription>
-    <fo:table table-layout="fixed" width="7.5in" margin-top="0.3in"><fo:table-body>
-    <fo:table-row font-size="8pt" border-bottom="thin solid black">
-        <fo:table-cell padding="${cellPadding}" width="6in"><fo:block font-size="12pt" font-weight="bold"><@encodeText (itemTypeDescription)!""/></fo:block></fo:table-cell>
-        <fo:table-cell padding="${cellPadding}" width="1.5in"><fo:block font-size="12pt" font-weight="bold" text-align="right">Valor</fo:block></fo:table-cell>
+    <fo:table table-layout="fixed" width="7.5in" margin-top="0.2in"><fo:table-body>
+    <fo:table-row font-size="8pt">
+        <fo:table-cell padding="${cellPadding}" width="6in"><fo:block font-size="10pt" font-weight="bold"><@encodeText (itemTypeDescription)!""/></fo:block></fo:table-cell>
+        <fo:table-cell padding="${cellPadding}" width="1.5in"><fo:block font-size="10pt" font-weight="bold" text-align="right">Valor</fo:block></fo:table-cell>
     </fo:table-row>
 </#macro>
 <#macro itemFooter itemTotalDescription itemTotal currencyUomId>
-    <fo:table-row font-size="8pt" border-bottom="thin solid black">
+    <fo:table-row font-size="8pt" border-top="solid black">
         <fo:table-cell padding="${cellPadding}"><fo:block font-weight="bold"><@encodeText (itemTotalDescription)!""/></fo:block></fo:table-cell>
         <#if 0 &gt; itemTotal>
             <fo:table-cell padding="${cellPadding}"><fo:block font-weight="bold" text-align="right">(${ec.l10n.format(-itemTotal!0, '#,###')})</fo:block></fo:table-cell>
@@ -39,7 +39,7 @@ along with this software (see the LICENSE.md file). If not, see
 </#macro>
 <#macro itemRow invoiceItem currencyUomId>
     <#assign itemTypeEnum = invoiceItem.type!>
-    <fo:table-row font-size="8pt" border-bottom="thin solid black">
+    <fo:table-row font-size="8pt" border-bottom="thin dotted black">
         <fo:table-cell padding="${cellPadding}">
             <fo:block><@encodeText (invoiceItem.description)!(itemTypeEnum.description)!""/></fo:block>
         </fo:table-cell>
@@ -101,43 +101,38 @@ along with this software (see the LICENSE.md file). If not, see
                     <fo:table table-layout="fixed" margin-top="5pt" margin-bottom="5pt" width="7.5in"><fo:table-body>
                         <fo:table-row>
                             <fo:table-cell padding="2pt" width="3.75in">
-                                <fo:block font-weight="bold" font-size="12pt" margin-top="5pt">Datos del Trabajador</fo:block>
-                            </fo:table-cell>
-                            <fo:table-cell padding="2pt" width="3.75in">
-                                <fo:block font-weight="bold" font-size="12pt" margin-top="5pt" text-align="right">Período de Remuneración</fo:block>
+                                <fo:block font-weight="bold" font-size="12pt" margin-top="5pt">Datos del Trabajador y Período</fo:block>
                             </fo:table-cell>
                         </fo:table-row>
                     </fo:table-body></fo:table>
-                    <fo:table table-layout="fixed" margin-top="5pt" margin-bottom="25pt" width="7.5in" border-bottom-style="solid"><fo:table-body>
+                    <fo:table table-layout="fixed" margin-top="5pt" margin-bottom="5pt" width="7.5in" border-bottom-style="double"><fo:table-body>
                         <fo:table-row>
-                            <fo:table-cell padding="2pt" width="0.95in">
-                                <fo:block font-weight="bold" text-align="right">RUT:</fo:block>
-                            </fo:table-cell>
-                            <fo:table-cell padding="2pt" width="4.85in">
-                                <fo:block>${employeeReceipt.employeeRut}</fo:block>
-                            </fo:table-cell>
-                            <fo:table-cell padding="2pt" width="1.2in">
-                                <fo:block font-weight="bold" text-align="right">Mes:</fo:block>
-                            </fo:table-cell>
-                            <fo:table-cell padding="2pt" width="0.5in">
-                                <fo:block>${timePeriodMonth}</fo:block>
-                            </fo:table-cell>
-                        </fo:table-row>
-                        <fo:table-row>
-                            <fo:table-cell padding="2pt">
+                            <fo:table-cell padding="2pt" width="0.60in">
                                 <fo:block font-weight="bold" text-align="right">Nombre:</fo:block>
                             </fo:table-cell>
-                            <fo:table-cell padding="2pt">
+                            <fo:table-cell padding="2pt" width="3.05in">
                                 <fo:block>${ec.resource.expand('PartyNameOnlyTemplate', null, employeeReceipt.employeePartyDetail)}</fo:block>
                             </fo:table-cell>
-                            <fo:table-cell padding="2pt">
-                                <fo:block font-weight="bold" text-align="right">Año:</fo:block>
+                            <fo:table-cell padding="2pt" width="1.0in">
+                                <fo:block font-weight="bold" text-align="right">RUT:</fo:block>
                             </fo:table-cell>
-                            <fo:table-cell padding="2pt">
-                                <fo:block>${timePeriodYear}</fo:block>
+                            <fo:table-cell padding="2pt" width="1.0in">
+                                <fo:block>${employeeReceipt.employeeRut}</fo:block>
+                            </fo:table-cell>
+                            <fo:table-cell padding="2pt" width="0.8in">
+                                <fo:block font-weight="bold" text-align="right">Mes:</fo:block>
+                            </fo:table-cell>
+                            <fo:table-cell padding="2pt" width="1.05in">
+                                <fo:block>${timePeriodMonth} ${timePeriodYear}</fo:block>
                             </fo:table-cell>
                         </fo:table-row>
                         <fo:table-row>
+                            <fo:table-cell padding="2pt">
+                                <fo:block font-weight="bold" text-align="right">Lugar:</fo:block>
+                            </fo:table-cell>
+                            <fo:table-cell padding="2pt">
+                                <fo:block>${employeeReceipt.employmentFacilityName}</fo:block>
+                            </fo:table-cell>
                             <fo:table-cell padding="2pt">
                                 <fo:block font-weight="bold" text-align="right">Sueldo Base:</fo:block>
                             </fo:table-cell>
@@ -145,7 +140,7 @@ along with this software (see the LICENSE.md file). If not, see
                                 <fo:block>${ec.l10n.format(employeeReceipt.baseSalary, '#,###')}</fo:block>
                             </fo:table-cell>
                             <fo:table-cell padding="2pt" width="0.75in">
-                                <fo:block font-weight="bold" text-align="right">Días Trabajados:</fo:block>
+                                <fo:block font-weight="bold" text-align="right">Días Trab:</fo:block>
                             </fo:table-cell>
                             <fo:table-cell padding="2pt" width="0.75in">
                                 <fo:block>${employeeReceipt.daysWorked}</fo:block>
@@ -154,34 +149,69 @@ along with this software (see the LICENSE.md file). If not, see
                     </fo:table-body></fo:table>
                 </fo:block-container>
 
-                <fo:block-container width="7.5in">
-                    <@itemHeader "Haberes Imponibles"/>
-                    <#list employeeReceipt.haberesImponibles as haberImponible>
-                        <@itemRow haberImponible employeeReceipt.currencyUomId/>
-                    </#list>
-                    <@itemFooter "Total Haberes Imponibles" employeeReceipt.totalHaberesImponibles!0 employeeReceipt.currencyUomId/>
-                </fo:block-container>
+                <#if employeeReceipt.totalHaberesImponibles != 0>
+                    <fo:block-container width="7.5in">
+                        <@itemHeader "Haberes Imponibles"/>
+                        <#list employeeReceipt.haberesImponibles as haberImponible>
+                            <@itemRow haberImponible employeeReceipt.currencyUomId/>
+                        </#list>
+                        <@itemFooter "Total Haberes Imponibles" employeeReceipt.totalHaberesImponibles!0 employeeReceipt.currencyUomId/>
+                    </fo:block-container>
+                </#if>
 
-                <fo:block-container width="7.5in">
-                    <@itemHeader "Haberes No Imponibles"/>
-                    <#list employeeReceipt.haberesNoImponibles as haberNoImponible>
-                        <@itemRow haberNoImponible employeeReceipt.currencyUomId/>
-                    </#list>
-                    <@itemFooter "Total Haberes No Imponibles" employeeReceipt.totalHaberesNoImponibles!0 employeeReceipt.currencyUomId/>
-                </fo:block-container>
+                <#if employeeReceipt.totalHaberesNoImponibles != 0>
+                    <fo:block-container width="7.5in">
+                        <@itemHeader "Haberes No Imponibles"/>
+                        <#list employeeReceipt.haberesNoImponibles as haberNoImponible>
+                            <@itemRow haberNoImponible employeeReceipt.currencyUomId/>
+                        </#list>
+                        <@itemFooter "Total Haberes No Imponibles" employeeReceipt.totalHaberesNoImponibles!0 employeeReceipt.currencyUomId/>
+                    </fo:block-container>
+                </#if>
 
-                <fo:block-container width="7.5in">
-                    <@itemHeader "Descuentos"/>
-                    <#list employeeReceipt.descuentos as descuento>
-                        <@itemRow descuento employeeReceipt.currencyUomId/>
-                    </#list>
-                    <@itemFooter "Total Descuentos" employeeReceipt.totalDescuentos!0 employeeReceipt.currencyUomId/>
-                </fo:block-container>
+                <fo:table table-layout="fixed" width="7.5in" margin-top="0.2in"><fo:table-body>
+                    <fo:table-row font-size="8pt" border-bottom-style="double" border-width="2pt">
+                        <fo:table-cell padding="${cellPadding}" width="6in"><fo:block font-size="11pt" font-weight="bold">Total Haberes</fo:block></fo:table-cell>
+                        <fo:table-cell padding="${cellPadding}" width="1.5in"><fo:block font-size="11pt"
+                        font-weight="bold" text-align="right">${ec.l10n.format((employeeReceipt.totalHaberes!0), '#,###')}</fo:block></fo:table-cell>
+                    </fo:table-row>
+                </fo:table-body></fo:table>
 
-                <fo:table table-layout="fixed" width="7.5in" margin-top="0.3in"><fo:table-body>
-                    <fo:table-row font-size="8pt" border-bottom="thin solid black">
+                <#if employeeReceipt.totalDescuentosPrevisionales != 0>
+                    <fo:block-container width="7.5in">
+                        <@itemHeader "Descuentos Previsionales"/>
+                        <#list employeeReceipt.descuentosPrevisionales as descuento>
+                            <@itemRow descuento employeeReceipt.currencyUomId/>
+                        </#list>
+                        <@itemFooter "Total Descuentos Previsionales" employeeReceipt.totalDescuentosPrevisionales!0 employeeReceipt.currencyUomId/>
+                    </fo:block-container>
+                </#if>
+
+                <#if employeeReceipt.totalDescuentosOtros != 0>
+                    <fo:block-container width="7.5in">
+                        <@itemHeader "Otros Descuentos"/>
+                        <#list employeeReceipt.descuentosOtros as descuento>
+                            <@itemRow descuento employeeReceipt.currencyUomId/>
+                        </#list>
+                        <@itemFooter "Total Otros Descuentos" employeeReceipt.totalDescuentosOtros!0 employeeReceipt.currencyUomId/>
+                    </fo:block-container>
+                </#if>
+
+                <fo:table table-layout="fixed" width="7.5in" margin-top="0.2in"><fo:table-body>
+                    <fo:table-row font-size="8pt" border-bottom-style="double" border-width="2pt">
+                        <fo:table-cell padding="${cellPadding}" width="6in"><fo:block font-size="11pt" font-weight="bold">Total Descuentos</fo:block></fo:table-cell>
+                        <fo:table-cell padding="${cellPadding}" width="1.5in"><fo:block font-size="11pt"
+                        font-weight="bold" text-align="right">(${ec.l10n.format((-employeeReceipt.totalDescuentos!0), '#,###')})</fo:block></fo:table-cell>
+                    </fo:table-row>
+                </fo:table-body></fo:table>
+
+                <fo:table table-layout="fixed" width="7.5in" margin-top="0.3in" border-style="double black" border-left-style="double" border-right-style="double" border-width="2pt"><fo:table-body>
+                    <fo:table-row font-size="8pt">
                         <fo:table-cell padding="${cellPadding}" width="6in"><fo:block font-size="12pt" font-weight="bold">Saldo Líquido a Pagar</fo:block></fo:table-cell>
-                        <fo:table-cell padding="${cellPadding}" width="1.5in"><fo:block font-size="12pt" font-weight="bold" text-align="right">${employeeReceipt.invoice.invoiceTotal}</fo:block></fo:table-cell>
+                        <fo:table-cell padding="${cellPadding}" width="1.5in"><fo:block font-size="12pt" font-weight="bold" text-align="right">${employeeReceipt.liquidoAPagar}</fo:block></fo:table-cell>
+                    </fo:table-row>
+                    <fo:table-row font-size="8pt" border-bottom="thin solid black">
+                        <fo:table-cell padding="${cellPadding}" width="7.5in"><fo:block font-size="8pt">Son: ${employeeReceipt.liquidoAPagarPalabras} pesos.</fo:block></fo:table-cell>
                     </fo:table-row>
                 </fo:table-body></fo:table>
 

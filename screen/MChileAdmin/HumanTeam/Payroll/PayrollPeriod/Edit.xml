@@ -15,22 +15,6 @@ along with this software (see the LICENSE.md file). If not, see
 <screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd" default-menu-include="false">
 
-    <!--
-    leave types:
-    * PltFeriadoLegal
-    * PltPermisoSinRem
-    * PltAusenciaInjustif
-    * PltFeriadoPactado
-    * PltLicencia
-    * PltPermisoFallecimiento
-
-    Change reasons:
-    * PcrAccruedUsage
-    * PcrPeriodAccrued
-    * PcrLeave
-
-    -->
-
     <transition name="addIllnessLeave">
         <service-call name="mchile.humanteam.PayrollServices.add#Leave" in-map="context+[leaveTypeEnumId:'PltLicencia', changeReasonEnumId:'PcrIllness', amountUomId:'TF_day', diffAmount:diffAmount]"/>
         <default-response url="."/>
@@ -62,6 +46,15 @@ along with this software (see the LICENSE.md file). If not, see
         <default-response url="../ShowClosed"/>
     </transition>
 
+    <transition name="addAdjustment">
+        <service-call name="mchile.humanteam.PayrollServices.add#Adjustment"/>
+        <default-response url="."/>
+    </transition>
+    <transition name="removeAdjustment">
+        <service-call name="mchile.humanteam.PayrollServices.remove#Adjustment"/>
+        <default-response url="."/>
+    </transition>
+
     <actions>
         <entity-find-one entity-name="mantle.party.PartyDetail" value-field="employer" auto-field-map="[partyId:timePeriod.partyId]"/>
         <entity-find entity-name="mantle.humanres.employment.EmploymentAndRelationship" list="employmentList">
@@ -84,7 +77,7 @@ along with this software (see the LICENSE.md file). If not, see
             <script>employeeList.add([partyRelationshipId:employment.partyRelationshipId, employeeName:employeeName, rut:rut])</script>
         </iterate>
 
-        <entity-find entity-name="mchile.humanteam.employment.PayrollLeaveDetailAndEmployee" list="existingLeaves">
+        <entity-find entity-name="mchile.humanteam.payroll.PayrollLeaveDetailAndEmployee" list="existingLeaves">
             <econdition field-name="partyRelationshipId" operator="in" from="employmentIdList"/>
             <econdition field-name="fromDate" operator="less-equals" from="timePeriod.thruDate"/>
             <econdition field-name="thruDate" operator="greater-equals" from="timePeriod.fromDate"/>
@@ -95,6 +88,14 @@ along with this software (see the LICENSE.md file). If not, see
             <econdition field-name="partyRelationshipId" operator="in" from="employmentIdList"/>
             <econdition field-name="fromDate" operator="less-equals" from="timePeriod.thruDate"/>
             <econdition field-name="thruDate" operator="greater-equals" from="timePeriod.fromDate"/>
+        </entity-find>
+
+        <service-call name="mchile.humanteam.PayrollServices.get#AdjustmentTypes" out-map="context"/>
+        <entity-find entity-name="mchile.humanteam.employment.PayrollAdjustmentDetailAndEmployee" list="existingAdjustments">
+            <econdition field-name="partyRelationshipId" operator="in" from="employmentIdList"/>
+            <econdition field-name="fromDate" operator="less-equals" from="timePeriod.thruDate"/>
+            <econdition field-name="thruDate" operator="greater-equals" from="timePeriod.fromDate"/>
+            <econdition field-name="itemTypeEnumId" operator="in" from="adjustmentTypeList.itemTypeEnumId"/>
         </entity-find>
 
         <set field="today" from="ec.l10n.format(ec.user.nowTimestamp, 'yyyy-MM-dd')"/>
@@ -130,7 +131,7 @@ along with this software (see the LICENSE.md file). If not, see
                                 <container-dialog id="AddIllnessLeave" button-text="Add Illness Leave">
                                     <form-single name="AddIllnessLeave" transition="addIllnessLeave">
                                         <field name="timePeriodId"><default-field><hidden/></default-field></field>
-                                        <field name="partyRelationshipId"><default-field><drop-down>
+                                        <field name="partyRelationshipId"><default-field title="Employee"><drop-down>
                                             <list-options list="employeeList" key="${partyRelationshipId}" text="${employeeName} (Rut ${rut})"/>
                                         </drop-down></default-field></field>
                                         <field name="fromDate"><default-field>
@@ -148,7 +149,7 @@ along with this software (see the LICENSE.md file). If not, see
                                 <container-dialog id="AddVacationLeave" button-text="Add Vacation Leave">
                                     <form-single name="AddVacationLeave" transition="addVacationLeave">
                                         <field name="timePeriodId"><default-field><hidden/></default-field></field>
-                                        <field name="partyRelationshipId"><default-field><drop-down>
+                                        <field name="partyRelationshipId"><default-field title="Employee"><drop-down>
                                             <list-options list="employeeList" key="${partyRelationshipId}" text="${employeeName} (Rut ${rut})"/>
                                         </drop-down></default-field></field>
                                         <field name="fromDate"><default-field>
@@ -166,10 +167,10 @@ along with this software (see the LICENSE.md file). If not, see
                                 <container-dialog id="AddOtherLeave" button-text="Add Other Leave">
                                     <form-single name="AddOtherLeave" transition="addOtherLeave">
                                         <field name="timePeriodId"><default-field><hidden/></default-field></field>
-                                        <field name="partyRelationshipId"><default-field><drop-down>
+                                        <field name="partyRelationshipId"><default-field title="Employee"><drop-down>
                                             <list-options list="employeeList" key="${partyRelationshipId}" text="${employeeName} (Rut ${rut})"/>
                                         </drop-down></default-field></field>
-                                        <field name="leaveTypeEnumId"><default-field><drop-down>
+                                        <field name="leaveTypeEnumId"><default-field title="Leave Type"><drop-down>
                                             <entity-options>
                                                 <entity-find entity-name="moqui.basic.Enumeration">
                                                     <econdition field-name="enumId" operator="in" from="['PltPermisoSinRem', 'PltPermisoFallecimiento', 'PltAusenciaInjustif']"/>
@@ -200,7 +201,10 @@ along with this software (see the LICENSE.md file). If not, see
                                     <field name="diffAmount"><default-field title="Days"><display text="${-diffAmount}"/></default-field></field>
                                     <field name="leaveTypeEnumId"><default-field title="Type"><display-entity entity-name="moqui.basic.Enumeration"/></default-field></field>
                                     <field name="changeReasonEnumId"><default-field title="Reason"><display-entity entity-name="moqui.basic.Enumeration"/></default-field></field>
-                                    <field name="actions"><default-field><link url="removeLeave" text="Remove"/></default-field></field>
+                                    <field name="actions"><default-field>
+                                        <link url="removeLeave" text="Remove"/>
+                                        <link url="${ec.web.getWebappRootUrl(false, null)}/fop/apps/${appRoot}/HumanTeam/Employment/Certificate" parameter-map="[leaveDetailId:leaveDetailId, filename:ec.resource.expand('Certificado ${leaveDetailId}', null)]" url-type="plain" text="Certificate"/>
+                                    </default-field></field>
                                 </form-list>
 
                             </box-body>
@@ -220,7 +224,7 @@ along with this software (see the LICENSE.md file). If not, see
                                     <form-single name="AddOvertime" transition="addOvertime">
                                         <field name="overtimeId"><default-field><hidden/></default-field></field>
                                         <field name="timePeriodId"><default-field><hidden/></default-field></field>
-                                        <field name="partyRelationshipId"><default-field><drop-down>
+                                        <field name="partyRelationshipId"><default-field title="Employee"><drop-down>
                                             <list-options list="employeeList" key="${partyRelationshipId}" text="${employeeName} (Rut ${rut})"/>
                                         </drop-down></default-field></field>
                                         <field name="fromDate"><default-field>
@@ -230,6 +234,10 @@ along with this software (see the LICENSE.md file). If not, see
                                         </default-field></field>
                                         <field name="overtimeHours"><default-field>
                                             <text-line size="3"/>
+                                        </default-field></field>
+                                        <field name="overtimeTypeEnumId"><default-field title="Overtime Type"><drop-down><entity-options>
+                                            <entity-find entity-name="moqui.basic.Enumeration"><econdition field-name="enumTypeId" value="OvertimeType"/></entity-find>
+                                        </entity-options></drop-down>
                                         </default-field></field>
                                         <field name="add"><default-field><submit/></default-field></field>
                                     </form-single>
@@ -243,6 +251,7 @@ along with this software (see the LICENSE.md file). If not, see
                                     <field name="fromDate"><default-field><display format="yyyy-MM-dd"/></default-field></field>
                                     <field name="thruDate"><default-field><display format="yyyy-MM-dd"/></default-field></field>
                                     <field name="overtimeHours"><default-field title="Hours"><display/></default-field></field>
+                                    <field name="overtimeTypeEnumId"><default-field title="Overtime Type"><display-entity entity-name="moqui.basic.Enumeration"/></default-field></field>
                                     <field name="actions"><default-field><link url="removeOvertime" text="Remove"/></default-field></field>
                                 </form-list>
 
@@ -253,5 +262,65 @@ along with this software (see the LICENSE.md file). If not, see
 
             </row-col>
         </container-row>
+
+        <container-row>
+
+            <row-col lg="6">
+                <section name="SpecificAdjustmentsSection">
+                    <widgets>
+                        <container-box>
+                            <box-header title="Manage Adjustments"/>
+                            <box-body>
+
+                                <container-dialog id="AddAdjustment" button-text="Add Adjustment">
+                                    <form-single name="AddAdjustment" transition="addAdjustment">
+                                        <field name="timePeriodId"><default-field><hidden/></default-field></field>
+                                        <field name="partyRelationshipId"><default-field title="Employee"><drop-down>
+                                            <list-options list="employeeList" key="${partyRelationshipId}" text="${employeeName} (Rut ${rut})"/>
+                                        </drop-down></default-field></field>
+                                        <field name="adjustmentType"><default-field><drop-down>
+                                            <list-options list="adjustmentTypeList" key="${adjustmentType}" text="${description}"></list-options>
+                                        </drop-down></default-field></field>
+                                        <field name="description"><default-field><text-line/></default-field></field>
+                                        <field name="amount"><default-field title="Amount">
+                                            <text-line size="10"/>
+                                        </default-field></field>
+                                        <field name="distribution"><default-field><radio no-current-selected-key="distribute">
+                                            <option key="distribute" text="Distribute total on a number of periods"/>
+                                            <option key="repeat" text="Repeat amount for a number of periods"/>
+                                        </radio></default-field></field>
+                                        <field name="numberTimePeriods"><default-field title="Number of periods"><text-line mask="#" size="3" default-value="1"/></default-field></field>
+                                        <field name="add"><default-field><submit/></default-field></field>
+                                    </form-single>
+                                </container-dialog>
+
+                                <form-list name="ExistingAdjustments" list="existingAdjustments">
+                                    <row-actions>
+                                        <set field="adjustmentType" from="adjustmentTypeList.find {it.itemTypeEnumId == itemTypeEnumId; it.payrollPhaseEnumId == payrollPhaseEnumId}"/>
+                                        <log message="found adjustmentType: ${adjustmentType}"/>
+                                    </row-actions>
+                                    <field name="payrollAdjustmentId"><default-field><hidden/></default-field></field>
+                                    <field name="timePeriodId"><default-field><hidden/></default-field></field>
+                                    <field name="employeeName"><default-field>
+                                        <display text="PartyNameOnlyTemplate"/>
+                                    </default-field></field>
+                                    <field name="description"><default-field><display/></default-field></field>
+                                    <field name="fromDate"><default-field><display format="yyyy-MM-dd"/></default-field></field>
+                                    <field name="thruDate"><default-field><display format="yyyy-MM-dd"/></default-field></field>
+                                    <field name="flatAmount"><default-field title="Amount"><display/></default-field></field>
+                                    <field name="adjustmentType"><default-field>
+                                        <display text="${adjustmentType?.description?:'?'}"/>
+                                    </default-field></field>
+                                    <field name="actions"><default-field><link url="removeAdjustment" text="Remove"/></default-field></field>
+                                </form-list>
+
+                            </box-body>
+                        </container-box>
+                    </widgets>
+                </section>
+            </row-col>
+
+        </container-row>
+
     </widgets>
 </screen>

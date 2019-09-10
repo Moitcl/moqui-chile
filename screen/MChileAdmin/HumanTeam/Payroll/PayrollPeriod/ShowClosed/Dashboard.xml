@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd" default-menu-include="false">
+
+    <transition name="PrintPayrollReceipts.pdf">
+        <actions>
+            <entity-find-one value-field="timePeriod" entity-name="mantle.party.time.TimePeriod"/>
+        </actions>
+        <default-response url="${ec.web.getWebappRootUrl(false, null)}/fop/apps/${appRoot}/HumanTeam/Payroll/PayrollPeriod/PrintReceipts" url-type="plain">
+            <parameter name="renderMode" value="xsl-fo"/><parameter name="pageNoLimit" value="true"/>
+            <parameter name="timePeriodId"/>
+            <parameter name="partyIdList"/>
+            <parameter name="copies"/>
+            <parameter name="filename" value="Liquidaciones ${timePeriod.periodName}.pdf"/>
+        </default-response>
+    </transition>
+
+    <transition name="reopenPayrollPeriod">
+        <service-call name="mchile.humanteam.PayrollServices.reopen#PayrollPeriod"/>
+        <default-response url="../../Edit"/>
+    </transition>
+
+    <transition name="recordPayment">
+        <service-call name="mantle.account.PaymentServices.create#InvoicePayment" in-map="[invoiceId:invoiceId, statusId:paymentStatusId, paymentInstrumentEnumId:paymentInstrumentEnumId, effectiveDate:ec.user.nowTimestamp]"/>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="pagoPrevired">
+        <service-call name="mchile.humanteam.PayrollServices.add#PreviredPayment"/>
+        <default-response url="."/>
+    </transition>
+
+    <widgets>
+        <link url="reopenPayrollPeriod" parameter-map="[timePeriodId:timePeriodId]" text="Re-open"/>
+        <section name="Totals">
+            <widgets>
+                <container-row><row-col lg="6" md="9" sm="12"><container-box>
+                    <box-header title="Totals"></box-header>
+                    <box-body>
+                        <container-row>
+                            <row-col lg="6" md="4"><label text="Payee" type="h4"/></row-col>
+                            <row-col lg="2" md="4" style="text-right"><label text="Amount" type="h4"/></row-col>
+                            <row-col lg="2" md="4" style="text-right"><label text="Unpaid" type="h4"/></row-col>
+                        </container-row>
+                        <section-iterate name="TotalByParty" list="totalsByCategory.keySet()" entry="key">
+                            <actions>
+                                <set field="totalsMap" from="totalsByCategory[key]"/>
+                                <set field="categoryName" from="categoryDescr[key]"/>
+                                <if condition="!categoryName">
+                                    <entity-find-one value-field="partyDetail" entity-name="mantle.party.PartyDetail" auto-field-map="[partyId:key]"/>
+                                    <set field="categoryName" from="ec.resource.expand('PartyNameOnlyTemplate', null, partyDetail)"/>
+                                </if>
+                            </actions>
+                            <widgets>
+                                <container-row>
+                                    <row-col lg="6" md="4"><label text="${categoryName}"/></row-col>
+                                    <row-col lg="2" md="4" style="text-right"><label text="${ec.l10n.formatCurrency(totalsMap.total, currencyUomId)}"/></row-col>
+                                    <row-col lg="2" md="4" style="text-right"><label text="${ec.l10n.formatCurrency(totalsMap.unpaid, currencyUomId)}"/></row-col>
+                                </container-row>
+                            </widgets>
+                        </section-iterate>
+                        <container-row>
+                            <row-col lg="6" md="4"><label text="Total" type="h4"/></row-col>
+                            <row-col lg="2" md="4" style="text-right"><label text="${ec.l10n.formatCurrency(total, currencyUomId)}" type="h4"/></row-col>
+                            <row-col lg="2" md="4" style="text-right"><label text="${ec.l10n.formatCurrency(unpaidTotal, currencyUomId)}" type="h4"/></row-col>
+                        </container-row>
+                    </box-body>
+                </container-box></row-col></container-row>
+            </widgets>
+        </section>
+        <link url="PrintPayrollReceipts.pdf" text="Liquidaciones (PDF)" parameter-map="[copies:1]"/>
+        <link url="PrintPayrollReceipts.pdf" text="Liquidaciones (PDF) - 2 Copias" parameter-map="[copies:2]"/>
+
+        <section name="Cuadratura">
+            <widgets>
+                <container-box>
+                    <box-header title="Cuadratura"/><box-body>
+                    <container-row>
+                        <row-col lg="2" md="3" sm="6"><label type="h4" text="PartyNameOnlyTemplate" text-map="employerDetail"/></row-col>
+                        <row-col lg="2" md="3" sm="6"><label type="h4" text="Total a pagar: ${ec.l10n.formatCurrency(nonWorkerTotal, 'CLP')}"/></row-col>
+                        <row-col lg="2" md="3" sm="6"><link url="pagoPrevired" condition="pagablePrevired" text="Pago Previred"/></row-col>
+                    </container-row>
+                    <container-row>
+                        <row-col lg="4" md="6" sm="12">
+                            <container-box><box-header title="AFP"/><box-body>
+                            <form-list name="PayrollPeriodInvoicesAfp" extends="component://MoquiChile/template/humanteam/WidgetTemplates.xml#PayrollPeriodInvoices" list="invoicesByCategory['AFP']"/>
+                            </box-body></container-box></row-col>
+                        <row-col lg="4" md="6" sm="12">
+                            <container-box><box-header title="IPS/FONASA"/><box-body>
+                            <form-list name="PayrollPeriodInvoicesIps" extends="component://MoquiChile/template/humanteam/WidgetTemplates.xml#PayrollPeriodInvoices" list="invoicesByCategory['IPS']"/>
+                            </box-body></container-box></row-col>
+                        <row-col lg="4" md="6" sm="12">
+                            <container-box><box-header title="ISAPRE"/><box-body>
+                            <form-list name="PayrollPeriodInvoicesIsapre" extends="component://MoquiChile/template/humanteam/WidgetTemplates.xml#PayrollPeriodInvoices" list="invoicesByCategory['ISAPRE']"/>
+                            </box-body></container-box></row-col>
+                    </container-row>
+
+                </box-body></container-box>
+            </widgets>
+        </section>
+
+        <section name="Employees">
+            <widgets>
+                <container-row><row-col lg="4" md="6" sm="12">
+                    <container-box><box-header title="Employees"/><box-body>
+                        <form-list name="PayrollPeriodInvoicesEmloyees" extends="component://MoquiChile/template/humanteam/WidgetTemplates.xml#PayrollPeriodInvoices" list="employeeInvoiceList">
+                            <field name="fromPartyId"><default-field title="Name">
+                                <display-entity entity-name="mantle.party.PartyDetail" text="PartyNameOnlyTemplate"/>
+                            </default-field></field>
+
+                            <field name="payment">
+                                <!--
+                                <conditional-field condition="invoiceId &amp;&amp; statusId in ['InvoiceReceived', 'InvoiceApproved']">
+                                    <container-dialog id="RecordPayment" button-text="Record Payment">
+                                        <form-single extends="component://MoquiChile/template/humanteam/WidgetTemplates.xml#RecordPaymentForm" name="RecordPaymentForm"/>
+                                    </container-dialog>
+                                </conditional-field>
+                                -->
+                                <conditional-field condition="invoiceId &amp;&amp; statusId in ['InvoiceReceived', 'InvoiceApproved']">
+                                    <link url="recordPayment" parameter-map="[invoiceId:invoiceId, paymentStatusId:'PmntConfirmed', paymentInstrumentEnumId:'PiWireTransfer']" text="Record Payment" condition="invoiceId &amp;&amp; statusId in ['InvoiceReceived', 'InvoiceApproved']"/>
+                                </conditional-field>
+                                <default-field></default-field></field>
+                        </form-list>
+                    </box-body></container-box>
+                </row-col></container-row>
+
+            </widgets>
+        </section>
+    </widgets>
+</screen>

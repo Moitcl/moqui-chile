@@ -19,6 +19,7 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters><parameter name="partyRelationshipId"/></in-parameters>
         <out-parameters>
             <parameter name="employment" type="Map"/>
+            <parameter name="employmentFacility" type="Map"/>
             <parameter name="employeeParty" type="Map"/>
             <parameter name="employerParty" type="Map"/>
             <parameter name="currentSalary" type="Map"/>
@@ -33,6 +34,10 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="currentCommutingAdjustment" type="Map"/>
             <parameter name="nourishmentAdjustmentHistory" type="List"/>
             <parameter name="currentNourishmentAdjustment" type="Map"/>
+            <parameter name="employmentDurationType"/>
+            <parameter name="employmentEmployeeConditionType"/>
+            <parameter name="employmentTerminationType"/>
+            <parameter name="employmentTerminationReason"/>
         </out-parameters>
         <actions>
             <entity-find-one entity-name="mantle.humanres.employment.EmploymentAndRelationship" value-field="employment"/>
@@ -45,6 +50,15 @@ along with this software (see the LICENSE.md file). If not, see
                 <order-by field-name="-expireDate"/>
             </entity-find>
             <if condition="rutList"><service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:rutList.first.idValue]" out-map="employeeParty"/></if>
+            <entity-find entity-name="mchile.humanteam.employment.EmploymentFacility" list="facilityList">
+                <econdition field-name="partyRelationshipId"/>
+                <date-filter/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <entity-find-one entity-name="mantle.facility.Facility" value-field="employmentFacility" auto-field-map="[facilityId:facilityList.first?.facilityId]"/>
+
+            <if condition="employment.terminationTypeEnumId"><entity-find-one value-field="employmentTerminationType" entity-name="moqui.basic.Enumeration" auto-field-map="[enumId:employment.terminationTypeEnumId]"/></if>
+            <if condition="employment.terminationReasonEnumId"><entity-find-one value-field="employmentTerminationReason" entity-name="moqui.basic.Enumeration" auto-field-map="[enumId:employment.terminationReasonEnumId]"/></if>
 
             <entity-find-one entity-name="mantle.party.PartyDetail" value-field="employerPartyEv" auto-field-map="[partyId:employment.toPartyId]"/>
             <set field="employerParty" from="employerPartyEv.getMap()"/>
@@ -67,6 +81,7 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find entity-name="mantle.humanres.employment.PayrollAdjustmentAndDetail" list="commutingAdjustmentHistory">
                 <econdition field-name="partyRelationshipId" from="employment.partyRelationshipId"/>
                 <econdition field-name="itemTypeEnumId" value="ItemPayrollCommuting"/>
+                <econdition field-name="exclusiveByItemType" operator="not-equals" value="Y"/>
                 <order-by field-name="-fromDate"/>
             </entity-find>
             <iterate entry="adjustment" list="commutingAdjustmentHistory">
@@ -77,6 +92,7 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find entity-name="mantle.humanres.employment.PayrollAdjustmentAndDetail" list="nourishmentAdjustmentHistory">
                 <econdition field-name="partyRelationshipId" from="employment.partyRelationshipId"/>
                 <econdition field-name="itemTypeEnumId" value="ItemPayrollNourishment"/>
+                <econdition field-name="exclusiveByItemType" operator="not-equals" value="Y"/>
                 <order-by field-name="-fromDate"/>
             </entity-find>
             <iterate entry="adjustment" list="nourishmentAdjustmentHistory">
@@ -115,6 +131,11 @@ along with this software (see the LICENSE.md file). If not, see
                 <if condition="currentPensionFundAffiliation == null &amp;&amp; pfah.fromDate &lt;= ec.user.nowTimestamp &amp;&amp; ( pfah.thruDate == null || pfah.thruDate > ec.user.nowTimestamp)">
                     <set field="currentPensionFundAffiliation" from="pfah"/></if>
             </iterate>
+
+            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="employmentDurationTypeEnum" auto-field-map="[enumId:employment.employmentDurationTypeEnumId]"/>
+            <set field="employmentDurationType" from="employmentDurationTypeEnum.description"/>
+            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="employmentEmployeeConditionTypeEnum" auto-field-map="[enumId:employment.employmentEmployeeConditionTypeEnumId]"/>
+            <set field="employmentEmployeeConditionType" from="employmentEmployeeConditionTypeEnum.description"/>
         </actions>
     </service>
 
@@ -155,24 +176,26 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="flatAmount" required="true" type="BigDecimal"/>
             <parameter name="fromDate" required="true" type="Timestamp"/>
         </in-parameters>
+        <out-parameters><parameter name="payrollAdjustmentId"/></out-parameters>
         <actions>
             <entity-find-one entity-name="mantle.humanres.employment.Employment" value-field="employment"/>
             <entity-find entity-name="mantle.humanres.employment.PayrollAdjustment" list="existingList" limit="1">
                 <econdition field-name="partyRelationshipId" from="employment.partyRelationshipId"/>
                 <econdition field-name="timePeriodTypeId" from="employment.timePeriodTypeId"/>
                 <econdition field-name="thruDate" or-null="true" operator="greater-equals" from="fromDate"/>
+                <econdition field-name="itemTypeEnumId"/>
                 <order-by field-name="-fromDate"/>
             </entity-find>
             <if condition="existingList">
                 <set field="existing" from="existingList.first"/>
                 <if condition="existing.fromDate >= fromDate">
-                    <return error="true" message="Found existing adjustment has fromDate after new fromDate"/>
+                    <return error="true" message="Found existing adjustment has fromDate after new fromDate: ${existing}"/>
                 </if>
                 <set field="existing.thruDate" from="fromDate"/>
                 <entity-update value-field="existing"/>
             </if>
             <entity-find-one entity-name="moqui.basic.Enumeration" value-field="itemTypeEnum" auto-field-map="[enumId:itemTypeEnumId]"/>
-            <service-call name="create#mantle.humanres.employment.PayrollAdjustment" in-map="[description:itemTypeEnum.description, partyRelationshipId:partyRelationshipId, itemTypeEnumId:itemTypeEnumId, exclusiveByItemType:'Y', payrollPhaseEnumId:'PrphExpenses', timePeriodTypeId:employment.timePeriodTypeId, fromDate:fromDate, isTax:'N', isTaxable:'N', isSocialTaxable:'N', isMedicalTaxable:'N', isEmployerPaid:'N', applyStdDeduction:'N']" out-map="context"/>
+            <service-call name="create#mantle.humanres.employment.PayrollAdjustment" in-map="[description:itemTypeEnum.description, partyRelationshipId:partyRelationshipId, itemTypeEnumId:itemTypeEnumId, exclusiveByItemType:'N', payrollPhaseEnumId:'PrphExpenses', timePeriodTypeId:employment.timePeriodTypeId, fromDate:fromDate, isTax:'N', isTaxable:'N', isSocialTaxable:'N', isMedicalTaxable:'N', isEmployerPaid:'N', applyStdDeduction:'N']" out-map="context"/>
             <service-call name="create#mantle.humanres.employment.PayrollAdjustmentDetail" in-map="[payrollAdjustmentId:payrollAdjustmentId, detailSeqId:'01', flatAmount:flatAmount]"/>
         </actions>
     </service>
@@ -184,6 +207,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="affiliationTypeEnumId" required="true"/>
             <parameter name="organizationPartyId" required="true"/>
             <parameter name="amount" type="BigDecimal"/>
+            <parameter name="folioFun"/>
             <parameter name="currencyUomId"/>
             <parameter name="fromDate" required="true" type="Timestamp"/>
         </in-parameters>
@@ -325,6 +349,220 @@ along with this software (see the LICENSE.md file). If not, see
                     </if>
                 </while>
             </iterate>
+        </actions>
+    </service>
+
+    <service verb="update" noun="Employee">
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+            <parameter name="rut"/>
+            <parameter name="birthDate" type="Date"/>
+            <parameter name="comments"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.party.Party" value-field="party" for-update="true"/>
+            <if condition="!party"><return error="true" message="could not find party with Id ${partyId}"/></if>
+            <if condition="party.comments != comments">
+                <set field="party.comments" from="comments"/>
+                <entity-update value-field="party"/></if>
+
+            <set field="person" from="party.person"/>
+            <if condition="!person"><return error="true" message="Party ${partyId} is not a person"/></if>
+            <if condition="birthDate != null &amp;&amp; person.birthDate != birthDate">
+                <set field="person.birthDate" from="birthDate"/>
+                <entity-update value-field="person"/></if>
+
+            <entity-find entity-name="mantle.party.PartyIdentification" list="rutList" for-update="true">
+                <econdition field-name="partyId"/>
+                <econdition field-name="partyIdTypeEnumId" operator="in" from="['PtidUniqueNationalId', 'PtidNationalTaxId']"/>
+            </entity-find>
+            <iterate list="rutList" entry="rutEv">
+                <if condition="rut != null &amp;&amp; rutEv.idValue != rut">
+                    <set field="rutEv.idValue" from="rut"/>
+                    <entity-update value-field="rutEv"/></if>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="create" noun="Employment">
+        <in-parameters>
+            <parameter name="fromPartyId" required="true"/>
+            <parameter name="toPartyId" required="true"/>
+            <parameter name="timePeriodTypeId" required="true"/>
+            <parameter name="emplPositionId" required="true"/>
+            <parameter name="employmentDurationTypeEnumId" required="true"/>
+            <parameter name="employmentEmployeeConditionTypeEnumId" required="true"/>
+            <parameter name="fromDate" required="true" type="Timestamp"/>
+            <parameter name="thruDate" required="true" type="Timestamp"/>
+            <parameter name="amount" required="true" type="BigDecimal"/>
+            <parameter name="currencyUomId" default="CLP"/>
+            <parameter name="commutingAssignment" type="BigDecimal" default="0"/>
+            <parameter name="nourishmentAssignment" type="BigDecimal" default="0"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="partyRelationshipId"/>
+        </out-parameters>
+        <actions>
+            <if condition="employmentDurationTypeEnumId == 'MchedtPlazoFijo'">
+                <if condition="thruDate == null"><message error="true">Cannot set fixed date without specifying thruDate</message></if>
+                <set field="terminationReasonEnumId" value="TrTermCompleted"/>
+                <set field="terminationTypeEnumId" value="TtTermCompleted"/>
+            </if>
+            <if condition="thruDate.before(fromDate)"><message error="true">Cannot set thru date before from date</message></if>
+            <check-errors/>
+            <set field="relationshipTypeEnumId" value="PrtEmployee"/>
+            <set field="toRoleTypeId" value="OrgInternal"/>
+            <service-call name="create#mantle.party.PartyRelationship" in-map="context" out-map="context"/>
+            <service-call name="create#mantle.humanres.employment.Employment" in-map="context"/>
+            <service-call name="create#mantle.humanres.employment.EmploymentSalary" in-map="context"/>
+            <if condition="nourishmentAssignment">
+                <service-call name="mchile.humanteam.EmploymentServices.modify#PayrollAdjustment" in-map="[partyRelationshipId:partyRelationshipId, itemTypeEnumId:'ItemPayrollNourishment', flatAmount:nourishmentAssignment, fromDate:fromDate]" out-map="nourishOut"/>
+                <set field="nourishmentAdjustmentId" from="nourishOut.payrollAdjustmentId"/>
+                <log message="nourishmentAdjustmentId: ${nourishmentAdjustmentId}"/>
+            </if>
+            <if condition="commutingAssignment">
+                <service-call name="mchile.humanteam.EmploymentServices.modify#PayrollAdjustment" in-map="[partyRelationshipId:partyRelationshipId, itemTypeEnumId:'ItemPayrollCommuting', flatAmount:commutingAssignment, fromDate:fromDate]" out-map="commutingOut"/>
+                <set field="commutingAdjustmentId" from="commutingOut.payrollAdjustmentId"/>
+                <log message="commutingAdjustmentId: ${commutingAdjustmentId}"/>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="end" noun="Employment">
+        <in-parameters>
+            <parameter name="partyRelationshipId"/>
+            <parameter name="thruDate" type="Timestamp"/>
+            <parameter name="terminationTypeEnumId"/>
+            <parameter name="terminationReasonEnumId"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.humanres.employment.Employment" value-field="employment" for-update="true"/>
+            <entity-find-one entity-name="mantle.party.PartyRelationship" value-field="relationship" for-update="true"/>
+            <entity-find-count entity-name="mantle.party.time.TimePeriod" count-field="closedPeriodAmount">
+                <econdition field-name="timePeriodTypeId" from="employment.timePeriodTypeId"/>
+                <econdition field-name="partyId" from="relationship.toPartyId"/>
+                <econdition field-name="isClosed" value="Y"/>
+                <econdition field-name="thruDate" operator="greater-equals" from="thruDate"/>
+            </entity-find-count>
+            <if condition="closedPeriodAmount"><return error="true" message="Cannot end employment on a date inside closed PayrollPeriod"/></if>
+            <set field="employment.terminationTypeEnumId" from="terminationTypeEnumId"/>
+            <set field="employment.terminationReasonEnumId" from="terminationReasonEnumId"/>
+            <entity-update value-field="employment"/>
+            <script>
+                Calendar cal = Calendar.instance
+                cal.setTimeInMillis(thruDate.time)
+                cal.set(Calendar.HOUR, 23)
+                cal.set(Calendar.MINUTE, 59)
+                cal.set(Calendar.SECOND, 59)
+                cal.set(Calendar.MILLISECOND, 999)
+                thruDate = new java.sql.Timestamp(cal.time.time)
+            </script>
+            <set field="relationship.thruDate" from="thruDate"/>
+            <entity-update value-field="relationship"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="CertificateInfo">
+        <in-parameters>
+            <parameter name="certificateType"/>
+            <parameter name="leaveDetailId"/>
+            <parameter name="partyRelationshipId"/>
+            <parameter name="certificateDate"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="templateLocation"/>
+            <parameter name="title"/>
+            <parameter name="documentType"/>
+            <parameter name="employeePartyDetail"/>
+            <parameter name="employeeRut"/>
+            <parameter name="employerPartyDetail"/>
+            <parameter name="employerRut"/>
+            <parameter name="employerRepresentativePartyDetail"/>
+            <parameter name="employerRepresentativeRut"/>
+            <parameter name="fromDate"/>
+            <parameter name="thruDate"/>
+            <parameter name="days"/>
+            <parameter name="accruedAmount"/>
+            <parameter name="certificateDate"/>
+            <parameter name="employmentFromDate"/>
+            <parameter name="contractDurationText"/>
+            <parameter name="employerText"/>
+        </out-parameters>
+        <actions>
+            <if condition="certificateType == 'leave'">
+                <if condition="!leaveDetailId"><return error="true" message="Required parameter leaveDetailId missing"/></if>
+                <entity-find-one entity-name="mchile.humanteam.employment.LeaveDetail" value-field="leaveDetail"/>
+                <if condition="leaveDetail.leaveTypeEnumId == 'PltFeriadoLegal' &amp;&amp; leaveDetail.changeReasonEnumId == 'PcrAccruedUsage'"><then>
+                    <set field="documentType" value="vacaciones"/>
+                    <set field="title" value="Certificado de Feriado Legal"/>
+                </then><else-if condition="leaveDetail.leaveTypeEnumId == 'PltPermisoSinRem'">
+                    <set field="documentType" value="permisoSinGoce"/>
+                    <set field="title" value="Permiso sin goce de sueldo"/>
+                </else-if><else>
+                    <return error="true" message="Don't know how to issue certificate for leaveDetail ${leaveDetail}"/>
+                </else></if>
+                <set field="partyRelationshipId" from="leaveDetail.partyRelationshipId"/>
+                <if condition="!certificateDate">
+                    <set field="certificateDate" from="leaveDetail.fromDate.before(ec.user.nowTimestamp)? leaveDetail.fromDate: ec.user.nowTimestamp"/>
+                </if>
+
+                <set field="fromDate" from="leaveDetail.fromDate"/>
+                <set field="thruDate" from="leaveDetail.thruDate"/>
+                <set field="days" from="-leaveDetail.diffAmount"/>
+
+                <if condition="documentType == 'vacaciones'">
+                    <entity-find entity-name="mchile.humanteam.employment.LeaveDetail" list="previousLeaves">
+                        <econdition field-name="partyRelationshipId"/>
+                        <econdition field-name="amountUomId" value="TF_day"/>
+                        <econdition field-name="leaveTypeEnumId" value="PltFeriadoLegal"/>
+                        <econdition field-name="thruDate" operator="less-equals" from="certificateDate"/>
+                        <order-by field-name="thruDate"/>
+                    </entity-find>
+                    <set field="accruedAmount" from="0" type="BigDecimal"/>
+                    <iterate entry="leave" list="previousLeaves">
+                        <set field="accruedAmount" from="accruedAmount + leave.diffAmount"/></iterate>
+                </if>
+            </if>
+            <if condition="!certificateDate"><set field="certificateDate" from="ec.user.nowTimestamp"/></if>
+            <entity-find-one entity-name="mantle.humanres.employment.EmploymentAndRelationship" value-field="employment"/>
+            <set field="employmentFromDate" from="employment.fromDate"/>
+            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="employeePartyDetail" auto-field-map="[partyId:employment.fromPartyId]"/>
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:employment.fromPartyId]" out-map="rutMap"/>
+            <set field="employeeRut" from="rutMap.rut"/>
+            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="employerPartyDetail" auto-field-map="[partyId:employment.toPartyId]"/>
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:employment.toPartyId]" out-map="rutMap"/>
+            <set field="employerRut" from="rutMap.rut"/>
+            <if condition="certificateType == 'antiguedad'">
+                <if condition="!partyRelationshipId"><return error="true" message="Required parameter partyRelationshipId missing"/></if>
+                <if condition="!employment"><return error="true" message="Could not find employment for relationshipId ${relationshipId}"/></if>
+                <entity-find entity-name="mantle.party.PartyRelationship" list="repList">
+                    <econdition field-name="relationshipTypeEnumId" value="PrtLegalRepresentative"/>
+                    <econdition field-name="toPartyId" from="employment.toPartyId"/>
+                    <date-filter/>
+                    <order-by field-name="fromDate"/>
+                </entity-find>
+                <set field="representativePartyId" from="repList.first?.fromPartyId"/>
+                <if condition="representativePartyId"><then>
+                    <entity-find-one entity-name="mantle.party.PartyDetail" value-field="employerRepresentativePartyDetail" auto-field-map="[partyId:representativePartyId]"/>
+                    <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:representativePartyId]" out-map="rutMap"/>
+                    <set field="employerRepresentativeRut" from="rutMap.rut"/>
+                    <set field="employerText" value="Yo, ${ec.resource.expand('PartyNameOnlyTemplate', null, employerRepresentativePartyDetail)}, representante legal de la empresa ${ec.resource.expand('PartyNameOnlyTemplate', null, employerPartyDetail)}, Rut: ${employerRut}, certifico"/>
+                </then><else>
+                    <set field="employerText" value="La empresa ${ec.resource.expand('PartyNameOnlyTemplate', null, employerPartyDetail)}, Rut: ${employerRut}, certifica"/>
+                </else></if>
+                <set field="title" value="Certificado de Antigüedad Laboral"/>
+                <set field="documentType" value="antiguedad"/>
+                <if condition="employment.employmentDurationTypeEnumId in ['MchedtPlazoIndefinido', 'MchedtPlazoIndefinido11Anos']"><then>
+                    <set field="contractDurationText" value="a plazo indefinido"/>
+                </then><else-if condition="employment.employmentDurationTypeEnumId == 'MchedtPlazoFijo'">
+                    <set field="contractDurationText" value="a plazo fijo hasta el ${ec.l10n.format(employment.thruDate, 'd\' de \'MMMM\' de \'yyyy')}"/>
+                </else-if><else>
+                    <return error="true" message="Unknown employmentDurationTypeEnumId: ${employment.employmentDurationTypeEnumId}"/>
+                </else></if>
+            </if>
+
+            <set field="templateLocation" value="component://MoquiChile/template/humanteam/CertificadoEmpleo.xsl-fo.ftl"/>
+
         </actions>
     </service>
 
