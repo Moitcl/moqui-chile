@@ -41,14 +41,16 @@ along with this software (see the LICENSE.md file). If not, see
         <out-parameters>
             <parameter name="rut"/>
             <parameter name="dv"/>
+            <parameter name="errorMessage"/>
         </out-parameters>
         <actions>
-            <set field="idValue" from="rut?.replaceAll('\\.', '').replaceAll(',', '').toUpperCase()"/>
+            <set field="idValue" from="rut?.replaceAll('\\.', '').replaceAll(',', '').replaceAll(' ', '').toUpperCase()"/>
 
             <set field="length" from="rut.length()"/>
 
             <if condition="length &lt; 2">
-                <return error="true" message="Error validating RUT '${rut}': length &lt; 2"/>
+                <set field="errorMessage" from="ec.resource.expand('Error validating RUT \'${rut}\': length &lt; 2', null)"/>
+                <return error="true" message="${errorMessage}"/>
             </if>
             <script>
                 (rut, givenDv) = idValue.tokenize('-')
@@ -62,7 +64,8 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.GeneralServices.calculate#DigitoVerificador" in-map="[rut:rut]"
                           out-map="context"/>
             <if condition="givenDv != dv">
-                <return error="true" message="RUT incorrecto: ${idValue}"/>
+                <set field="errorMessage" from="ec.resource.expand('Invalid RUT: ${idValue}', null)"/>
+                <return error="true" message="${errorMessage}"/>
             </if>
         </actions>
     </service>
@@ -86,7 +89,7 @@ along with this software (see the LICENSE.md file). If not, see
         <out-parameters><parameter name="rut" type="String"/></out-parameters>
         <actions>
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="context" out-map="vrut"/>
-            <set field="rut" value="${ec.l10n.format(new Integer(vrut.rut), '#,###').replaceAll(',', '.')}-${vrut.dv}"/>
+            <set field="rut" value="${ec.l10n.format(new Integer(vrut.rut), '#,###').replaceAll(',', '.').replaceAll(' ', '')}-${vrut.dv}"/>
         </actions>
     </service>
 
