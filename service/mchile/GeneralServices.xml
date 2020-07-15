@@ -31,6 +31,27 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="normalize" noun="PartyIdentification">
+        <in-parameters>
+            <parameter name="idValue"/>
+            <parameter name="partyIdTypeEnumId"/>
+            <parameter name="partyId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="idValue"/>
+            <parameter name="existingPartyIdentification"/>
+        </out-parameters>
+        <actions>
+            <if condition="partyIdTypeEnumId in ['PtidNationalTaxId', 'PtidUniqueNationalId']">
+                <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:idValue]" out-map="verifyMap"/>
+                <set field="idValue" from="new String(verifyMap.rut) + '-' + verifyMap.dv"/></if>
+            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="existingPartyIdentification">
+                <field-map field-name="partyIdTypeEnumId"/>
+                <field-map field-name="idValue"/>
+            </entity-find-one>
+        </actions>
+    </service>
+
     <service verb="verify" noun="Rut">
         <!-- to be called directly -->
         <in-parameters>
@@ -44,7 +65,7 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <set field="idValue" from="rut?.replaceAll('\\s', '').replaceAll('\\.', '').replaceAll(',', '').replaceAll(' ', '').toUpperCase()"/>
 
-            <set field="length" from="rut.length()"/>
+            <set field="length" from="idValue.length()"/>
 
             <if condition="length &lt; 2">
                 <set field="errorMessage" from="ec.resource.expand('Error validating RUT \'${rut}\': length &lt; 2', null)"/>
