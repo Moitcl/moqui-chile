@@ -26,10 +26,29 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="! ['PtidUniqueNationalId', 'PtidNationalTaxId'].contains(entityValue.partyIdTypeEnumId)">
                 <return/>
             </if>
-
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:entityValue.idValue]" out-map="context"/>
-
             <set field="entityValue.idValue" from="new String(rut) + '-' + dv"/>
+        </actions>
+    </service>
+
+    <service verb="normalize" noun="PartyIdentification">
+        <in-parameters>
+            <parameter name="idValue"/>
+            <parameter name="partyIdTypeEnumId"/>
+            <parameter name="partyId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="idValue"/>
+            <parameter name="existingPartyIdentification"/>
+        </out-parameters>
+        <actions>
+            <if condition="partyIdTypeEnumId in ['PtidNationalTaxId', 'PtidUniqueNationalId']">
+                <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:idValue]" out-map="verifyMap"/>
+                <set field="idValue" from="new String(verifyMap.rut) + '-' + verifyMap.dv"/></if>
+            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="existingPartyIdentification">
+                <field-map field-name="partyIdTypeEnumId"/>
+                <field-map field-name="idValue"/>
+            </entity-find-one>
         </actions>
     </service>
 
@@ -41,28 +60,28 @@ along with this software (see the LICENSE.md file). If not, see
         <out-parameters>
             <parameter name="rut"/>
             <parameter name="dv"/>
+            <parameter name="errorMessage"/>
         </out-parameters>
         <actions>
-            <set field="idValue" from="rut?.replaceAll('\\.', '').toUpperCase()"/>
+            <set field="idValue" from="rut?.replaceAll('\\s', '').replaceAll('\\.', '').replaceAll(',', '').replaceAll(' ', '').toUpperCase()"/>
 
-            <set field="length" from="rut.length()"/>
+            <set field="length" from="idValue.length()"/>
 
             <if condition="length &lt; 2">
-                <return error="true" message="Error validating RUT '${rut}': length &lt; 2"/>
+                <set field="errorMessage" from="ec.resource.expand('Error validating RUT \'${rut}\': length &lt; 2', null)"/>
+                <return error="true" message="${errorMessage}"/>
             </if>
             <script>
                 (rut, givenDv) = idValue.tokenize('-')
                 if (givenDv == null) {
                     rut = idValue.substring(0, length-1)
-                    ec.logger.info("rut: ${rutStr}")
                     givenDv = idValue.substring(length-1)
-                    ec.logger.info("givenDv: ${givenDv}")
                 }
             </script>
-            <service-call name="mchile.GeneralServices.calculate#DigitoVerificador" in-map="[rut:rut]"
-                          out-map="context"/>
+            <service-call name="mchile.GeneralServices.calculate#DigitoVerificador" in-map="[rut:rut]" out-map="context"/>
             <if condition="givenDv != dv">
-                <return error="true" message="RUT incorrecto: ${idValue}"/>
+                <set field="errorMessage" from="ec.resource.expand('Invalid RUT: ${idValue}', null)"/>
+                <return error="true" message="${errorMessage}"/>
             </if>
         </actions>
     </service>
@@ -86,7 +105,7 @@ along with this software (see the LICENSE.md file). If not, see
         <out-parameters><parameter name="rut" type="String"/></out-parameters>
         <actions>
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="context" out-map="vrut"/>
-            <set field="rut" value="${ec.l10n.format(new Integer(vrut.rut), '#,###')}-${vrut.dv}"/>
+            <set field="rut" value="${ec.l10n.format(new Integer(vrut.rut), '#,###').replaceAll(',', '.').replaceAll(' ', '')}-${vrut.dv}"/>
         </actions>
     </service>
 
