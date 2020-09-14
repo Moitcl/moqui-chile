@@ -45,10 +45,12 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="partyIdTypeEnumId in ['PtidNationalTaxId', 'PtidUniqueNationalId']">
                 <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:idValue]" out-map="verifyMap"/>
                 <set field="idValue" from="new String(verifyMap.rut) + '-' + verifyMap.dv"/></if>
-            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="existingPartyIdentification">
-                <field-map field-name="partyIdTypeEnumId"/>
-                <field-map field-name="idValue"/>
-            </entity-find-one>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="existingPartyIdentificationList">
+                <econdition field-name="partyIdTypeEnumId"/>
+                <econdition field-name="idValue"/>
+                <econdition field-name="partyId" operator="not-equals"/>
+            </entity-find>
+            <set field="existingPartyIdentification" from="existingPartyIdentificationList.first"/>
         </actions>
     </service>
 
@@ -77,6 +79,7 @@ along with this software (see the LICENSE.md file). If not, see
                     rut = idValue.substring(0, length-1)
                     givenDv = idValue.substring(length-1)
                 }
+                rut = rut.replaceAll("[^0-9]", "")
             </script>
             <service-call name="mchile.GeneralServices.calculate#DigitoVerificador" in-map="[rut:rut]" out-map="context"/>
             <if condition="givenDv != dv">
@@ -88,7 +91,7 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="calculate" noun="DigitoVerificador">
         <in-parameters><parameter name="rut" type="Integer" required="true"/></in-parameters>
-        <out-parameters><parameter name="dv"/></out-parameters>
+        <out-parameters><parameter name="rut"/><parameter name="dv"/></out-parameters>
         <actions>
             <script>
                 int m = 0, s = 1, irut = rut;
@@ -96,6 +99,7 @@ along with this software (see the LICENSE.md file). If not, see
                     s = (s + irut % 10 * (9 - m++ % 6)) % 11;
                 }
                 dv = (char) (s != 0 ? s + 47 : 75);
+                rut = rut.toString()
             </script>
         </actions>
     </service>
