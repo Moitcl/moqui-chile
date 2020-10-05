@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+    <service verb="get" noun="SituacionTributariaTerceros">
+        <in-parameters>
+            <parameter name="rut"/>
+            <parameter name="dv"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mchile.sii.SIIServices.get#Captcha" out-map="captcha"/>
+            <script><![CDATA[import org.moqui.util.RestClient
+
+            location = "https://zeus.sii.cl/cvc_cgi/stc/getstc"
+            situacionTributariaRequestJson = groovy.json.JsonOutput.toJson([RUT: rut, DV: dv.toUpperCase(), PRG: 'STC', OPC: 'NOR', txt_code:captcha.code, txt_captcha: captcha.txtCaptcha])
+            //ec.logger.warn("requestJson: ${situacionTributariaRequestJson}")
+            situacionTributaria = ec.service.rest().uri(location).contentType('application/x-www-form-urlencoded').acceptContentType('application/json').method('POST').text("RUT=${rut}&DV=${dv.toUpperCase()}&PRG=STC&OPC=NOR&txt_code=${captcha.code}&txt_captcha=${captcha.txtCaptcha}").call()
+
+            String situacionTributariaHtml = situacionTributaria.text()
+            //ec.logger.warn("situacionTributariaHtml: ${situacionTributariaHtml}")
+
+            patternList = [
+                    [name:'tieneInicioActividades', pattern:'Contribuyente presenta Inicio de Actividades: ([SINO]{2})</span>'],
+                    [name:'razonSocial', pattern:'<strong>Nombre o Raz&oacute;n Social&nbsp;:</strong></div><div [^>]*>(.*?)</div><br>'],
+                    [name:'fechaInicioActividades', pattern:'Fecha de Inicio de Actividades: (\\d{2}-\\d{2}-\\d{4})'],
+                    [name:'actividadesEconomicas', preselectPattern:'<strong>Actividades Econ&oacute;micas vigentes:</strong>.*?<table border="1".*?>(.*?)</table>', pattern:'<TR>\\s*<TD [^>]*>\\s*<font class[^>]*>([^<>]*)</font></TD>\\s*<TD [^>]*>\\s*<font class[^>]*>([^<>]*)</font></TD>\\s*<TD [^>]*>\\s*<font class[^>]*>([^<>]*)</font></TD>\\s*<TD [^>]*>\\s*<font class[^>]*>([^<>]*)</font></TD>\\s*<TD [^>]*>\\s*<font class[^>]*>([^<>]*)</font></TD>\\s*</TR>', fieldNames:['descripcion', 'codigo', 'categoria', 'afecta', 'fecha']]
+            ]
+
+            campos = [:]
+            patternList.each {
+                //println("attempting pattern ${it.pattern} of type ${it.pattern.class}")
+                if (it.preselectPattern) {
+                    //ec.logger.warn("preselectPattern: ${it.preselectPattern}")
+                    pattern = java.util.regex.Pattern.compile(it.preselectPattern, java.util.regex.Pattern.DOTALL)
+                    matcher = situacionTributariaHtml =~ pattern
+                    if (matcher.find()) {
+                        baseText = matcher.findAll().first()[1]
+                        ec.logger.warn("baseText: ${baseText}")
+                        ec.logger.warn("pattern: ${it.pattern}")
+                    }
+                    else baseText = situacionTributariaHtml
+                } else
+                    baseText = situacionTributariaHtml
+
+                pattern = java.util.regex.Pattern.compile(it.pattern, java.util.regex.Pattern.DOTALL)
+                matcher = baseText =~ pattern
+                campoList = []
+                matcher.findAll().each { match ->
+                    if (it.fieldNames) {
+                        fieldMap = [:]
+                        i = 1
+                        it.fieldNames.each { fieldName ->
+                            fieldMap.put(fieldName, match[i].trim())
+                            i++
+                        }
+                        campoList.add(fieldMap)
+                    } else
+                        campoList.add(match[1].trim())
+                }
+                campos.put(it['name'], campoList.size() == 1? campoList.get(0): campoList)
+            }
+
+            ]]></script>
+            <log message="campos: ${campos}"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="Captcha">
+        <!-- curl -X POST - -header 'Accept: application/json' -d "oper=0" https://zeus.sii.cl/cvc_cgi/stc/CViewCaptcha.cgi -->
+        <in-parameters>
+            <parameter name="oper" default-value="0"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="txtCaptcha"/>
+            <parameter name="code"/>
+        </out-parameters>
+        <actions>
+            <script><![CDATA[
+                location = 'https://zeus.sii.cl/cvc_cgi/stc/CViewCaptcha.cgi'
+
+                captchaResponse = ec.service.rest().uri(location).contentType('application/x-www-form-urlencoded').acceptContentType('application/json').method('POST').text('oper=0').call()
+                jsonResponse = captchaResponse?.jsonObject()
+                txtCaptcha = jsonResponse?.txtCaptcha
+                code = new String(Base64.decoder.decode(txtCaptcha)).substring(36,40)
+            ]]></script>
+        </actions>
+    </service>
+
+</services>
