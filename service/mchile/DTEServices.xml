@@ -128,12 +128,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="folioS" from="folio" type="Integer"/>
             <set field="codRef" value="0" type="Integer"/>
 
-
-
             <script>
                 cafS = cafS + caf
             </script>
-
             <script>
                 import java.io.ByteArrayOutputStream;
                 import java.io.File;
@@ -197,6 +194,7 @@ along with this software (see the LICENSE.md file). If not, see
                 opts.setLoadSubstituteNamespaces(namespaces);
 
                 // Recuperación de archivo CAF desde BD
+
                 caf = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts).getAUTORIZACION();
 
                 // Construyo base a partir del template
@@ -1189,7 +1187,6 @@ along with this software (see the LICENSE.md file). If not, see
                     Files.write(path, salida);
                     logger.warn("Error al generar factura folio "+folio);
                 }
-
             </script>
             <!-- Registro de DTE en base de datos y generación de PDF -->
             <set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/>
@@ -2052,7 +2049,6 @@ return
                 <select-field field-name="rutEmisor"/>
                 <select-field field-name="rutEnvia"/>
                 <select-field field-name="rznSocEmisor"/>
-                <!--select-field field-name="giroEmisor"/-->
                 <select-field field-name="cdgSIISucur"/>
                 <select-field field-name="dirOrigen"/>
                 <select-field field-name="cmnaOrigen"/>
@@ -2088,7 +2084,6 @@ return
             <set field="rutEmisor" from="orgField.rutEmisor"/>
             <set field="rutEnvia" from="orgField.rutEnvia"/>
             <set field="rznSocEmisor" from="orgField.rznSocEmisor"/>
-            <!--set field="giroEmisor" from="orgField.giroEmisor"/-->
             <set field="cdgSIISucur" from="orgField.cdgSIISucur"/>
             <set field="dirOrigen" from="orgField.dirOrigen"/>
             <set field="cmnaOrigen" from="orgField.cmnaOrigen"/>
@@ -3075,7 +3070,6 @@ return
 
                 //DTEDocument doc = DTEDocument.Factory.parse(new FileInputStream(envio), opts);
                 DTEDocument doc = DTEDocument.Factory.parse(contentData.getBinaryStream(), opts);
-
                 ConexionSii con = new ConexionSii();
 
                 // leo certificado y llave privada del archivo pkcs12
@@ -3090,7 +3084,6 @@ return
                 PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray());
 
                 String token = con.getToken(pKey, x509);
-
                 String enviadorS = Utilities.getRutFromCertificate(x509);
 
                 RESPUESTADocument resp = con.getEstadoDTECertificacion(enviadorS, doc.getDTE().getDocumento(), token);
@@ -11643,22 +11636,33 @@ return
 
             <!-- Datos para encontrar contacto -->
 
-            <set field="contactMechId"/>
 
-            <entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
+
+            <!--entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
                 <field-map field-name="partyId" from="partyId"/>
                 <field-map field-name="contactMechPurposeId" value="PostalTax"/>
-            </entity-find-one>
+            </entity-find-one-->
 
-            <if condition="!contactMechField">
+            <entity-find entity-name="mantle.party.contact.PartyContactMech" list="contactMechList">
+                <econdition field-name="partyId" from="partyId"/>
+                <econdition field-name="contactMechPurposeId" value="PostalTax"/>
+                <econdition field-name="fromDate" operator="less-equals" from="ec.user.nowTimestamp"/>
+                <econdition field-name="thruDate" from="null"/>
+            </entity-find>
+
+            <if condition="!contactMechList">
                 <return error="true" message="Receptor no tiene dirección para impuestos"/>
             </if>
-
-            <set field="contactMechId" from="contactMechField.contactMechId"/>
-
-
+            <set field="contactMechId" from="contactMechList.contactMechId.first()"/>
+            <!--set field="contactMechId"/>
+            <set field="contactMechId" from="contactMechField.contactMechId"/-->
             <!-- Datos de contacto -->
             <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressField"/>
+
+            <if condition="!contactPostalAddressField">
+                <return error="true" message="Receptor no tiene dirección postal"/>
+            </if>
+
             <set field="dirReceptor" from="contactPostalAddressField.address1"/>
             <script>
                 dirReceptor = dirReceptor + " " + contactPostalAddressField.unitNumber
