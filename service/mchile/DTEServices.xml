@@ -128,12 +128,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="folioS" from="folio" type="Integer"/>
             <set field="codRef" value="0" type="Integer"/>
 
-
-
             <script>
                 cafS = cafS + caf
             </script>
-
             <script>
                 import java.io.ByteArrayOutputStream;
                 import java.io.File;
@@ -197,6 +194,7 @@ along with this software (see the LICENSE.md file). If not, see
                 opts.setLoadSubstituteNamespaces(namespaces);
 
                 // Recuperación de archivo CAF desde BD
+
                 caf = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts).getAUTORIZACION();
 
                 // Construyo base a partir del template
@@ -1189,7 +1187,6 @@ along with this software (see the LICENSE.md file). If not, see
                     Files.write(path, salida);
                     logger.warn("Error al generar factura folio "+folio);
                 }
-
             </script>
             <!-- Registro de DTE en base de datos y generación de PDF -->
             <set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/>
@@ -2052,7 +2049,6 @@ return
                 <select-field field-name="rutEmisor"/>
                 <select-field field-name="rutEnvia"/>
                 <select-field field-name="rznSocEmisor"/>
-                <!--select-field field-name="giroEmisor"/-->
                 <select-field field-name="cdgSIISucur"/>
                 <select-field field-name="dirOrigen"/>
                 <select-field field-name="cmnaOrigen"/>
@@ -2088,7 +2084,6 @@ return
             <set field="rutEmisor" from="orgField.rutEmisor"/>
             <set field="rutEnvia" from="orgField.rutEnvia"/>
             <set field="rznSocEmisor" from="orgField.rznSocEmisor"/>
-            <!--set field="giroEmisor" from="orgField.giroEmisor"/-->
             <set field="cdgSIISucur" from="orgField.cdgSIISucur"/>
             <set field="dirOrigen" from="orgField.dirOrigen"/>
             <set field="cmnaOrigen" from="orgField.cmnaOrigen"/>
@@ -2156,13 +2151,12 @@ return
         </description>
         <in-parameters>
             <parameter name="pdf" required="true"/>
-            <parameter name="pdfCedible" required="true"/>
+            <parameter name="pdfCedible"/>
             <parameter name="dte" required="true"/>
             <parameter name="activeOrgId" required="true"/>
             <parameter name="boleta"/>
         </in-parameters>
         <actions>
-
             <!-- Recuperacion de parametros de la organizacion -->
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
             <set field="certS" from="pathCert"/>
@@ -2205,9 +2199,14 @@ return
                 import cl.nic.dte.util.Utilities;
                 import cl.sii.siiDte.RECEPCIONDTEDocument;
 
-                //Utilities.generatePDF(new FileInputStream(dte), new FileInputStream(template), new FileOutputStream(pdf));
                 Utilities.generatePDF(new FileInputStream(dte), ec.resource.getLocationStream(template), new FileOutputStream(pdf));
-                Utilities.generatePDF(new FileInputStream(dte), ec.resource.getLocationStream(templatePdfCedible), new FileOutputStream(pdfCedible));
+            </script>
+            <if condition="!boleta">
+                <script>
+                    Utilities.generatePDF(new FileInputStream(dte), ec.resource.getLocationStream(templatePdfCedible), new FileOutputStream(pdfCedible));
+                </script>
+            </if>
+            <script>
 
                 logger.warn("---------------");
                 logger.warn("PDF Generado: " + pdf);
@@ -2619,21 +2618,26 @@ return
 
             <if condition="partyTypeEnumId == 'PtyOrganization'">
                 <!-- email -->
-                <entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
-                    <field-map field-name="partyId" from="partyId"/>
-                    <field-map field-name="contactMechPurposeId" value="PostalTax"/>
-                </entity-find-one>
-                <set field="contactMechId" from="contactMechField.contactMechId"/>
+                <entity-find entity-name="mantle.party.contact.PartyContactMech" list="contactMechList">
+                    <econdition field-name="partyId" from="partyId"/>
+                    <econdition field-name="contactMechPurposeId" value="PostalTax"/>
+                    <econdition field-name="fromDate" operator="less-equals" from="ec.user.nowTimestamp"/>
+                    <econdition field-name="thruDate" from="null"/>
+                </entity-find>
+
+                <if condition="!contactMechList">
+                    <return error="true" message="Receptor no tiene dirección para impuestos"/>
+                </if>
+                <set field="contactMechId" from="contactMechList.contactMechId.first()"/>
+
+
                 <!-- Organizacion -->
                 <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField"/>
                 <set field="rznSocReceptor" from="organizationField.organizationName"/>
 
-                <!--if condition="!organizationField.giro">
-                    <return error="true" message="Receptor no tiene giro"/>
-                </if-->
                 <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:toPartyId]" out-map="giroOutMap"/>
                 <set field="giroReceptor" from="giroOutMap.description"/>
-                <!--set field="giroReceptor" from="organizationField.giro"/-->
+
                 <!-- Obtención de contacto para impuestos en organización -->
 
                 <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
@@ -2858,20 +2862,24 @@ return
 
             <if condition="partyTypeEnumId == 'PtyOrganization'">
                 <!-- email -->
-                <entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
-                    <field-map field-name="partyId" from="partyId"/>
-                    <field-map field-name="contactMechPurposeId" value="PostalTax"/>
-                </entity-find-one>
-                <set field="contactMechId"/>
-                <if condition="contactMechField">
-                    <set field="contactMechId" from="contactMechField.contactMechId"/>
+                <entity-find entity-name="mantle.party.contact.PartyContactMech" list="contactMechList">
+                    <econdition field-name="partyId" from="partyId"/>
+                    <econdition field-name="contactMechPurposeId" value="PostalTax"/>
+                    <econdition field-name="fromDate" operator="less-equals" from="ec.user.nowTimestamp"/>
+                    <econdition field-name="thruDate" from="null"/>
+                </entity-find>
+
+                <if condition="!contactMechList">
+                    <return error="true" message="Receptor no tiene dirección para impuestos"/>
                 </if>
+                <set field="contactMechId" from="contactMechList.contactMechId.first()"/>
+
+
+
                 <!-- Organizacion -->
                 <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField"/>
                 <set field="rznSocReceptor" from="organizationField.organizationName"/>
                 <!-- Giro no es necesario en boleta -->
-                <!--service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:toPartyId]" out-map="giroOutMap"/>
-                <set field="giroReceptor" from="giroOutMap.description"/-->
                 <set field="giroReceptor" value=""/>
                 <!-- Obtención de contacto para impuestos en organización -->
                 <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
@@ -3075,7 +3083,6 @@ return
 
                 //DTEDocument doc = DTEDocument.Factory.parse(new FileInputStream(envio), opts);
                 DTEDocument doc = DTEDocument.Factory.parse(contentData.getBinaryStream(), opts);
-
                 ConexionSii con = new ConexionSii();
 
                 // leo certificado y llave privada del archivo pkcs12
@@ -3090,7 +3097,6 @@ return
                 PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray());
 
                 String token = con.getToken(pKey, x509);
-
                 String enviadorS = Utilities.getRutFromCertificate(x509);
 
                 RESPUESTADocument resp = con.getEstadoDTECertificacion(enviadorS, doc.getDTE().getDocumento(), token);
@@ -4084,7 +4090,11 @@ return
             <parameter name="fiscalTaxDocumentId"/>
         </out-parameters>
         <actions>
+            <if condition="!items">
+                <return error="true" message="Deben existir items a corregir en Nota de Crédito"/>
+            </if>
             <set field="listItems" from="items instanceof List ? items : items.split(',') as List" default-value="null"/>
+
             <iterate list="listItems" entry="detailItem">
                 <set field="listProduct" from="detailItem instanceof List ? detailItem : detailItem.split('-') as List"/>
                 <log message="Leyendo: $listProduct" level="warn"/>
@@ -7330,6 +7340,12 @@ return
             <set field="rznSocEmisor" from="rznSocEmisor"/>
             <!--set field="giroEmisor" from="giroEmisor"/-->
             <set field="cdgSIISucur" from="cdgSIISucur"/>
+
+            <!-- REVISAR -->
+            <if condition="cdgSIISucur == 'LOCAL'">
+                <set field="cdgSIISucur" value="0"/>
+            </if>
+
             <set field="dirOrigen" from="dirOrigen"/>
             <set field="cmnaOrigen" from="cmnaOrigen"/>
             <set field="ciudadOrigen" from="ciudadOrigen"/>
@@ -7347,7 +7363,6 @@ return
             <set field="tipoFacturaS" from="codeOut.siiCode"/>
 
             <set field="fechaEmision"/>
-
 
             <!-- Obtención de folio y path de CAF -->
             <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, activeOrgId:activeOrgId]" out-map="context"/>
@@ -11643,22 +11658,25 @@ return
 
             <!-- Datos para encontrar contacto -->
 
-            <set field="contactMechId"/>
+            <entity-find entity-name="mantle.party.contact.PartyContactMech" list="contactMechList">
+                <econdition field-name="partyId" from="partyId"/>
+                <econdition field-name="contactMechPurposeId" value="PostalTax"/>
+                <econdition field-name="fromDate" operator="less-equals" from="ec.user.nowTimestamp"/>
+                <econdition field-name="thruDate" from="null"/>
+            </entity-find>
 
-            <entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
-                <field-map field-name="partyId" from="partyId"/>
-                <field-map field-name="contactMechPurposeId" value="PostalTax"/>
-            </entity-find-one>
-
-            <if condition="!contactMechField">
+            <if condition="!contactMechList">
                 <return error="true" message="Receptor no tiene dirección para impuestos"/>
             </if>
-
-            <set field="contactMechId" from="contactMechField.contactMechId"/>
-
+            <set field="contactMechId" from="contactMechList.contactMechId.first()"/>
 
             <!-- Datos de contacto -->
             <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressField"/>
+
+            <if condition="!contactPostalAddressField">
+                <return error="true" message="Receptor no tiene dirección postal"/>
+            </if>
+
             <set field="dirReceptor" from="contactPostalAddressField.address1"/>
             <script>
                 dirReceptor = dirReceptor + " " + contactPostalAddressField.unitNumber
