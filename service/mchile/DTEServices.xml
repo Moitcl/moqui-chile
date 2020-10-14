@@ -2674,6 +2674,16 @@ return
                 <set field="contactoReceptor" from="rznSocReceptor"/>
             </if>
 
+            <!-- Para generar factura se elimina item de IVA: no tienen productId -->
+            <set field="correctedInvoiceItemList" from="[]"/>
+            <iterate list="invoiceItemList" entry="itemField">
+                <if condition="itemField.productId">
+                    <log message="Item con productId: $itemField" level="warn"/>
+                    <script>
+                        correctedInvoiceItemList.add(itemField);
+                    </script>
+                </if>
+            </iterate>
             <!-- Recuperación de referencias -->
             <entity-find entity-name="mchile.dte.ReferenciaInvoiceAndFiscalCode" list="referenciaList">
                 <econdition field-name="invoiceId" from="invoiceId"/>
@@ -2682,12 +2692,12 @@ return
             <if condition="(fiscalTaxDocumentTypeEnumId == 'Ftdt-39') || (fiscalTaxDocumentTypeEnumId == 'Ftdt-41')"><then>
                 <!-- Generacion de boletas -->
                 <service-call name="mchile.DTEServices.genera#Boleta" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, activeOrgId:activeOrgId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
-                           contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
+                           contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:correctedInvoiceItemList,
                            invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId]" out-map="context"/>
             </then><else>
                 <!-- Generacion de factura -->
                 <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, activeOrgId:activeOrgId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
-                      contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
+                      contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:correctedInvoiceItemList,
                           invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId, globalDiscount:globalDiscount, glosaDr:glosaDr]" out-map="context"/>
             </else></if>
         </actions>
@@ -7268,7 +7278,6 @@ return
             </entity-find>
 
             <log level="warn" message="Verificando si item $productId es AFECTO o EXENTO"/>
-            <!--if condition="categoryMemberField"><then-->
             <if condition="categoryMemberList"><then>
                 <log message="Item AFECTO encontrado $productId" level="warn"/>
                 <set field="afecto" value="true"/>
@@ -12215,6 +12224,7 @@ return
             <parameter name="partyId" required="true"/>
             <parameter name="templateFactura"/>
             <parameter name="templateBoleta"/>
+            <parameter name="templateBoletaContinua"/>
             <parameter name="templatePdf"/>
             <parameter name="templatePdfCedible"/>
             <parameter name="templatePdfBoleta"/>
@@ -12253,7 +12263,7 @@ return
                 </then>
                 <else>
                     <service-call name="create#mchile.dte.PartyDteParams"
-                                  in-map="[partyId:partyId, templateFactura:templateFactura, templateBoleta:templateBoleta, templatePdf:templatePdf, templatePdfCedible:templatePdfCedible, templatePdfBoleta:templatePdfBoleta,
+                                  in-map="[partyId:partyId, templateFactura:templateFactura, templateBoleta:templateBoleta, templateBoletaContinua:templateBoletaContinua, templatePdf:templatePdf, templatePdfCedible:templatePdfCedible, templatePdfBoleta:templatePdfBoleta,
                     templateEnvio:templateEnvio, templateEnvioBoleta:templateEnvioBoleta, templateAceptaciones:templateAceptaciones, templateRcof:templateRcof, logo:logo, fchResol:fechResol, nroResol:nroResol, rutEmisor:rutEmisor,
                     rutEnvia:rutEnvia, rznSocEmisor:rznSocEmisor, cdgSIISucur:cdgSIISucur, dirOrigen:dirOrigen, cmnaOrigen:cmnaOrigen, ciudadOrigen:ciudadOrigen, pathResults:pathResults, pathAceptaciones:pathAceptaciones,
                     pathRecibidas:pathRecibidas, pathPdf:pathPdf, pathTemp:pathTemp, pathCaf:pathCaf, pathCert:pathCert, passCert:passCert, nmbContacto:nmbContacto, mailContacto:mailContacto]"/>
