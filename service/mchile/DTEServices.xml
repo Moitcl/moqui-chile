@@ -2149,8 +2149,7 @@ return
 
     <service verb="genera" noun="PDF">
         <description>
-            Genera archivo PDF de Factura (envio).
-            Dejarlo en BD probablemente no es buena idea.
+            Genera archivo PDF de Factura/Boleta (envio).
         </description>
         <in-parameters>
             <parameter name="pdf" required="true"/>
@@ -2158,6 +2157,7 @@ return
             <parameter name="dte" required="true"/>
             <parameter name="activeOrgId" required="true"/>
             <parameter name="boleta"/>
+            <parameter name="continua"/>
         </in-parameters>
         <actions>
             <!-- Recuperacion de parametros de la organizacion -->
@@ -2172,6 +2172,7 @@ return
             <set field="templatePdf" from="templatePdf"/>
             <set field="templatePdfCedible" from="templatePdfCedible"/>
             <set field="templatePdfBoleta" from="templatePdfBoleta"/>
+            <set field="templatePdfBoletaContinua" from="templatePdfBoletaContinua"/>
             <set field="templatePdfBoletaCedible" from="templatePdfBoletaCedible"/>
             <set field="templateEnvio" from="templateEnvio"/>
             <set field="templateAceptaciones" from="templateAceptaciones"/>
@@ -2183,6 +2184,9 @@ return
 
             <if condition="boleta">
                 <set field="template" from="templatePdfBoleta"/>
+                <if condition="continua">
+                    <set field="template" from="templatePdfBoletaContinua"/>
+                </if>
             </if>
 
             <if condition="!templatePdf">
@@ -2934,10 +2938,21 @@ return
                 <order-by field-name="fiscalTaxDocumentTypeEnumId"/>
             </entity-find>
 
+            !-- Para generar boleta se elimina item de IVA: no tienen productId -->
+            <set field="correctedInvoiceItemList" from="[]"/>
+            <iterate list="invoiceItemList" entry="itemField">
+                <if condition="itemField.productId">
+                    <log message="Item con productId: $itemField" level="warn"/>
+                    <script>
+                        correctedInvoiceItemList.add(itemField);
+                    </script>
+                </if>
+            </iterate>
+
             <!-- TODO: Generación de Boletas -->
                 <!-- Generacion de boletas -->
                 <service-call name="mchile.DTEServices.genera#Boleta" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, activeOrgId:activeOrgId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
-                          contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
+                          contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:correctedInvoiceItemList,
                           invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId, continua:continua]" out-map="context"/>
         </actions>
     </service>
@@ -7368,7 +7383,7 @@ return
             <if condition="continua">
                 <set field="templatePdfBoleta" from="templatePdfBoletaContinua"/>
             </if>
-            <return error="true" message="PP: $templatePdfBoleta"/>
+
             <!-- Giro del emisor -->
             <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:activeOrgId]" out-map="giroOutMap"/>
             <set field="giroEmisor" from="giroOutMap.description"/>
@@ -7609,14 +7624,14 @@ return
                 <iterate list="detailList" entry="detailEntry">
                     <set field="nombreItem" from="detailEntry.description"/>
                     <set field="qtyItem" from="detailEntry.quantity" type="Integer"/>
-                    <!-- TODO: obtener precio de productId -->
+                    <!-- Obtener precio de productId -->
                     <set field="priceItem" from="detailEntry.amount" type="Integer"/>
                     <set field="totalItem" from="qtyItem * priceItem" type="Integer"/>
                     <set field="unmdItem"/>
                     <if condition="detailEntry.quantityUomId">
                         <set field="unmdItem" from="detailEntry.quantityUomId"/>
                     </if>
-                    <!-- TODO: Verificar si item es afecto o exento -->
+                    <!-- Verificar si item es afecto o exento -->
                     <service-call name="mchile.DTEServices.check#Afecto" in-map="[productId:detailEntry.productId]" out-map="afectoOutMap"/>
                     <set field="itemAfecto" from="afectoOutMap.afecto" type="String"/>
                     <log message="Item afecto: $itemAfecto, $totalItem" level="warn"/>
@@ -7904,7 +7919,7 @@ return
             <set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/>
             <set field="xml" value="${resultS}BOL${tipoFactura}-${folio}.xml"/>
             <set field="pdf" value="${pathPdf}BOL${tipoFactura}-${folio}.pdf"/>
-            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, activeOrgId:activeOrgId, boleta:true]" out-map="context"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, activeOrgId:activeOrgId, boleta:true, continua:continua]" out-map="context"/>
 
             <set field="bArray2"/>
             <!-- Lectura y conversión a arreglo de bytes de PDF temporal -->

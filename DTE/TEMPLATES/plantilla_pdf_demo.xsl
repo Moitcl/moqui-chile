@@ -10,6 +10,13 @@
 	<xsl:output method="xml" version="1.0" omit-xml-declaration="no"
 		indent="yes" />
 
+	<xsl:decimal-format name="us" decimal-separator='.' grouping-separator=',' />
+        <xsl:decimal-format name="european" decimal-separator=',' grouping-separator='.' />
+        <xsl:decimal-format name="example" decimal-separator="." grouping-separator=","
+           infinity="INFINITY" minus-sign="-" NaN="Not a Number" percent="%"
+           per-mille="m" zero-digit="0" digit="#" pattern-separator=";" />
+
+
 	<xsl:param name="versionParam" select="'1.0'" />
 	<xsl:template match="/">
 		<fo:root xmlns:fo="http://www.w3.org/1999/XSL/Format">
@@ -32,7 +39,6 @@
 
 		</fo:root>
 	</xsl:template>
-
 
 	<xsl:template match="DTE/Documento">
 		<fo:block>
@@ -64,7 +70,8 @@
 					<fo:table table-layout="fixed" width="100%"
 						border-collapse="collapse">
 						<fo:table-column column-width="2cm" />
-						<fo:table-column column-width="12.5cm" />
+						<fo:table-column column-width="10cm" />
+						<fo:table-column column-width="2.5cm" />
 						<fo:table-column column-width="2.5cm" />
 						<fo:table-column column-width="2.5cm" />
 
@@ -94,6 +101,14 @@
 										</fo:inline>
 									</fo:block>
 								</fo:table-cell>
+								<fo:table-cell text-align="center"
+                                                                        border-width="0.5pt" border-style="solid">
+                                                                        <fo:block>
+                                                                                <fo:inline font-weight="bold">
+                                                                                        Descuento
+                                                                                </fo:inline>
+                                                                        </fo:block>
+                                                                </fo:table-cell>
 								<fo:table-cell text-align="center"
 									border-width="0.5pt" border-style="solid">
 									<fo:block>
@@ -266,13 +281,36 @@
 									border-left-width="0.5pt" border-left-style="solid"
 									border-right-width="0.5pt" border-right-style="solid"
 									border-bottom-width="0.5pt" border-bottom-style="solid"
-									number-columns-spanned="4">Prueba
+									number-columns-spanned="5">Prueba
 									<fo:block />
 								</fo:table-cell>
 							</fo:table-row>
 							<fo:table-row>
+                                                                <fo:table-cell text-align="center"
+                                                                        border-width="0.5pt" border-style="solid" display-align="center" column-number="4" height="1cm">
+                                                                        <fo:block>
+                                                                                <fo:inline font-weight="bold">
+                                                                                        <xsl:choose>
+                                                                                        <xsl:when test="DscRcgGlobal[NroLinDR=1]">
+                                                                                                <xsl:value-of select="format-number(DscRcgGlobal/ValorDR, '###.###','european')"/>% Descuento Global
+                                                                                        </xsl:when>
+                                                                                                <xsl:otherwise>0% Descuento Global</xsl:otherwise>
+                                                                                        </xsl:choose>
+                                                                                        </fo:inline>
+                                                                        </fo:block>
+                                                                </fo:table-cell>
+                                                                <fo:table-cell text-align="center"
+                                                                        border-width="0.5pt" border-style="solid" column-number="5" display-align="center" height="1cm">
+                                                                        <fo:block>
+                                                                                <fo:inline font-weight="bold">
+                                                                                </fo:inline>
+                                                                        </fo:block>
+                                                                </fo:table-cell>
+                                                        </fo:table-row>
+
+							<fo:table-row>
 								<fo:table-cell text-align="center"
-									border-width="0.5pt" border-style="solid" display-align="center" column-number="3" height="1cm">
+									border-width="0.5pt" border-style="solid" display-align="center" column-number="4" height="1cm">
 									<fo:block>
 										<fo:inline font-weight="bold">
 											Suma
@@ -280,17 +318,23 @@
 									</fo:block>
 								</fo:table-cell>
 								<fo:table-cell text-align="center"
-									border-width="0.5pt" border-style="solid" column-number="4" display-align="center" height="1cm">
+									border-width="0.5pt" border-style="solid" column-number="5" display-align="center" height="1cm">
 									<fo:block>
 										<fo:inline font-weight="bold">
-											<xsl:value-of select="Encabezado/Totales/MntNeto"/>
-										</fo:inline>
+											<xsl:choose>
+                                                                                        <xsl:when test="Encabezado/Totales/MntNeto">
+                                                                                                <xsl:value-of select="format-number(Encabezado/Totales/MntNeto, '###.###','european')"/>
+                                                                                        </xsl:when>
+                                                                                                <xsl:otherwise>0</xsl:otherwise>
+                                                                                        </xsl:choose>
+                                                                                </fo:inline>
 									</fo:block>
 								</fo:table-cell>
 							</fo:table-row>
+
 							<fo:table-row>
 								<fo:table-cell text-align="center"
-									border-width="0.5pt" border-style="solid" column-number="3" display-align="center" height="1cm">
+									border-width="0.5pt" border-style="solid" column-number="4" display-align="center" height="1cm">
 									<fo:block>
 										<fo:inline font-weight="bold">
 											IVA <xsl:value-of select="Encabezado/Totales/TasaIVA"/>%
@@ -298,17 +342,22 @@
 									</fo:block>
 								</fo:table-cell>
 								<fo:table-cell text-align="center"
-									border-width="0.5pt" border-style="solid" column-number="4" display-align="center" height="1cm">
+									border-width="0.5pt" border-style="solid" column-number="5" display-align="center" height="1cm">
 									<fo:block>
 										<fo:inline font-weight="bold">
-											<xsl:value-of select="Encabezado/Totales/IVA"/>
+											<xsl:choose>
+                                                                                        <xsl:when test="Encabezado/Totales/IVA">
+                                                                                                <xsl:value-of select="format-number(Encabezado/Totales/IVA, '###.###','european')"/>
+                                                                                        </xsl:when>
+                                                                                                <xsl:otherwise>0</xsl:otherwise>
+                                                                                        </xsl:choose>
 										</fo:inline>
 									</fo:block>
 								</fo:table-cell>
 							</fo:table-row>
 							<fo:table-row>
 								<fo:table-cell text-align="center"
-									border-width="0.5pt" border-style="solid" column-number="3" display-align="center" height="1cm">
+									border-width="0.5pt" border-style="solid" column-number="4" display-align="center" height="1cm">
 									<fo:block>
 										<fo:inline font-weight="bold">
 											Total
@@ -316,10 +365,10 @@
 									</fo:block>
 								</fo:table-cell>
 								<fo:table-cell text-align="center"
-									border-width="0.5pt" border-style="solid" column-number="4" display-align="center" height="1cm">
+									border-width="0.5pt" border-style="solid" column-number="5" display-align="center" height="1cm">
 									<fo:block>
 										<fo:inline font-weight="bold">
-											<xsl:value-of select="Encabezado/Totales/MntTotal"/>
+											<xsl:value-of select="format-number(Encabezado/Totales/MntTotal, '###.###', 'european')"/>
 										</fo:inline>
 									</fo:block>
 								</fo:table-cell>
@@ -336,7 +385,7 @@
 						  color="black" text-align="left" space-before="8pt">
 					<fo:table table-layout="fixed" width="100%"
 							  border-collapse="collapse">
-						<fo:table-column column-width="12.5cm" />
+						<fo:table-column column-width="10.0cm" />
 
 						<fo:table-body>
 							<fo:table-row>
@@ -640,7 +689,7 @@
 				border-left-style="solid" border-right-width="0.5pt"
 				border-right-style="solid" margin-right="2mm"  height="0.8cm">
 				<fo:block>
-						<xsl:value-of select="QtyItem" />
+						<xsl:value-of select="QtyItem" />&#160;<xsl:value-of select="UnmdItem" />
 				</fo:block>
 			</fo:table-cell>
 			<fo:table-cell text-align="left" border-left-width="0.5pt"
@@ -654,14 +703,31 @@
 				border-left-style="solid" border-right-width="0.5pt"
 				border-right-style="solid" margin-right="2mm"  height="0.8cm">
 				<fo:block>
-						<xsl:value-of select="PrcItem" />
+					<xsl:choose>
+						<xsl:when test="string(number(PrcItem))='NaN'">0</xsl:when>
+					<xsl:otherwise>
+						<xsl:value-of select="format-number(PrcItem, '###.###', 'european')" />
+					</xsl:otherwise>
+					</xsl:choose>
 				</fo:block>
 			</fo:table-cell>
+			<fo:table-cell text-align="right" border-left-width="0.5pt"
+                                border-left-style="solid" border-right-width="0.5pt"
+                                border-right-style="solid" margin-right="2mm"  height="0.8cm">
+                                <fo:block>
+					<xsl:choose>
+						<xsl:when test="string(number(DescuentoPct))='NaN'">0%</xsl:when>
+					<xsl:otherwise>
+						<xsl:value-of select="format-number(DescuentoPct, '###.###', 'european')" />%
+					</xsl:otherwise>
+					</xsl:choose>
+                                </fo:block>
+                        </fo:table-cell>
 			<fo:table-cell text-align="right" border-left-width="0.5pt"
 				border-left-style="solid" border-right-width="0.5pt"
 				border-right-style="solid" margin-right="2mm" height="0.8cm" >
 				<fo:block>
-						<xsl:value-of select="MontoItem"/>
+						<xsl:value-of select="format-number(MontoItem, '###.###', 'european')"/>
 				</fo:block>
 			</fo:table-cell>
 		</fo:table-row>
@@ -703,7 +769,7 @@
 										</xsl:when>
 									</xsl:choose>
 									Nro.
-								    <xsl:value-of select="FolioRef" /> de <xsl:value-of select="FchRef"/>, RUT <xsl:value-of select="RUTOtr" />: <xsl:value-of select="RazonRef"/>
+								    <xsl:value-of select="FolioRef" /> de <xsl:value-of select="FchRef"/><!--, RUT <xsl:value-of select="RUTOtr" /-->: <xsl:value-of select="RazonRef"/>
 							</fo:block>
                         </fo:table-cell>
 
@@ -860,6 +926,11 @@
 				border-right-style="solid" height="0.8cm">
 				<fo:block white-space-treatment="preserve">&#xa0;</fo:block>
 			</fo:table-cell>
+			<fo:table-cell text-align="center" border-left-width="0.5pt"
+                                border-left-style="solid" border-right-width="0.5pt"
+                                border-right-style="solid" height="0.8cm">
+                                <fo:block white-space-treatment="preserve">&#xa0;</fo:block>
+                        </fo:table-cell>
 			<fo:table-cell text-align="center" border-left-width="0.5pt"
 				border-left-style="solid" border-right-width="0.5pt"
 				border-right-style="solid" height="0.8cm">

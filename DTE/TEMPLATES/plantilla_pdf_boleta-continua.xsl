@@ -10,16 +10,22 @@
 	<xsl:output method="xml" version="1.0" omit-xml-declaration="no"
 		indent="yes" />
 
+        <xsl:decimal-format name="us" decimal-separator='.' grouping-separator=',' />
+        <xsl:decimal-format name="european" decimal-separator=',' grouping-separator='.' />
+        <xsl:decimal-format name="example" decimal-separator="." grouping-separator=","
+           infinity="INFINITY" minus-sign="-" NaN="Not a Number" percent="%"
+           per-mille="m" zero-digit="0" digit="#" pattern-separator=";" />
+
 	<xsl:param name="versionParam" select="'1.0'" />
 	<xsl:template match="/">
 		<fo:root xmlns:fo="http://www.w3.org/1999/XSL/Format">
 			<fo:layout-master-set>
 				<fo:simple-page-master master-name="simple"
-					page-height="27.9cm" page-width="21.6cm" margin-top="1cm"
-					margin-bottom="2cm" margin-left="1cm" margin-right="1cm">
+					page-height="27.9cm" page-width="8cm" margin-top="0.5cm"
+					margin-bottom="0.5cm" margin-left="0.25cm" margin-right="0.25cm">
 					<fo:region-body margin-top="0cm" />
-					<fo:region-before extent="3cm" />
-					<fo:region-after extent="1.5cm" />
+					<fo:region-before extent="1cm" />
+					<fo:region-after extent="1cm" />
 				</fo:simple-page-master>
 			</fo:layout-master-set>
 
@@ -58,21 +64,21 @@
 
 			<!--  La lista de detalle -->
 			<fo:block-container absolute-position="absolute" left="0cm"
-				top="5cm">
-				<fo:block font-size="8pt" font-family="monospace"
+				top="3cm">
+				<fo:block font-size="5pt" font-family="monospace"
 					color="black" text-align="left" space-before="8pt">
 					<fo:table table-layout="fixed" width="100%"
 						border-collapse="collapse">
-						<fo:table-column column-width="2cm" />
-						<fo:table-column column-width="9.5cm" />
-						<fo:table-column column-width="2.5cm" />
-						<fo:table-column column-width="2.5cm" />
-						<fo:table-column column-width="2.5cm" />
+						<fo:table-column column-width="1.0cm" />
+						<fo:table-column column-width="3cm" />
+						<fo:table-column column-width="1cm" />
+						<fo:table-column column-width="1cm" />
+						<fo:table-column column-width="1cm" />
 
 						<fo:table-body>
 							<fo:table-row>
 								<fo:table-cell text-align="center"
-									border-width="0.5pt" border-style="solid">
+									border-width="0.1pt" border-style="solid">
 									<fo:block>
 										<fo:inline font-weight="bold">
 											Cantidad
@@ -80,7 +86,7 @@
 									</fo:block>
 								</fo:table-cell>
 								<fo:table-cell text-align="center"
-									border-width="0.5pt" border-style="solid">
+									border-width="0.1pt" border-style="solid">
 									<fo:block>
 										<fo:inline font-weight="bold">
 											Detalle
@@ -292,7 +298,7 @@
 									border-width="0.5pt" border-style="solid" column-number="5" display-align="center" height="1cm">
 									<fo:block>
 										<fo:inline font-weight="bold">
-											<xsl:value-of select="Encabezado/Totales/MntNeto"/>
+											<xsl:value-of select="format-number(Encabezado/Totales/MntTotal, '###.###', 'european')"/>
 										</fo:inline>
 									</fo:block>
 								</fo:table-cell>
@@ -312,42 +318,33 @@
 		<xsl:param name="folio" />
 		<xsl:param name="tipo" />
 
-		<!--  El logo -->
-		<fo:block-container absolute-position="absolute" left="0cm"
-			top="0cm">
-			<fo:block>
-				<fo:external-graphic
-					src="url('//home/cherrera/moit/cowork/moqui-framework/runtime/component/moquichile/DTE/TEMPLATES/logo-emisor.jpg')" width="30%" content-height="30%" content-width="scale-to-fit" scaling="uniform"/>
-			</fo:block>
-		</fo:block-container>
+		<fo:block-container absolute-position="absolute" left="0.5cm"
+			top="0cm" width="7cm">
 
-		<fo:block-container absolute-position="absolute" left="2.5cm"
-			top="0cm" width="9cm">
-
-			<fo:block font-size="18pt" font-family="Helvetica"
-				font-weight="bold" text-align="left" color="blue">
+			<fo:block font-size="6pt" font-family="Helvetica"
+				font-weight="bold" text-align="center" color="blue">
 				<xsl:value-of select="RznSocEmisor" />
 			</fo:block>
 
 			<xsl:if test="Sucursal">
-				<fo:block font-weight="bold" font-size="12pt" font-family="monospace"
-					language="es" hyphenate="true" color="black" text-align="left">
+				<fo:block font-weight="bold" font-size="6pt" font-family="monospace"
+					language="es" hyphenate="true" color="black" text-align="center">
 					Sucursal: <xsl:value-of select="Sucursal" /> (Codigo SII: <xsl:value-of select="CdgSIISucur" />)
 				</fo:block>
 			</xsl:if>
 
-			<fo:block font-weight="bold" font-size="12pt" font-family="monospace"
-				language="es" hyphenate="true" color="black" text-align="left">
+			<fo:block font-weight="bold" font-size="6pt" font-family="monospace"
+				language="es" hyphenate="true" color="black" text-align="center">
 				<xsl:value-of select="GiroEmisor" />
 			</fo:block>
 
-			<fo:block font-weight="bold" font-size="12pt" font-family="monospace"
-				language="es" hyphenate="true" color="black" text-align="left">
+			<fo:block font-weight="bold" font-size="6pt" font-family="monospace"
+				language="es" hyphenate="true" color="black" text-align="center">
 				<xsl:value-of select="DirOrigen" />
 			</fo:block>
 
-			<fo:block font-weight="bold" font-size="12pt" font-family="monospace"
-				language="es" hyphenate="true" color="black" text-align="left">
+			<fo:block font-weight="bold" font-size="6pt" font-family="monospace"
+				language="es" hyphenate="true" color="black" text-align="center">
 				<xsl:value-of select="CmnaOrigen" />
 				,
 				<xsl:value-of select="CiudadOrigen" />
@@ -356,11 +353,11 @@
 		</fo:block-container>
 
 		<!-- Recuadro con folio -->
-		<fo:block-container absolute-position="absolute" top="0cm"
-			margin-top="0.5cm" left="12cm" height="3cm" width="7.5cm"
-			border-color="red" border-style="solid" border-width="0.5mm">
-			<fo:block font-size="14pt" font-family="monospace"
-				font-weight="bold" color="red" text-align="center"
+		<fo:block-container absolute-position="absolute" top="1.4cm"
+			margin-top="0.5cm" left="0.25cm" height="0.75cm" width="7.0cm"
+			border-color="black" border-style="solid" border-width="0.5mm">
+			<fo:block font-size="6pt" font-family="monospace"
+				font-weight="bold" color="black" text-align="center"
 				hyphenate="false">
 				R.U.T.:
 				<xsl:call-template name="RutFormat">
@@ -369,8 +366,8 @@
 					</xsl:with-param>
 				</xsl:call-template>
 			</fo:block>
-			<fo:block font-size="14pt" font-family="monospace"
-				font-weight="bold" color="red" text-align="center">
+			<fo:block font-size="6pt" font-family="monospace"
+				font-weight="bold" color="black" text-align="center">
 				<xsl:choose>
 					<xsl:when test="$tipo=39">
                                                 BOLETA ELECTRONICA
@@ -384,19 +381,19 @@
 				</xsl:choose>
 			</fo:block>
 
-			<fo:block font-size="14pt" font-family="monospace"
-				font-weight="bold" color="red" text-align="center">
+			<fo:block font-size="6pt" font-family="monospace"
+				font-weight="bold" color="black" text-align="center">
 				N&#176;
 				<xsl:value-of select="$folio" />
 			</fo:block>
 		</fo:block-container>
-		<fo:block-container absolute-position="absolute" top="3cm"
-							margin-top="0.5cm" left="12cm" height="3cm" width="7.5cm">
-     		<fo:block font-size="12pt" font-family="monospace"
-				  font-weight="bold" color="red" text-align="center">
+		<!--fo:block-container absolute-position="absolute" top="3m"
+							margin-top="0.5cm" left="0.1cm" height="3cm" width="7.5cm">
+     		<fo:block font-size="6pt" font-family="monospace"
+				  font-weight="bold" color="black" text-align="center">
 			S.I.I. - Santiago Oriente
 		</fo:block>
-		</fo:block-container>
+		</fo:block-container-->
 
 	</xsl:template>
 
@@ -406,9 +403,9 @@
 		<xsl:param name="medioPago"/>
 		<xsl:param name="formaPago"/>
 
-     	<fo:block-container absolute-position="absolute" left="0cm"
-			top="4cm">
-			<fo:block font-size="10pt" font-family="monospace" space-after="8pt"
+     	<fo:block-container absolute-position="absolute" left="2cm"
+			top="2.5cm">
+			<fo:block font-size="6pt" font-family="monospace" space-after="8pt"
 				language="es" hyphenate="true" color="black" text-align="left">
 				Santiago,
 				<xsl:call-template name="FechaFormat">
@@ -431,28 +428,28 @@
 		<fo:table-row >
 			<fo:table-cell text-align="right" border-left-width="0.5pt"
 				border-left-style="solid" border-right-width="0.5pt"
-				border-right-style="solid" margin-right="2mm"  height="0.8cm">
+				border-right-style="solid" margin-right="1mm"  height="0.8cm">
 				<fo:block>
-						<xsl:value-of select="QtyItem" />
+						<xsl:value-of select="QtyItem" />&#160;<xsl:value-of select="UnmdItem" />
 				</fo:block>
 			</fo:table-cell>
 			<fo:table-cell text-align="left" border-left-width="0.5pt"
 				border-left-style="solid" border-right-width="0.5pt"
-				border-right-style="solid"  margin-right="2mm" margin-left="2mm"  height="0.8cm">
+				border-right-style="solid"  margin-right="1mm" margin-left="1mm"  height="0.8cm">
 				<fo:block >
 						<xsl:value-of select="NmbItem" />
 				</fo:block>
 			</fo:table-cell>
 			<fo:table-cell text-align="right" border-left-width="0.5pt"
 				border-left-style="solid" border-right-width="0.5pt"
-				border-right-style="solid" margin-right="2mm"  height="0.8cm">
+				border-right-style="solid" margin-right="1mm"  height="0.8cm">
 				<fo:block>
-						<xsl:value-of select="PrcItem" />
+						<xsl:value-of select="format-number(PrcItem, '###.###', 'european')" />
 				</fo:block>
 			</fo:table-cell>
 			<fo:table-cell text-align="right" border-left-width="0.5pt"
                                 border-left-style="solid" border-right-width="0.5pt"
-                                border-right-style="solid" margin-right="2mm"  height="0.8cm">
+                                border-right-style="solid" margin-right="1mm"  height="0.8cm">
                                 <fo:block>
                                                 <!--xsl:value-of select="IndExe" /-->
 						 <xsl:choose>
@@ -467,9 +464,9 @@
                         </fo:table-cell>
 			<fo:table-cell text-align="right" border-left-width="0.5pt"
 				border-left-style="solid" border-right-width="0.5pt"
-				border-right-style="solid" margin-right="2mm" height="0.8cm" >
+				border-right-style="solid" margin-right="1mm" height="0.8cm" >
 				<fo:block>
-						<xsl:value-of select="MontoItem"/>
+						<xsl:value-of select="format-number(MontoItem, '###.###', 'european')"/>
 				</fo:block>
 			</fo:table-cell>
 		</fo:table-row>
@@ -509,7 +506,7 @@
 			</fo:block>
 			<fo:block font-size="8pt" font-family="sans-serif"
 				text-align="center">
-				Res. 99 de 2014 - Verifique Documento: https://moqui.moit.cl/INVCJ
+				Res. 99 de 2014 - Verifique Documento: https://moqui.moit.cl/dte
 			</fo:block>
 		</fo:block-container>
 	</xsl:template>
