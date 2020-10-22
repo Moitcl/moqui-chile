@@ -432,7 +432,7 @@
 			top="0cm">
 			<fo:block>
 				<fo:external-graphic
-					src="url('/home/cherrera/git/moqui-framework/runtime/component/moqui-chile/DTE/TEMPLATES/logo-emisor.jpg')" width="30%" content-height="30%" content-width="scale-to-fit" scaling="uniform"/>
+					src="url('/home/cherrera/moit/cowork/moqui-framework/runtime/component/moquichile/DTE/TEMPLATES/logo-emisor.jpg')" width="30%" content-height="30%" content-width="scale-to-fit" scaling="uniform"/>
 			</fo:block>
 		</fo:block-container>
 

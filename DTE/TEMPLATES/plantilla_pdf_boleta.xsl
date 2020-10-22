@@ -10,6 +10,12 @@
 	<xsl:output method="xml" version="1.0" omit-xml-declaration="no"
 		indent="yes" />
 
+	<xsl:decimal-format name="us" decimal-separator='.' grouping-separator=',' />
+	<xsl:decimal-format name="european" decimal-separator=',' grouping-separator='.' />
+	<xsl:decimal-format name="example" decimal-separator="." grouping-separator=","
+	   infinity="INFINITY" minus-sign="-" NaN="Not a Number" percent="%"
+	   per-mille="m" zero-digit="0" digit="#" pattern-separator=";" /> 
+
 	<xsl:param name="versionParam" select="'1.0'" />
 	<xsl:template match="/">
 		<fo:root xmlns:fo="http://www.w3.org/1999/XSL/Format">
@@ -292,7 +298,7 @@
 									border-width="0.5pt" border-style="solid" column-number="5" display-align="center" height="1cm">
 									<fo:block>
 										<fo:inline font-weight="bold">
-											<xsl:value-of select="Encabezado/Totales/MntNeto"/>
+											<xsl:value-of select="format-number(Encabezado/Totales/MntTotal, '###.###', 'european')"/>
 										</fo:inline>
 									</fo:block>
 								</fo:table-cell>
@@ -349,7 +355,7 @@
 			<fo:block font-weight="bold" font-size="12pt" font-family="monospace"
 				language="es" hyphenate="true" color="black" text-align="left">
 				<xsl:value-of select="CmnaOrigen" />
-				,
+				-
 				<xsl:value-of select="CiudadOrigen" />
 			</fo:block>
 
@@ -390,13 +396,13 @@
 				<xsl:value-of select="$folio" />
 			</fo:block>
 		</fo:block-container>
-		<fo:block-container absolute-position="absolute" top="3cm"
+		<!--fo:block-container absolute-position="absolute" top="3cm"
 							margin-top="0.5cm" left="12cm" height="3cm" width="7.5cm">
      		<fo:block font-size="12pt" font-family="monospace"
 				  font-weight="bold" color="red" text-align="center">
 			S.I.I. - Santiago Oriente
 		</fo:block>
-		</fo:block-container>
+		</fo:block-container-->
 
 	</xsl:template>
 
@@ -433,7 +439,7 @@
 				border-left-style="solid" border-right-width="0.5pt"
 				border-right-style="solid" margin-right="2mm"  height="0.8cm">
 				<fo:block>
-						<xsl:value-of select="QtyItem" />
+						<xsl:value-of select="QtyItem" />&#160;<xsl:value-of select="UnmdItem" />
 				</fo:block>
 			</fo:table-cell>
 			<fo:table-cell text-align="left" border-left-width="0.5pt"
@@ -447,7 +453,7 @@
 				border-left-style="solid" border-right-width="0.5pt"
 				border-right-style="solid" margin-right="2mm"  height="0.8cm">
 				<fo:block>
-						<xsl:value-of select="PrcItem" />
+						<xsl:value-of select="format-number(PrcItem, '###.###', 'european')" />
 				</fo:block>
 			</fo:table-cell>
 			<fo:table-cell text-align="right" border-left-width="0.5pt"
@@ -469,7 +475,7 @@
 				border-left-style="solid" border-right-width="0.5pt"
 				border-right-style="solid" margin-right="2mm" height="0.8cm" >
 				<fo:block>
-						<xsl:value-of select="MontoItem"/>
+						<xsl:value-of select="format-number(MontoItem, '###.###', 'european')"/>
 				</fo:block>
 			</fo:table-cell>
 		</fo:table-row>
@@ -509,7 +515,7 @@
 			</fo:block>
 			<fo:block font-size="8pt" font-family="sans-serif"
 				text-align="center">
-				Res. 99 de 2014 - Verifique Documento: https://moqui.moit.cl/INVCJ
+				Res. 99 de 2014 - Verifique Documento: https://mtest.moit.cl/dte
 			</fo:block>
 		</fo:block-container>
 	</xsl:template>
