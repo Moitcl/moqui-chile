@@ -236,7 +236,7 @@ along with this software (see the LICENSE.md file). If not, see
                 // Para Facturas de Exportación:
                 //   4 Servicios de Hotelería
                 //   5 Servicio de Transporte Terrestre Internacional
-                //iddoc.setIndServicio(BigInteger.valueOf(3));
+                iddoc.setIndServicio(BigInteger.valueOf(3));
 
                 Calendar cal = Calendar.getInstance();
                 cal.add(Calendar.DAY_OF_MONTH, 45);
@@ -1294,19 +1294,29 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
 
             <!-- Recuperacion de parametros de la organizacion -->
-            <!--entity-find-one entity-name="mantle.party.Organization" value-field="orgField"-->
-            <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="orgField">
-                <field-map field-name="partyId" from="activeOrgId"/>
-                <!--select-field field-name="giroEmisor"/-->
-                <select-field field-name="templateFactura"/>
-                <select-field field-name="templatePdf"/>
-                <select-field field-name="templateEnvio"/>
-                <select-field field-name="templateAceptaciones"/>
-                <select-field field-name="templateLibro"/>
-                <select-field field-name="logo"/>
-                <select-field field-name="fchResol"/>
-                <select-field field-name="nroResol"/>
-            </entity-find-one>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <!--set field="certS" from="pathCert"/-->
+            <set field="certS" from="certData"/>
+            <set field="passS" from="passCert"/>
+            <set field="resultS" from="pathResults"/>
+            <set field="pathTemp" from="pathTemp"/>
+            <set field="pathPdf" from="pathPdf"/>
+            <set field="cafS" from="pathCaf"/>
+            <set field="plantillaS" from="templateFactura"/>
+            <!--set field="giro" from="giroEmisor"/-->
+            <set field="templateFactura" from="templateFactura"/>
+            <set field="templatePdf" from="templatePdf"/>
+            <set field="templatePdfCedible" from="templatePdfCedible"/>
+            <set field="templateEnvio" from="templateEnvio"/>
+            <set field="templateAceptaciones" from="templateAceptaciones"/>
+            <set field="templateLibro" from="templateLibro"/>
+            <set field="logo" from="logo"/>
+            <set field="fchResol" from="fchResol"/>
+            <set field="nroResol" from="nroResol"/>
+
+            <if condition="!templateEnvio">
+                <return error="true" message="Organizacion no tiene plantilla para envio al SII"/>
+            </if>
 
             <set field="idS" value="Doc"/>
 
@@ -1356,7 +1366,6 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="pathResultS" from="pathResults"/>
             <set field="plantillaEnvio" from="templateEnvio"/>
 
-
             <!-- Variable para guardar nombre de archivo del envio -->
             <set field="archivoEnvio" value=""/>
             <script>
@@ -1402,11 +1411,13 @@ along with this software (see the LICENSE.md file). If not, see
                 //ks.load(new FileInputStream(certS), passS.toCharArray());
                 ks.load(certData.getBinaryStream(), passS.toCharArray());
                 String alias = ks.aliases().nextElement();
-                logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS);
+                logger.warn("Usando certificado " + alias + " del archivo PKCS12");// + certS);
 
                 X509Certificate x509 = (X509Certificate) ks.getCertificate(alias);
                 String enviadorS = Utilities.getRutFromCertificate(x509);
                 PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray());
+
+                logger.warn("RUT envia: " + enviadorS);
 
                 // Asigno un ID
                 envio.getEnvioDTE().getSetDTE().setID(idS);
@@ -1511,6 +1522,7 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="generaEnvio" noun="Boletas">
         <description>
+            <!-- TODO -->
             Generación de envio documento a partir de boletas ya generadas.
         </description>
         <in-parameters>
@@ -1523,22 +1535,24 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="archivoEnvio"/>
         </out-parameters>
         <actions>
-
             <!-- Recuperacion de parametros de la organizacion -->
-            <entity-find-one entity-name="mantle.party.Organization" value-field="orgField">
-                <field-map field-name="partyId" from="activeOrgId"/>
-                <select-field field-name="giro"/>
-                <select-field field-name="templateFactura"/>
-                <select-field field-name="templatePdf"/>
-                <select-field field-name="templateEnvio"/>
-                <select-field field-name="templateEnvioBoleta"/>
-                <select-field field-name="templateAceptaciones"/>
-                <select-field field-name="templateLibro"/>
-                <select-field field-name="logo"/>
-                <select-field field-name="fchResol"/>
-                <select-field field-name="nroResol"/>
-            </entity-find-one>
-
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <set field="certS" from="certData"/>
+            <set field="passS" from="passCert"/>
+            <set field="resultS" from="pathResults"/>
+            <set field="pathTemp" from="pathTemp"/>
+            <set field="pathPdf" from="pathPdf"/>
+            <set field="cafS" from="pathCaf"/>
+            <set field="plantillaS" from="templateFactura"/>
+            <set field="templateFactura" from="templateFactura"/>
+            <set field="templatePdf" from="templatePdf"/>
+            <set field="templatePdfCedible" from="templatePdfCedible"/>
+            <set field="templateEnvioBoleta" from="templateEnvioBoleta"/>
+            <set field="templateAceptaciones" from="templateAceptaciones"/>
+            <set field="templateLibro" from="templateLibro"/>
+            <set field="logo" from="logo"/>
+            <set field="fchResol" from="fchResol"/>
+            <set field="nroResol" from="nroResol"/>
 
             <set field="idS" value="EnvBol"/>
 
@@ -1554,6 +1568,7 @@ along with this software (see the LICENSE.md file). If not, see
                 String[] DTEList = new String[documentList.size()];
                 int j = 0;
             </script>
+
             <iterate list="documentList" entry="docField">
                 <set field="fiscalTaxDocument" from="docField"/>
                 <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="dteField">
@@ -1576,7 +1591,7 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/>
 
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:orgField.templateEnvioBoleta]" out-map="context"/>
+            <!--service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:orgField.templateEnvioBoleta]" out-map="context"/>
             <set field="plantillaEnvio" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CERT']" out-map="context"/>
             <set field="certS" from="resourceValue"/>
@@ -1585,7 +1600,7 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_RESULTS']" out-map="context"/>
             <set field="pathResults" from="resourceValue"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[resourceName:'PATH_CAF']" out-map="context"/>
-            <set field="cafS" from="resourceValue"/>
+            <set field="cafS" from="resourceValue"/-->
 
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
@@ -1600,44 +1615,40 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="pathResults" from="pathResults"/>
 
 
-            <!-- Obtención de folio y path de CAF -->
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-39', activeOrgId:activeOrgId]" out-map="context"/>
 
             <set field="folioS" from="folio" type="Integer"/>
-            <set field="codRef" value="0" type="Integer"/>
-            <script>
-                cafS = cafS + caf
-            </script>
 
 
             <!-- Variable para guardar nombre de archivo del envio -->
             <set field="archivoEnvio" value=""/>
-            <script><![CDATA[
+            <script>
                 import java.io.ByteArrayOutputStream;
-                import java.io.IOException;
-                import java.io.StringReader;
-                import java.math.BigDecimal;
+                import java.io.File;
+                import java.io.FileInputStream;
                 import java.math.BigInteger;
-                import java.sql.Connection;
-                import java.sql.SQLException;
-                import java.text.SimpleDateFormat;
-                import java.util.ArrayList;
-                import java.util.Calendar;
-                import java.util.Collection;
-                import java.util.Date;
-                import java.util.HashMap;
+                import java.nio.file.Files;
                 import java.nio.file.Path;
-
-                import org.apache.log4j.Logger;
-                import org.apache.xmlbeans.XmlDate;
-                import org.apache.xmlbeans.XmlException;
-                import org.apache.xmlbeans.XmlOptions;
-                import javax.xml.namespace.QName;
-                import org.apache.xmlbeans.XmlCursor;
-                import java.security.cert.X509Certificate;
+                import java.nio.file.Paths;
                 import java.security.KeyStore;
                 import java.security.PrivateKey;
+                import java.security.cert.X509Certificate;
+                import java.util.Date;
+                import java.util.HashMap;
+
+                import javax.xml.namespace.QName;
+
+                import org.apache.xmlbeans.XmlCursor;
+                import org.apache.xmlbeans.XmlOptions;
                 import org.w3c.dom.Document;
+
+                import cl.nic.dte.util.Signer;
+                import cl.nic.dte.util.Utilities;
+                import cl.nic.dte.util.XMLUtil;
+                //import cl.sii.siiDte.DTEDefType;
+                //import cl.sii.siiDte.DTEDocument;
+                //import cl.sii.siiDte.EnvioDTEDocument;
+                //import cl.sii.siiDte.FechaHoraType;
+                //import cl.sii.siiDte.EnvioDTEDocument.EnvioDTE.SetDTE.Caratula.SubTotDTE;
 
                 import cl.nic.dte.VerifyResult;
                 import cl.sii.siiDte.AUTORIZACIONDocument;
@@ -1661,217 +1672,88 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE;
                 import org.apache.commons.io.IOUtils;
 
-                AutorizacionType caf;
-                BOLETADefType boleta; // boleta tiene cargada toda la información correspondiente
-								  // (emisor, receptor, detalle, totales, etc)
-   			    //boleta = BOLETADefType.Factory.parse(new FileInputStream(DTEList[0]), opts);
-   			    boleta = BOLETADefType.Factory.newInstance();
-   			    boleta.addNewDocumento();
-   			    boleta.getDocumento().addNewEncabezado();
-   			    // IdDoc
-   			    boleta.getDocumento().getEncabezado().addNewIdDoc();
-   			    boleta.getDocumento().getEncabezado().getIdDoc().setTipoDTE(41);
-   			    // Emisor
-   			    boleta.getDocumento().getEncabezado().addNewEmisor();
-   			    boleta.getDocumento().getEncabezado().addNewReceptor();
-   			    boleta.getDocumento().getEncabezado().addNewTotales();
-   			    // Detalles
-   			    boleta.getDocumento().addNewDetalle();
-
-                logger.warn("Boleta: " + boleta);
-
-   			    return
-    			// timbrar
-	    		HashMap<String, String> namespaces = new HashMap<String, String>();
-		    	namespaces.put("", "http://www.sii.cl/SiiDte");
-			    XmlOptions opts = new XmlOptions();
-    			opts.setLoadSubstituteNamespaces(namespaces);
-	    		AutorizacionType auth;
-		    	// cargar archivo de CAF, o stream de datos del CAF
-				//auth = AUTORIZACIONDocument.Factory.parse(new File(cafS), opts).getAUTORIZACION();
-
-				// Recuperación de archivo CAF desde BD
-                caf = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts).getAUTORIZACION();
-
-				logger.warn("CAF:" + cafS);
-				// TODO: Agregar datos a boleta
-
-			    // Timbrar boleta
-    			//try {
-	    		//	boleta.timbrar(auth.getCAF(), auth.getPrivateKey(null));
-		    	//} catch (Exception e) {
-			    //}
-			    //
-
-    			// ajustes para el formato (MAGIA) antes de firmar
-	    		cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument = EnvioBOLETADocument.Factory
-					.newInstance();
-		    	EnvioBOLETA eb = EnvioBOLETA.Factory.newInstance();
-			    SetDTE sdte = SetDTE.Factory.newInstance();
-
-    			BOLETADefType[] bolArr = new BOLETADefType[1];
-	    		bolArr[0] = boleta;
-		    	sdte.setDTEArray(bolArr);
-			    sdte.setID("envio-boleta");
-    			eb.setSetDTE(sdte);
-	    		eb.setVersion(new BigDecimal("1.0"));
-		    	envioBoletaDocument.setEnvioBOLETA(eb);
-
-
-
-			    opts = new XmlOptions();
-    			opts.setSaveImplicitNamespaces(namespaces);
-	    		opts.setLoadSubstituteNamespaces(namespaces);
-		    	opts.setSavePrettyPrint();
-			    opts.setSavePrettyPrintIndent(0);
-
-    			try {
-	    			envioBoletaDocument = EnvioBOLETADocument.Factory.parse(envioBoletaDocument.newInputStream(opts), opts);
-		    	} catch (Exception e) {
-
-			    }
-
-    			boleta = envioBoletaDocument.getEnvioBOLETA().getSetDTE().getDTEArray(0);
-
-
-
-	    		// carga certificado digital y llave
-                ks = KeyStore.getInstance("PKCS12");
-                //ks.load(new FileInputStream(certS), passS.toCharArray());
-                ks.load(certData.getBinaryStream(), passS.toCharArray());
-                alias = ks.aliases().nextElement();
-
-                logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
-
-
-                cert = (X509Certificate) ks.getCertificate(alias);
-                key = (PrivateKey) ks.getKey(alias, passS.toCharArray());
-		    	// firmo
-			    try {
-				    boleta.sign(cert, key);
-    			} catch (Exception e) {
-
-	    		}
-	    		logger.warn("Boleta: " + boleta)
-return
-		    	// verificacion de estructura XML
-			    VerifyResult resl = boleta.verifyXML();
-    			if (!resl.isOk()) {
-	    			// error
-		    	}
-
-    			opts = new XmlOptions();
-	    		opts.setCharacterEncoding("ISO-8859-1");
-		    	opts.setSaveImplicitNamespaces(namespaces);
-			    opts.setSaveOuter();
-return
-
+                // Construyo Envio
+                //EnvioDTEDocument envio = EnvioDTEDocument.Factory.parse(new FileInputStream(plantillaEnvio));
+                EnvioDTEDocument envio = EnvioDTEDocument.Factory.parse(ec.resource.getLocationStream(plantillaEnvio));
 
                 // Debo agregar el schema location (Sino SII rechaza)
                 XmlCursor cursor = envio.newCursor();
                 if (cursor.toFirstChild()) {
-                    cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioBOLETA_v11.xsd");
+                cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioDTE_v10.xsd");
                 }
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
-                ks.load(new FileInputStream(certS), passS.toCharArray());
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
                 String alias = ks.aliases().nextElement();
-                logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS);
+                logger.warn("Usando certificado " + alias + " del archivo PKCS12");// + certS);
 
                 X509Certificate x509 = (X509Certificate) ks.getCertificate(alias);
                 String enviadorS = Utilities.getRutFromCertificate(x509);
                 PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray());
 
-                // Asigno un ID
-                envio.getEnvioBOLETA().getSetDTE().setID(idS);
+                logger.warn("RUT envia: " + enviadorS);
 
-                cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula car =
-                envio.getEnvioBOLETA().getSetDTE().getCaratula();
+                // Asigno un ID
+                envio.getEnvioDTE().getSetDTE().setID(idS);
+
+                cl.sii.siiDte.EnvioDTEDocument.EnvioDTE.SetDTE.Caratula car =
+                envio.getEnvioDTE().getSetDTE().getCaratula();
 
                 //car.setRutReceptor(recepS);
                 car.setRutReceptor('60803000-K');
                 car.setRutEnvia(enviadorS);
 
+                // documentos a enviar
+                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;();
+                namespaces.put("", "http://www.sii.cl/SiiDte");
+                XmlOptions opts = new XmlOptions();
+                opts.setLoadSubstituteNamespaces(namespaces);
+
                 // Cantidad de documentos a enviar
 
-                cl.sii.siiDte.boletas.BOLETADefType[] boletas = new BOLETADefType[DTEList.size()];
+                DTEDefType[] dtes = new DTEDefType[DTEList.size()];
 
-                HashMap<Integer, Integer> hashTot = new HashMap<Integer, Integer>();
+                HashMap&lt;Integer, Integer&gt; hashTot = new HashMap&lt;Integer, Integer&gt;();
 
-                for (int i = 0; i < DTEList.length; i++) {
-                    // Truco: ¿leer Boleta como DTEDefType y luego mover datos de un lado a otro?
-                    // Truco 2: leer boleta como DTEDefType y luego sacar sólo la parte DTE?
-                    boletas[i] = BOLETADefType.Factory.parse(new FileInputStream(DTEList[i]), opts);
-                    //dtes[i] = DTEDocument.Factory.parse(new FileInputStream(DTEList[i]), opts).getDTE();
-                    //dtes2[i] = DTEDocument.Factory.parse(new FileInputStream(DTEList[i]), opts);
-                    //logger.warn("PPPPP => " + dtes2[i]);
-                    //dtes[i] = DTEDefType.Factory.parse(new FileInputStream(DTEList[i]), opts).getDTE();
-
-                    HashMap<String, String> namespacesPp = new HashMap<String, String>();
-                    namespacesPp.put("", "http://www.sii.cl/SiiDte");
-                    namespacesPp.put("siid", "http://www.w3.org/2001/XMLSchema-instance");
-
-                    XmlOptions xmlopts = new XmlOptions();
-                    xmlopts.setLoadSubstituteNamespaces(namespacesPp);
-
-                    //BOLETADefType prueba = BOLETADefType.Factory.parse(dtes[i].toString());
-                    //ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    //dtes2[i].save(baos);
-                    //boletas[i].save(baos);
-                    //String prueba2 = new String(baos.toByteArray());
-                    //BOLETADefType prueba = BOLETADefType.Factory.parse(prueba2, xmlopts);//, xmlopts);
-                    //logger.warn("=========>" + prueba.getDocumento());
-
-                    // Prueba
-                    //envio.getEnvioBOLETA().getSetDTE().addNewDTE();
-                    //envio.getEnvioBOLETA().getSetDTE().setDTEArray(i, prueba);
-                    //envio.getEnvioBOLETA().getSetDTE().setDTEArray(i, boletas[i]);
-                    cl.sii.siiDte.boletas.BOLETADefType[] prueba = envio.getEnvioBOLETA().getSetDTE().getDTEArray();
-                    prueba = boletas;
-
-                    //logger.warn("Leido: *********************** " + dtes[i].toString());
-
-                    //logger.warn("Leido: *********************** " + pp);
-                    //logger.warn("Leido: *********************** " + prueba);
-                    // armar hash para totalizar por tipoDTE
-                    //if (hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) != null) {
-                    //    hashTot.put(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue(),
-                    //    hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) + 1);
-                    //} else {
-                    //    hashTot.put(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue(), 1);
-                    //}
+                for (int i = 0; i &lt; DTEList.length; i++) {
+                dtes[i] = DTEDocument.Factory.parse(DTEList[i].getBinaryStream(), opts).getDTE();
+                // armar hash para totalizar por tipoDTE
+                if (hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) != null) {
+                hashTot.put(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue(),
+                hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) + 1);
+                } else {
+                hashTot.put(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue(), 1);
                 }
-
-                /*SubTotDTE[] subtDtes = new SubTotDTE[hashTot.size()];
+                }
+                SubTotDTE[] subtDtes = new SubTotDTE[hashTot.size()];
                 int i = 0;
                 for (Integer tipo : hashTot.keySet()) {
-                    SubTotDTE subt = SubTotDTE.Factory.newInstance();
-                    subt.setTpoDTE(new BigInteger(tipo.toString()));
-                    subt.setNroDTE(new BigInteger(hashTot.get(tipo).toString()));
-                    subtDtes[i] = subt;
-                    i++;
+                SubTotDTE subt = SubTotDTE.Factory.newInstance();
+                subt.setTpoDTE(new BigInteger(tipo.toString()));
+                subt.setNroDTE(new BigInteger(hashTot.get(tipo).toString()));
+                subtDtes[i] = subt;
+                i++;
                 }
-                car.setSubTotDTEArray(subtDtes);*/
+                car.setSubTotDTEArray(subtDtes);
                 // Le doy un formato bonito (debo hacerlo antes de firmar para no
                 // afectar los DTE internos)
                 opts = new XmlOptions();
                 opts.setSavePrettyPrint();
                 opts.setSavePrettyPrintIndent(4);
-
-                envio = EnvioBOLETADocument.Factory.parse(envio.newInputStream(opts));
-
-                //envio.getEnvioBOLETA().getSetDTE().setDTEArray(dtes);
-                //envio.getEnvioBOLETA().getSetDTE().setDTEArray(boletas);
-                logger.warn("Doc: " + envio);
-                return
+                envio = EnvioDTEDocument.Factory.parse(envio.newInputStream(opts));
 
 
-                //FechaHoraType now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+                envio.getEnvioDTE().getSetDTE().setDTEArray(dtes);
 
-                //envio.getEnvioBOLETA().getSetDTE().getCaratula().xsetTmstFirmaEnv(now);
+                FechaHoraType now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
 
-                logger.warn("Doc: " + envio);
-                return
+                envio.getEnvioDTE().getSetDTE().getCaratula().xsetTmstFirmaEnv(now);
+
+                // firmo
+                //envio.sign(pKey, x509);
+
+
                 opts = new XmlOptions();
                 opts.setCharacterEncoding("ISO-8859-1");
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -1885,17 +1767,17 @@ return
                 doc2 = XMLUtil.parseDocument(salida);
 
                 if (Signer.verify(doc2, "SetDTE")) {
-                    archivoEnvio = pathResults + "ENV" + idS + ".xml"
-                    Path path = Paths.get(pathResults + "ENV" + idS + ".xml");
-                    Files.write(path, salida);
-                    logger.warn("Envio generado OK");
+                archivoEnvio = pathResults + "ENV" + idS + ".xml"
+                Path path = Paths.get(pathResults + "ENV" + idS + ".xml");
+                Files.write(path, salida);
+                logger.warn("Envio generado OK");
                 } else {
-                    archivoEnvio = pathResults + "ENV" + idS + "-mala.xml"
-                    Path path = Paths.get(pathResults + "ENV" + idS + "-mala.xml");
-                    Files.write(path, salida);
-                    logger.warn("Error al generar envio");
+                archivoEnvio = pathResults + "ENV" + idS + "-mala.xml"
+                Path path = Paths.get(pathResults + "ENV" + idS + "-mala.xml");
+                Files.write(path, salida);
+                logger.warn("Error al generar envio");
                 }
-            ]]></script>
+            </script>
             <!-- Se guarda referencia a XML de envío en BD -->
             <iterate list="documentList" entry="docField">
                 <set field="createMap" from="[fiscalTaxDocumentId:docField, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Misc', contentLocation:archivoEnvio, contentDate:ts]"/>
@@ -1903,10 +1785,14 @@ return
 
                 <!-- Se marca DTE como enviada -->
                 <set field="idDte" from="docField"/>
-                <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true" auto-field-map="[fiscalTaxDocumentId:idDte]"/>
+                <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
+                    <field-map field-name="fiscalTaxDocumentId" from="idDte"/>
+                </entity-find-one>
+
                 <set field="dteField.fiscalTaxDocumentSentStatusEnumId" value="Ftdt-Sent"/>
                 <entity-update value-field="dteField"/>
             </iterate>
+        </actions>
 
         </actions>
     </service>
@@ -1955,7 +1841,9 @@ return
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
                 //ks.load(new FileInputStream(certS), passS.toCharArray());
-                ks.load(certData.getBinaryStream(), passS.toCharArray());
+                // Used for testing pppppp
+                ks.load(new FileInputStream('/home/cherrera/Descargas/12857517-0.pfx'), passS.toCharArray());
+                //ks.load(certData.getBinaryStream(), passS.toCharArray());
                 String alias = ks.aliases().nextElement();
                 logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS);
 
@@ -2008,10 +1896,6 @@ return
         <out-parameters>
             <parameter name="templateFactura"/>
             <parameter name="templateBoleta"/>
-            <!--parameter name="templatePdf"/>
-            <parameter name="templatePdfCedible"/>
-            <parameter name="templatePdfBoleta"/>
-            <parameter name="templatePdfBoletaContinua"/-->
             <parameter name="pdfTemplate"/>
             <parameter name="pdfTemplateCedible"/>
             <parameter name="pdfTemplateBoleta"/>
@@ -2052,10 +1936,6 @@ return
                 <field-map field-name="partyId" from="partyId"/>
                 <select-field field-name="templateFactura"/>
                 <select-field field-name="templateBoleta"/>
-                <!--select-field field-name="templatePdf"/>
-                <select-field field-name="templatePdfCedible"/>
-                <select-field field-name="templatePdfBoleta"/>
-                <select-field field-name="templatePdfBoletaContinua"/-->
                 <select-field field-name="pdfTemplate"/>
                 <select-field field-name="pdfTemplateCedible"/>
                 <select-field field-name="pdfTemplateBoleta"/>
@@ -2092,10 +1972,6 @@ return
 
             <set field="templateFactura" from="orgField.templateFactura"/>
             <set field="templateBoleta" from="orgField.templateBoleta"/>
-            <!--set field="templatePdf" from="orgField.templatePdf"/>
-            <set field="templatePdfCedible" from="orgField.templatePdfCedible"/>
-            <set field="templatePdfBoleta" from="orgField.templatePdfBoleta"/>
-            <set field="templatePdfBoletaContinua" from="orgField.templatePdfBoletaContinua"/-->
             <set field="pdfTemplate" from="orgField.pdfTemplate"/>
             <set field="pdfTemplateCedible" from="orgField.pdfTemplateCedible"/>
             <set field="pdfTemplateBoleta" from="orgField.pdfTemplateBoleta"/>
@@ -3114,7 +2990,8 @@ return
             </if>
             <set field="envio" from="content" type="String"/>
 
-            <!--set field="envio" from="fiscalTaxDocumentField.xml" type="String"/-->
+
+
             <set field="salida" value=""/>
             <set field="statusXML" value=""/>
 
@@ -3147,14 +3024,15 @@ return
                 //ks.load(new FileInputStream(certS), passS.toCharArray());
                 ks.load(certData.getBinaryStream(), passS.toCharArray());
                 String alias = ks.aliases().nextElement();
-                System.out.println("Usando certificado " + alias + " del archivo PKCS12: " + certS);
-
+                System.out.println("Usando certificado " + alias + " del archivo PKCS12 ");// + certS);
 
                 X509Certificate x509 = (X509Certificate) ks.getCertificate(alias);
                 PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray());
 
                 String token = con.getToken(pKey, x509);
                 String enviadorS = Utilities.getRutFromCertificate(x509);
+
+                System.out.println("Enviador: " + enviadorS + ", token: " + token);
 
                 RESPUESTADocument resp = con.getEstadoDTECertificacion(enviadorS, doc.getDTE().getDocumento(), token);
                 opts.setSavePrettyPrintIndent(2);
@@ -3167,11 +3045,117 @@ return
                 statusXML = salida
                 String status = "0"
 
-                int inicio = statusXML.indexOf("&lt;SII:ERR_CODE&gt;");
-                int fin = statusXML.indexOf("&lt;/SII:ERR_CODE&gt;");
+                //int inicio = statusXML.indexOf("&lt;SII:ERR_CODE&gt;");
+                //int fin = statusXML.indexOf("&lt;/SII:ERR_CODE&gt;");
+                int inicio = statusXML.indexOf("&lt;SII:RESP_HDR&gt;");
+                int fin = statusXML.indexOf("&lt;/SII:RESP_HDR&gt;");
 
                 statusXML = statusXML.substring(inicio+1,fin);
-                statusXML = statusXML.replaceAll("SII:ERR_CODE&gt;","");
+                //statusXML = statusXML.replaceAll("SII:ERR_CODE&gt;","");
+                statusXML = statusXML.replaceAll("SII:RESP_HDR&gt;","");
+                logger.warn("STATUS: " + statusXML);
+                statusSii = statusXML
+            </script>
+            <set field="statusSii" from="statusXML"/>
+        </actions>
+    </service>
+
+    <service verb="verificaEnSII" noun="Boleta">
+        <description>
+            <!-- TODO -->
+            Verificación en el SII de Boleta ya enviada
+        </description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="activeOrgId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="statusSii" required="true"/>
+            <parameter name="salida" required="true"/>
+        </out-parameters>
+        <actions>
+
+            <return error="true" message="Not yet implemented"/>
+
+            <set field="statusSii" value=""/>
+
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <set field="certS" from="pathCert"/>
+            <set field="certData" from="certData"/>
+            <set field="passS" from="passCert"/>
+
+            <service-call name="mchile.DTEServices.get#DteContent"
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
+
+            <if condition="!content">
+                <return error="true" message="DTE no existe"/>
+            </if>
+            <set field="envio" from="content" type="String"/>
+
+
+
+            <set field="salida" value=""/>
+            <set field="statusXML" value=""/>
+
+            <script>
+                import java.io.FileInputStream;
+                import java.security.KeyStore;
+                import java.security.PrivateKey;
+                import java.security.cert.X509Certificate;
+                import java.util.HashMap;
+
+
+                import org.apache.xmlbeans.XmlOptions;
+
+                import cl.nic.dte.net.ConexionSii;
+                import cl.nic.dte.util.Utilities;
+                import cl.sii.siiDte.DTEDocument;
+                import cl.sii.xmlSchema.RESPUESTADocument;
+
+                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;();
+                namespaces.put("", "http://www.sii.cl/SiiDte");
+                XmlOptions opts = new XmlOptions();
+                opts.setLoadSubstituteNamespaces(namespaces);
+
+                //DTEDocument doc = DTEDocument.Factory.parse(new FileInputStream(envio), opts);
+                DTEDocument doc = DTEDocument.Factory.parse(contentData.getBinaryStream(), opts);
+                ConexionSii con = new ConexionSii();
+
+                // leo certificado y llave privada del archivo pkcs12
+                KeyStore ks = KeyStore.getInstance("PKCS12");
+                //ks.load(new FileInputStream(certS), passS.toCharArray());
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
+                String alias = ks.aliases().nextElement();
+                System.out.println("Usando certificado " + alias + " del archivo PKCS12 ");// + certS);
+
+                X509Certificate x509 = (X509Certificate) ks.getCertificate(alias);
+                PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray());
+
+                String token = con.getToken(pKey, x509);
+                String enviadorS = Utilities.getRutFromCertificate(x509);
+
+                System.out.println("Enviador: " + enviadorS + ", token: " + token);
+
+                RESPUESTADocument resp = con.getEstadoDTECertificacion(enviadorS, doc.getDTE().getDocumento(), token);
+                opts.setSavePrettyPrintIndent(2);
+                opts.setSavePrettyPrint();
+                resp.save(System.out, opts);
+
+                logger.warn("------" + resp.toString())
+
+                salida = resp.toString();
+                statusXML = salida
+                String status = "0"
+
+                //int inicio = statusXML.indexOf("&lt;SII:ERR_CODE&gt;");
+                //int fin = statusXML.indexOf("&lt;/SII:ERR_CODE&gt;");
+                int inicio = statusXML.indexOf("&lt;SII:RESP_HDR&gt;");
+                int fin = statusXML.indexOf("&lt;/SII:RESP_HDR&gt;");
+
+                statusXML = statusXML.substring(inicio+1,fin);
+                //statusXML = statusXML.replaceAll("SII:ERR_CODE&gt;","");
+                statusXML = statusXML.replaceAll("SII:RESP_HDR&gt;","");
                 logger.warn("STATUS: " + statusXML);
                 statusSii = statusXML
             </script>
@@ -7408,9 +7392,13 @@ return
             <set field="ciudadOrigen" from="ciudadOrigen"/>
             <set field="fchResol" from="fchResol"/>
             <set field="nroResol" from="nroResol"/>
-            <set field="templatePdfBoleta" from="templatePdfBoleta"/>
+            <set field="pdfTemplateBoleta" from="pdfTemplateBoleta"/>
             <if condition="continua">
-                <set field="templatePdfBoleta" from="templatePdfBoletaContinua"/>
+                <set field="pdfTemplateBoleta" from="pdfTemplateBoletaContinua"/>
+            </if>
+
+            <if condition="!pdfTemplateBoleta">
+                <return error="true" message="Emisor no tiene plantilla para PDF de boletas"/>
             </if>
 
             <!-- Giro del emisor -->
@@ -12334,6 +12322,9 @@ return
             <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams" for-update="true">
                 <field-map field-name="partyId" from="activeOrgId"/>
             </entity-find-one>
+            <if condition="!dteParams">
+                <return error="true" message="Primero complete parametros de organizacion"/>
+            </if>
             <set field="dteParams.passCert" from="passCert"/>
             <set field="dteParams.certData" from="filename.get()"/>
             
