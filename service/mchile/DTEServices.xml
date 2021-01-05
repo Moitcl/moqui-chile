@@ -2646,6 +2646,7 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find-one>
 
             <set field="cmnaReceptor" from="geoField.geoName"/>
+
             <set field="ciudadReceptor" from="contactPostalAddressField.city"/>
             <!-- ID Contacto receptor -->
             <set field="receptorContactId" from="contactPostalAddressField.telecomContactMechId"/>
@@ -2727,6 +2728,8 @@ along with this software (see the LICENSE.md file). If not, see
                     </script>
                 </if>
             </iterate>
+
+
             <!-- Recuperación de referencias -->
             <entity-find entity-name="mchile.dte.ReferenciaInvoiceAndFiscalCode" list="referenciaList">
                 <econdition field-name="invoiceId" from="invoiceId"/>
@@ -4106,6 +4109,27 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="marcarEnviado" noun="Documento">
+        <description>
+            Marca una DTE como ya enviada al SII
+        </description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
+                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+            </entity-find-one>
+
+            <if condition="!dteField">
+                <return error="true" message="No existe DTE especificada"/>
+            </if>
+
+            <set field="dteField.fiscalTaxDocumentSentStatusEnumId" value="Ftdt-Sent"/>
+            <entity-update value-field="dteField"/>
+        </actions>
+    </service>
+
     <service verb="load" noun="Dt">
         <description>
             Carga documento tributario en papel recibido de tercero
@@ -4477,7 +4501,11 @@ along with this software (see the LICENSE.md file). If not, see
             <script>
                 dirReceptor = dirReceptor + " " + contactPostalAddressField.unitNumber
             </script>
-            <set field="cmnaReceptor" from="contactPostalAddressField.city"/>
+
+            <service-call name="mchile.GeoServices.get#ComunaFromGeoId" in-map="[stateProvinceGeoId:contactPostalAddressField.stateProvinceGeoId]" out-map="comunaOut"/>
+
+            <set field="cmnaReceptor" from="comunaOut.comuna"/>
+
             <if condition="!cmnaReceptor">
                 <return error="true" message="Receptor no tiene comuna/ciudad definida $contactMechId"/>
             </if>
@@ -4538,6 +4566,7 @@ along with this software (see the LICENSE.md file). If not, see
                 </script>
                 <set field="contactoReceptor" from="rznSocReceptor"/>
             </if>
+
 
             <!-- Generacion de nota de crédito -->
             <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, emisorS:emisorS, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
@@ -6256,616 +6285,6 @@ return
         </actions>
     </service>
 
-    <service verb="genera" noun="LibroVentas">
-        <description>
-            Generación de libro de Ventas
-        </description>
-        <in-parameters>
-            <parameter name="tipo" default="'VENTA'"/><!-- Compra o venta -->
-            <parameter name="tipoLibro" default="'ESPECIAL'"/><!-- MENSUAL-ESPECIAL-RECTIFICA-->
-            <parameter name="tipoEnvio" default="'TOTAL'"/><!-- PARCIAL-FINAL-TOTAL-AJUSTE -->
-            <parameter name="periodo" default="'2000-04'"/><!-- Si es nulo, se toma el mes anterior -->
-            <parameter name="folio" default-value="1"/>
-            <parameter name="activeOrgId" required="true"/>
-        </in-parameters>
-        <actions>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
-            <set field="passS" from="passCert"/>
-            <set field="resultS" from="pathAceptaciones"/>
-            <set field="pathTemp" from="pathTemp"/>
-            <set field="pathPdf" from="pathPdf"/>
-            <set field="cafS" from="pathCaf"/>
-            <set field="plantillaS" from="templateLibro"/>
-            <set field="enviadorS" from="rutEnvia"/>
-            <set field="emisorS" from="rutEmisor"/>
-            <set field="fchResol" from="fchResol"/>
-            <set field="nroResol" from="nroResol"/>
-
-
-
-            <set field="resultadoFirmado" from="resultS"/>
-
-            <set field="tipoFactura" from="tipoFacturaS"/>
-
-            <set field="fechaEmision" value=""/>
-
-            <set field="entryDate" from="ec.user.nowTimestamp"/>
-            <set field="idS" value=""/>
-
-            <!-- TODO: Variables no implementadas -->
-            <set field="nroSegmento" value=""/>
-            <!--set field="folioNotificacion" value="1025728"/-->
-            <!--set field="folioNotificacion" value="2"/-->
-            <set field="folioNotificacion" type="String" value="2"/>
-            <set field="codAutRec" value=""/>
-            <script>
-                import java.math.BigDecimal;
-                import java.text.SimpleDateFormat;
-                import java.util.ArrayList;
-                import java.util.Properties;
-                import java.util.Iterator;
-                import java.util.Map;
-                import java.util.Map.Entry;
-                import java.nio.file.Path;
-                import org.apache.xmlbeans.XmlCursor;
-                import org.apache.xmlbeans.XmlOptions;
-                import org.w3c.dom.Document;
-
-                import cl.nic.dte.util.Signer;
-
-                import java.security.KeyStore;
-                import java.security.PrivateKey;
-                import java.security.cert.X509Certificate;
-
-                import cl.nic.dte.util.Utilities;
-                import cl.nic.dte.util.XMLUtil;
-
-                import cl.helpcom.recursos.Validador;
-                import cl.helpcom.recursos.ComunicadorAppClienteTXT;
-                import cl.helpcom.dte.util.FirmaLibro;
-                import cl.helpcom.dte.util.AgregarCamposLibros;
-                import cl.helpcom.recursos.LectorFichero;
-
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.ResumenPeriodo.TotalesPeriodo;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.ResumenPeriodo;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.ResumenSegmento;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Caratula;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.IVANoRec;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.OtrosImp;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.ResumenPeriodo.TotalesPeriodo.TotIVANoRec;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.ResumenPeriodo.TotalesPeriodo.TotOtrosImp;
-                import cl.sii.siiDte.FechaType;
-
-                LectorFichero lectorFichero = new LectorFichero();
-                String resultadoSinFirma = "/tmp/LBR-temp.xml";
-
-                SimpleDateFormat dateFormat = new SimpleDateFormat("ddMMyyyy_HHmm");
-                idS  = "ID"+dateFormat.format(new Date());
-
-                SimpleDateFormat formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
-                Date dateFechaEmision = new Date();
-                fechaEmision = formatterFechaEmision.format(dateFechaEmision);
-
-                ComunicadorAppClienteTXT c = new ComunicadorAppClienteTXT();
-                Validador val = new Validador();
-
-                ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasCaratulas= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
-                ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasCaratulas2= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
-                ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasTotal= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
-                ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasDetalle= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
-                ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasSegmentos= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
-                // Lee y llena los campos  => Caratula se debe armar con parámetros
-                // CARATULA
-                //arrayLineasCaratulas = c.formatoLibroCVLineas(rutaLibro,arrayLineasCaratulas, "C");
-                arrayLineasCaratulas.add(new ArrayList&lt;String&gt;());
-                arrayLineasCaratulas.get(0).add(emisorS);
-                arrayLineasCaratulas.get(0).add(enviadorS);
-                arrayLineasCaratulas.get(0).add('2019-05');
-                arrayLineasCaratulas.get(0).add(fchResol);
-                arrayLineasCaratulas.get(0).add(nroResol);
-                arrayLineasCaratulas.get(0).add(tipo);
-                arrayLineasCaratulas.get(0).add(tipoLibro);
-                arrayLineasCaratulas.get(0).add(tipoEnvio);
-
-                arrayLineasCaratulas.get(0).add(nroSegmento);         // Solo para tipo de envio PARCIAL
-                arrayLineasCaratulas.get(0).add(folioNotificacion); // Solo para envío ESPECIAL
-                arrayLineasCaratulas.get(0).add(codAutRec);         // Solo para reemplazo de libro
-
-                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-
-                /* XML FACTURA */
-                LibroCompraVentaDocument libCV;
-
-                /* LibroCV */
-                libCV = LibroCompraVentaDocument.Factory.parse(new FileInputStream(plantillaS));
-
-                // libCV = LibroCompraVentaDocument.Factory.newInstance();
-                LibroCompraVenta libroCompraVenta = libCV.getLibroCompraVenta();
-                libCV.getLibroCompraVenta().setVersion(new BigDecimal("1.0"));
-                EnvioLibro envioLibro = libroCompraVenta.addNewEnvioLibro();
-
-                // ID de libro se debería calcular
-                libCV.getLibroCompraVenta().getEnvioLibro().setID(idS);
-                //libCV.xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
-
-                XmlCursor cursor = libCV.newCursor();
-                ResumenPeriodo resumenPeriodo = envioLibro.addNewResumenPeriodo();
-
-                AgregarCamposLibros addCampos = new AgregarCamposLibros();
-                // Agregar CARATULA
-                addCampos.addDatosCaratula(envioLibro, arrayLineasCaratulas);
-
-                // Factura Electronica (33)
-                TotalesPeriodo totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
-                totalesPeriodo.setTpoDoc(33);
-                totalesPeriodo.setTotDoc(4);
-                totalesPeriodo.setTotMntExe(48825);
-                totalesPeriodo.setTotMntNeto(9288349);
-                totalesPeriodo.setTotMntIVA(1764786);
-                totalesPeriodo.setTotMntTotal(11101960);
-
-                // Nota de Debito Electronica (56)
-                totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
-                totalesPeriodo.setTpoDoc(56);
-                totalesPeriodo.setTotDoc(1);
-                totalesPeriodo.setTotMntExe(0);
-                totalesPeriodo.setTotMntNeto(0);
-                totalesPeriodo.setTotMntIVA(0);
-                totalesPeriodo.setTotMntTotal(0);
-
-                // Nota de Credito Electrónica (61)
-                totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
-                totalesPeriodo.setTpoDoc(61);
-                totalesPeriodo.setTotDoc(3);
-                totalesPeriodo.setTotMntExe(35183);
-                totalesPeriodo.setTotMntNeto(3655247);
-                totalesPeriodo.setTotMntIVA(694497);
-                totalesPeriodo.setTotMntTotal(4384927);
-
-                outPDF=lectorFichero.crearFicheroMMDDFlex(resultadoFirmado, arrayLineasCaratulas.get(0).get(3));
-                outPDF+="/"+arrayLineasCaratulas.get(0).get(5)+"_"+arrayLineasCaratulas.get(0).get(6)+"_"+arrayLineasCaratulas.get(0).get(7)+"_"+idS+".xml";
-
-                // Debo meter el namespace porque SII no lo genera
-                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;();
-                namespaces.put("", "http://www.sii.cl/SiiDte");
-                namespaces.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
-                XmlOptions opts = new XmlOptions();
-                opts.setLoadSubstituteNamespaces(namespaces);
-
-                //opts = new XmlOptions();
-                opts.setSavePrettyPrint();
-                //opts.setSavePrettyPrintIndent(0);
-                //opts.setCharacterEncoding("ISO-8859-1");
-                libCV = LibroCompraVentaDocument.Factory.parse(libCV.newInputStream(opts), (opts));
-
-                // CARPETA AUXILIAR DTE XML SIN TIMBRE
-                //File archivoEnvio = new File(resultadoSinFirma);
-                ByteArrayOutputStream out = new ByteArrayOutputStream();
-                //libCV.save(archivoEnvio, opts);
-
-                libCV.save(new File(resultS + "LIBCV" + idS + "-sinfirma.xml"), opts);
-                libCV.save(out, opts);
-
-                FirmaLibro firmaLibro = new FirmaLibro();
-
-                String mensaje=firmaLibro.firmarLibro(certS, passS, resultS + "LIBCV" + idS + "-sinfirma.xml",outPDF,10,"ENVIADO",arrayLineasCaratulas.get(0).get(5),arrayLineasCaratulas.get(0).get(2),"xmlasdas",tipoEnvio);
-                logger.warn("Mensaje: " + mensaje);
-
-            </script>
-            <!-- Registro de DTE en base de datos y generación de PDF -->
-            <!--set field="periodo" from="arrayLineasCaratulas.get(0).get(2)"/>
-            <set field="tipoLibro" from="arrayLineasCaratulas.get(0).get(5)"/-->
-        </actions>
-    </service>
-
-
-    <service verb="genera" noun="LibroCompras">
-        <description>
-            Generación de libro de Compra/Venta
-        </description>
-        <in-parameters>
-            <parameter name="tipo" default="'COMPRA'"/><!-- Compra o venta -->
-            <parameter name="tipoLibro" default="'MENSUAL'"/><!-- MENSUAL-ESPECIAL-RECTIFICA-->
-            <parameter name="tipoEnvio" default="'TOTAL'"/><!-- PARCIAL-FINAL-TOTAL-AJUSTE -->
-            <parameter name="periodo" default="'2000-04'"/><!-- Si es nulo, se toma el mes anterior -->
-            <parameter name="folio" default-value="1"/>
-            <parameter name="activeOrgId" required="true"/>
-        </in-parameters>
-        <actions>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
-            <set field="passS" from="passCert"/>
-            <set field="resultS" from="pathAceptaciones"/>
-            <set field="pathTemp" from="pathTemp"/>
-            <set field="pathPdf" from="pathPdf"/>
-            <set field="cafS" from="pathCaf"/>
-            <set field="plantillaS" from="templateLibro"/>
-            <set field="enviadorS" from="rutEnvia"/>
-            <set field="emisorS" from="rutEmisor"/>
-            <set field="fchResol" from="fchResol"/>
-            <set field="nroResol" from="nroResol"/>
-
-            <set field="resultadoFirmado" from="resultS"/>
-
-            <set field="tipoFactura" from="tipoFacturaS"/>
-
-            <set field="fechaEmision" value=""/>
-
-            <set field="entryDate" from="ec.user.nowTimestamp"/>
-            <set field="idS" value=""/>
-
-            <!-- TODO: Variables no implementadas -->
-            <set field="nroSegmento" value=""/>
-            <!--set field="folioNotificacion" value="1025728"/-->
-            <!--set field="folioNotificacion" value="2"/-->
-            <set field="folioNotificacion" type="String"/>
-            <set field="codAutRec" value=""/>
-            <script>
-                import java.math.BigDecimal;
-                import java.text.SimpleDateFormat;
-                import java.util.ArrayList;
-                import java.util.Properties;
-                import java.util.Iterator;
-                import java.util.Map;
-                import java.util.Map.Entry;
-                import java.nio.file.Path;
-                import org.apache.xmlbeans.XmlCursor;
-                import org.apache.xmlbeans.XmlOptions;
-                import org.w3c.dom.Document;
-
-                import cl.nic.dte.util.Signer;
-
-                import java.security.KeyStore;
-                import java.security.PrivateKey;
-                import java.security.cert.X509Certificate;
-
-                import cl.nic.dte.util.Utilities;
-                import cl.nic.dte.util.XMLUtil;
-
-                import cl.helpcom.recursos.Validador;
-                import cl.helpcom.recursos.ComunicadorAppClienteTXT;
-                import cl.helpcom.dte.util.FirmaLibro;
-                import cl.helpcom.dte.util.AgregarCamposLibros;
-                import cl.helpcom.recursos.LectorFichero;
-
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.ResumenPeriodo.TotalesPeriodo;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.ResumenPeriodo;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.ResumenSegmento;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Caratula;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.IVANoRec;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.OtrosImp;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.ResumenPeriodo.TotalesPeriodo.TotIVANoRec;
-                import cl.sii.siiDte.libroCV.LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.ResumenPeriodo.TotalesPeriodo.TotOtrosImp;
-                import cl.sii.siiDte.FechaType;
-
-                LectorFichero lectorFichero = new LectorFichero();
-                String resultadoSinFirma = "/tmp/LBR-temp.xml";
-
-                SimpleDateFormat dateFormat = new SimpleDateFormat("ddMMyyyy_HHmm");
-                idS  = "ID"+dateFormat.format(new Date());
-
-                SimpleDateFormat formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
-                Date dateFechaEmision = new Date();
-                fechaEmision = formatterFechaEmision.format(dateFechaEmision);
-
-                ComunicadorAppClienteTXT c = new ComunicadorAppClienteTXT();
-                Validador val = new Validador();
-
-                ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasCaratulas= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
-                ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasCaratulas2= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
-                ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasTotal= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
-                ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasDetalle= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
-                ArrayList&lt;ArrayList&lt;String&gt;&gt; arrayLineasSegmentos= new ArrayList&lt;ArrayList&lt;String&gt;&gt;();
-                // Lee y llena los campos  => Caratula se debe armar con parámetros
-                // CARATULA
-                //arrayLineasCaratulas = c.formatoLibroCVLineas(rutaLibro,arrayLineasCaratulas, "C");
-                arrayLineasCaratulas.add(new ArrayList&lt;String&gt;());
-                logger.warn("Emisor:" +emisorS);
-                logger.warn("Enviador:" +enviadorS);
-                arrayLineasCaratulas.get(0).add(emisorS);
-                arrayLineasCaratulas.get(0).add(enviadorS);
-                arrayLineasCaratulas.get(0).add('2019-05');
-                arrayLineasCaratulas.get(0).add(fchResol);
-                arrayLineasCaratulas.get(0).add(nroResol);
-                arrayLineasCaratulas.get(0).add(tipo);
-                arrayLineasCaratulas.get(0).add(tipoLibro);
-                arrayLineasCaratulas.get(0).add(tipoEnvio);
-
-                arrayLineasCaratulas.get(0).add(nroSegmento);         // Solo para tipo de envio PARCIAL
-                arrayLineasCaratulas.get(0).add(folioNotificacion); // Solo para envío ESPECIAL
-                arrayLineasCaratulas.get(0).add(codAutRec);         // Solo para reemplazo de libro
-
-                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-
-                /* XML FACTURA */
-                LibroCompraVentaDocument libCV;
-
-                /* LibroCV */
-                libCV = LibroCompraVentaDocument.Factory.parse(new FileInputStream(plantillaS));
-
-                // libCV = LibroCompraVentaDocument.Factory.newInstance();
-                LibroCompraVenta libroCompraVenta = libCV.getLibroCompraVenta();
-                libCV.getLibroCompraVenta().setVersion(new BigDecimal("1.0"));
-                EnvioLibro envioLibro = libroCompraVenta.addNewEnvioLibro();
-
-                // ID de libro se debería calcular
-                libCV.getLibroCompraVenta().getEnvioLibro().setID(idS);
-                //libCV.xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
-
-                XmlCursor cursor = libCV.newCursor();
-                ResumenPeriodo resumenPeriodo = envioLibro.addNewResumenPeriodo();
-
-                AgregarCamposLibros addCampos = new AgregarCamposLibros();
-                // Agregar CARATULA
-                addCampos.addDatosCaratula(envioLibro, arrayLineasCaratulas);
-
-                TotalesPeriodo totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
-                totalesPeriodo.setTpoDoc(30);
-                totalesPeriodo.setTotDoc(2);
-                totalesPeriodo.setTotMntExe(0);
-                totalesPeriodo.setTotMntNeto(57995);
-                totalesPeriodo.setTotMntIVA(5344);
-                totalesPeriodo.setTotOpIVAUsoComun(1);
-                totalesPeriodo.setTotIVAUsoComun(5675);
-                totalesPeriodo.setFctProp(0.6);
-                totalesPeriodo.setTotCredIVAUsoComun(3405);
-                totalesPeriodo.setTotMntTotal(69014);
-
-
-                // Factura Electronica (33)
-                totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
-                totalesPeriodo.setTpoDoc(33);
-                totalesPeriodo.setTotDoc(2);
-                totalesPeriodo.setTotMntExe(9226);
-                totalesPeriodo.setTotMntNeto(18061);
-                totalesPeriodo.setTotMntIVA(1441);
-                // IVA No Recuperable
-                totIvaNoRec = new ArrayList&lt;TotIVANoRec&gt;();
-                oit = TotIVANoRec.Factory.newInstance();
-                oit.setCodIVANoRec(4);
-                oit.setTotOpIVANoRec(1);
-                oit.setTotMntIVANoRec(1991);
-                totIvaNoRec.add(oit);
-                arrayTot = new TotIVANoRec[totIvaNoRec.size()];
-                totIvaNoRec.toArray(arrayTot);
-                totalesPeriodo.setTotIVANoRecArray(arrayTot);
-                totalesPeriodo.setTotMntTotal(30719);
-
-                // Factura Exenta Electronica (34)
-                //totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
-                //totalesPeriodo.setTpoDoc(34);
-                //totalesPeriodo.setTotDoc(1);
-                //totalesPeriodo.setTotMntExe(29744);
-                //totalesPeriodo.setTotMntNeto(0);
-                //totalesPeriodo.setTotMntIVA(0);
-                //totalesPeriodo.setTotMntTotal(29744);
-
-                // Factura Exenta (32)
-                //totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
-                //totalesPeriodo.setTpoDoc(32);
-                //totalesPeriodo.setTotDoc(1);
-                //totalesPeriodo.setTotMntExe(29628);
-                //totalesPeriodo.setTotMntNeto(0);
-                //totalesPeriodo.setTotMntIVA(0);
-                //totalesPeriodo.setTotMntTotal(29628);
-
-                // Nota de Credito (60)
-                totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
-                totalesPeriodo.setTpoDoc(60);
-                totalesPeriodo.setTotDoc(2);
-                totalesPeriodo.setTotMntExe(0);
-                totalesPeriodo.setTotMntNeto(8209);
-                totalesPeriodo.setTotMntIVA(1560);
-                totalesPeriodo.setTotMntTotal(9769);
-
-                // Nota de Credito Electronica (61)
-                //totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
-                //totalesPeriodo.setTpoDoc(61);
-                //totalesPeriodo.setTotDoc(1);
-                //totalesPeriodo.setTotMntExe(8649);
-                //totalesPeriodo.setTotMntNeto(5990);
-                //totalesPeriodo.setTotMntIVA(0);
-                // IVA No Recuperable
-                //totIvaNoRec = new ArrayList&lt;TotIVANoRec&gt;();
-                //oit = TotIVANoRec.Factory.newInstance();
-                //oit.setCodIVANoRec(1);
-                //oit.setTotOpIVANoRec(1);
-                //oit.setTotMntIVANoRec(1138);
-                //totIvaNoRec.add(oit);
-                //arrayTot = new TotIVANoRec[totIvaNoRec.size()];
-                //totIvaNoRec.toArray(arrayTot);
-                //totalesPeriodo.setTotIVANoRecArray(arrayTot);
-                //totalesPeriodo.setTotMntTotal(15777);
-
-                // Nota de Debito Electronica (56)
-                //totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
-                //totalesPeriodo.setTpoDoc(56);
-                //totalesPeriodo.setTotDoc(1);
-                //totalesPeriodo.setTotMntExe(3967);
-                //totalesPeriodo.setTotMntNeto(0);
-                //totalesPeriodo.setTotMntIVA(0);
-                //totalesPeriodo.setTotMntTotal(3967);
-
-                // Factura de Compra Electronica (46)
-                totalesPeriodo = resumenPeriodo.addNewTotalesPeriodo();
-                totalesPeriodo.setTpoDoc(46);
-                totalesPeriodo.setTotDoc(1);
-                totalesPeriodo.setTotMntExe(0);
-                totalesPeriodo.setTotMntNeto(9801);
-                totalesPeriodo.setTotMntIVA(1862);
-                ArrayList&lt;TotOtrosImp&gt; totOtrosImp = new ArrayList&lt;TotOtrosImp&gt;();
-                toimp = TotOtrosImp.Factory.newInstance();
-                toimp.setCodImp(15);
-                toimp.setTotMntImp(1862);
-                totOtrosImp.add(toimp);
-                arrayTot = new TotOtrosImp[totOtrosImp.size()];
-                totOtrosImp.toArray(arrayTot);
-                totalesPeriodo.setTotOtrosImpArray(arrayTot);
-                totalesPeriodo.setTotMntTotal(9801);
-
-                // **************************************************
-                // Factura 234
-                // Detalles
-                Detalle detalle = envioLibro.addNewDetalle(); // Prueba
-                detalle.setTpoDoc(30);
-                detalle.setNroDoc(234);
-                detalle.setTasaImp(19);
-                //detalle.setTpoImp(1);
-                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2019-05-21"))
-                detalle.setRUTDoc("96800570-7");
-                detalle.setRznSoc("ENEL DISTRIBUCION");
-                detalle.setMntExe(0);
-                detalle.setMntNeto(28127);
-                detalle.setMntIVA(5344);
-                detalle.setMntTotal(33471);
-
-                // Factura Electrónica 32
-                detalle = envioLibro.addNewDetalle(); // Prueba
-                detalle.setTpoDoc(33);
-                detalle.setNroDoc(32);
-                detalle.setTasaImp(19);
-                //detalle.setTpoImp(1);
-                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2019-05-10"))
-                detalle.setRUTDoc("96800570-7");
-                detalle.setRznSoc("ENEL DISTRIBUCION");
-                detalle.setMntExe(9226)
-                detalle.setMntNeto(7584);
-                detalle.setMntIVA(1441);
-                detalle.setMntTotal(18251);
-
-                // Factura 781
-                detalle = envioLibro.addNewDetalle(); // Prueba
-                detalle.setTpoDoc(30);
-                detalle.setNroDoc(781);
-                detalle.setTasaImp(19);
-                detalle.setTpoImp(1);
-                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2019-05-21"))
-                detalle.setRUTDoc("96800570-7");
-                detalle.setRznSoc("ENEL DISTRIBUCION");
-                detalle.setMntExe(0);
-                detalle.setMntNeto(29868);
-                detalle.setIVAUsoComun(5675);
-                detalle.setMntTotal(35543);
-
-
-                // Nota de Crédito 451
-                detalle = envioLibro.addNewDetalle(); // Prueba
-                detalle.setTpoDoc(60);
-                detalle.setNroDoc(451);
-                detalle.setTasaImp(19);
-                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2019-05-29"))
-                detalle.setRUTDoc("96800570-7");
-                detalle.setRznSoc("ENEL DISTRIBUCION");
-                detalle.setMntExe(0);
-                detalle.setMntNeto(2763);
-                detalle.setMntIVA(525);
-                detalle.setMntTotal(3288);
-
-                // Factura Electronica 67
-                detalle = envioLibro.addNewDetalle(); // Prueba
-                detalle.setTpoDoc(33);
-                detalle.setNroDoc(67);
-                detalle.setTasaImp(19);
-                detalle.setTpoImp(1);
-                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2019-05-10"))
-                detalle.setRUTDoc("96800570-7");
-                detalle.setRznSoc("ENEL DISTRIBUCION");
-                detalle.setMntExe(0)
-                detalle.setMntNeto(10477);
-                ivaNoRec = new ArrayList&lt;IVANoRec&gt;();
-                oi = IVANoRec.Factory.newInstance();
-                oi.setCodIVANoRec(new BigInteger(4));
-                oi.setMntIVANoRec(1991);
-                ivaNoRec.add(oi);
-                array = new IVANoRec[ivaNoRec.size()];
-                ivaNoRec.toArray(array);
-                detalle.setIVANoRecArray(array);
-                detalle.setMntTotal(12468);
-
-                // Factura de Compra Electrónica 9
-                detalle = envioLibro.addNewDetalle(); // Prueba
-                detalle.setTpoDoc(46);
-                detalle.setNroDoc(9);
-                detalle.setTasaImp(19);
-                //detalle.setTpoImp(1);
-                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2019-05-10"))
-                detalle.setRUTDoc("96800570-7");
-                detalle.setRznSoc("ENEL DISTRIBUCION");
-                detalle.setMntExe(0)
-                detalle.setMntNeto(9801);
-                detalle.setMntIVA(1862);
-                ArrayList&lt;OtrosImp&gt; otrosImp = new ArrayList&lt;OtrosImp&gt;();
-                oimp = OtrosImp.Factory.newInstance();
-                oimp.setCodImp(15);
-                oimp.setTasaImp(19);
-                oimp.setMntImp(1862);
-                otrosImp.add(oimp);
-                array = new OtrosImp[otrosImp.size()];
-                otrosImp.toArray(array);
-                detalle.setOtrosImpArray(array);
-                detalle.setMntTotal(9801);
-
-                // Nota de Crédito 211
-                detalle = envioLibro.addNewDetalle(); // Prueba
-                detalle.setTpoDoc(60);
-                detalle.setNroDoc(211);
-                detalle.setTasaImp(19);
-                detalle.xsetFchDoc(LibroCompraVentaDocument.LibroCompraVenta.EnvioLibro.Detalle.FchDoc.Factory.newValue("2019-04-12"))
-                detalle.setRUTDoc("96800570-7");
-                detalle.setRznSoc("ENEL DISTRIBUCION");
-                detalle.setMntExe(0);
-                detalle.setMntNeto(5446);
-                detalle.setMntIVA(1035);
-                detalle.setMntTotal(6481);
-
-                outPDF=lectorFichero.crearFicheroMMDDFlex(resultadoFirmado, arrayLineasCaratulas.get(0).get(3));
-                outPDF+="/"+arrayLineasCaratulas.get(0).get(5)+"_"+arrayLineasCaratulas.get(0).get(6)+"_"+arrayLineasCaratulas.get(0).get(7)+"_"+idS+".xml";
-
-
-                // Agregar DETALLES (SOLO LIBRO DE COMPRAS)
-                if(tipo.equals("COMPRA")) {
-                logger.warn("agregando detalles libro de compras");
-                    addCampos.addDatosDetalle(envioLibro, arrayLineasDetalle,c.getCantidadDetallesTotales());
-                    //addCampos.addDatosDetalle(envioLibro, arrayLineasDetalle,7);
-                }
-               // Debo meter el namespace porque SII no lo genera
-                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;();
-                namespaces.put("", "http://www.sii.cl/SiiDte");
-                namespaces.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
-                XmlOptions opts = new XmlOptions();
-                opts.setLoadSubstituteNamespaces(namespaces);
-
-                //opts = new XmlOptions();
-                opts.setSavePrettyPrint();
-                //opts.setSavePrettyPrintIndent(0);
-                //opts.setCharacterEncoding("ISO-8859-1");
-                libCV = LibroCompraVentaDocument.Factory.parse(libCV.newInputStream(opts), (opts));
-
-                // CARPETA AUXILIAR DTE XML SIN TIMBRE
-                //File archivoEnvio = new File(resultadoSinFirma);
-                ByteArrayOutputStream out = new ByteArrayOutputStream();
-                //libCV.save(archivoEnvio, opts);
-
-                libCV.save(new File(resultS + "LIBCV" + idS + "-sinfirma.xml"), opts);
-                libCV.save(out, opts);
-
-                FirmaLibro firmaLibro = new FirmaLibro();
-
-                String mensaje=firmaLibro.firmarLibro(certS, passS, resultS + "LIBCV" + idS + "-sinfirma.xml",outPDF,10,"ENVIADO",arrayLineasCaratulas.get(0).get(5),arrayLineasCaratulas.get(0).get(2),"xmlasdas",tipoEnvio);
-
-            </script>
-        </actions>
-    </service>
-
     <service verb="get" noun="DteContent">
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
@@ -7648,9 +7067,8 @@ return
                 //doc2 = XMLUtil.parseDocument(salidaBoleta);
                 // Firma de EnvioBOLETA
                 byte[] salida = Signer.sign(doc2, uri, key, cert, uri, "SetDTE");
-                doc2 = XMLUtil.parseDocument(salida);//pppppppxxxx
+                doc2 = XMLUtil.parseDocument(salida);
 
-                System.out.println("BOLETA8:"+out);
 
                 if (Signer.verify(doc2, "SetDTE")) {
                     Path path = Paths.get(resultS + "BOL" + tipoFactura + "-" + folio + ".xml");
@@ -8347,15 +7765,18 @@ return
             <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
                           in-map="[partyId:partyId, postalContactMechPurposeId:'PostalTax']"/>
             <if condition="!contactOut.postalContactMechId">
-                <return error="true" message="Receptor no tiene contacto tributario asignado"/>
             </if>
             <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="postalAddressField">
                 <field-map field-name="contactMechId" from="contactOut.postalContactMechId"/>
             </entity-find-one>
 
-            <set field="cmnaReceptor" from="postalAddressField.city"/>
+            <set field="cmnaReceptor" from="postalAddressField.stateProvinceGeoId"/>
+
+            <service-call name="mchile.GeoServices.get#ComunaFromGeoId" in-map="[stateProvinceGeoId:postalAddressField.stateProvinceGeoId]" out-map="comunaOut"/>
 
 
+
+            <set field="cmnaReceptor" from="comunaOut.comuna"/>
             <!-- ID Contacto receptor -->
             <set field="receptorContactId" from="contactPostalAddressField.telecomContactMechId"/>
 
@@ -8423,6 +7844,7 @@ return
                 <service-call name="mchile.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:tipoDespachoEnumId]" out-map="codeOut"/>
                 <set field="tipoDespacho" from="codeOut.siiCode"/>
             </if>
+
 
             <!-- Generacion de guía de despacho -->
             <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-52', emisorS:emisorS, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
