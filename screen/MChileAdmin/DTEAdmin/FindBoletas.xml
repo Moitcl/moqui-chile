@@ -30,9 +30,10 @@
     <transition name="verificarEnSII">
         <parameter name="fiscalTaxDocumentId"/>
         <parameter name="fiscalTaxDocumentTypeEnumId"/>
+        <parameter name="activeOrgId" from="activeOrgId"/>
         <actions>
-            <service-call name="mchile.DTEServices.verificaEnSII#Documento"
-                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" out-map="verifyOut"/>
+            <service-call name="mchile.DTEServices.verificaEnSII#Boleta"
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, activeOrgId:activeOrgId]" out-map="verifyOut"/>
             <log message="-> ${verifyOut.statusSii}" level="warn"/>
             <if condition="verifyOut.statusSii == '0'">
                 <return error="false" message="${verifyOut.salida}"/>
@@ -40,6 +41,16 @@
             <if condition="verifyOut.statusSii != '0'">
                 <return error="true" message="ERROR: ${verifyOut.salida}"/>
             </if>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="enviarDirectoSII">
+        <parameter name="fiscalTaxDocumentId"/>
+        <parameter name="activeOrgId"/>
+        <actions>
+            <service-call name="mchile.DTEServices.enviarDirecto#SII"
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, activeOrgId:activeOrgId]"/>
         </actions>
         <default-response url="."/>
     </transition>
@@ -113,7 +124,6 @@
     <transition-include name="searchPartyList" location="component://SimpleScreens/template/party/PartyForms.xml"/>
 
     <actions>
-        <!--entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList"-->
         <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
             <search-form-inputs/>
             <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in"
@@ -123,10 +133,9 @@
                 <econdition field-name="fiscalTaxDocumentStatusEnumId" operator="equals" value="Ftdt-Issued"/>
                 <econdition field-name="fiscalTaxDocumentStatusEnumId" operator="equals" value="Ftdt-Cancelled"/>
             </econditions>
-            <econdition field-name="issuerPartyId" from="activeOrgId"/>
+            <econdition field-name="fiscalTaxDocumentSentStatusEnumId" operator="equals" value="Ftdt-NotSent"/>
             <order-by field-name="-lastUpdatedStamp"/>
         </entity-find>
-
     </actions>
     <widgets>
 
@@ -173,14 +182,13 @@
                     <display-entity entity-name="moqui.basic.Enumeration"/>
                 </default-field>
             </field>
-
-            <!--field name="receiverPartyId">
+            <field name="receiverPartyId">
                 <header-field title="Receptor">
                     <drop-down allow-empty="true"><dynamic-options transition="searchPartyList" server-search="true" min-length="2"
                                                                    parameter-map="[roleTypeId:'Customer,OrgInternal']"/></drop-down>
                 </header-field>
                 <default-field><link url="editParty" entity-name="mantle.party.PartyDetail" text="PartyNameTemplate" link-type="anchor"/></default-field>
-            </field-->
+            </field>
             <field name="invoiceId">
                 <header-field title="Invoice ID" show-order-by="true"><text-find/></header-field>
                 <default-field><link url="editInvoice" text="${invoiceId}" link-type="anchor" parameter-map="[invoiceId:invoiceId]"/>
@@ -206,11 +214,6 @@
                     <display-entity entity-name="moqui.basic.Enumeration"/>
                 </default-field>
             </field>
-            <!--field name="xml">
-                <default-field title=" ">
-                    <link url="xml/${xmlFilename}" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="XML" link-type="anchor"/>
-                </default-field>
-            </field-->
             <field name="xml">
                 <default-field title=" ">
                     <link url="downloadDocument" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fileType:'Ftdct-Xml']" text="XML" link-type="anchor"/>
@@ -221,17 +224,16 @@
                     <link url="downloadDocument" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fileType:'Ftdct-Pdf']" text="PDF" link-type="anchor"/>
                 </default-field>
             </field>
-            <!--field name="pdf">
-                   <default-field title=" ">
-                    <link url="pdf/${pdfFilename}" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="PDF" link-type="anchor"/>
-                   </default-field>
-            </field-->
-
-            <!--field name="verificarEnSII">
+            <field name="verificarEnSII">
                 <default-field title=" ">
                     <link url="verificarEnSII" tooltip="Verificar Estado en SII"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" text="Verificar en SII"/>
                 </default-field>
-            </field-->
+            </field>
+            <field name="enviarDirectoSII">
+                <default-field title=" ">
+                    <link url="enviarDirectoSII" tooltip="Enviar directo a SII"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" text="Enviar directo a SII"/>
+                </default-field>
+            </field>
 
             <field name="eliminar">
                 <default-field title=" ">
@@ -243,11 +245,10 @@
                     <link url="anularDTE" tooltip="Anular Boleta"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="Anular"/>
                 </default-field>
             </field>
-            <!-- TODO: Boletas no se envían al SII -->
-            <!--field name="_rowSubmit"><default-field title="Enviar a SII">
+            <field name="_rowSubmit"><default-field title="Enviar a SII">
                 <check no-current-selected-key="false"><option key="true" text=" "/></check></default-field>
-            </field-->
-            <!--field name="envioSII"><default-field title="Crear Envío para SII"><submit/></default-field></field-->
+            </field>
+            <field name="envioSII"><default-field title="Crear Envío para SII"><submit/></default-field></field>
 
         </form-list>
     </widgets>
