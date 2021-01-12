@@ -5177,15 +5177,11 @@ along with this software (see the LICENSE.md file). If not, see
                 DOCUMENTO	FACTURA ELECTRONICA
 
                 ITEM			CANTIDAD	PRECIO UNITARIO
-                Cajón AFECTO		    115		    443
-                Relleno AFECTO		     50		    662
+                Cajón AFECTO		    130		   1274
+                Relleno AFECTO		     56		   2066
                 **************************************************************/
 
                 int folio;
-                int folioCaso1;
-                int folioCaso2;
-                int folioCaso3;
-                int folioCaso5;
                 DTEDocument doc;
                 AutorizacionType caf;
                 X509Certificate cert;
@@ -5259,9 +5255,8 @@ along with this software (see the LICENSE.md file). If not, see
                 Receptor recp = doc.getDTE().getDocumento().getEncabezado().addNewReceptor();
 
                 // Usamos de receptor a Entel
-
                 recp.setRUTRecep("96806980-2");
-                recp.setRznSocRecep("ENTEL PCS S.A.");
+                recp.setRznSocRecep("ENTEL PCS TELECOMUNICACIONES S A");
                 recp.setGiroRecep("TELECOMUNICACIONES");
                 recp.setContacto("23651000");
                 recp.setDirRecep("AVDA. COSTANERA SUR RIO MAPOCHO 2760");
@@ -5274,26 +5269,32 @@ along with this software (see the LICENSE.md file). If not, see
                 det[0] = Detalle.Factory.newInstance();
                 det[0].setNroLinDet(1);
                 det[0].setNmbItem("Cajón AFECTO");
-                det[0].setQtyItem(BigDecimal.valueOf(115));
-                det[0].setPrcItem(BigDecimal.valueOf(443));
-                det[0].setMontoItem( Math.round(115*443));
+                det[0].setQtyItem(BigDecimal.valueOf(130));
+                det[0].setPrcItem(BigDecimal.valueOf(1274));
+                totalItem1 = 130 * 1274;
+                det[0].setMontoItem(Math.round(totalItem1));
+                ivaItem1 = Math.round(totalItem1 * 0.19);
 
                 det[1] = Detalle.Factory.newInstance();
                 det[1].setNroLinDet(2);
                 det[1].setNmbItem("Relleno AFECTO");
-                det[1].setQtyItem(BigDecimal.valueOf(50));
-                det[1].setPrcItem(BigDecimal.valueOf(662));
-                det[1].setMontoItem( Math.round(50*662));
+                det[1].setQtyItem(BigDecimal.valueOf(56));
+                det[1].setPrcItem(BigDecimal.valueOf(2066));
+                totalItem2 = 56 * 2066;
+                det[1].setMontoItem(Math.round(totalItem2));
+                ivaItem2 = Math.round(totalItem2 * 0.19);
 
                 doc.getDTE().getDocumento().setDetalleArray(det);
 
                 // Totales
                 Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
-                long totalNeto = 50945+33100;
+                long totalNeto = totalItem1 + totalItem2;
                 tot.setMntNeto(Math.round(totalNeto));
-                tot.setTasaIVA(BigDecimal.valueOf(19));
+                //tot.setTasaIVA(BigDecimal.valueOf(19));
+                cl.sii.siiDte.PctType tasaIVA = cl.sii.siiDte.PctType.Factory.newValue("19.00");
+                tot.xsetTasaIVA(tasaIVA);
                 // Valor de solo IVA
-                long totalIVA = Math.round(totalNeto * 0.19)
+                long totalIVA = ivaItem1 + ivaItem2;
                 tot.setIVA(totalIVA)
                 // total neto + IVA
                 totalInvoice = totalNeto + totalIVA;
@@ -5306,9 +5307,9 @@ along with this software (see the LICENSE.md file). If not, see
                 ref[0] = Referencia.Factory.newInstance();
                 ref[0].setNroLinRef(1);
                 ref[0].setTpoDocRef('SET');
-                ref[0].setFolioRef("1813968");
+                ref[0].setFolioRef(""+folio);
                 ref[0].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
-                ref[0].setRazonRef("CASO 1813968-1");
+                ref[0].setRazonRef("CASO 1889781-1");
 
                 doc.getDTE().getDocumento().setReferenciaArray(ref);
 
@@ -5505,9 +5506,10 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="fechaEmision"/>
 
             <!-- Obtención de primer folio y path de CAF -->
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="dte2map"/>
 
-            <set field="folioS" from="folio" type="Integer"/>
+            <set field="folioS" from="dte2map.folio" type="Integer"/>
+            <set field="folio" from="folioS"/>
             <set field="codRef" value="0" type="Integer"/>
 
             <script>
@@ -5562,13 +5564,6 @@ along with this software (see the LICENSE.md file). If not, see
                 int frmPago = 1;
                 int listSize = 0;
 
-            </script>
-
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="dte2map"/>
-
-            <set field="folioS" from="dte2map.folio" type="Integer"/>
-            <set field="codRef" value="0" type="Integer"/>
-            <script>
                 logger.warn("Creando Caso 2, con folio: " + dte2map.folio);
                 /************************************************************************
 
@@ -5660,11 +5655,10 @@ along with this software (see the LICENSE.md file). If not, see
                 det2[0].setQtyItem(BigDecimal.valueOf(137));
                 //det2[0].setUnmdItem(uom);
                 det2[0].setPrcItem(BigDecimal.valueOf(1187));
-                det2[0].setMontoItem( Math.round(137*1187));
-                //det2[i].setIndExe(1);
                 det2[0].setDescuentoPct(3);
                 descuento = (137*1187) * 3 / 100;
-                totalItem1 = Math.round(137*1187)-descuento;
+                totalItem1 = Math.round(137*1187)-Math.round(descuento);
+                det2[0].setMontoItem(totalItem1);
                 det2[0].setDescuentoMonto(Math.round(descuento));
 
                 det2[1] = Detalle.Factory.newInstance();
@@ -5672,10 +5666,10 @@ along with this software (see the LICENSE.md file). If not, see
                 det2[1].setNmbItem("ITEM 2 AFECTO");
                 det2[1].setQtyItem(BigDecimal.valueOf(60));
                 det2[1].setPrcItem(BigDecimal.valueOf(254));
-                det2[1].setMontoItem( Math.round(60*254));
                 det2[1].setDescuentoPct(2);
                 descuento = (60*254) * 2 / 100;
-                totalItem2 = Math.round(60*254)-descuento;
+                totalItem2 = Math.round(60*254)-Math.round(descuento);
+                det2[1].setMontoItem(totalItem2);
                 det2[1].setDescuentoMonto(Math.round(descuento));
 
                 doc2.getDTE().getDocumento().setDetalleArray(det2);
@@ -5895,9 +5889,11 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="fechaEmision"/>
 
             <!-- Obtención de primer folio y path de CAF -->
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="dte3map"/>
 
-            <set field="folioS" from="folio" type="Integer"/>
+            <set field="folioS" from="dte3map.folio" type="Integer"/>
+            <set field="folio" from="folioS"/>
+
             <set field="codRef" value="0" type="Integer"/>
             <set field="receiverPartyId" value="100102"/>
 
@@ -5953,13 +5949,6 @@ along with this software (see the LICENSE.md file). If not, see
                 int frmPago = 1;
                 int listSize = 0;
 
-            </script>
-
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="dte3map"/>
-
-            <set field="folioS" from="dte3map.folio" type="Integer"/>
-            <set field="codRef" value="0" type="Integer"/>
-            <script>
                 logger.warn("Creando Caso 3, con folio: " + dte3map.folio);
                 /************************************************************************
 
@@ -5977,7 +5966,6 @@ along with this software (see the LICENSE.md file). If not, see
 
                 // Leo el folio
                 folio = Integer.valueOf(folioS);
-                folioCaso3 = folio;
                 tipoFactura = Integer.valueOf('33');
                 if(formaPago != null)
                 frmPago = Integer.valueOf(formaPago);
@@ -6039,7 +6027,7 @@ along with this software (see the LICENSE.md file). If not, see
 
                 recp3.setRUTRecep("96992030-1");
                 recp3.setRznSocRecep("Sociedad Concesionaria Vespucio Norte Express S.A.");
-                recp3.setGiroRecep("CONSTRUCCION DE CARRETERAS Y LINEAS DE FERROCARRIL");
+                recp3.setGiroRecep("CONSTRUCCION DE CARRETERAS Y LINEAS DE");
                 recp3.setContacto("6005713000");
                 recp3.setDirRecep("AMERICO VESPUCIO ORIENTE 1305");
                 recp3.setCmnaRecep("PUDAHUEL");
@@ -6055,11 +6043,7 @@ along with this software (see the LICENSE.md file). If not, see
                 //det3[0].setUnmdItem(uom);
                 det3[0].setPrcItem(BigDecimal.valueOf(887));
                 det3[0].setMontoItem( Math.round(23*887));
-                //det3[i].setIndExe(1);
-                //det3[0].setDescuentoPct(3);
-                //descuento = (137*1187) * 3 / 100;
                 totalItem1 = Math.round(23*887);
-                //det3[0].setDescuentoMonto(Math.round(descuento));
 
                 det3[1] = Detalle.Factory.newInstance();
                 det3[1].setNroLinDet(2);
@@ -6067,36 +6051,33 @@ along with this software (see the LICENSE.md file). If not, see
                 det3[1].setQtyItem(BigDecimal.valueOf(132));
                 det3[1].setPrcItem(BigDecimal.valueOf(2888));
                 det3[1].setMontoItem( Math.round(132*2888));
-                //det3[1].setDescuentoPct(2);
-                //descuento = (60*254) * 2 / 100;
                 totalItem2 = Math.round(132*2888);
-                //det3[1].setDescuentoMonto(Math.round(descuento));
 
                 det3[2] = Detalle.Factory.newInstance();
-                det3[2].setNroLinDet(2);
+                det3[2].setNroLinDet(3);
                 det3[2].setNmbItem("ITEM 3 SERVICIO EXENTO");
                 det3[2].setQtyItem(BigDecimal.valueOf(1));
                 det3[2].setPrcItem(BigDecimal.valueOf(34595));
                 det3[2].setMontoItem( Math.round(34595));
                 det3[2].setIndExe(1);
-                //det3[2].setDescuentoPct(2);
-                //descuento = (60*254) * 2 / 100;
                 totalItem3 = Math.round(34595);
+                totalExento = totalItem3;
                 //det3[2].setDescuentoMonto(Math.round(descuento));
 
                 doc3.getDTE().getDocumento().setDetalleArray(det3);
 
                 // Totales
                 Totales tot3 = doc3.getDTE().getDocumento().getEncabezado().addNewTotales();
-                totalNeto = totalItem1 + totalItem2 + totalItem3;
+                totalNeto = totalItem1 + totalItem2;
                 tot3.setMntNeto(Math.round(totalNeto));
+                tot3.setMntExe(totalExento);
                 tot3.setTasaIVA(BigDecimal.valueOf(19));
                 // Valor de solo IVA
                 totalIVA = Math.round(totalNeto * 0.19)
                 tot3.setIVA(totalIVA)
                 // total neto + IVA
                 //totalInvoice = totalNeto + totalIVA + totalExento
-                totalInvoice = totalNeto + totalIVA;
+                totalInvoice = totalNeto + totalIVA+totalExento;
                 tot3.setMntTotal(Math.round(totalInvoice))
                 //if(totalExento &gt; 0) {
                 //    tot.setMntExe(Math.round(totalExento));
@@ -6299,9 +6280,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="fechaEmision"/>
 
             <!-- Obtención de primer folio y path de CAF -->
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="dte4map"/>
 
-            <set field="folioS" from="folio" type="Integer"/>
+            <set field="folioS" from="dte4map.folio" type="Integer"/>
             <set field="codRef" value="0" type="Integer"/>
 
             <script>
@@ -6362,10 +6343,6 @@ along with this software (see the LICENSE.md file). If not, see
 
             </script>
 
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="dte4map"/>
-
-            <set field="folioS" from="dte4map.folio" type="Integer"/>
-            <set field="codRef" value="0" type="Integer"/>
             <set field="receiverPartyId" value="100102"/>
             <script>
                 logger.warn("Creando Caso 4, con folio: " + dte4map.folio);
@@ -6469,7 +6446,7 @@ along with this software (see the LICENSE.md file). If not, see
                 totalItem2 = Math.round(9*320);
 
                 det4[2] = Detalle.Factory.newInstance();
-                det4[2].setNroLinDet(2);
+                det4[2].setNroLinDet(3);
                 det4[2].setNmbItem("ITEM 3 SERVICIO EXENTO");
                 det4[2].setQtyItem(BigDecimal.valueOf(2));
                 det4[2].setPrcItem(BigDecimal.valueOf(6755));
@@ -6479,7 +6456,8 @@ along with this software (see the LICENSE.md file). If not, see
 
                 doc4.getDTE().getDocumento().setDetalleArray(det4);
 
-                totalNeto = totalItem1 + totalItem2 + totalItem3;
+                totalNeto = totalItem1 + totalItem2;
+                totalExento = totalItem3;
 
                 // Descuento Global
                 long descuento = Math.round(totalNeto * (Long.valueOf(3) / 100));
@@ -6501,12 +6479,13 @@ along with this software (see the LICENSE.md file). If not, see
                 Totales tot4 = doc4.getDTE().getDocumento().getEncabezado().addNewTotales();
 
                 tot4.setMntNeto(Math.round(totalNeto));
+                tot4.setMntExe(totalExento);
                 tot4.setTasaIVA(BigDecimal.valueOf(19));
                 // Valor de solo IVA
                 totalIVA = Math.round(totalNeto * 0.19)
                 tot4.setIVA(totalIVA)
                 // total neto + IVA
-                totalInvoice = totalNeto + totalIVA;
+                totalInvoice = totalNeto + totalIVA + totalExento;
                 tot4.setMntTotal(Math.round(totalInvoice))
 
                 amount = totalInvoice;
@@ -6662,7 +6641,6 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="genera" noun="SetBasicoCaso5">
-
         <description>
             Generación de DTE de acuerdo a plantilla
         </description>
@@ -6753,7 +6731,6 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.sii.siiDte.MedioPagoType;
                 import org.apache.commons.io.IOUtils;
 
-                int folio;
                 DTEDocument doc;
                 AutorizacionType caf;
                 X509Certificate cert;
@@ -6856,9 +6833,9 @@ along with this software (see the LICENSE.md file). If not, see
                 det5[0] = Detalle.Factory.newInstance();
                 det5[0].setNroLinDet(1);
                 det5[0].setNmbItem("Cajón AFECTO");
-                //det5[0].setQtyItem(BigDecimal.valueOf(115));
-                //det5[0].setPrcItem(BigDecimal.valueOf(443));
-                //det5[0].setMontoItem( Math.round(115*443));
+                //det5[0].setQtyItem(BigDecimal.valueOf(0));
+                //det5[0].setPrcItem(BigDecimal.valueOf(0));
+                det5[0].setMontoItem( Math.round(0));
                 totalItem1 = Math.round(0);
 
                 doc5.getDTE().getDocumento().setDetalleArray(det5);
@@ -6991,7 +6968,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <field-map field-name="issuerPartyId" from="activeOrgId"/>
             </entity-find-one>
 
-
             <set field="dteField.receiverPartyId" from="receiverPartyId"/>
             <set field="dteField.receiverPartyIdTypeEnumId" value="PtidNationalTaxId"/>
             <set field="dteField.fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
@@ -7079,15 +7055,6 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="fechaEmision"/>
 
-            <!-- Obtención de primer folio y path de CAF -->
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="context"/>
-
-            <set field="folioS" from="folio" type="Integer"/>
-            <set field="codRef" value="0" type="Integer"/>
-            <set field="receiverPartyId" value="100102"/>
-            <script>
-                cafS = cafS + caf
-            </script>
             <script>
                 import java.io.ByteArrayOutputStream;
                 import java.io.File;
@@ -7470,11 +7437,6 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="fechaEmision"/>
 
-            <!-- Obtención de primer folio y path de CAF -->
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="context"/>
-
-            <set field="folioS" from="folio" type="Integer"/>
-            <set field="codRef" value="0" type="Integer"/>
             <set field="receiverPartyId" value="100102"/>
             <script>
                 cafS = cafS + caf
@@ -7608,7 +7570,7 @@ along with this software (see the LICENSE.md file). If not, see
 
                 recp7.setRUTRecep("96992030-1");
                 recp7.setRznSocRecep("Sociedad Concesionaria Vespucio Norte Express S.A.");
-                recp7.setGiroRecep("CONSTRUCCION DE CARRETERAS Y LINEAS DE FERROCARRIL");
+                recp7.setGiroRecep("CONSTRUCCION DE CARRETERAS");
                 recp7.setContacto("6005713000");
                 recp7.setDirRecep("AMERICO VESPUCIO ORIENTE 1305");
                 recp7.setCmnaRecep("PUDAHUEL");
@@ -7635,7 +7597,7 @@ along with this software (see the LICENSE.md file). If not, see
                 totalItem2 = Math.round(132*2888);
 
                 det7[2] = Detalle.Factory.newInstance();
-                det7[2].setNroLinDet(2);
+                det7[2].setNroLinDet(3);
                 det7[2].setNmbItem("ITEM 3 SERVICIO EXENTO");
                 det7[2].setQtyItem(BigDecimal.valueOf(1));
                 det7[2].setPrcItem(BigDecimal.valueOf(34595));
@@ -7645,7 +7607,8 @@ along with this software (see the LICENSE.md file). If not, see
 
                 doc7.getDTE().getDocumento().setDetalleArray(det7);
 
-                totalNeto = totalItem1 + totalItem2 + totalItem3;
+                totalExento = totalItem3;
+                totalNeto = totalItem1 + totalItem2;
 
                 // Totales
                 Totales tot7 = doc7.getDTE().getDocumento().getEncabezado().addNewTotales();
@@ -7656,11 +7619,9 @@ along with this software (see the LICENSE.md file). If not, see
                 totalIVA = Math.round(totalNeto * 0.19)
                 tot7.setIVA(totalIVA)
                 // total neto + IVA
-                totalInvoice = totalNeto + totalIVA;
+                totalInvoice = totalNeto + totalIVA + totalExento;
                 tot7.setMntTotal(Math.round(totalInvoice))
-                //if(totalExento &gt; 0) {
-                //    tot.setMntExe(Math.round(totalExento));
-                //}
+                tot7.setMntExe(Math.round(totalExento));
                 amount = totalInvoice;
 
                 // Referencias
@@ -7829,7 +7790,7 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="activeOrgId" required="true"/>
-            <parameter name="folioReferencia"/>
+            <parameter name="folioReferencia" required="true"/>
         </in-parameters>
         <actions>
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
@@ -7869,10 +7830,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="fechaEmision"/>
 
             <!-- Obtención de primer folio y path de CAF -->
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="context"/>
 
-            <set field="folioS" from="folio" type="Integer"/>
-            <set field="codRef" value="0" type="Integer"/>
             <set field="receiverPartyId" value="100102"/>
             <script>
                 cafS = cafS + caf
@@ -8008,38 +7966,22 @@ along with this software (see the LICENSE.md file). If not, see
                 recp8.setCmnaRecep("Las Condes");
                 recp8.setCiudadRecep("Santiago");
 
-                Detalle[] det8 = new Detalle[3]
+                Detalle[] det8 = new Detalle[1];
 
                 // Agrego detalle 0
                 det8[0] = Detalle.Factory.newInstance();
                 det8[0].setNroLinDet(1);
-                det8[0].setNmbItem("Pintura B&amp;W AFECTO");
-                det8[0].setQtyItem(BigDecimal.valueOf(23));
-                det8[0].setPrcItem(BigDecimal.valueOf(887));
-                det8[0].setMontoItem( Math.round(23*887));
-                totalItem1 = Math.round(23*887);
+                det8[0].setNmbItem("Cajón AFECTO");
+                //det8[0].setQtyItem(BigDecimal.valueOf(23));
+                //det8[0].setPrcItem(BigDecimal.valueOf(887));
+                det8[0].setMontoItem( Math.round(0));
+                totalItem1 = Math.round(0);
                 //det8[0].setDescuentoMonto(Math.round(descuento));
 
-                det8[1] = Detalle.Factory.newInstance();
-                det8[1].setNroLinDet(2);
-                det8[1].setNmbItem("ITEM 2 AFECTO");
-                det8[1].setQtyItem(BigDecimal.valueOf(132));
-                det8[1].setPrcItem(BigDecimal.valueOf(2888));
-                det8[1].setMontoItem( Math.round(132*2888));
-                totalItem2 = Math.round(132*2888);
-
-                det8[2] = Detalle.Factory.newInstance();
-                det8[2].setNroLinDet(2);
-                det8[2].setNmbItem("ITEM 3 SERVICIO EXENTO");
-                det8[2].setQtyItem(BigDecimal.valueOf(1));
-                det8[2].setPrcItem(BigDecimal.valueOf(34595));
-                det8[2].setMontoItem( Math.round(34595));
-                det8[2].setIndExe(1);
-                totalItem3 = Math.round(34595);
 
                 doc8.getDTE().getDocumento().setDetalleArray(det8);
 
-                totalNeto = totalItem1 + totalItem2 + totalItem3;
+                totalNeto = totalItem1;
 
                 // Totales
                 Totales tot8 = doc8.getDTE().getDocumento().getEncabezado().addNewTotales();
@@ -8052,9 +7994,6 @@ along with this software (see the LICENSE.md file). If not, see
                 // total neto + IVA
                 totalInvoice = totalNeto + totalIVA;
                 tot8.setMntTotal(Math.round(totalInvoice))
-                //if(totalExento &gt; 0) {
-                //    tot.setMntExe(Math.round(totalExento));
-                //}
                 amount = totalInvoice;
 
                 // Referencias
@@ -8070,13 +8009,13 @@ along with this software (see the LICENSE.md file). If not, see
 
                 ref8[1] = Referencia.Factory.newInstance();
                 ref8[1].setNroLinRef(2);
-                ref8[1].setTpoDocRef('33');
+                ref8[1].setTpoDocRef('61');
                 ref8[1].setCodRef(1);
                 ref8[1].setFolioRef(folioReferencia); // Folio del caso 3
                 ref8[1].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
                 ref8[1].setRazonRef("ANULA FACTURA");
 
-                doc8.getDTE().getDocumento().setReferenciaArray(ref6);
+                doc8.getDTE().getDocumento().setReferenciaArray(ref8);
 
                 // Timbro
                 doc8.getDTE().timbrar(caf8.getCAF(), caf8.getPrivateKey(null));
@@ -8224,13 +8163,13 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <actions>
             <service-call name="mchile.DTECertification.genera#SetBasicoCaso1" in-map="[activeOrgId:activeOrgId]" out-map="caso1map"/>
-            <service-call name="mchile.DTECertification.genera#SetBasicoCaso2" in-map="[activeOrgId:activeOrgId]" out-map="caso2map"/>
+            <!--service-call name="mchile.DTECertification.genera#SetBasicoCaso2" in-map="[activeOrgId:activeOrgId]" out-map="caso2map"/>
             <service-call name="mchile.DTECertification.genera#SetBasicoCaso3" in-map="[activeOrgId:activeOrgId]" out-map="caso3map"/>
             <service-call name="mchile.DTECertification.genera#SetBasicoCaso4" in-map="[activeOrgId:activeOrgId]" out-map="caso4map"/>
             <service-call name="mchile.DTECertification.genera#SetBasicoCaso5" in-map="[activeOrgId:activeOrgId, folioReferencia:caso1map.folio]" out-map="caso5map"/>
             <service-call name="mchile.DTECertification.genera#SetBasicoCaso6" in-map="[activeOrgId:activeOrgId, folioReferencia:caso2map.folio]" out-map="caso6map"/>
             <service-call name="mchile.DTECertification.genera#SetBasicoCaso7" in-map="[activeOrgId:activeOrgId, folioReferencia:caso3map.folio]" out-map="caso7map"/>
-            <service-call name="mchile.DTECertification.genera#SetBasicoCaso8" in-map="[activeOrgId:activeOrgId, folioReferencia:caso5map.folio]" out-map="caso8map"/>
+            <service-call name="mchile.DTECertification.genera#SetBasicoCaso8" in-map="[activeOrgId:activeOrgId, folioReferencia:caso5map.folio]" out-map="caso8map"/-->
         </actions>
     </service>
 </services>
