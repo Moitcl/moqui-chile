@@ -37,6 +37,7 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
     public Map<String, Object> runService(ServiceDefinition sd, Map<String, Object> parameters) {
         String location = sd.serviceNode.attribute("location")
         String method = sd.serviceNode.attribute("method")
+
         if (!location) throw new IllegalArgumentException("Cannot call remote service [${sd.serviceName}] because it has no location specified.")
         if (!method) throw new IllegalArgumentException("Cannot call remote service [${sd.serviceName}] because it has no method specified.")
 
@@ -54,11 +55,25 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
         if (debug) logger.info("Debug mode is ON")
         else logger.info("Debug mode is OFF")
 
+        boolean proxy = serviceParams?.proxy
+        if (proxy) {
+            logger.info("Proxy mode is ON ")
+            def proxyhost = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(serviceParams?.proxyhost, serviceParams?.proxyport))
+            client.httpClient.proxy = proxyhost
+        }
+        else logger.info("Proxy mode is OFF")
+
         Map<String, Object> basicAuthAttributes = (Map<String, Object>)parameters.get("xmlRpcBasicAuthentication")
         if (basicAuthAttributes) {
             if (debug) logger.info("user: ${basicAuthAttributes['user']}, pass: ${basicAuthAttributes['pass']}")
             client.authorization = new HTTPBasicAuthorization( basicAuthAttributes['user'].toString(), basicAuthAttributes['pass'].toString() )
             parameters.remove("xmlRpcBasicAuthentication")
+        }
+
+        Map<String, Object> soapConfig = (Map<String, Object>)parameters.get("xmlRpcSoapAttributes")
+        if (soapConfig) {
+            if (soapConfig['version'] == 'v1.1') smb.setVersion(SOAPVersion.V1_1)
+            parameters.remove("xmlRpcSoapAttributes")
         }
 
         Map<String, Object> envelopeAttributes = (Map<String, Object>)parameters.get("xmlRpcEnvelopeAttributes")
@@ -81,9 +96,28 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
             }
         }
 
+        if (debug) logger.info("RequestParams: ${requestParams}")
+        if (debug) logger.info("ContentType: ${msg.version}; ${msg.encoding}")
         if (debug) logger.info("XML String: ${msg}")
 
         SOAPResponse response = client.send(requestParams, msg.version, msg.toString())
+        // SOAPResponse response = client.send(msg.toString())
+        /*def response = client.send(requestParams) {
+            version msg.version      // SOAPVersion.V1_1 is default
+            encoding msg.encoding()  // "UTF-8" is default encoding for xml
+            envelopeAttributes "xmlns:hr":"http://example.org/hr"
+            header(mustUnderstand:false) {
+                auth {
+                    apiToken("1234567890")
+                }
+            }
+            body {
+                GetWeatherByZipCode(xmlns:"http://example.weather.org") {
+                    ZipCode("93657")
+                }
+            }
+        }*/
+
         Map<String, Object> xmlRpcResult = (Map<String, Object>) toMap(response.body)
 
         if (debug) logger.info("XML Result: ${xmlRpcResult}")
