@@ -5049,17 +5049,7 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="genera" noun="SetGuiaDespacho">
-        <description>
-            Generación de libro de Compra/Venta
-        </description>
-        <in-parameters>
-            <parameter name="activeOrgId" required="true"/>
-        </in-parameters>
-        <actions>
-            <return error="true" message="Not implemented yet!"/>
-        </actions>
-    </service>
+
 
     <service verb="genera" noun="SetFacturaExenta">
         <description>
@@ -5080,6 +5070,11 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="activeOrgId" required="true"/>
+            <parameter name="qtyItem1Caso1" required="true" type="Long"/>
+            <parameter name="prcItem1Caso1" required="true" type="Long"/>
+            <parameter name="qtyItem2Caso1" required="true" type="Long"/>
+            <parameter name="prcItem2Caso1" required="true" type="Long"/>
+            <parameter name="refCaso1" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="folio"/>
@@ -5172,20 +5167,16 @@ along with this software (see the LICENSE.md file). If not, see
 
                 logger.warn("Creando Caso 1, con folio: " + folio);
                 /* Primera Factura *******************************************
-                CASO 1813968-1
+                CASO 1889781-1
                 ==============
                 DOCUMENTO	FACTURA ELECTRONICA
 
                 ITEM			CANTIDAD	PRECIO UNITARIO
-                Cajón AFECTO		    115		    443
-                Relleno AFECTO		     50		    662
+                Cajón AFECTO		    130		   1274
+                Relleno AFECTO		     56		   2066
                 **************************************************************/
 
                 int folio;
-                int folioCaso1;
-                int folioCaso2;
-                int folioCaso3;
-                int folioCaso5;
                 DTEDocument doc;
                 AutorizacionType caf;
                 X509Certificate cert;
@@ -5240,11 +5231,11 @@ along with this software (see the LICENSE.md file). If not, see
                 SimpleDateFormat formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
                 Date dateFechaEmision = new Date();
                 fechaEmision = formatterFechaEmision.format(dateFechaEmision);
-                iddoc.setIndServicio(BigInteger.valueOf(3));
 
                 Calendar cal = Calendar.getInstance();
                 cal.add(Calendar.DAY_OF_MONTH, 45);
                 iddoc.xsetFchCancel(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+                iddoc.xsetFchVenc(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
                 // Medio y forma de pago
                 if (medioPago != null ) {
                 iddoc.setMedioPago(MedioPagoType.Enum.forString(medioPago));
@@ -5259,41 +5250,53 @@ along with this software (see the LICENSE.md file). If not, see
                 Receptor recp = doc.getDTE().getDocumento().getEncabezado().addNewReceptor();
 
                 // Usamos de receptor a Entel
-
                 recp.setRUTRecep("96806980-2");
-                recp.setRznSocRecep("ENTEL PCS S.A.");
+                recp.setRznSocRecep("ENTEL PCS TELECOMUNICACIONES S A");
                 recp.setGiroRecep("TELECOMUNICACIONES");
                 recp.setContacto("23651000");
                 recp.setDirRecep("AVDA. COSTANERA SUR RIO MAPOCHO 2760");
                 recp.setCmnaRecep("Las Condes");
                 recp.setCiudadRecep("Santiago");
 
-                Detalle[] det = new Detalle[2]
+                Detalle[] det = new Detalle[2];
 
                 // Agrego detalle 0
                 det[0] = Detalle.Factory.newInstance();
                 det[0].setNroLinDet(1);
                 det[0].setNmbItem("Cajón AFECTO");
-                det[0].setQtyItem(BigDecimal.valueOf(115));
-                det[0].setPrcItem(BigDecimal.valueOf(443));
-                det[0].setMontoItem( Math.round(115*443));
+                //det[0].setQtyItem(BigDecimal.valueOf(130));
+                det[0].setQtyItem(BigDecimal.valueOf(qtyItem1Caso1));
+                //det[0].setPrcItem(BigDecimal.valueOf(1274));
+                det[0].setPrcItem(BigDecimal.valueOf(prcItem1Caso1));
+                //totalItem1 = 130 * 1274;
+                totalItem1 = qtyItem1Caso1 * prcItem1Caso1;
+                det[0].setMontoItem(Math.round(totalItem1));
+                ivaItem1 = Math.round(totalItem1 * 0.19);
 
                 det[1] = Detalle.Factory.newInstance();
                 det[1].setNroLinDet(2);
                 det[1].setNmbItem("Relleno AFECTO");
-                det[1].setQtyItem(BigDecimal.valueOf(50));
-                det[1].setPrcItem(BigDecimal.valueOf(662));
-                det[1].setMontoItem( Math.round(50*662));
+                //det[1].setQtyItem(BigDecimal.valueOf(56));
+                det[1].setQtyItem(BigDecimal.valueOf(qtyItem2Caso1));
+                //det[1].setPrcItem(BigDecimal.valueOf(2066));
+                det[1].setPrcItem(BigDecimal.valueOf(prcItem2Caso1));
+                //totalItem2 = 56*2066;
+                totalItem2 = qtyItem2Caso1 * prcItem2Caso1;
+                det[1].setMontoItem(Math.round(totalItem2));
+                ivaItem2 = Math.round(totalItem2 * 0.19);
 
                 doc.getDTE().getDocumento().setDetalleArray(det);
 
                 // Totales
                 Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
-                long totalNeto = 50945+33100;
+                long totalNeto = totalItem1 + totalItem2;
                 tot.setMntNeto(Math.round(totalNeto));
-                tot.setTasaIVA(BigDecimal.valueOf(19));
+                tot.setMntExe(0);
+                //tot.setTasaIVA(BigDecimal.valueOf(19));
+                cl.sii.siiDte.PctType tasaIVA = cl.sii.siiDte.PctType.Factory.newValue("19.00");
+                tot.xsetTasaIVA(tasaIVA);
                 // Valor de solo IVA
-                long totalIVA = Math.round(totalNeto * 0.19)
+                long totalIVA = ivaItem1 + ivaItem2;
                 tot.setIVA(totalIVA)
                 // total neto + IVA
                 totalInvoice = totalNeto + totalIVA;
@@ -5306,9 +5309,10 @@ along with this software (see the LICENSE.md file). If not, see
                 ref[0] = Referencia.Factory.newInstance();
                 ref[0].setNroLinRef(1);
                 ref[0].setTpoDocRef('SET');
-                ref[0].setFolioRef("1813968");
+                ref[0].setFolioRef(""+folio);
                 ref[0].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
-                ref[0].setRazonRef("CASO 1813968-1");
+                //ref[0].setRazonRef("CASO 1889781-1");
+                ref[0].setRazonRef(refCaso1);
 
                 doc.getDTE().getDocumento().setReferenciaArray(ref);
 
@@ -5457,12 +5461,18 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="genera" noun="SetBasicoCaso2">
-
         <description>
             Generación de Set Basico Caso 2
         </description>
         <in-parameters>
             <parameter name="activeOrgId" required="true"/>
+            <parameter name="qtyItem1Caso2" required="true" type="Long"/>
+            <parameter name="prcItem1Caso2" required="true" type="Long"/>
+            <parameter name="qtyItem2Caso2" required="true" type="Long"/>
+            <parameter name="prcItem2Caso2" required="true" type="Long"/>
+            <parameter name="descItem1Caso2" required="true" type="Long"/>
+            <parameter name="descItem2Caso2" required="true" type="Long"/>
+            <parameter name="refCaso2" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="folio"/>
@@ -5505,9 +5515,10 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="fechaEmision"/>
 
             <!-- Obtención de primer folio y path de CAF -->
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="dte2map"/>
 
-            <set field="folioS" from="folio" type="Integer"/>
+            <set field="folioS" from="dte2map.folio" type="Integer"/>
+            <set field="folio" from="folioS"/>
             <set field="codRef" value="0" type="Integer"/>
 
             <script>
@@ -5562,23 +5573,16 @@ along with this software (see the LICENSE.md file). If not, see
                 int frmPago = 1;
                 int listSize = 0;
 
-            </script>
-
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="dte2map"/>
-
-            <set field="folioS" from="dte2map.folio" type="Integer"/>
-            <set field="codRef" value="0" type="Integer"/>
-            <script>
                 logger.warn("Creando Caso 2, con folio: " + dte2map.folio);
                 /************************************************************************
 
-                CASO 1813968-2
+                CASO 1889781-2
                 ==============
                 DOCUMENTO	FACTURA ELECTRONICA
 
                 ITEM			CANTIDAD	PRECIO UNITARIO		DESCUENTO ITEM
-                Pañuelo AFECTO		    137		   1187			      3%
-                ITEM 2 AFECTO		     60		    254			      2%
+                Pañuelo AFECTO		    306		   2465			      5%
+                ITEM 2 AFECTO		    235		   1527			      8%
 
                 *************************************************************************/
                 // Leo el folio
@@ -5622,16 +5626,15 @@ along with this software (see the LICENSE.md file). If not, see
                 formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
                 dateFechaEmision = new Date();
                 fechaEmision = formatterFechaEmision.format(dateFechaEmision);
-                iddoc.setIndServicio(BigInteger.valueOf(3));
 
                 cal = Calendar.getInstance();
                 cal.add(Calendar.DAY_OF_MONTH, 45);
                 iddoc.xsetFchCancel(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
                 // Medio y forma de pago
                 if (medioPago != null ) {
-                iddoc.setMedioPago(MedioPagoType.Enum.forString(medioPago));
+                    iddoc.setMedioPago(MedioPagoType.Enum.forString(medioPago));
                 } else {
-                iddoc.setMedioPago(MedioPagoType.Enum.forString("CH"));
+                    iddoc.setMedioPago(MedioPagoType.Enum.forString("CH"));
                 }
                 iddoc.setFmaPago(BigInteger.valueOf(frmPago));
 
@@ -5657,25 +5660,23 @@ along with this software (see the LICENSE.md file). If not, see
                 det2[0] = Detalle.Factory.newInstance();
                 det2[0].setNroLinDet(1);
                 det2[0].setNmbItem("Pañuelo AFECTO");
-                det2[0].setQtyItem(BigDecimal.valueOf(137));
-                //det2[0].setUnmdItem(uom);
-                det2[0].setPrcItem(BigDecimal.valueOf(1187));
-                det2[0].setMontoItem( Math.round(137*1187));
-                //det2[i].setIndExe(1);
-                det2[0].setDescuentoPct(3);
-                descuento = (137*1187) * 3 / 100;
-                totalItem1 = Math.round(137*1187)-descuento;
+                det2[0].setQtyItem(BigDecimal.valueOf(qtyItem1Caso2));
+                det2[0].setPrcItem(BigDecimal.valueOf(prcItem1Caso2));
+                det2[0].setDescuentoPct(descItem1Caso2);
+                descuento = (qtyItem1Caso2*prcItem1Caso2) * descItem1Caso2 / 100;
+                totalItem1 = Math.round(qtyItem1Caso2*prcItem1Caso2)-Math.round(descuento);
+                det2[0].setMontoItem(totalItem1);
                 det2[0].setDescuentoMonto(Math.round(descuento));
 
                 det2[1] = Detalle.Factory.newInstance();
                 det2[1].setNroLinDet(2);
                 det2[1].setNmbItem("ITEM 2 AFECTO");
-                det2[1].setQtyItem(BigDecimal.valueOf(60));
-                det2[1].setPrcItem(BigDecimal.valueOf(254));
-                det2[1].setMontoItem( Math.round(60*254));
-                det2[1].setDescuentoPct(2);
-                descuento = (60*254) * 2 / 100;
-                totalItem2 = Math.round(60*254)-descuento;
+                det2[1].setQtyItem(BigDecimal.valueOf(qtyItem2Caso2));
+                det2[1].setPrcItem(BigDecimal.valueOf(prcItem2Caso2));
+                det2[1].setDescuentoPct(descItem2Caso2);
+                descuento = (qtyItem2Caso2*prcItem2Caso2) * descItem2Caso2 / 100;
+                totalItem2 = Math.round(qtyItem2Caso2*prcItem2Caso2)-Math.round(descuento);
+                det2[1].setMontoItem(totalItem2);
                 det2[1].setDescuentoMonto(Math.round(descuento));
 
                 doc2.getDTE().getDocumento().setDetalleArray(det2);
@@ -5703,10 +5704,9 @@ along with this software (see the LICENSE.md file). If not, see
                 ref2[0] = Referencia.Factory.newInstance();
                 ref2[0].setNroLinRef(1);
                 ref2[0].setTpoDocRef('SET');
-                //ref2[0].setFolioRef("1813968");
                 ref2[0].setFolioRef(""+folio);
                 ref2[0].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
-                ref2[0].setRazonRef("CASO 1813968-2");
+                ref2[0].setRazonRef(refCaso2);
 
                 doc2.getDTE().getDocumento().setReferenciaArray(ref2);
 
@@ -5854,6 +5854,13 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="activeOrgId" required="true"/>
+            <parameter name="qtyItem1Caso3" required="true" type="Long"/>
+            <parameter name="prcItem1Caso3" required="true" type="Long"/>
+            <parameter name="qtyItem2Caso3" required="true" type="Long"/>
+            <parameter name="prcItem2Caso3" required="true" type="Long"/>
+            <parameter name="qtyItem3Caso3" required="true" type="Long"/>
+            <parameter name="prcItem3Caso3" required="true" type="Long"/>
+            <parameter name="refCaso3" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="folio"/>
@@ -5895,9 +5902,11 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="fechaEmision"/>
 
             <!-- Obtención de primer folio y path de CAF -->
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="dte3map"/>
 
-            <set field="folioS" from="folio" type="Integer"/>
+            <set field="folioS" from="dte3map.folio" type="Integer"/>
+            <set field="folio" from="folioS"/>
+
             <set field="codRef" value="0" type="Integer"/>
             <set field="receiverPartyId" value="100102"/>
 
@@ -5953,31 +5962,23 @@ along with this software (see the LICENSE.md file). If not, see
                 int frmPago = 1;
                 int listSize = 0;
 
-            </script>
-
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="dte3map"/>
-
-            <set field="folioS" from="dte3map.folio" type="Integer"/>
-            <set field="codRef" value="0" type="Integer"/>
-            <script>
                 logger.warn("Creando Caso 3, con folio: " + dte3map.folio);
                 /************************************************************************
 
-                CASO 1813968-3
+                CASO 1889781-3
                 ==============
                 DOCUMENTO	FACTURA ELECTRONICA
 
                 ITEM			CANTIDAD	PRECIO UNITARIO
-                Pintura B&amp;W AFECTO	     23		    887
-                ITEM 2 AFECTO		    132		   2888
-                ITEM 3 SERVICIO EXENTO	      1		  34595
+                Pintura B y W AFECTO	     27		   2676
+                ITEM 2 AFECTO		    161		   3069
+                ITEM 3 SERVICIO EXENTO	      1		  34785
 
                 *************************************************************************/
 
 
                 // Leo el folio
                 folio = Integer.valueOf(folioS);
-                folioCaso3 = folio;
                 tipoFactura = Integer.valueOf('33');
                 if(formaPago != null)
                 frmPago = Integer.valueOf(formaPago);
@@ -6017,7 +6018,6 @@ along with this software (see the LICENSE.md file). If not, see
                 formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
                 dateFechaEmision = new Date();
                 fechaEmision = formatterFechaEmision.format(dateFechaEmision);
-                iddoc.setIndServicio(BigInteger.valueOf(3));
 
                 cal = Calendar.getInstance();
                 cal.add(Calendar.DAY_OF_MONTH, 45);
@@ -6039,7 +6039,7 @@ along with this software (see the LICENSE.md file). If not, see
 
                 recp3.setRUTRecep("96992030-1");
                 recp3.setRznSocRecep("Sociedad Concesionaria Vespucio Norte Express S.A.");
-                recp3.setGiroRecep("CONSTRUCCION DE CARRETERAS Y LINEAS DE FERROCARRIL");
+                recp3.setGiroRecep("CONSTRUCCION DE CARRETERAS Y LINEAS DE");
                 recp3.setContacto("6005713000");
                 recp3.setDirRecep("AMERICO VESPUCIO ORIENTE 1305");
                 recp3.setCmnaRecep("PUDAHUEL");
@@ -6051,56 +6051,42 @@ along with this software (see the LICENSE.md file). If not, see
                 det3[0] = Detalle.Factory.newInstance();
                 det3[0].setNroLinDet(1);
                 det3[0].setNmbItem("Pintura B&amp;W AFECTO");
-                det3[0].setQtyItem(BigDecimal.valueOf(23));
-                //det3[0].setUnmdItem(uom);
-                det3[0].setPrcItem(BigDecimal.valueOf(887));
-                det3[0].setMontoItem( Math.round(23*887));
-                //det3[i].setIndExe(1);
-                //det3[0].setDescuentoPct(3);
-                //descuento = (137*1187) * 3 / 100;
-                totalItem1 = Math.round(23*887);
-                //det3[0].setDescuentoMonto(Math.round(descuento));
+                det3[0].setQtyItem(BigDecimal.valueOf(qtyItem1Caso3));
+                det3[0].setPrcItem(BigDecimal.valueOf(prcItem1Caso3));
+                det3[0].setMontoItem(Math.round(qtyItem1Caso3*prcItem1Caso3));
+                totalItem1 = Math.round(qtyItem1Caso3*prcItem1Caso3);
 
                 det3[1] = Detalle.Factory.newInstance();
                 det3[1].setNroLinDet(2);
                 det3[1].setNmbItem("ITEM 2 AFECTO");
-                det3[1].setQtyItem(BigDecimal.valueOf(132));
-                det3[1].setPrcItem(BigDecimal.valueOf(2888));
-                det3[1].setMontoItem( Math.round(132*2888));
-                //det3[1].setDescuentoPct(2);
-                //descuento = (60*254) * 2 / 100;
-                totalItem2 = Math.round(132*2888);
-                //det3[1].setDescuentoMonto(Math.round(descuento));
+                det3[1].setQtyItem(BigDecimal.valueOf(qtyItem2Caso3));
+                det3[1].setPrcItem(BigDecimal.valueOf(prcItem2Caso3));
+                det3[1].setMontoItem( Math.round(qtyItem2Caso3 * prcItem2Caso3));
+                totalItem2 = Math.round(qtyItem2Caso3 * prcItem2Caso3);
 
                 det3[2] = Detalle.Factory.newInstance();
-                det3[2].setNroLinDet(2);
+                det3[2].setNroLinDet(3);
                 det3[2].setNmbItem("ITEM 3 SERVICIO EXENTO");
-                det3[2].setQtyItem(BigDecimal.valueOf(1));
-                det3[2].setPrcItem(BigDecimal.valueOf(34595));
-                det3[2].setMontoItem( Math.round(34595));
+                det3[2].setQtyItem(BigDecimal.valueOf(qtyItem3Caso3));
+                det3[2].setPrcItem(BigDecimal.valueOf(prcItem3Caso3));
+                det3[2].setMontoItem( Math.round(qtyItem3Caso3 * prcItem3Caso3));
                 det3[2].setIndExe(1);
-                //det3[2].setDescuentoPct(2);
-                //descuento = (60*254) * 2 / 100;
-                totalItem3 = Math.round(34595);
-                //det3[2].setDescuentoMonto(Math.round(descuento));
+                totalItem3 = Math.round(qtyItem3Caso3 * prcItem3Caso3);
+                totalExento = totalItem3;
 
                 doc3.getDTE().getDocumento().setDetalleArray(det3);
 
                 // Totales
                 Totales tot3 = doc3.getDTE().getDocumento().getEncabezado().addNewTotales();
-                totalNeto = totalItem1 + totalItem2 + totalItem3;
+                totalNeto = totalItem1 + totalItem2;
                 tot3.setMntNeto(Math.round(totalNeto));
+                tot3.setMntExe(totalExento);
                 tot3.setTasaIVA(BigDecimal.valueOf(19));
                 // Valor de solo IVA
                 totalIVA = Math.round(totalNeto * 0.19)
                 tot3.setIVA(totalIVA)
-                // total neto + IVA
-                //totalInvoice = totalNeto + totalIVA + totalExento
-                totalInvoice = totalNeto + totalIVA;
+                totalInvoice = totalNeto + totalIVA+totalExento;
                 tot3.setMntTotal(Math.round(totalInvoice))
-                //if(totalExento &gt; 0) {
-                //    tot.setMntExe(Math.round(totalExento));
-                //}
                 amount = totalInvoice;
 
                 // Referencias
@@ -6109,10 +6095,9 @@ along with this software (see the LICENSE.md file). If not, see
                 ref3[0] = Referencia.Factory.newInstance();
                 ref3[0].setNroLinRef(1);
                 ref3[0].setTpoDocRef('SET');
-                //ref3[0].setFolioRef("1813968");
                 ref3[0].setFolioRef(""+folio);
                 ref3[0].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
-                ref3[0].setRazonRef("CASO 1813968-3");
+                ref3[0].setRazonRef(refCaso3);
 
                 doc3.getDTE().getDocumento().setReferenciaArray(ref3);
 
@@ -6152,6 +6137,7 @@ along with this software (see the LICENSE.md file). If not, see
                 uri = "#" + uri;
                 out = new ByteArrayOutputStream();
                 doc3.save(out, opts);
+                doc3.save(new File(resultS + "DTE" + tipoFactura + "-" + folio + "-sinfirma.xml"), opts);
                 Document doc23 = XMLUtil.parseDocument(out.toByteArray());
                 byte[] salida3 = Signer.sign(doc23, uri, key, cert, uri, "Documento");
                 doc23 = XMLUtil.parseDocument(salida3);
@@ -6260,8 +6246,22 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="activeOrgId" required="true"/>
+            <parameter name="qtyItem1Caso4" required="true" type="Long"/>
+            <parameter name="prcItem1Caso4" required="true" type="Long"/>
+            <parameter name="qtyItem2Caso4" required="true" type="Long"/>
+            <parameter name="prcItem2Caso4" required="true" type="Long"/>
+            <parameter name="qtyItem3Caso4" required="true" type="Long"/>
+            <parameter name="prcItem3Caso4" required="true" type="Long"/>
+            <parameter name="refCaso4" required="true"/>
+            <parameter name="descGlobalAfectos" required="true" type="Long"/>
         </in-parameters>
         <actions>
+            <!--return error="true" message="
+                $qtyItem1Caso4, $prcItem1Caso4 -
+                $qtyItem2Caso4, $prcItem2Caso4 -
+                $qtyItem3Caso4, $prcItem3Caso4 -
+                $refCaso4, $descGlobalAfectos
+            "/-->
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
                 <econdition field-name="partyId" from="activeOrgId"/></entity-find>
 
@@ -6299,9 +6299,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="fechaEmision"/>
 
             <!-- Obtención de primer folio y path de CAF -->
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="dte4map"/>
 
-            <set field="folioS" from="folio" type="Integer"/>
+            <set field="folioS" from="dte4map.folio" type="Integer"/>
             <set field="codRef" value="0" type="Integer"/>
 
             <script>
@@ -6362,25 +6362,21 @@ along with this software (see the LICENSE.md file). If not, see
 
             </script>
 
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="dte4map"/>
-
-            <set field="folioS" from="dte4map.folio" type="Integer"/>
-            <set field="codRef" value="0" type="Integer"/>
             <set field="receiverPartyId" value="100102"/>
             <script>
                 logger.warn("Creando Caso 4, con folio: " + dte4map.folio);
                 /************************************************************************
 
-                CASO 1813968-4
+                CASO 1889781-4
                 ==============
                 DOCUMENTO	FACTURA ELECTRONICA
 
                 ITEM			CANTIDAD	PRECIO UNITARIO
-                ITEM 1 AFECTO		     19		    877
-                ITEM 2 AFECTO		      9		    320
-                ITEM 3 SERVICIO EXENTO	      2		   6755
+                ITEM 1 AFECTO		    127		   2252
+                ITEM 2 AFECTO		     54		   2197
+                ITEM 3 SERVICIO EXENTO	      2		   6776
 
-                DESCUENTO GLOBAL ITEMES AFECTOS		      3%
+                DESCUENTO GLOBAL ITEMES AFECTOS		      9%
 
                 *************************************************************************/
                 // Leo el folio
@@ -6424,7 +6420,6 @@ along with this software (see the LICENSE.md file). If not, see
                 formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
                 dateFechaEmision = new Date();
                 fechaEmision = formatterFechaEmision.format(dateFechaEmision);
-                iddoc.setIndServicio(BigInteger.valueOf(3));
 
                 cal = Calendar.getInstance();
                 cal.add(Calendar.DAY_OF_MONTH, 45);
@@ -6449,48 +6444,49 @@ along with this software (see the LICENSE.md file). If not, see
                 recp4.setCmnaRecep("Huechuraba");
                 recp4.setCiudadRecep("Santiago");
 
-                Detalle[] det4 = new Detalle[3]
+                Detalle[] det4 = new Detalle[3];
+
 
                 // Agrego detalle 0
                 det4[0] = Detalle.Factory.newInstance();
                 det4[0].setNroLinDet(1);
                 det4[0].setNmbItem("ITEM 1 AFECTO");
-                det4[0].setQtyItem(BigDecimal.valueOf(19));
-                det4[0].setPrcItem(BigDecimal.valueOf(887));
-                det4[0].setMontoItem( Math.round(19*887));
-                totalItem1 = Math.round(19*887);
+                det4[0].setQtyItem(BigDecimal.valueOf(qtyItem1Caso4));
+                det4[0].setPrcItem(BigDecimal.valueOf(prcItem1Caso4));
+                det4[0].setMontoItem( Math.round(qtyItem1Caso4*prcItem1Caso4));
+                totalItem1 = Math.round(qtyItem1Caso4*prcItem1Caso4);
 
                 det4[1] = Detalle.Factory.newInstance();
                 det4[1].setNroLinDet(2);
                 det4[1].setNmbItem("ITEM 2 AFECTO");
-                det4[1].setQtyItem(BigDecimal.valueOf(9));
-                det4[1].setPrcItem(BigDecimal.valueOf(320));
-                det4[1].setMontoItem( Math.round(9*320));
-                totalItem2 = Math.round(9*320);
+                det4[1].setQtyItem(BigDecimal.valueOf(qtyItem2Caso4));
+                det4[1].setPrcItem(BigDecimal.valueOf(prcItem2Caso4));
+                det4[1].setMontoItem( Math.round(qtyItem2Caso4*prcItem2Caso4));
+                totalItem2 = Math.round(qtyItem2Caso4*prcItem2Caso4);
 
                 det4[2] = Detalle.Factory.newInstance();
-                det4[2].setNroLinDet(2);
+                det4[2].setNroLinDet(3);
                 det4[2].setNmbItem("ITEM 3 SERVICIO EXENTO");
-                det4[2].setQtyItem(BigDecimal.valueOf(2));
-                det4[2].setPrcItem(BigDecimal.valueOf(6755));
-                det4[2].setMontoItem( Math.round(2*6755));
+                det4[2].setQtyItem(BigDecimal.valueOf(qtyItem3Caso4));
+                det4[2].setPrcItem(BigDecimal.valueOf(prcItem3Caso4));
+                det4[2].setMontoItem( Math.round(qtyItem3Caso4*prcItem3Caso4));
                 det4[2].setIndExe(1);
-                totalItem3 = Math.round(2*6755);
+                totalItem3 = Math.round(qtyItem3Caso4*prcItem3Caso4);
 
                 doc4.getDTE().getDocumento().setDetalleArray(det4);
 
-                totalNeto = totalItem1 + totalItem2 + totalItem3;
+                totalNeto = totalItem1 + totalItem2;
+                totalExento = totalItem3;
 
                 // Descuento Global
-                long descuento = Math.round(totalNeto * (Long.valueOf(3) / 100));
+                long descuento = Math.round(totalNeto * (Long.valueOf(descGlobalAfectos) / 100));
                 totalNeto = totalNeto - descuento
                 // Creación entradas en XML
                 DscRcgGlobal dscGlobal = DscRcgGlobal.Factory.newInstance();
                 dscGlobal.setNroLinDR(BigInteger.valueOf(1));
                 dscGlobal.setTpoMov(DscRcgGlobal.TpoMov.Enum.forString("D"));
                 dscGlobal.setTpoValor(cl.sii.siiDte.DineroPorcentajeType.Enum.forString("%"));
-                dscGlobal.setValorDR(BigDecimal.valueOf(Integer.valueOf(3)));// Porcentaje Dscto
-                //dscGlobal.setGlosaDR(glosaDr);
+                dscGlobal.setValorDR(BigDecimal.valueOf(Integer.valueOf(""+descGlobalAfectos)));// Porcentaje Dscto
                 dscGlobal.setGlosaDR("DESCUENTO GLOBAL ITEMES AFECTOS");
                 DscRcgGlobal[] dscGB4 = new DscRcgGlobal[1];
                 dscGB4[0] = dscGlobal;
@@ -6501,12 +6497,13 @@ along with this software (see the LICENSE.md file). If not, see
                 Totales tot4 = doc4.getDTE().getDocumento().getEncabezado().addNewTotales();
 
                 tot4.setMntNeto(Math.round(totalNeto));
+                tot4.setMntExe(totalExento);
                 tot4.setTasaIVA(BigDecimal.valueOf(19));
                 // Valor de solo IVA
                 totalIVA = Math.round(totalNeto * 0.19)
                 tot4.setIVA(totalIVA)
                 // total neto + IVA
-                totalInvoice = totalNeto + totalIVA;
+                totalInvoice = totalNeto + totalIVA + totalExento;
                 tot4.setMntTotal(Math.round(totalInvoice))
 
                 amount = totalInvoice;
@@ -6517,10 +6514,9 @@ along with this software (see the LICENSE.md file). If not, see
                 ref4[0] = Referencia.Factory.newInstance();
                 ref4[0].setNroLinRef(1);
                 ref4[0].setTpoDocRef('SET');
-                //ref4[0].setFolioRef("1813968");
                 ref4[0].setFolioRef(""+folio);
                 ref4[0].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
-                ref4[0].setRazonRef("CASO 1813968-4");
+                ref4[0].setRazonRef(refCaso4);
 
                 doc4.getDTE().getDocumento().setReferenciaArray(ref4);
 
@@ -6662,13 +6658,13 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="genera" noun="SetBasicoCaso5">
-
         <description>
             Generación de DTE de acuerdo a plantilla
         </description>
         <in-parameters>
             <parameter name="activeOrgId" required="true"/>
             <parameter name="folioReferencia" required="true"/>
+            <parameter name="refCaso5" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="folio"/>
@@ -6753,7 +6749,6 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.sii.siiDte.MedioPagoType;
                 import org.apache.commons.io.IOUtils;
 
-                int folio;
                 DTEDocument doc;
                 AutorizacionType caf;
                 X509Certificate cert;
@@ -6774,10 +6769,10 @@ along with this software (see the LICENSE.md file). If not, see
                 logger.warn("Creando Caso 5, con folio: " + dte5map.folio);
                 /************************************************************************
 
-                CASO 1813968-5
-
+                CASO 1889781-5
+                ==============
                 DOCUMENTO		NOTA DE CREDITO ELECTRONICA
-                REFERENCIA		FACTURA ELECTRONICA CORRESPONDIENTE A CASO 1813968-1
+                REFERENCIA		FACTURA ELECTRONICA CORRESPONDIENTE A CASO 1889781-1
                 RAZON REFERENCIA	CORRIGE GIRO DEL RECEPTOR
 
                 *************************************************************************/
@@ -6822,7 +6817,6 @@ along with this software (see the LICENSE.md file). If not, see
                 formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
                 dateFechaEmision = new Date();
                 fechaEmision = formatterFechaEmision.format(dateFechaEmision);
-                iddoc.setIndServicio(BigInteger.valueOf(3));
 
                 cal = Calendar.getInstance();
                 cal.add(Calendar.DAY_OF_MONTH, 45);
@@ -6856,9 +6850,9 @@ along with this software (see the LICENSE.md file). If not, see
                 det5[0] = Detalle.Factory.newInstance();
                 det5[0].setNroLinDet(1);
                 det5[0].setNmbItem("Cajón AFECTO");
-                //det5[0].setQtyItem(BigDecimal.valueOf(115));
-                //det5[0].setPrcItem(BigDecimal.valueOf(443));
-                //det5[0].setMontoItem( Math.round(115*443));
+                //det5[0].setQtyItem(BigDecimal.valueOf(0));
+                //det5[0].setPrcItem(BigDecimal.valueOf(0));
+                det5[0].setMontoItem( Math.round(0));
                 totalItem1 = Math.round(0);
 
                 doc5.getDTE().getDocumento().setDetalleArray(det5);
@@ -6884,10 +6878,10 @@ along with this software (see the LICENSE.md file). If not, see
                 ref5[0] = Referencia.Factory.newInstance();
                 ref5[0].setNroLinRef(1);
                 ref5[0].setTpoDocRef('SET');
-                //ref5[0].setFolioRef("1813968");
                 ref5[0].setFolioRef(""+folio);
                 ref5[0].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
-                ref5[0].setRazonRef("CASO 1813968-5");
+                //ref5[0].setRazonRef("CASO 1889781-5");
+                ref5[0].setRazonRef(refCaso5);
 
                 ref5[1] = Referencia.Factory.newInstance();
                 ref5[1].setNroLinRef(2);
@@ -6991,7 +6985,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <field-map field-name="issuerPartyId" from="activeOrgId"/>
             </entity-find-one>
 
-
             <set field="dteField.receiverPartyId" from="receiverPartyId"/>
             <set field="dteField.receiverPartyIdTypeEnumId" value="PtidNationalTaxId"/>
             <set field="dteField.fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
@@ -7041,6 +7034,13 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="activeOrgId" required="true"/>
             <parameter name="folioReferencia" required="true"/>
+            <parameter name="qtyItem1Caso6" required="true" type="Long"/>
+            <parameter name="prcItem1Caso6" required="true" type="Long"/>
+            <parameter name="qtyItem2Caso6" required="true" type="Long"/>
+            <parameter name="prcItem2Caso6" required="true" type="Long"/>
+            <parameter name="descItem1Caso6" required="true" type="Long"/>
+            <parameter name="descItem2Caso6" required="true" type="Long"/>
+            <parameter name="refCaso6" required="true"/>
         </in-parameters>
         <actions>
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
@@ -7079,15 +7079,6 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="fechaEmision"/>
 
-            <!-- Obtención de primer folio y path de CAF -->
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="context"/>
-
-            <set field="folioS" from="folio" type="Integer"/>
-            <set field="codRef" value="0" type="Integer"/>
-            <set field="receiverPartyId" value="100102"/>
-            <script>
-                cafS = cafS + caf
-            </script>
             <script>
                 import java.io.ByteArrayOutputStream;
                 import java.io.File;
@@ -7151,13 +7142,15 @@ along with this software (see the LICENSE.md file). If not, see
                 logger.warn("Creando Caso 6, con folio: " + dte6map.folio);
                 /************************************************************************
 
+                CASO 1889781-6
+                ==============
                 DOCUMENTO		NOTA DE CREDITO ELECTRONICA
-                REFERENCIA		FACTURA  ELECTRONICA CORRESPONDIENTE A CASO 1813968-2
+                REFERENCIA		FACTURA  ELECTRONICA CORRESPONDIENTE A CASO 1889781-2
                 RAZON REFERENCIA	DEVOLUCION DE MERCADERIAS
 
                 ITEM			CANTIDAD
-                Pañuelo AFECTO		     50
-                ITEM 2 AFECTO		     40
+                Pañuelo AFECTO		    112
+                ITEM 2 AFECTO		    159
 
                 *************************************************************************/
                 // Leo el folio
@@ -7201,7 +7194,6 @@ along with this software (see the LICENSE.md file). If not, see
                 formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
                 dateFechaEmision = new Date();
                 fechaEmision = formatterFechaEmision.format(dateFechaEmision);
-                iddoc.setIndServicio(BigInteger.valueOf(3));
 
                 cal = Calendar.getInstance();
                 cal.add(Calendar.DAY_OF_MONTH, 45);
@@ -7228,24 +7220,35 @@ along with this software (see the LICENSE.md file). If not, see
                 recp6.setCmnaRecep("LAS CONDES");
                 recp6.setCiudadRecep("SANTIAGO");
 
-                Detalle[] det6 = new Detalle[2]
+                Detalle[] det6 = new Detalle[2];
+
+
+
 
                 // Agrego detalle 0
                 det6[0] = Detalle.Factory.newInstance();
                 det6[0].setNroLinDet(1);
                 det6[0].setNmbItem("Pañuelo AFECTO");
-                det6[0].setQtyItem(BigDecimal.valueOf(50));
-                det6[0].setPrcItem(BigDecimal.valueOf(1151));
-                det6[0].setMontoItem( Math.round(50*1151));
-                totalItem1 = Math.round(50*1151);
+                det6[0].setQtyItem(BigDecimal.valueOf(qtyItem1Caso6));
+                det6[0].setPrcItem(BigDecimal.valueOf(prcItem1Caso6));
+                det6[0].setDescuentoPct(descItem1Caso6);
+                descuento = (qtyItem1Caso6*prcItem1Caso6) * descItem1Caso6 / 100;
+                totalItem1 = Math.round(qtyItem1Caso6*prcItem1Caso6)-Math.round(descuento);
+                //det6[0].setMontoItem( Math.round(qtyItem1Caso6*prcItem1Caso6));
+                det6[0].setMontoItem(totalItem1);
+                det6[0].setDescuentoMonto(Math.round(descuento));
 
                 det6[1] = Detalle.Factory.newInstance();
                 det6[1].setNroLinDet(2);
                 det6[1].setNmbItem("ITEM 2 AFECTO");
-                det6[1].setQtyItem(BigDecimal.valueOf(40));
-                det6[1].setPrcItem(BigDecimal.valueOf(249));
-                det6[1].setMontoItem( Math.round(40*249));
-                totalItem2 = Math.round(40*249);
+                det6[1].setQtyItem(BigDecimal.valueOf(qtyItem2Caso6));
+                det6[1].setPrcItem(BigDecimal.valueOf(prcItem2Caso6));
+                det6[1].setDescuentoPct(descItem2Caso6);
+                descuento = (qtyItem2Caso6*prcItem2Caso6) * descItem2Caso6 / 100;
+                totalItem2 = Math.round(qtyItem2Caso6*prcItem2Caso6)-Math.round(descuento);
+                //det6[1].setMontoItem( Math.round(qtyItem2Caso6*prcItem2Caso6));
+                det6[1].setMontoItem(totalItem2);
+                det6[1].setDescuentoMonto(Math.round(descuento));
 
                 doc6.getDTE().getDocumento().setDetalleArray(det6);
 
@@ -7262,9 +7265,6 @@ along with this software (see the LICENSE.md file). If not, see
                 // total neto + IVA
                 totalInvoice = totalNeto + totalIVA;
                 tot6.setMntTotal(Math.round(totalInvoice))
-                //if(totalExento &gt; 0) {
-                //    tot.setMntExe(Math.round(totalExento));
-                //}
                 amount = totalInvoice;
 
                 // Referencias
@@ -7273,10 +7273,9 @@ along with this software (see the LICENSE.md file). If not, see
                 ref6[0] = Referencia.Factory.newInstance();
                 ref6[0].setNroLinRef(1);
                 ref6[0].setTpoDocRef('SET');
-                //ref6[0].setFolioRef("1813968");
                 ref6[0].setFolioRef(""+folio);
                 ref6[0].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
-                ref6[0].setRazonRef("CASO 1813968-6");
+                ref6[0].setRazonRef(refCaso6);
 
                 ref6[1] = Referencia.Factory.newInstance();
                 ref6[1].setNroLinRef(2);
@@ -7432,6 +7431,13 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="activeOrgId" required="true"/>
             <parameter name="folioReferencia" required="true"/>
+            <parameter name="qtyItem1Caso7" required="true" type="Long"/>
+            <parameter name="prcItem1Caso7" required="true" type="Long"/>
+            <parameter name="qtyItem2Caso7" required="true" type="Long"/>
+            <parameter name="prcItem2Caso7" required="true" type="Long"/>
+            <parameter name="qtyItem3Caso7" required="true" type="Long"/>
+            <parameter name="prcItem3Caso7" required="true" type="Long"/>
+            <parameter name="refCaso7" required="true"/>
         </in-parameters>
         <actions>
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
@@ -7470,11 +7476,6 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="fechaEmision"/>
 
-            <!-- Obtención de primer folio y path de CAF -->
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="context"/>
-
-            <set field="folioS" from="folio" type="Integer"/>
-            <set field="codRef" value="0" type="Integer"/>
             <set field="receiverPartyId" value="100102"/>
             <script>
                 cafS = cafS + caf
@@ -7542,8 +7543,10 @@ along with this software (see the LICENSE.md file). If not, see
                 logger.warn("Creando Caso 7, con folio: " + dte7map.folio);
                 /************************************************************************
 
+                CASO 1889781-7
+                ==============
                 DOCUMENTO		NOTA DE CREDITO ELECTRONICA
-                REFERENCIA		FACTURA ELECTRONICA CORRESPONDIENTE A CASO 1813968-3
+                REFERENCIA		FACTURA ELECTRONICA CORRESPONDIENTE A CASO 1889781-3
                 RAZON REFERENCIA	ANULA FACTURA
 
                 *************************************************************************/
@@ -7588,7 +7591,6 @@ along with this software (see the LICENSE.md file). If not, see
                 formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
                 dateFechaEmision = new Date();
                 fechaEmision = formatterFechaEmision.format(dateFechaEmision);
-                iddoc.setIndServicio(BigInteger.valueOf(3));
 
                 cal = Calendar.getInstance();
                 cal.add(Calendar.DAY_OF_MONTH, 45);
@@ -7608,7 +7610,7 @@ along with this software (see the LICENSE.md file). If not, see
 
                 recp7.setRUTRecep("96992030-1");
                 recp7.setRznSocRecep("Sociedad Concesionaria Vespucio Norte Express S.A.");
-                recp7.setGiroRecep("CONSTRUCCION DE CARRETERAS Y LINEAS DE FERROCARRIL");
+                recp7.setGiroRecep("CONSTRUCCION DE CARRETERAS");
                 recp7.setContacto("6005713000");
                 recp7.setDirRecep("AMERICO VESPUCIO ORIENTE 1305");
                 recp7.setCmnaRecep("PUDAHUEL");
@@ -7620,32 +7622,32 @@ along with this software (see the LICENSE.md file). If not, see
                 det7[0] = Detalle.Factory.newInstance();
                 det7[0].setNroLinDet(1);
                 det7[0].setNmbItem("Pintura B&amp;W AFECTO");
-                det7[0].setQtyItem(BigDecimal.valueOf(23));
-                det7[0].setPrcItem(BigDecimal.valueOf(887));
-                det7[0].setMontoItem( Math.round(23*887));
-                totalItem1 = Math.round(23*887);
-                //det7[0].setDescuentoMonto(Math.round(descuento));
+                det7[0].setQtyItem(BigDecimal.valueOf(qtyItem1Caso7));
+                det7[0].setPrcItem(BigDecimal.valueOf(prcItem1Caso7));
+                det7[0].setMontoItem( Math.round(qtyItem1Caso7*prcItem1Caso7));
+                totalItem1 = Math.round(qtyItem1Caso7*prcItem1Caso7);
 
                 det7[1] = Detalle.Factory.newInstance();
                 det7[1].setNroLinDet(2);
                 det7[1].setNmbItem("ITEM 2 AFECTO");
-                det7[1].setQtyItem(BigDecimal.valueOf(132));
-                det7[1].setPrcItem(BigDecimal.valueOf(2888));
-                det7[1].setMontoItem( Math.round(132*2888));
-                totalItem2 = Math.round(132*2888);
+                det7[1].setQtyItem(BigDecimal.valueOf(qtyItem2Caso7));
+                det7[1].setPrcItem(BigDecimal.valueOf(prcItem2Caso7));
+                det7[1].setMontoItem( Math.round(qtyItem2Caso7*prcItem2Caso7));
+                totalItem2 = Math.round(qtyItem2Caso7*prcItem2Caso7);
 
                 det7[2] = Detalle.Factory.newInstance();
-                det7[2].setNroLinDet(2);
+                det7[2].setNroLinDet(3);
                 det7[2].setNmbItem("ITEM 3 SERVICIO EXENTO");
-                det7[2].setQtyItem(BigDecimal.valueOf(1));
-                det7[2].setPrcItem(BigDecimal.valueOf(34595));
-                det7[2].setMontoItem( Math.round(34595));
+                det7[2].setQtyItem(BigDecimal.valueOf(qtyItem3Caso7));
+                det7[2].setPrcItem(BigDecimal.valueOf(prcItem3Caso7));
+                det7[2].setMontoItem( Math.round(qtyItem3Caso7*prcItem3Caso7));
                 det7[2].setIndExe(1);
-                totalItem3 = Math.round(34595);
+                totalItem3 = Math.round(qtyItem3Caso7*prcItem3Caso7);
 
                 doc7.getDTE().getDocumento().setDetalleArray(det7);
 
-                totalNeto = totalItem1 + totalItem2 + totalItem3;
+                totalExento = totalItem3;
+                totalNeto = totalItem1 + totalItem2;
 
                 // Totales
                 Totales tot7 = doc7.getDTE().getDocumento().getEncabezado().addNewTotales();
@@ -7656,11 +7658,9 @@ along with this software (see the LICENSE.md file). If not, see
                 totalIVA = Math.round(totalNeto * 0.19)
                 tot7.setIVA(totalIVA)
                 // total neto + IVA
-                totalInvoice = totalNeto + totalIVA;
+                totalInvoice = totalNeto + totalIVA + totalExento;
                 tot7.setMntTotal(Math.round(totalInvoice))
-                //if(totalExento &gt; 0) {
-                //    tot.setMntExe(Math.round(totalExento));
-                //}
+                tot7.setMntExe(Math.round(totalExento));
                 amount = totalInvoice;
 
                 // Referencias
@@ -7669,10 +7669,10 @@ along with this software (see the LICENSE.md file). If not, see
                 ref7[0] = Referencia.Factory.newInstance();
                 ref7[0].setNroLinRef(1);
                 ref7[0].setTpoDocRef('SET');
-                //ref7[0].setFolioRef("1813968");
                 ref7[0].setFolioRef(""+folio);
                 ref7[0].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
-                ref7[0].setRazonRef("CASO 1813968-7");
+                //ref7[0].setRazonRef("CASO 1889781-7");
+                ref7[0].setRazonRef(refCaso7);
 
                 ref7[1] = Referencia.Factory.newInstance();
                 ref7[1].setNroLinRef(2);
@@ -7829,7 +7829,8 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="activeOrgId" required="true"/>
-            <parameter name="folioReferencia"/>
+            <parameter name="folioReferencia" required="true"/>
+            <parameter name="refCaso8" required="true"/>
         </in-parameters>
         <actions>
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
@@ -7869,10 +7870,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="fechaEmision"/>
 
             <!-- Obtención de primer folio y path de CAF -->
-            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="context"/>
 
-            <set field="folioS" from="folio" type="Integer"/>
-            <set field="codRef" value="0" type="Integer"/>
             <set field="receiverPartyId" value="100102"/>
             <script>
                 cafS = cafS + caf
@@ -7936,8 +7934,10 @@ along with this software (see the LICENSE.md file). If not, see
                 logger.warn("Creando Caso 8, con folio: " + dte8map.folio);
                 /************************************************************************
 
+                CASO 1889781-8
+                ==============
                 DOCUMENTO		NOTA DE DEBITO ELECTRONICA
-                REFERENCIA		NOTA DE CREDITO ELECTRONICA CORRESPONDIENTE A CASO 1813968-5
+                REFERENCIA		NOTA DE CREDITO ELECTRONICA CORRESPONDIENTE A CASO 1889781-5
                 RAZON REFERENCIA	ANULA NOTA DE CREDITO ELECTRONICA
 
                 *************************************************************************/
@@ -7982,7 +7982,6 @@ along with this software (see the LICENSE.md file). If not, see
                 formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
                 dateFechaEmision = new Date();
                 fechaEmision = formatterFechaEmision.format(dateFechaEmision);
-                iddoc.setIndServicio(BigInteger.valueOf(3));
 
                 cal = Calendar.getInstance();
                 cal.add(Calendar.DAY_OF_MONTH, 45);
@@ -8008,38 +8007,18 @@ along with this software (see the LICENSE.md file). If not, see
                 recp8.setCmnaRecep("Las Condes");
                 recp8.setCiudadRecep("Santiago");
 
-                Detalle[] det8 = new Detalle[3]
+                Detalle[] det8 = new Detalle[1];
 
                 // Agrego detalle 0
                 det8[0] = Detalle.Factory.newInstance();
                 det8[0].setNroLinDet(1);
-                det8[0].setNmbItem("Pintura B&amp;W AFECTO");
-                det8[0].setQtyItem(BigDecimal.valueOf(23));
-                det8[0].setPrcItem(BigDecimal.valueOf(887));
-                det8[0].setMontoItem( Math.round(23*887));
-                totalItem1 = Math.round(23*887);
-                //det8[0].setDescuentoMonto(Math.round(descuento));
-
-                det8[1] = Detalle.Factory.newInstance();
-                det8[1].setNroLinDet(2);
-                det8[1].setNmbItem("ITEM 2 AFECTO");
-                det8[1].setQtyItem(BigDecimal.valueOf(132));
-                det8[1].setPrcItem(BigDecimal.valueOf(2888));
-                det8[1].setMontoItem( Math.round(132*2888));
-                totalItem2 = Math.round(132*2888);
-
-                det8[2] = Detalle.Factory.newInstance();
-                det8[2].setNroLinDet(2);
-                det8[2].setNmbItem("ITEM 3 SERVICIO EXENTO");
-                det8[2].setQtyItem(BigDecimal.valueOf(1));
-                det8[2].setPrcItem(BigDecimal.valueOf(34595));
-                det8[2].setMontoItem( Math.round(34595));
-                det8[2].setIndExe(1);
-                totalItem3 = Math.round(34595);
+                det8[0].setNmbItem("Cajón AFECTO");
+                det8[0].setMontoItem( Math.round(0));
+                totalItem1 = Math.round(0);
 
                 doc8.getDTE().getDocumento().setDetalleArray(det8);
 
-                totalNeto = totalItem1 + totalItem2 + totalItem3;
+                totalNeto = totalItem1;
 
                 // Totales
                 Totales tot8 = doc8.getDTE().getDocumento().getEncabezado().addNewTotales();
@@ -8052,9 +8031,6 @@ along with this software (see the LICENSE.md file). If not, see
                 // total neto + IVA
                 totalInvoice = totalNeto + totalIVA;
                 tot8.setMntTotal(Math.round(totalInvoice))
-                //if(totalExento &gt; 0) {
-                //    tot.setMntExe(Math.round(totalExento));
-                //}
                 amount = totalInvoice;
 
                 // Referencias
@@ -8063,20 +8039,20 @@ along with this software (see the LICENSE.md file). If not, see
                 ref8[0] = Referencia.Factory.newInstance();
                 ref8[0].setNroLinRef(1);
                 ref8[0].setTpoDocRef('SET');
-                //ref8[0].setFolioRef("1813968");
                 ref8[0].setFolioRef(""+folio);
                 ref8[0].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
-                ref8[0].setRazonRef("CASO 1813968-7");
+                //ref8[0].setRazonRef("CASO 1889781-7");
+                ref8[0].setRazonRef(refCaso8);
 
                 ref8[1] = Referencia.Factory.newInstance();
                 ref8[1].setNroLinRef(2);
-                ref8[1].setTpoDocRef('33');
+                ref8[1].setTpoDocRef('61');
                 ref8[1].setCodRef(1);
                 ref8[1].setFolioRef(folioReferencia); // Folio del caso 3
                 ref8[1].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
-                ref8[1].setRazonRef("ANULA FACTURA");
+                ref8[1].setRazonRef("ANULA NOTA DE CREDITO ELECTRONICA");
 
-                doc8.getDTE().getDocumento().setReferenciaArray(ref6);
+                doc8.getDTE().getDocumento().setReferenciaArray(ref8);
 
                 // Timbro
                 doc8.getDTE().timbrar(caf8.getCAF(), caf8.getPrivateKey(null));
@@ -8223,14 +8199,1314 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="activeOrgId" required="true"/>
         </in-parameters>
         <actions>
-            <service-call name="mchile.DTECertification.genera#SetBasicoCaso1" in-map="[activeOrgId:activeOrgId]" out-map="caso1map"/>
-            <service-call name="mchile.DTECertification.genera#SetBasicoCaso2" in-map="[activeOrgId:activeOrgId]" out-map="caso2map"/>
-            <service-call name="mchile.DTECertification.genera#SetBasicoCaso3" in-map="[activeOrgId:activeOrgId]" out-map="caso3map"/>
-            <service-call name="mchile.DTECertification.genera#SetBasicoCaso4" in-map="[activeOrgId:activeOrgId]" out-map="caso4map"/>
-            <service-call name="mchile.DTECertification.genera#SetBasicoCaso5" in-map="[activeOrgId:activeOrgId, folioReferencia:caso1map.folio]" out-map="caso5map"/>
-            <service-call name="mchile.DTECertification.genera#SetBasicoCaso6" in-map="[activeOrgId:activeOrgId, folioReferencia:caso2map.folio]" out-map="caso6map"/>
-            <service-call name="mchile.DTECertification.genera#SetBasicoCaso7" in-map="[activeOrgId:activeOrgId, folioReferencia:caso3map.folio]" out-map="caso7map"/>
-            <service-call name="mchile.DTECertification.genera#SetBasicoCaso8" in-map="[activeOrgId:activeOrgId, folioReferencia:caso5map.folio]" out-map="caso8map"/>
+
+            <!-- Caso 1: 2 itemes afectos -->
+            <set field="qtyItem1Caso1" value="118"/>
+            <set field="prcItem1Caso1" value="601"/>
+            <set field="qtyItem2Caso1" value="51"/>
+            <set field="prcItem2Caso1" value="930"/>
+            <set field="refCaso1" value="CASO 1965337-1"/>
+            <service-call name="mchile.DTECertification.genera#SetBasicoCaso1" in-map="[activeOrgId:activeOrgId,
+                qtyItem1Caso1:qtyItem1Caso1, prcItem1Caso1:prcItem1Caso1,
+                qtyItem2Caso1:qtyItem2Caso1, prcItem2Caso1:prcItem2Caso1,
+                refCaso1:refCaso1]" out-map="caso1map"/>
+
+            <!-- Caso2: 2 itemes afectos c/u con un descuento especifico -->
+            <set field="qtyItem1Caso2" value="169"/>
+            <set field="prcItem1Caso2" value="1431"/>
+            <set field="descItem1Caso2" value="3"/>
+            <set field="qtyItem2Caso2" value="93"/>
+            <set field="prcItem2Caso2" value="497"/>
+            <set field="descItem2Caso2" value="3"/>
+            <set field="refCaso2" value="CASO 1965337-2"/>
+            <service-call name="mchile.DTECertification.genera#SetBasicoCaso2" in-map="[activeOrgId:activeOrgId,
+                qtyItem1Caso2:qtyItem1Caso2, prcItem1Caso2:prcItem1Caso2,
+                qtyItem2Caso2:qtyItem2Caso2, prcItem2Caso2:prcItem2Caso2,
+                descItem1Caso2:descItem1Caso2, descItem2Caso2:descItem2Caso2,
+                refCaso2:refCaso2]" out-map="caso2map"/>
+
+            <!-- Caso 3: 2 itemes afectos, 1 item exento -->
+            <set field="qtyItem1Caso3" value="23"/>
+            <set field="prcItem1Caso3" value="1239"/>
+            <set field="qtyItem2Caso3" value="138"/>
+            <set field="prcItem2Caso3" value="2911"/>
+            <set field="qtyItem3Caso3" value="1"/>
+            <set field="prcItem3Caso3" value="34631"/>
+            <set field="refCaso3" value="CASO 1965337-3"/>
+            <service-call name="mchile.DTECertification.genera#SetBasicoCaso3" in-map="[activeOrgId:activeOrgId,
+                qtyItem1Caso3:qtyItem1Caso3, prcItem1Caso3:prcItem1Caso3,
+                qtyItem2Caso3:qtyItem2Caso3, prcItem2Caso3:prcItem2Caso3,
+                qtyItem3Caso3:qtyItem3Caso3, prcItem3Caso3:prcItem3Caso3,
+                refCaso3:refCaso3]" out-map="caso3map"/>
+
+            <!-- Caso 4: 2 itemes afectos, 1 item exento, descuento global afectos -->
+            <set field="qtyItem1Caso4" value="39"/>
+            <set field="prcItem1Caso4" value="1140"/>
+            <set field="qtyItem2Caso4" value="17"/>
+            <set field="prcItem2Caso4" value="678"/>
+            <set field="qtyItem3Caso4" value="2"/>
+            <set field="prcItem3Caso4" value="6759"/>
+            <set field="descGlobalAfectos" value="4"/>
+            <set field="refCaso4" value="CASO 1965337-4"/>
+            <service-call name="mchile.DTECertification.genera#SetBasicoCaso4" in-map="[activeOrgId:activeOrgId,
+                qtyItem1Caso4:qtyItem1Caso4, prcItem1Caso4:prcItem1Caso4,
+                qtyItem2Caso4:qtyItem2Caso4, prcItem2Caso4:prcItem2Caso4,
+                qtyItem3Caso4:qtyItem3Caso4, prcItem3Caso4:prcItem3Caso4,
+                descGlobalAfectos:descGlobalAfectos,
+                refCaso4:refCaso4
+            ]" out-map="caso4map"/>
+
+            <!-- Caso 5: Corrige giro del receptor, sin otros parametros -->
+            <set field="refCaso5" value="CASO 1965337-5"/>
+            <service-call name="mchile.DTECertification.genera#SetBasicoCaso5" in-map="[activeOrgId:activeOrgId,
+                refCaso5:refCaso5, folioReferencia:caso1map.folio]" out-map="caso5map"/>
+
+            <!-- Caso 6: 2 itemes para devolver. Tomar precios de caso 2 -->
+            <set field="qtyItem1Caso6" value="112"/>
+            <set field="prcItem1Caso6" value="1431" type="Long"/><!-- usa el precio sin descuento caso 2 -->
+            <set field="qtyItem2Caso6" value="159"/>
+            <set field="prcItem2Caso6" value="497" type="Long"/><!-- usa el precio sin descuento caso 2 -->
+            <set field="refCaso6" value="CASO 1965337-6"/>
+            <service-call name="mchile.DTECertification.genera#SetBasicoCaso6" in-map="[activeOrgId:activeOrgId,
+                qtyItem1Caso6:qtyItem1Caso6, prcItem1Caso6:prcItem1Caso2,
+                qtyItem2Caso6:qtyItem2Caso6, prcItem2Caso6:prcItem2Caso2,
+                descItem1Caso6:descItem1Caso2, descItem2Caso6:descItem2Caso2,
+                refCaso6:refCaso6, folioReferencia:caso2map.folio]" out-map="caso6map"/>
+
+
+            <!-- Caso 7: Anula Factura de caso 3. Toma todos los items de caso 3-->
+            <set field="refCaso7" value="CASO 1965337-7"/>
+            <service-call name="mchile.DTECertification.genera#SetBasicoCaso7" in-map="[activeOrgId:activeOrgId,
+                qtyItem1Caso7:qtyItem1Caso3, prcItem1Caso7:prcItem1Caso3,
+                qtyItem2Caso7:qtyItem2Caso3, prcItem2Caso7:prcItem2Caso3,
+                qtyItem3Caso7:qtyItem3Caso3, prcItem3Caso7:prcItem3Caso3,
+                refCaso7:refCaso7,
+                folioReferencia:caso3map.folio]" out-map="caso7map"/>
+
+            <!-- Caso 8: Anula nota de credito electronica. No toma parametros de otros casos -->
+            <set field="refCaso8" value="CASO 1965337-8"/>
+            <service-call name="mchile.DTECertification.genera#SetBasicoCaso8" in-map="[activeOrgId:activeOrgId, folioReferencia:caso5map.folio, refCaso8:refCaso8]" out-map="caso8map"/>
         </actions>
     </service>
+
+    <service verb="genera" noun="SetGuiaDespacho">
+        <description>
+            Generación de Set Basico
+        </description>
+        <in-parameters>
+            <parameter name="activeOrgId" required="true"/>
+        </in-parameters>
+        <actions>
+
+            <!-- Caso 1: 3 items por traslado de materiales -->
+            <set field="qtyItem1Caso1" value="84"/>
+            <set field="qtyItem2Caso1" value="139"/>
+            <set field="qtyItem3Caso1" value="98"/>
+            <set field="refCaso1" value="CASO 1965340-1"/>
+            <service-call name="mchile.DTECertification.genera#SetGuiaCaso1" in-map="[activeOrgId:activeOrgId,
+                qtyItem1Caso1:qtyItem1Caso1, qtyItem2Caso1:qtyItem2Caso1, qtyItem3Caso1:qtyItem3Caso1,
+                refCaso1:refCaso1]" out-map="caso1map"/>
+
+            <!-- Caso2: 2 Guia por venta y traslado por emisor, con precios -->
+            <set field="qtyItem1Caso2" value="410"/>
+            <set field="prcItem1Caso2" value="2465"/>
+            <set field="descItem1Caso2" value="5"/>
+            <set field="qtyItem2Caso2" value="796"/>
+            <set field="prcItem2Caso2" value="1527"/>
+            <set field="refCaso2" value="CASO 1965340-2"/>
+            <service-call name="mchile.DTECertification.genera#SetGuiaCaso2" in-map="[activeOrgId:activeOrgId,
+                qtyItem1Caso2:qtyItem1Caso2, prcItem1Caso2:prcItem1Caso2,
+                qtyItem2Caso2:qtyItem2Caso2, prcItem2Caso2:prcItem2Caso2,
+                refCaso2:refCaso2]" out-map="caso2map"/>
+
+            <!-- Caso 3: 2 itemes por venta, traslado por cliente -->
+            <set field="qtyItem1Caso3" value="189"/>
+            <set field="prcItem1Caso3" value="2676"/>
+            <set field="qtyItem2Caso3" value="161"/>
+            <set field="prcItem2Caso3" value="487"/>
+            <set field="refCaso3" value="CASO 1965340-3"/>
+            <service-call name="mchile.DTECertification.genera#SetGuiaCaso3" in-map="[activeOrgId:activeOrgId,
+                qtyItem1Caso3:qtyItem1Caso3, prcItem1Caso3:prcItem1Caso3,
+                qtyItem2Caso3:qtyItem2Caso3, prcItem2Caso3:prcItem2Caso3,
+                refCaso3:refCaso3]" out-map="caso3map"/>
+
+        </actions>
+    </service>
+
+    <service verb="genera" noun="SetGuiaCaso1">
+        <description>
+            Generación de Caso 1 Set Guia Despacho
+        </description>
+        <in-parameters>
+            <parameter name="activeOrgId" required="true"/>
+            <parameter name="qtyItem1Caso1" required="true" type="Long"/>
+            <parameter name="prcItem1Caso1" required="true" type="Long"/>
+            <parameter name="qtyItem2Caso1" required="true" type="Long"/>
+            <parameter name="prcItem2Caso1" required="true" type="Long"/>
+            <parameter name="refCaso1" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="folio"/>
+        </out-parameters>
+        <actions>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
+                <econdition field-name="partyId" from="activeOrgId"/></entity-find>
+
+            <if condition="!partyIdentificationList.idValue[0]">
+                <return error="true" message="Organización $activeOrgId no tiene RUT definido"/>
+            </if>
+            <set field="emisorS" from="partyIdentificationList.idValue[0]"/>
+
+            <!-- Recuperacion de parametros de la organizacion -->
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <!--set field="certS" from="pathCert"/-->
+            <set field="certS" from="certData"/>
+            <set field="passS" from="passCert"/>
+            <set field="resultS" from="pathResults"/>
+            <set field="pathTemp" from="pathTemp"/>
+            <set field="pathPdf" from="pathPdf"/>
+            <set field="cafS" from="pathCaf"/>
+            <set field="plantillaS" from="templateFactura"/>
+            <!--set field="giro" from="giroEmisor"/-->
+            <set field="templateFactura" from="templateFactura"/>
+            <set field="templatePdf" from="templatePdf"/>
+            <set field="templatePdfCedible" from="templatePdfCedible"/>
+            <set field="templateEnvio" from="templateEnvio"/>
+            <set field="templateAceptaciones" from="templateAceptaciones"/>
+            <set field="templateLibro" from="templateLibro"/>
+            <set field="logo" from="logo"/>
+            <set field="fchResol" from="fchResol"/>
+            <set field="nroResol" from="nroResol"/>
+
+            <!-- Giro Emisor -->
+            <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:activeOrgId]" out-map="giroOutMap"/>
+            <set field="giro" from="giroOutMap.description"/>
+
+            <set field="fechaEmision"/>
+
+            <!-- Obtención de primer folio y path de CAF -->
+            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="context"/>
+
+            <set field="folioS" from="folio" type="Integer"/>
+            <set field="codRef" value="0" type="Integer"/>
+
+            <script>
+                cafS = cafS + caf
+            </script>
+            <script>
+                import java.io.ByteArrayOutputStream;
+                import java.io.File;
+                import java.io.FileInputStream;
+                import java.math.BigDecimal;
+                import java.math.BigInteger;
+                import java.nio.file.Files;
+                import java.nio.file.Path;
+                import java.nio.file.Paths;
+                import java.security.KeyStore;
+                import java.security.PrivateKey;
+                import java.security.cert.X509Certificate;
+                import java.util.Calendar;
+                import java.util.Date;
+                import java.util.HashMap;
+                import java.text.ParseException;
+                import java.text.SimpleDateFormat;
+                import java.util.Date;
+
+                import org.apache.xmlbeans.XmlOptions;
+                import org.w3c.dom.Document;
+
+                import cl.nic.dte.util.Signer;
+                import cl.nic.dte.util.Utilities;
+                import cl.nic.dte.util.XMLUtil;
+                import cl.sii.siiDte.AUTORIZACIONDocument;
+                import cl.sii.siiDte.AutorizacionType;
+                import cl.sii.siiDte.DTEDefType.Documento.Detalle;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.IdDoc;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Receptor;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Totales;
+                import cl.sii.siiDte.DTEDefType.Documento.Referencia;
+                import cl.sii.siiDte.DTEDefType.Documento.DscRcgGlobal;
+                import cl.sii.siiDte.DTEDefType.Documento.DscRcgGlobal.TpoMov.Enum;
+                import cl.sii.siiDte.DTEDocument;
+                import cl.sii.siiDte.FechaHoraType;
+                import cl.sii.siiDte.FechaType;
+                import cl.sii.siiDte.MedioPagoType;
+                import org.apache.commons.io.IOUtils;
+
+                logger.warn("Creando Guia Caso 1, con folio: " + folio);
+                /* Primera Guia (Ejemplo caso) *******************************************
+                CASO 1965340-1
+                ==============
+                DOCUMENTO	GUIA DE DESPACHO
+                MOTIVO:		TRASLADO DE MATERIALES ENTRE BODEGAS DE LA EMPRESA
+
+                ITEM		CANTIDAD
+                ITEM 1		     84
+                ITEM 2		    139
+                ITEM 3		     98
+                **************************************************************/
+
+                int folio;
+                DTEDocument doc;
+                AutorizacionType caf;
+                X509Certificate cert;
+                PrivateKey key;
+                int tipoFactura;
+                int frmPago = 1;
+                int listSize = 0;
+
+                // Leo el folio
+                folio = Integer.valueOf(folioS);
+                folioCaso1 = folio;
+                tipoFactura = Integer.valueOf('52');
+                if(formaPago != null)
+                frmPago = Integer.valueOf(formaPago);
+
+                // Debo meter el namespace porque SII no lo genera
+                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;();
+                namespaces.put("", "http://www.sii.cl/SiiDte");
+                namespaces.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+                XmlOptions opts = new XmlOptions();
+                opts.setLoadSubstituteNamespaces(namespaces);
+
+                // Recuperación de archivo CAF desde BD
+
+                caf = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts).getAUTORIZACION();
+
+                // Construyo base a partir del template
+                doc = DTEDocument.Factory.parse(ec.resource.getLocationStream(plantillaS), opts);
+
+                // leo certificado y llave privada del archivo pkcs12
+                KeyStore ks = KeyStore.getInstance("PKCS12");
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
+                String alias = ks.aliases().nextElement();
+
+                logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
+
+                cert = (X509Certificate) ks.getCertificate(alias);
+                key = (PrivateKey) ks.getKey(alias, passS.toCharArray());
+
+                // Se recorre lista de productos para armar documento (detailList)
+
+                IdDoc iddoc = doc.getDTE().getDocumento().getEncabezado().addNewIdDoc();
+                iddoc.setFolio(folio);
+                // Obtención de ID distinto
+                logger.warn("id: " + System.nanoTime());
+                doc.getDTE().getDocumento().setID("N" + System.nanoTime());
+
+                // Tipo de DTE
+                iddoc.setTipoDTE(BigInteger.valueOf(tipoFactura));
+                iddoc.xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+
+                SimpleDateFormat formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
+                Date dateFechaEmision = new Date();
+                fechaEmision = formatterFechaEmision.format(dateFechaEmision);
+
+                Calendar cal = Calendar.getInstance();
+                cal.add(Calendar.DAY_OF_MONTH, 45);
+                iddoc.xsetFchCancel(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+                iddoc.xsetFchVenc(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+                // Medio y forma de pago
+                if (medioPago != null ) {
+                iddoc.setMedioPago(MedioPagoType.Enum.forString(medioPago));
+                } else {
+                iddoc.setMedioPago(MedioPagoType.Enum.forString("CH"));
+                }
+                iddoc.setFmaPago(BigInteger.valueOf(frmPago));
+
+                // Si es guía de despacho se configura indicador de traslado
+
+                // Receptor
+                Receptor recp = doc.getDTE().getDocumento().getEncabezado().addNewReceptor();
+
+                // Usamos de receptor a Entel
+                recp.setRUTRecep("96806980-2");
+                recp.setRznSocRecep("ENTEL PCS TELECOMUNICACIONES S A");
+                recp.setGiroRecep("TELECOMUNICACIONES");
+                recp.setContacto("23651000");
+                recp.setDirRecep("AVDA. COSTANERA SUR RIO MAPOCHO 2760");
+                recp.setCmnaRecep("Las Condes");
+                recp.setCiudadRecep("Santiago");
+
+                Detalle[] det = new Detalle[2];
+
+                // Agrego detalle 0
+                det[0] = Detalle.Factory.newInstance();
+                det[0].setNroLinDet(1);
+                det[0].setNmbItem("Cajón AFECTO");
+                //det[0].setQtyItem(BigDecimal.valueOf(130));
+                det[0].setQtyItem(BigDecimal.valueOf(qtyItem1Caso1));
+                //det[0].setPrcItem(BigDecimal.valueOf(1274));
+                det[0].setPrcItem(BigDecimal.valueOf(prcItem1Caso1));
+                //totalItem1 = 130 * 1274;
+                totalItem1 = qtyItem1Caso1 * prcItem1Caso1;
+                det[0].setMontoItem(Math.round(totalItem1));
+                ivaItem1 = Math.round(totalItem1 * 0.19);
+
+                det[1] = Detalle.Factory.newInstance();
+                det[1].setNroLinDet(2);
+                det[1].setNmbItem("Relleno AFECTO");
+                //det[1].setQtyItem(BigDecimal.valueOf(56));
+                det[1].setQtyItem(BigDecimal.valueOf(qtyItem2Caso1));
+                //det[1].setPrcItem(BigDecimal.valueOf(2066));
+                det[1].setPrcItem(BigDecimal.valueOf(prcItem2Caso1));
+                //totalItem2 = 56*2066;
+                totalItem2 = qtyItem2Caso1 * prcItem2Caso1;
+                det[1].setMontoItem(Math.round(totalItem2));
+                ivaItem2 = Math.round(totalItem2 * 0.19);
+
+                doc.getDTE().getDocumento().setDetalleArray(det);
+
+                // Totales
+                Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales();
+                long totalNeto = totalItem1 + totalItem2;
+                tot.setMntNeto(Math.round(totalNeto));
+                tot.setMntExe(0);
+                //tot.setTasaIVA(BigDecimal.valueOf(19));
+                cl.sii.siiDte.PctType tasaIVA = cl.sii.siiDte.PctType.Factory.newValue("19.00");
+                tot.xsetTasaIVA(tasaIVA);
+                // Valor de solo IVA
+                long totalIVA = ivaItem1 + ivaItem2;
+                tot.setIVA(totalIVA)
+                // total neto + IVA
+                totalInvoice = totalNeto + totalIVA;
+                tot.setMntTotal(Math.round(totalInvoice))
+                amount = totalInvoice;
+
+                // Referencias
+                Referencia[] ref = new Referencia[1];
+
+                ref[0] = Referencia.Factory.newInstance();
+                ref[0].setNroLinRef(1);
+                ref[0].setTpoDocRef('SET');
+                ref[0].setFolioRef(""+folio);
+                ref[0].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
+                //ref[0].setRazonRef("CASO 1889781-1");
+                ref[0].setRazonRef(refCaso1);
+
+                doc.getDTE().getDocumento().setReferenciaArray(ref);
+
+                // Timbro
+
+                doc.getDTE().timbrar(caf.getCAF(), caf.getPrivateKey(null));
+
+                // antes de firmar le doy formato a los datos
+                opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces);
+                opts.setLoadSubstituteNamespaces(namespaces);
+                opts.setLoadAdditionalNamespaces(namespaces);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(4);
+
+                // releo el doc para que se reflejen los cambios de formato
+                doc = DTEDocument.Factory.parse(doc.newInputStream(opts), opts);
+
+                // Guardo
+                opts = new XmlOptions();
+                opts.setCharacterEncoding("ISO-8859-1");
+                opts.setSaveImplicitNamespaces(namespaces);
+
+                String uri = "";
+                FechaHoraType now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                if (doc.getDTE().isSetDocumento()) {
+                uri = doc.getDTE().getDocumento().getID();
+                doc.getDTE().getDocumento().xsetTmstFirma(now);
+                } else if (doc.getDTE().isSetLiquidacion()) {
+                uri = doc.getDTE().getLiquidacion().getID();
+                doc.getDTE().getLiquidacion().xsetTmstFirma(now);
+                } else if (doc.getDTE().isSetExportaciones()) {
+                uri = doc.getDTE().getExportaciones().getID();
+                doc.getDTE().getExportaciones().xsetTmstFirma(now);
+                }
+
+                uri = "#" + uri;
+
+                logger.warn("URI: " + uri)
+
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                doc.save(out, opts);
+                Document doc21 = XMLUtil.parseDocument(out.toByteArray());
+                byte[] salida = Signer.sign(doc21, uri, key, cert, uri, "Documento");
+                doc21 = XMLUtil.parseDocument(salida);
+
+                if (Signer.verify(doc21, "Documento")) {
+                Path path = Paths.get(resultS + "DTE" + tipoFactura + "-" + folio + ".xml");
+                Files.write(path, salida);
+                logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                } else {
+                Path path = Paths.get(resultS + "DTE" + tipoFactura + "-" + folio + "-mala.xml");
+                Files.write(path, salida);
+                logger.warn("Error al generar factura folio "+folio);
+                }
+            </script>
+            <!-- Registro de DTE en base de datos y generación de PDF -->
+            <set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/>
+            <set field="xml" value="${resultS}/DTE${tipoFactura}-${folio}.xml"/>
+            <set field="pdf" value="${pathPdf}/DTE${tipoFactura}-${folio}.pdf"/>
+            <set field="pdfCedible" value="${pathPdf}/DTE${tipoFactura}-${folio}-cedible.pdf"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, pdfCedible:pdfCedible, activeOrgId:activeOrgId]" out-map="context"/>
+            <set field="bArray2"/>
+
+            <!-- Lectura y conversión a arreglo de bytes de PDF temporal -->
+            <script>
+                file = new File(pdf);
+                fis = null;
+                byte[] bArray = new byte[(int) file.length()];
+                try {
+                fis = new FileInputStream(file);
+                fis.read(bArray);
+                fis.close();
+                } catch (IOException ioExp) {
+                ioExp.printStackTrace();
+                }
+                logger.warn("pdf largo: " + file.length());
+                bArray2 = bArray;
+
+                fileCedible = new File(pdfCedible);
+                fisCedible = null;
+                byte[] bArrayCedible = new byte[(int) fileCedible.length()];
+                try {
+                fisCedible = new FileInputStream(fileCedible);
+                fisCedible.read(bArrayCedible);
+                fisCedible.close();
+                } catch (IOException ioExp) {
+                ioExp.printStackTrace();
+                }
+            </script>
+
+            <!-- Creación de registro en FiscalTaxDocument -->
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
+                <field-map field-name="fiscalTaxDocumentTypeEnumId" from="'Ftdt-33'"/>
+                <field-map field-name="fiscalTaxDocumentNumber" from="folio"/>
+                <field-map field-name="issuerPartyId" from="activeOrgId"/>
+            </entity-find-one>
+
+
+            <!--set field="dteField.receiverPartyId" from="receiverPartyId"/-->
+            <set field="dteField.receiverPartyIdTypeEnumId" value="PtidNationalTaxId"/>
+            <set field="dteField.fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
+            <set field="dteField.fiscalTaxDocumentSentStatusEnumId" value="Ftdt-NotSent"/>
+
+            <set field="dteField.invoiceId" from="invoiceId"/>
+
+            <script>
+                Date date = new Date();
+                Timestamp ts = new Timestamp(date.getTime());
+            </script>
+            <set field="dteField.date" from="ts"/>
+
+            <entity-update value-field="dteField"/>
+
+            <!-- Creacion de registros en FiscalTaxDocumentContent -->
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xml, contentDate:ts, contentData:salida]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts, contentData:bArray2]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedible, contentDate:ts, contentData:bArrayCedible]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+            <!-- Creación de registro en FiscalTaxDocumentAttributes -->
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, amount:amount, fechaEmision:fechaEmision, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmision,
+                                         montoExento:montoExento, montoIVARecuperable:montoIVARecuperable]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentAttributes" out-map="context" in-map="createMap"/>
+
+            <set field="fiscalTaxDocumentId" from="dteField.fiscalTaxDocumentId"/>
+
+            <!-- Eliminacion de XML temporal -->
+            <script>
+                File XMLfile = new File(xml);
+                XMLfile.delete();
+            </script>
+
+            <!-- Eliminacion de PDF temporal -->
+            <script>
+                file.delete();
+                fileCedible.delete();
+            </script>
+
+        </actions>
+
+    </service>
+
+    <service verb="genera" noun="SetGuiaCaso2">
+        <description>
+            Generación de Set Basico Caso 2
+        </description>
+        <in-parameters>
+            <parameter name="activeOrgId" required="true"/>
+            <parameter name="qtyItem1Caso2" required="true" type="Long"/>
+            <parameter name="prcItem1Caso2" required="true" type="Long"/>
+            <parameter name="qtyItem2Caso2" required="true" type="Long"/>
+            <parameter name="prcItem2Caso2" required="true" type="Long"/>
+            <parameter name="refCaso2" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="folio"/>
+        </out-parameters>
+        <actions>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
+                <econdition field-name="partyId" from="activeOrgId"/></entity-find>
+
+            <if condition="!partyIdentificationList.idValue[0]">
+                <return error="true" message="Organización $activeOrgId no tiene RUT definido"/>
+            </if>
+            <set field="emisorS" from="partyIdentificationList.idValue[0]"/>
+
+
+            <!-- Recuperacion de parametros de la organizacion -->
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <!--set field="certS" from="pathCert"/-->
+            <set field="certS" from="certData"/>
+            <set field="passS" from="passCert"/>
+            <set field="resultS" from="pathResults"/>
+            <set field="pathTemp" from="pathTemp"/>
+            <set field="pathPdf" from="pathPdf"/>
+            <set field="cafS" from="pathCaf"/>
+            <set field="plantillaS" from="templateFactura"/>
+            <!--set field="giro" from="giroEmisor"/-->
+            <set field="templateFactura" from="templateFactura"/>
+            <set field="templatePdf" from="templatePdf"/>
+            <set field="templatePdfCedible" from="templatePdfCedible"/>
+            <set field="templateEnvio" from="templateEnvio"/>
+            <set field="templateAceptaciones" from="templateAceptaciones"/>
+            <set field="templateLibro" from="templateLibro"/>
+            <set field="logo" from="logo"/>
+            <set field="fchResol" from="fchResol"/>
+            <set field="nroResol" from="nroResol"/>
+
+            <!-- Giro Emisor -->
+            <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:activeOrgId]" out-map="giroOutMap"/>
+            <set field="giro" from="giroOutMap.description"/>
+
+            <set field="fechaEmision"/>
+
+            <!-- Obtención de primer folio y path de CAF -->
+            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="dte2map"/>
+
+            <set field="folioS" from="dte2map.folio" type="Integer"/>
+            <set field="folio" from="folioS"/>
+            <set field="codRef" value="0" type="Integer"/>
+
+            <script>
+                cafS = cafS + caf
+            </script>
+            <script>
+                import java.io.ByteArrayOutputStream;
+                import java.io.File;
+                import java.io.FileInputStream;
+                import java.math.BigDecimal;
+                import java.math.BigInteger;
+                import java.nio.file.Files;
+                import java.nio.file.Path;
+                import java.nio.file.Paths;
+                import java.security.KeyStore;
+                import java.security.PrivateKey;
+                import java.security.cert.X509Certificate;
+                import java.util.Calendar;
+                import java.util.Date;
+                import java.util.HashMap;
+                import java.text.ParseException;
+                import java.text.SimpleDateFormat;
+                import java.util.Date;
+
+                import org.apache.xmlbeans.XmlOptions;
+                import org.w3c.dom.Document;
+
+                import cl.nic.dte.util.Signer;
+                import cl.nic.dte.util.Utilities;
+                import cl.nic.dte.util.XMLUtil;
+                import cl.sii.siiDte.AUTORIZACIONDocument;
+                import cl.sii.siiDte.AutorizacionType;
+                import cl.sii.siiDte.DTEDefType.Documento.Detalle;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.IdDoc;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Receptor;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Totales;
+                import cl.sii.siiDte.DTEDefType.Documento.Referencia;
+                import cl.sii.siiDte.DTEDefType.Documento.DscRcgGlobal;
+                import cl.sii.siiDte.DTEDefType.Documento.DscRcgGlobal.TpoMov.Enum;
+                import cl.sii.siiDte.DTEDocument;
+                import cl.sii.siiDte.FechaHoraType;
+                import cl.sii.siiDte.FechaType;
+                import cl.sii.siiDte.MedioPagoType;
+                import org.apache.commons.io.IOUtils;
+
+                int folio;
+                DTEDocument doc;
+                AutorizacionType caf;
+                X509Certificate cert;
+                PrivateKey key;
+                int tipoFactura;
+                int frmPago = 1;
+                int listSize = 0;
+
+                logger.warn("Creando Guia Caso 2, con folio: " + dte2map.folio);
+                /** Ejemplo de Caso 2 ****************************************************
+
+                CASO 1965340-2
+                ==============
+                DOCUMENTO	GUIA DE DESPACHO
+                MOTIVO:		VENTA
+                TRASLADO POR: 	EMISOR DEL DOCUMENTO AL LOCAL DEL CLIENTE
+
+                ITEM		CANTIDAD	PRECIO UNITARIO
+                ITEM 1		    410		   8270
+                ITEM 2		    796		   1785
+
+                *************************************************************************/
+                // Leo el folio
+                folio = Integer.valueOf(folioS);
+                tipoFactura = Integer.valueOf('52');
+                if(formaPago != null)
+                frmPago = Integer.valueOf(formaPago);
+
+                // Debo meter el namespace porque SII no lo genera
+                HashMap&lt;String, String&gt; namespaces2 = new HashMap&lt;String, String&gt;();
+                namespaces2.put("", "http://www.sii.cl/SiiDte");
+                namespaces2.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+                XmlOptions opts2 = new XmlOptions();
+                opts2.setLoadSubstituteNamespaces(namespaces2);
+
+                // Recuperación de archivo CAF desde BD
+                AutorizacionType caf2 = AUTORIZACIONDocument.Factory.parse(dte2map.cafData.getBinaryStream(), opts2).getAUTORIZACION();
+
+                // Construyo base a partir del template
+                DTEDocument doc2 = DTEDocument.Factory.parse(ec.resource.getLocationStream(plantillaS), opts2);
+
+                // leo certificado y llave privada del archivo pkcs12
+                KeyStore ks = KeyStore.getInstance("PKCS12");
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
+                String alias = ks.aliases().nextElement();
+
+                cert = (X509Certificate) ks.getCertificate(alias);
+                key = (PrivateKey) ks.getKey(alias, passS.toCharArray());
+
+                // Se recorre lista de productos para armar documento (detailList)
+
+                iddoc = doc2.getDTE().getDocumento().getEncabezado().addNewIdDoc();
+                iddoc.setFolio(folio);
+                // Obtención de ID distinto
+                doc2.getDTE().getDocumento().setID("N" + System.nanoTime());
+
+                // Tipo de DTE
+                iddoc.setTipoDTE(BigInteger.valueOf(tipoFactura));
+                iddoc.xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+
+                formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
+                dateFechaEmision = new Date();
+                fechaEmision = formatterFechaEmision.format(dateFechaEmision);
+
+                cal = Calendar.getInstance();
+                cal.add(Calendar.DAY_OF_MONTH, 45);
+                iddoc.xsetFchCancel(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+                // Medio y forma de pago
+                if (medioPago != null ) {
+                iddoc.setMedioPago(MedioPagoType.Enum.forString(medioPago));
+                } else {
+                iddoc.setMedioPago(MedioPagoType.Enum.forString("CH"));
+                }
+                iddoc.setFmaPago(BigInteger.valueOf(frmPago));
+
+                // Si es guía de despacho se configura indicador de traslado
+
+                // Receptor
+                Receptor recp2 = doc2.getDTE().getDocumento().getEncabezado().addNewReceptor();
+
+                // Usamos de receptor a Entel
+
+                recp2.setRUTRecep("79693930-3");
+                recp2.setRznSocRecep("LOREAL");
+                recp2.setGiroRecep("COMERCIALIZ. PROD. FARMAC. Y COSMETICOS");
+                recp2.setContacto("224406777");
+                recp2.setDirRecep("Av. Apoquindo 3885 Of. 201");
+                recp2.setCmnaRecep("LAS CONDES");
+                recp2.setCiudadRecep("SANTIAGO");
+
+
+                Detalle[] det2 = new Detalle[2]
+
+                // Agrego detalle 0
+                det2[0] = Detalle.Factory.newInstance();
+                det2[0].setNroLinDet(1);
+                det2[0].setNmbItem("Pañuelo AFECTO");
+                det2[0].setQtyItem(BigDecimal.valueOf(qtyItem1Caso2));
+                det2[0].setPrcItem(BigDecimal.valueOf(prcItem1Caso2));
+                det2[0].setDescuentoPct(descItem1Caso2);
+                descuento = (qtyItem1Caso2*prcItem1Caso2) * descItem1Caso2 / 100;
+                totalItem1 = Math.round(qtyItem1Caso2*prcItem1Caso2)-Math.round(descuento);
+                det2[0].setMontoItem(totalItem1);
+                det2[0].setDescuentoMonto(Math.round(descuento));
+
+                det2[1] = Detalle.Factory.newInstance();
+                det2[1].setNroLinDet(2);
+                det2[1].setNmbItem("ITEM 2 AFECTO");
+                det2[1].setQtyItem(BigDecimal.valueOf(qtyItem2Caso2));
+                det2[1].setPrcItem(BigDecimal.valueOf(prcItem2Caso2));
+                det2[1].setDescuentoPct(descItem2Caso2);
+                descuento = (qtyItem2Caso2*prcItem2Caso2) * descItem2Caso2 / 100;
+                totalItem2 = Math.round(qtyItem2Caso2*prcItem2Caso2)-Math.round(descuento);
+                det2[1].setMontoItem(totalItem2);
+                det2[1].setDescuentoMonto(Math.round(descuento));
+
+                doc2.getDTE().getDocumento().setDetalleArray(det2);
+
+                // Totales
+                Totales tot2 = doc2.getDTE().getDocumento().getEncabezado().addNewTotales();
+                totalNeto = totalItem1 + totalItem2;
+                tot2.setMntNeto(Math.round(totalNeto));
+                tot2.setTasaIVA(BigDecimal.valueOf(19));
+                // Valor de solo IVA
+                totalIVA = Math.round(totalNeto * 0.19)
+                tot2.setIVA(totalIVA)
+                // total neto + IVA
+                //totalInvoice = totalNeto + totalIVA + totalExento
+                totalInvoice = totalNeto + totalIVA;
+                tot2.setMntTotal(Math.round(totalInvoice))
+                //if(totalExento &gt; 0) {
+                //    tot.setMntExe(Math.round(totalExento));
+                //}
+                amount = totalInvoice;
+
+                // Referencias
+                Referencia[] ref2 = new Referencia[1];
+
+                ref2[0] = Referencia.Factory.newInstance();
+                ref2[0].setNroLinRef(1);
+                ref2[0].setTpoDocRef('SET');
+                ref2[0].setFolioRef(""+folio);
+                ref2[0].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
+                ref2[0].setRazonRef(refCaso2);
+
+                doc2.getDTE().getDocumento().setReferenciaArray(ref2);
+
+                // Timbro
+                doc2.getDTE().timbrar(caf2.getCAF(), caf2.getPrivateKey(null));
+
+                // antes de firmar le doy formato a los datos
+                opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces2);
+                opts.setLoadSubstituteNamespaces(namespaces2);
+                opts.setLoadAdditionalNamespaces(namespaces2);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(4);
+
+                // releo el doc para que se reflejen los cambios de formato
+                doc2 = DTEDocument.Factory.parse(doc2.newInputStream(opts), opts);
+
+                // Guardo
+                opts = new XmlOptions();
+                opts.setCharacterEncoding("ISO-8859-1");
+                opts.setSaveImplicitNamespaces(namespaces2);
+
+                uri = "";
+                now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                if (doc2.getDTE().isSetDocumento()) {
+                uri = doc2.getDTE().getDocumento().getID();
+                doc2.getDTE().getDocumento().xsetTmstFirma(now);
+                } else if (doc2.getDTE().isSetLiquidacion()) {
+                uri = doc2.getDTE().getLiquidacion().getID();
+                doc2.getDTE().getLiquidacion().xsetTmstFirma(now);
+                } else if (doc2.getDTE().isSetExportaciones()) {
+                uri = doc2.getDTE().getExportaciones().getID();
+                doc2.getDTE().getExportaciones().xsetTmstFirma(now);
+                }
+
+                uri = "#" + uri;
+                out = new ByteArrayOutputStream();
+                doc2.save(out, opts);
+                Document doc22 = XMLUtil.parseDocument(out.toByteArray());
+                byte[] salida2 = Signer.sign(doc22, uri, key, cert, uri, "Documento");
+                doc22 = XMLUtil.parseDocument(salida2);
+
+                if (Signer.verify(doc22, "Documento")) {
+                Path path = Paths.get(resultS + "DTE" + tipoFactura + "-" + folio + ".xml");
+                Files.write(path, salida2);
+                logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                } else {
+                Path path = Paths.get(resultS + "DTE" + tipoFactura + "-" + folio + "-mala.xml");
+                Files.write(path, salida2);
+                logger.warn("Error al generar factura folio "+folio);
+                }
+            </script>
+            <!-- Registro de DTE en base de datos y generación de PDF -->
+            <set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/>
+            <set field="xml" value="${resultS}/DTE${tipoFactura}-${folio}.xml"/>
+            <set field="pdf" value="${pathPdf}/DTE${tipoFactura}-${folio}.pdf"/>
+            <set field="pdfCedible" value="${pathPdf}/DTE${tipoFactura}-${folio}-cedible.pdf"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, pdfCedible:pdfCedible, activeOrgId:activeOrgId]" out-map="context"/>
+            <set field="bArray2"/>
+
+            <!-- Lectura y conversión a arreglo de bytes de PDF temporal -->
+            <script>
+                file = new File(pdf);
+                fis = null;
+                bArray = new byte[(int) file.length()];
+                try {
+                fis = new FileInputStream(file);
+                fis.read(bArray);
+                fis.close();
+                } catch (IOException ioExp) {
+                ioExp.printStackTrace();
+                }
+                logger.warn("pdf largo: " + file.length());
+                bArray2 = bArray;
+
+                fileCedible = new File(pdfCedible);
+                fisCedible = null;
+                bArrayCedible = new byte[(int) fileCedible.length()];
+                try {
+                fisCedible = new FileInputStream(fileCedible);
+                fisCedible.read(bArrayCedible);
+                fisCedible.close();
+                } catch (IOException ioExp) {
+                ioExp.printStackTrace();
+                }
+            </script>
+
+            <!-- Creación de registro en FiscalTaxDocument -->
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
+                <field-map field-name="fiscalTaxDocumentTypeEnumId" from="'Ftdt-33'"/>
+                <field-map field-name="fiscalTaxDocumentNumber" from="folio"/>
+                <field-map field-name="issuerPartyId" from="activeOrgId"/>
+            </entity-find-one>
+
+            <!--set field="dteField.receiverPartyId" from="receiverPartyId"/-->
+            <set field="dteField.receiverPartyIdTypeEnumId" value="PtidNationalTaxId"/>
+            <set field="dteField.fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
+            <set field="dteField.fiscalTaxDocumentSentStatusEnumId" value="Ftdt-NotSent"/>
+
+            <set field="dteField.invoiceId" from="invoiceId"/>
+
+            <script>
+                date = new Date();
+                ts = new Timestamp(date.getTime());
+            </script>
+            <set field="dteField.date" from="ts"/>
+
+            <entity-update value-field="dteField"/>
+
+            <!-- Creacion de registros en FiscalTaxDocumentContent -->
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xml, contentDate:ts, contentData:salida2]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts, contentData:bArray2]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedible, contentDate:ts, contentData:bArrayCedible]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+            <!-- Creación de registro en FiscalTaxDocumentAttributes -->
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, amount:amount, fechaEmision:fechaEmision, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmision,
+                                         montoExento:montoExento, montoIVARecuperable:montoIVARecuperable]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentAttributes" out-map="context" in-map="createMap"/>
+
+            <set field="fiscalTaxDocumentId" from="dteField.fiscalTaxDocumentId"/>
+
+            <!-- Eliminacion de XML temporal -->
+            <script>
+                XMLfile = new File(xml);
+                XMLfile.delete();
+            </script>
+
+            <!-- Eliminacion de PDF temporal -->
+            <script>
+                file.delete();
+                fileCedible.delete();
+            </script>
+
+        </actions>
+    </service>
+
+    <service verb="genera" noun="SetGuiaCaso3">
+        <description>
+            Generación de Caso 3 Guia de Despacho
+        </description>
+        <in-parameters>
+            <parameter name="activeOrgId" required="true"/>
+            <parameter name="qtyItem1Caso3" required="true" type="Long"/>
+            <parameter name="prcItem1Caso3" required="true" type="Long"/>
+            <parameter name="qtyItem2Caso3" required="true" type="Long"/>
+            <parameter name="prcItem2Caso3" required="true" type="Long"/>
+            <parameter name="refCaso3" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="folio"/>
+        </out-parameters>
+        <actions>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
+                <econdition field-name="partyId" from="activeOrgId"/></entity-find>
+
+            <if condition="!partyIdentificationList.idValue[0]">
+                <return error="true" message="Organización $activeOrgId no tiene RUT definido"/>
+            </if>
+            <set field="emisorS" from="partyIdentificationList.idValue[0]"/>
+
+            <!-- Recuperacion de parametros de la organizacion -->
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <!--set field="certS" from="pathCert"/-->
+            <set field="certS" from="certData"/>
+            <set field="passS" from="passCert"/>
+            <set field="resultS" from="pathResults"/>
+            <set field="pathTemp" from="pathTemp"/>
+            <set field="pathPdf" from="pathPdf"/>
+            <set field="cafS" from="pathCaf"/>
+            <set field="plantillaS" from="templateFactura"/>
+            <!--set field="giro" from="giroEmisor"/-->
+            <set field="templateFactura" from="templateFactura"/>
+            <set field="templatePdf" from="templatePdf"/>
+            <set field="templatePdfCedible" from="templatePdfCedible"/>
+            <set field="templateEnvio" from="templateEnvio"/>
+            <set field="templateAceptaciones" from="templateAceptaciones"/>
+            <set field="templateLibro" from="templateLibro"/>
+            <set field="logo" from="logo"/>
+            <set field="fchResol" from="fchResol"/>
+            <set field="nroResol" from="nroResol"/>
+
+            <!-- Giro Emisor -->
+            <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:activeOrgId]" out-map="giroOutMap"/>
+            <set field="giro" from="giroOutMap.description"/>
+
+            <set field="fechaEmision"/>
+
+            <!-- Obtención de primer folio y path de CAF -->
+            <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-33', activeOrgId:activeOrgId]" out-map="dte3map"/>
+
+            <set field="folioS" from="dte3map.folio" type="Integer"/>
+            <set field="folio" from="folioS"/>
+
+            <set field="codRef" value="0" type="Integer"/>
+            <set field="receiverPartyId" value="100102"/>
+
+            <script>
+                cafS = cafS + caf
+            </script>
+            <script>
+                import java.io.ByteArrayOutputStream;
+                import java.io.File;
+                import java.io.FileInputStream;
+                import java.math.BigDecimal;
+                import java.math.BigInteger;
+                import java.nio.file.Files;
+                import java.nio.file.Path;
+                import java.nio.file.Paths;
+                import java.security.KeyStore;
+                import java.security.PrivateKey;
+                import java.security.cert.X509Certificate;
+                import java.util.Calendar;
+                import java.util.Date;
+                import java.util.HashMap;
+                import java.text.ParseException;
+                import java.text.SimpleDateFormat;
+                import java.util.Date;
+
+                import org.apache.xmlbeans.XmlOptions;
+                import org.w3c.dom.Document;
+
+                import cl.nic.dte.util.Signer;
+                import cl.nic.dte.util.Utilities;
+                import cl.nic.dte.util.XMLUtil;
+                import cl.sii.siiDte.AUTORIZACIONDocument;
+                import cl.sii.siiDte.AutorizacionType;
+                import cl.sii.siiDte.DTEDefType.Documento.Detalle;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.IdDoc;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Receptor;
+                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Totales;
+                import cl.sii.siiDte.DTEDefType.Documento.Referencia;
+                import cl.sii.siiDte.DTEDefType.Documento.DscRcgGlobal;
+                import cl.sii.siiDte.DTEDefType.Documento.DscRcgGlobal.TpoMov.Enum;
+                import cl.sii.siiDte.DTEDocument;
+                import cl.sii.siiDte.FechaHoraType;
+                import cl.sii.siiDte.FechaType;
+                import cl.sii.siiDte.MedioPagoType;
+                import org.apache.commons.io.IOUtils;
+
+                int folio;
+                DTEDocument doc;
+                AutorizacionType caf;
+                X509Certificate cert;
+                PrivateKey key;
+                int tipoFactura;
+                int frmPago = 1;
+                int listSize = 0;
+
+                logger.warn("Creando Caso 3, con folio: " + dte3map.folio);
+                /************************************************************************
+
+                CASO 1965340-3
+                ==============
+                DOCUMENTO	GUIA DE DESPACHO
+                MOTIVO:		VENTA
+                TRASLADO POR: 	CLIENTE
+
+                ITEM		CANTIDAD	PRECIO UNITARIO
+                ITEM 1		    189		   2151
+                ITEM 2		    487		   6450
+
+                *************************************************************************/
+
+
+                // Leo el folio
+                folio = Integer.valueOf(folioS);
+                tipoFactura = Integer.valueOf('56');
+                if(formaPago != null)
+                frmPago = Integer.valueOf(formaPago);
+
+                // Debo meter el namespace porque SII no lo genera
+                HashMap&lt;String, String&gt; namespaces3 = new HashMap&lt;String, String&gt;();
+                namespaces3.put("", "http://www.sii.cl/SiiDte");
+                namespaces3.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+                XmlOptions opts3 = new XmlOptions();
+                opts3.setLoadSubstituteNamespaces(namespaces3);
+
+                // Recuperación de archivo CAF desde BD
+                AutorizacionType caf3 = AUTORIZACIONDocument.Factory.parse(dte3map.cafData.getBinaryStream(), opts3).getAUTORIZACION();
+
+                // Construyo base a partir del template
+                DTEDocument doc3 = DTEDocument.Factory.parse(ec.resource.getLocationStream(plantillaS), opts3);
+
+                // leo certificado y llave privada del archivo pkcs12
+                KeyStore ks = KeyStore.getInstance("PKCS12");
+                ks.load(certData.getBinaryStream(), passS.toCharArray());
+                String alias = ks.aliases().nextElement();
+
+                cert = (X509Certificate) ks.getCertificate(alias);
+                key = (PrivateKey) ks.getKey(alias, passS.toCharArray());
+
+                // Se recorre lista de productos para armar documento (detailList)
+
+                iddoc = doc3.getDTE().getDocumento().getEncabezado().addNewIdDoc();
+                iddoc.setFolio(folio);
+                // Obtención de ID distinto
+                doc3.getDTE().getDocumento().setID("N" + System.nanoTime());
+
+                // Tipo de DTE
+                iddoc.setTipoDTE(BigInteger.valueOf(tipoFactura));
+                iddoc.xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+
+                formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd");
+                dateFechaEmision = new Date();
+                fechaEmision = formatterFechaEmision.format(dateFechaEmision);
+
+                cal = Calendar.getInstance();
+                cal.add(Calendar.DAY_OF_MONTH, 45);
+                iddoc.xsetFchCancel(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())));
+                // Medio y forma de pago
+                if (medioPago != null ) {
+                iddoc.setMedioPago(MedioPagoType.Enum.forString(medioPago));
+                } else {
+                iddoc.setMedioPago(MedioPagoType.Enum.forString("CH"));
+                }
+                iddoc.setFmaPago(BigInteger.valueOf(frmPago));
+
+                // Si es guía de despacho se configura indicador de traslado
+
+                // Receptor
+                Receptor recp3 = doc3.getDTE().getDocumento().getEncabezado().addNewReceptor();
+
+                // Usamos de receptor a Entel
+
+                recp3.setRUTRecep("96992030-1");
+                recp3.setRznSocRecep("Sociedad Concesionaria Vespucio Norte Express S.A.");
+                recp3.setGiroRecep("CONSTRUCCION DE CARRETERAS Y LINEAS DE");
+                recp3.setContacto("6005713000");
+                recp3.setDirRecep("AMERICO VESPUCIO ORIENTE 1305");
+                recp3.setCmnaRecep("PUDAHUEL");
+                recp3.setCiudadRecep("SANTIAGO");
+
+                Detalle[] det3 = new Detalle[3]
+
+                // Agrego detalle 0
+                det3[0] = Detalle.Factory.newInstance();
+                det3[0].setNroLinDet(1);
+                det3[0].setNmbItem("Pintura B&amp;W AFECTO");
+                det3[0].setQtyItem(BigDecimal.valueOf(qtyItem1Caso3));
+                det3[0].setPrcItem(BigDecimal.valueOf(prcItem1Caso3));
+                det3[0].setMontoItem(Math.round(qtyItem1Caso3*prcItem1Caso3));
+                totalItem1 = Math.round(qtyItem1Caso3*prcItem1Caso3);
+
+                det3[1] = Detalle.Factory.newInstance();
+                det3[1].setNroLinDet(2);
+                det3[1].setNmbItem("ITEM 2 AFECTO");
+                det3[1].setQtyItem(BigDecimal.valueOf(qtyItem2Caso3));
+                det3[1].setPrcItem(BigDecimal.valueOf(prcItem2Caso3));
+                det3[1].setMontoItem( Math.round(qtyItem2Caso3 * prcItem2Caso3));
+                totalItem2 = Math.round(qtyItem2Caso3 * prcItem2Caso3);
+
+                det3[2] = Detalle.Factory.newInstance();
+                det3[2].setNroLinDet(3);
+                det3[2].setNmbItem("ITEM 3 SERVICIO EXENTO");
+                det3[2].setQtyItem(BigDecimal.valueOf(qtyItem3Caso3));
+                det3[2].setPrcItem(BigDecimal.valueOf(prcItem3Caso3));
+                det3[2].setMontoItem( Math.round(qtyItem3Caso3 * prcItem3Caso3));
+                det3[2].setIndExe(1);
+                totalItem3 = Math.round(qtyItem3Caso3 * prcItem3Caso3);
+                totalExento = totalItem3;
+
+                doc3.getDTE().getDocumento().setDetalleArray(det3);
+
+                // Totales
+                Totales tot3 = doc3.getDTE().getDocumento().getEncabezado().addNewTotales();
+                totalNeto = totalItem1 + totalItem2;
+                tot3.setMntNeto(Math.round(totalNeto));
+                tot3.setMntExe(totalExento);
+                tot3.setTasaIVA(BigDecimal.valueOf(19));
+                // Valor de solo IVA
+                totalIVA = Math.round(totalNeto * 0.19)
+                tot3.setIVA(totalIVA)
+                totalInvoice = totalNeto + totalIVA+totalExento;
+                tot3.setMntTotal(Math.round(totalInvoice))
+                amount = totalInvoice;
+
+                // Referencias
+                Referencia[] ref3 = new Referencia[1];
+
+                ref3[0] = Referencia.Factory.newInstance();
+                ref3[0].setNroLinRef(1);
+                ref3[0].setTpoDocRef('SET');
+                ref3[0].setFolioRef(""+folio);
+                ref3[0].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
+                ref3[0].setRazonRef(refCaso3);
+
+                doc3.getDTE().getDocumento().setReferenciaArray(ref3);
+
+                // Timbro
+                doc3.getDTE().timbrar(caf3.getCAF(), caf3.getPrivateKey(null));
+
+                // antes de firmar le doy formato a los datos
+                opts = new XmlOptions();
+                opts.setSaveImplicitNamespaces(namespaces3);
+                opts.setLoadSubstituteNamespaces(namespaces3);
+                opts.setLoadAdditionalNamespaces(namespaces3);
+                opts.setSavePrettyPrint();
+                opts.setSavePrettyPrintIndent(4);
+
+                // releo el doc para que se reflejen los cambios de formato
+                doc3 = DTEDocument.Factory.parse(doc3.newInputStream(opts), opts);
+
+                // Guardo
+                opts = new XmlOptions();
+                opts.setCharacterEncoding("ISO-8859-1");
+                opts.setSaveImplicitNamespaces(namespaces3);
+
+                uri = "";
+                now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
+
+                if (doc3.getDTE().isSetDocumento()) {
+                uri = doc3.getDTE().getDocumento().getID();
+                doc3.getDTE().getDocumento().xsetTmstFirma(now);
+                } else if (doc3.getDTE().isSetLiquidacion()) {
+                uri = doc3.getDTE().getLiquidacion().getID();
+                doc3.getDTE().getLiquidacion().xsetTmstFirma(now);
+                } else if (doc3.getDTE().isSetExportaciones()) {
+                uri = doc3.getDTE().getExportaciones().getID();
+                doc3.getDTE().getExportaciones().xsetTmstFirma(now);
+                }
+
+                uri = "#" + uri;
+                out = new ByteArrayOutputStream();
+                doc3.save(out, opts);
+                doc3.save(new File(resultS + "DTE" + tipoFactura + "-" + folio + "-sinfirma.xml"), opts);
+                Document doc23 = XMLUtil.parseDocument(out.toByteArray());
+                byte[] salida3 = Signer.sign(doc23, uri, key, cert, uri, "Documento");
+                doc23 = XMLUtil.parseDocument(salida3);
+
+                if (Signer.verify(doc23, "Documento")) {
+                Path path = Paths.get(resultS + "DTE" + tipoFactura + "-" + folio + ".xml");
+                Files.write(path, salida3);
+                logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                } else {
+                Path path = Paths.get(resultS + "DTE" + tipoFactura + "-" + folio + "-mala.xml");
+                Files.write(path, salida3);
+                logger.warn("Error al generar factura folio "+folio);
+                }
+            </script>
+
+            <!-- Registro de DTE en base de datos y generación de PDF -->
+            <set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/>
+            <set field="xml" value="${resultS}/DTE${tipoFactura}-${folio}.xml"/>
+            <set field="pdf" value="${pathPdf}/DTE${tipoFactura}-${folio}.pdf"/>
+            <set field="pdfCedible" value="${pathPdf}/DTE${tipoFactura}-${folio}-cedible.pdf"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, pdfCedible:pdfCedible, activeOrgId:activeOrgId]" out-map="context"/>
+            <set field="bArray2"/>
+
+            <!-- Lectura y conversión a arreglo de bytes de PDF temporal -->
+            <script>
+                file = new File(pdf);
+                fis = null;
+                bArray = new byte[(int) file.length()];
+                try {
+                fis = new FileInputStream(file);
+                fis.read(bArray);
+                fis.close();
+                } catch (IOException ioExp) {
+                ioExp.printStackTrace();
+                }
+                logger.warn("pdf largo: " + file.length());
+                bArray2 = bArray;
+
+                fileCedible = new File(pdfCedible);
+                fisCedible = null;
+                bArrayCedible = new byte[(int) fileCedible.length()];
+                try {
+                fisCedible = new FileInputStream(fileCedible);
+                fisCedible.read(bArrayCedible);
+                fisCedible.close();
+                } catch (IOException ioExp) {
+                ioExp.printStackTrace();
+                }
+            </script>
+
+            <!-- Creación de registro en FiscalTaxDocument -->
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
+                <field-map field-name="fiscalTaxDocumentTypeEnumId" from="'Ftdt-33'"/>
+                <field-map field-name="fiscalTaxDocumentNumber" from="folio"/>
+                <field-map field-name="issuerPartyId" from="activeOrgId"/>
+            </entity-find-one>
+
+
+            <!--set field="dteField.receiverPartyId" from="receiverPartyId"/-->
+            <set field="dteField.receiverPartyId" from="receiverPartyId"/>
+            <set field="dteField.receiverPartyIdTypeEnumId" value="PtidNationalTaxId"/>
+            <set field="dteField.fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
+            <set field="dteField.fiscalTaxDocumentSentStatusEnumId" value="Ftdt-NotSent"/>
+
+            <set field="dteField.invoiceId" from="invoiceId"/>
+
+            <script>
+                date = new Date();
+                ts = new Timestamp(date.getTime());
+            </script>
+            <set field="dteField.date" from="ts"/>
+
+            <entity-update value-field="dteField"/>
+
+            <!-- Creacion de registros en FiscalTaxDocumentContent -->
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xml, contentDate:ts, contentData:salida3]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts, contentData:bArray2]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedible, contentDate:ts, contentData:bArrayCedible]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+            <!-- Creación de registro en FiscalTaxDocumentAttributes -->
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, amount:amount, fechaEmision:fechaEmision, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmision,
+                                         montoExento:montoExento, montoIVARecuperable:montoIVARecuperable]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentAttributes" out-map="context" in-map="createMap"/>
+
+            <set field="fiscalTaxDocumentId" from="dteField.fiscalTaxDocumentId"/>
+            <script>
+                <!-- Eliminacion de XML temporal -->
+                XMLfile = new File(xml);
+                XMLfile.delete();
+                <!-- Eliminacion de PDF temporal -->
+                file.delete();
+                fileCedible.delete();
+            </script>
+
+        </actions>
+    </service>
+
+
 </services>
