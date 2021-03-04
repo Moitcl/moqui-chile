@@ -14,7 +14,7 @@
 package cl.moit.moqui.remote
 
 import groovy.util.slurpersupport.GPathResult
-
+import wslite.http.auth.HTTPBasicAuthorization
 import wslite.soap.SOAPClient
 import wslite.soap.SOAPResponse
 import wslite.soap.SOAPMessageBuilder
@@ -46,6 +46,21 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
         SOAPMessageBuilder smb = new SOAPMessageBuilder()
         smb.setVersion(SOAPVersion.V1_2)
 
+        Map<String, Object> serviceParams = (Map<String, Object>)parameters.get("xmlRpcServiceParams")
+        if (serviceParams) {
+            parameters.remove("xmlRpcServiceParams")
+        }
+        boolean debug = serviceParams?.debug
+        if (debug) logger.info("Debug mode is ON")
+        else logger.info("Debug mode is OFF")
+
+        Map<String, Object> basicAuthAttributes = (Map<String, Object>)parameters.get("xmlRpcBasicAuthentication")
+        if (basicAuthAttributes) {
+            if (debug) logger.info("user: ${basicAuthAttributes['user']}, pass: ${basicAuthAttributes['pass']}")
+            client.authorization = new HTTPBasicAuthorization( basicAuthAttributes['user'].toString(), basicAuthAttributes['pass'].toString() )
+            parameters.remove("xmlRpcBasicAuthentication")
+        }
+
         Map<String, Object> envelopeAttributes = (Map<String, Object>)parameters.get("xmlRpcEnvelopeAttributes")
         if (envelopeAttributes) {
             smb.envelopeAttributes(envelopeAttributes)
@@ -57,15 +72,8 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
             parameters.remove("xmlRpcRequestParams")
         }
 
-        Map<String, Object> serviceParams = (Map<String, Object>)parameters.get("xmlRpcServiceParams")
-        if (serviceParams) {
-            parameters.remove("xmlRpcServiceParams")
-        }
-
-        boolean debug = serviceParams?.debug
-
-       String queryXml = createQueryXml(method, parameters)
-        logger.info("queryXml: ${queryXml}")
+        String queryXml = createQueryXml(method, parameters)
+        if (debug) logger.info("queryXml: ${queryXml}")
 
         def msg = smb.build() {
             body = {
@@ -76,8 +84,9 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
         if (debug) logger.info("XML String: ${msg}")
 
         SOAPResponse response = client.send(requestParams, msg.version, msg.toString())
-
         Map<String, Object> xmlRpcResult = (Map<String, Object>) toMap(response.body)
+
+        if (debug) logger.info("XML Result: ${xmlRpcResult}")
 
         return xmlRpcResult
 
