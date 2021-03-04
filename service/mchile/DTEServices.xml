@@ -3893,6 +3893,9 @@ along with this software (see the LICENSE.md file). If not, see
                     // tipo de DTE
                     tipoDte = dteArray[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().toString();
                     folioDte = dteArray[i].getDocumento().getEncabezado().getIdDoc().getFolio().toString();
+
+                    logger.warn("folio: " + folioDte);
+
                     fechaEmision = dteArray[i].getDocumento().getEncabezado().getIdDoc().getFchEmis().toString();
                     razonSocialEmisor = dteArray[i].getDocumento().getEncabezado().getEmisor().getRznSoc().toString();
                     // Totales
@@ -3902,24 +3905,32 @@ along with this software (see the LICENSE.md file). If not, see
                     tasaIva = dteArray[i].getDocumento().getEncabezado().getTotales().getTasaIVA().toString();
                     iva = dteArray[i].getDocumento().getEncabezado().getTotales().getIVA().toString();
 
+                    // Datos receptor
+                    rutReceptor = dteArray[i].getDocumento().getEncabezado().getReceptor().getRUTRecep().toString();
+
+                    logger.warn("RUT Receptor: " + rutReceptor);
+
                     DateFormat formatter = new SimpleDateFormat("yyyy-MM-dd");
                     Date date = formatter.parse(fechaEmision);
                     Timestamp ts = new Timestamp(date.getTime());
 
             </script>
-
+                    <set field="receiveDte" value="true"/>
 
                     <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="receiverField">
                         <field-map field-name="idValue" from="rutReceptor"/>
                     </entity-find-one>
                     <if condition="!receiverField">
-                        <return error="true" message="RUT receptor ${rutReceptor} no está creado en el sistema"/>
+                        <log level="warn" message="RUT receptor ${rutReceptor} de folio folioDte no corresponde a org. activa"/>
+                        <set field="receiveDte" value="false"/>
                     </if>
-                    <set field="receiverPartyId" from="receiverField.partyId"/>
 
-                    <if condition="receiverPartyId != organizationPartyId">
+
+                    <if condition="receiveDte == 'true'">
+                        <set field="receiverPartyId" from="receiverField.partyId"/>
+                    <!--if condition="receiverPartyId != organizationPartyId">
                         <return error="true" message="Receptor en DTE no corresponde a receptor especificado ($receiverPartyId != $organizationPartyId)"/>
-                    </if>
+                    </if-->
 
                     <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
                         <econdition field-name="idValue" from="rutEmisor"/>
@@ -4079,6 +4090,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <if condition="contentLocationPdf">
                         <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts, contentData:pdf.get()]"/>
                         <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+                    </if>
                     </if>
             <script>
                 }
@@ -5374,15 +5386,15 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="aceptacionField.xml" value="${resultS}RESP-${idS}.xml" type="String"/>
             <entity-update value-field="aceptacionField"/>
 
-            <set field="bodyParameters" from="[fiscalTaxDocumentId:folioAceptacion, nmbContacto:nmbContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]"/>
+            <!--set field="bodyParameters" from="[fiscalTaxDocumentId:folioAceptacion, nmbContacto:nmbContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]"/>
             <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" async="true">
                 <field-map field-name="fiscalTaxDocumentId" from="folioAceptacion"/>
                 <field-map field-name="emailTypeEnumId" from="emailTypeEnumId"/>
-                <!--field-map field-name="toAddresses" value="cherrera@moit.cl"/-->
-                <field-map field-name="toAddresses" from="emailAceptacion"/>
+                <field-map field-name="toAddresses" value="cherrera@moit.cl"/--><!-- Prueba, no usar en produccion -->
+                <!--field-map field-name="toAddresses" from="emailAceptacion"/>
                 <field-map field-name="emailTemplateId" value="Aceptacion"/>
                 <field-map field-name="bodyParameters" from="bodyParameters"/>
-            </service-call>
+            </service-call-->
 
         </actions>
     </service>
@@ -8267,9 +8279,9 @@ return
         </actions>
     </service>
 
-    <service verb="load" noun="Xml">
+    <service verb="load" noun="DteContent">
         <description>
-            Carga XML directo en la BD
+            Carga XML/PDF/PDF Cedible directo en la BD
         </description>
         <in-parameters>
             <parameter name="filename" type="org.apache.commons.fileupload.FileItem"/>
@@ -8324,6 +8336,7 @@ return
             <parameter name="passCert"/>
             <parameter name="nmbContacto"/>
             <parameter name="mailContacto"/>
+            <parameter name="fonoContacto"/>
         </in-parameters>
         <actions>
             <entity-find entity-name="mchile.dte.PartyDteParams" list="paramsList">
@@ -8339,7 +8352,7 @@ return
                                   templatePdfBoletaContinua:templatePdfBoletaContinua,
                     templateEnvio:templateEnvio, templateEnvioBoleta:templateEnvioBoleta, templateAceptaciones:templateAceptaciones, templateRcof:templateRcof, logo:logo, fchResol:fechResol, nroResol:nroResol, rutEmisor:rutEmisor,
                     rutEnvia:rutEnvia, rznSocEmisor:rznSocEmisor, cdgSIISucur:cdgSIISucur, dirOrigen:dirOrigen, cmnaOrigen:cmnaOrigen, ciudadOrigen:ciudadOrigen, pathResults:pathResults, pathAceptaciones:pathAceptaciones,
-                    pathRecibidas:pathRecibidas, pathPdf:pathPdf, pathTemp:pathTemp, pathCaf:pathCaf, pathCert:pathCert, passCert:passCert, nmbContacto:nmbContacto, mailContacto:mailContacto]"/>
+                    pathRecibidas:pathRecibidas, pathPdf:pathPdf, pathTemp:pathTemp, pathCaf:pathCaf, pathCert:pathCert, passCert:passCert, nmbContacto:nmbContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]"/>
                 </else>
             </if>
         </actions>
@@ -8411,5 +8424,6 @@ return
             <entity-update value-field="dteParams"/>
         </actions>
     </service>
+
 
 </services>
