@@ -379,8 +379,10 @@ along with this software (see the LICENSE.md file). If not, see
                             SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
                             Date date = formatter.parse(fechaRef);
                             ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
-                            ref[i].setCodRef(codRef);
-                            ref[i].setRazonRef(referenciaEntry.razonReferencia);
+                            if(codRef != null)
+                                ref[i].setCodRef(codRef);
+                            if(referenciaEntry.razonReferencia != null)
+                                ref[i].setRazonRef(referenciaEntry.razonReferencia);
                             ref[i].setFolioRef(referenciaEntry.folio.toString());
                         }
 
@@ -515,8 +517,10 @@ along with this software (see the LICENSE.md file). If not, see
                             SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
                             Date date = formatter.parse(fechaRef);
                             ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
-                            ref[i].setCodRef(codRef);
-                            ref[i].setRazonRef(referenciaEntry.razonReferencia);
+                            if(codRef != null)
+                                ref[i].setCodRef(codRef);
+                            if(referenciaEntry.razonReferencia != null)
+                                ref[i].setRazonRef(referenciaEntry.razonReferencia);
                             ref[i].setFolioRef(referenciaEntry.folio.toString());
                         }
                         i = i + 1
@@ -1147,6 +1151,8 @@ along with this software (see the LICENSE.md file). If not, see
                 // releo el doc para que se reflejen los cambios de formato
                 doc = DTEDocument.Factory.parse(doc.newInputStream(opts), opts);
 
+                logger.warn("Documento: " + doc);
+
                 // Guardo
                 opts = new XmlOptions();
                 opts.setCharacterEncoding("ISO-8859-1");
@@ -1167,8 +1173,6 @@ along with this software (see the LICENSE.md file). If not, see
                 }
 
                 uri = "#" + uri;
-
-                logger.warn("URI: " + uri)
 
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                 //doc.save(new File(resultS + "DTE" + tipoFactura + "-" + folio + "-sinfirma.xml"), opts);
@@ -8463,6 +8467,36 @@ return
                 <set field="dteParams.preferredDteTypeEnumId" from="preferredDteTypeEnumId"/>
                 <entity-update value-field="dteParams"/>
             </else></if>
+        </actions>
+    </service>
+
+    <service verb="add" noun="ReferenceToInvoice">
+        <in-parameters>
+            <parameter name="invoiceId" required="true"/>
+            <parameter name="referenceText" default-value=" - "/>
+            <parameter name="folioRef"/>
+            <parameter name="tipoDocRef"/>
+            <parameter name="fecha"/>
+        </in-parameters>
+        <actions>
+
+            <entity-find-one entity-name="mchile.dte.ReferenciaInvoice" value-field="refField" for-update="true">
+                <field-map field-name="invoiceId" from="invoiceId"/>
+                <field-map field-name="fiscalTaxDocumentTypeEnumId" from="tipoDocRef"/>
+            </entity-find-one>
+
+            <if condition="!refField">
+                <then>
+                    <!-- Hay que crear entrada para referencia de invoiceId -->
+                    <set field="createMap" from="[fiscalTaxDocumentTypeEnumId:tipoDocRef, codigoReferenciaEnumId:codigoReferenciaEnumId, fecha:fecha, folio:folioRef, invoiceId:invoiceId]"/>
+                    <service-call name="create#mchile.dte.ReferenciaInvoice" out-map="context" in-map="createMap"/>
+                </then><else>
+                   <!-- Ya existe la referencia -->
+                    <set field="refField.folio" from="folioRef"/>
+                    <set field="refField.fiscalTaxDocumentTypeEnumId" from="tipoDocRef"/>
+                    <set field="refField.fecha" from="fecha"/>
+            </else></if>
+
         </actions>
     </service>
 
