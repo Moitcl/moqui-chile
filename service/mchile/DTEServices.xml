@@ -69,6 +69,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="ciudadReceptor" default-value="${cmnaReceptor}"/>
             <parameter name="detailList" type="List" required="false"/>
             <parameter name="invoiceId" required="false"/>
+            <parameter name="shipmentId" required="false"/>
             <parameter name="medioPago" required="false"/>
             <parameter name="formaPago" required="false" type="String"/>
             <parameter name="referenciaList" type="List"/>
@@ -379,8 +380,10 @@ along with this software (see the LICENSE.md file). If not, see
                             SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
                             Date date = formatter.parse(fechaRef);
                             ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
-                            ref[i].setCodRef(codRef);
-                            ref[i].setRazonRef(referenciaEntry.razonReferencia);
+                            if(codRef != null)
+                                ref[i].setCodRef(codRef);
+                            if(referenciaEntry.razonReferencia != null)
+                                ref[i].setRazonRef(referenciaEntry.razonReferencia);
                             ref[i].setFolioRef(referenciaEntry.folio.toString());
                         }
 
@@ -515,8 +518,10 @@ along with this software (see the LICENSE.md file). If not, see
                             SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd");
                             Date date = formatter.parse(fechaRef);
                             ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)));
-                            ref[i].setCodRef(codRef);
-                            ref[i].setRazonRef(referenciaEntry.razonReferencia);
+                            if(codRef != null)
+                                ref[i].setCodRef(codRef);
+                            if(referenciaEntry.razonReferencia != null)
+                                ref[i].setRazonRef(referenciaEntry.razonReferencia);
                             ref[i].setFolioRef(referenciaEntry.folio.toString());
                         }
                         i = i + 1
@@ -991,7 +996,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <!-- TODO: Si la referencia es tipo fe de erratas, Monto Item puede ser 0 -->
                 <iterate list="referenciaList" entry="referenciaEntry">
                     <set field="folioRef" from="referenciaEntry.folio" type="String"/>
-
                     <set field="codRef" from="referenciaEntry.codigoReferenciaEnumId" type="Integer"/>
                     <set field="fechaRef" from="referenciaEntry.fecha" type="String"/>
                     <script>
@@ -1005,9 +1009,9 @@ along with this software (see the LICENSE.md file). If not, see
                         ref[i].setFolioRef(referenciaEntry.folio.toString());
                         } else {
                     </script>
+
                     <service-call name="mchile.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]" out-map="codeOut"/>
                     <set field="tpoDocRef" from="codeOut.siiCode"/>
-
                     <script>
                         //ref[i].setTpoDocRef(referenciaEntry.fiscalTaxDocumentTypeEnumId);
                         ref[i].setTpoDocRef(tpoDocRef);
@@ -1069,18 +1073,7 @@ along with this software (see the LICENSE.md file). If not, see
                         det[i] = Detalle.Factory.newInstance();
                         det[i].setNroLinDet(i+1);
                         det[i].setNmbItem(nombreItem);
-                        //if(dteExenta) {
-                        //    det[i].setIndExe(1);
-                        //}
-                        //if((pctDiscount != null) && (BigDecimal.valueOf(pctDiscount) > 0)) {
-                        //    logger.warn("Aplicando descuento " + pctDiscount+"% a precio "+ priceItem );
-                        //    descuento = totalItem * pctDiscount / 100;
-                        //    logger.warn("Descuento:" + descuento);
-                        //    //totalInvoice = totalInvoice + totalItem - descuento
-                        //    det[i].setDescuentoPct(pctDiscount);
-                        //   det[i].setDescuentoMonto(Math.round(descuento));
-                        //    totalItem = totalItem - Math.round(descuento)
-                        //}
+
                         det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
                         logger.warn("priceInclude = " + priceInclude);
                         if(!indTraslado.equals("5")) {
@@ -1147,6 +1140,9 @@ along with this software (see the LICENSE.md file). If not, see
                 // releo el doc para que se reflejen los cambios de formato
                 doc = DTEDocument.Factory.parse(doc.newInputStream(opts), opts);
 
+
+                logger.warn("Documento: " + doc);
+
                 // Guardo
                 opts = new XmlOptions();
                 opts.setCharacterEncoding("ISO-8859-1");
@@ -1167,8 +1163,6 @@ along with this software (see the LICENSE.md file). If not, see
                 }
 
                 uri = "#" + uri;
-
-                logger.warn("URI: " + uri)
 
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                 //doc.save(new File(resultS + "DTE" + tipoFactura + "-" + folio + "-sinfirma.xml"), opts);
@@ -1235,6 +1229,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="dteField.fiscalTaxDocumentSentStatusEnumId" value="Ftdt-NotSent"/>
 
             <set field="dteField.invoiceId" from="invoiceId"/>
+            <set field="dteField.shipmentId" from="shipmentId"/>
 
             <script>
                 Date date = new Date();
@@ -2508,12 +2503,31 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="invoiceId" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="activeOrgId" required="true"/>
-            <parameter name="items"/>
+            <parameter name="items" type="String"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
         </out-parameters>
         <actions>
+            <if condition="!items">
+                <!-- Si no viene lista de items se intenta crearla -->
+                <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemList">
+                    <econdition field-name="invoiceId"/><order-by field-name="invoiceItemSeqId"/></entity-find>
+                <log level="warn" message="Lista: $invoiceItemList"/>
+                <iterate list="invoiceItemList" entry="itemEntry">
+                    <log level="warn" message="Item: $itemEntry"/>
+                    <script>
+                        discount = 0;
+                        if(itemEntry.pctDiscount != null)
+                            discount = itemEntry.pctDiscount;
+                        if(items == null) {
+                            items = itemEntry.invoiceItemSeqId+"-"+itemEntry.quantity+"-"+itemEntry.amount+"-" +discount+"-"+itemEntry.description;
+                        } else {
+                            items = items + "," + itemEntry.invoiceItemSeqId+"-"+itemEntry.quantity+"-"+itemEntry.amount+"-" +discount+"-"+itemEntry.description;
+                        }
+                    </script>
+                </iterate>
+            </if>
 
             <!-- Obtención de descuento global, si es > 0 se aplica -->
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoiceField">
@@ -2526,6 +2540,8 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="items">
                 <set field="listItems" from="items instanceof List ? items : items.split(',') as List"/>
             </if>
+
+
             <iterate list="listItems" entry="detailItem">
                 <set field="listProduct" from="detailItem instanceof List ? detailItem : detailItem.split('-') as List"/>
                 <log message="Leyendo: $listProduct" level="warn"/>
@@ -2537,7 +2553,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <script>
                     long discount = Long.valueOf(listProduct[3]);
                 </script>
-                <set field="invoiceItemField.pctDiscount" from="discount"/>
+                <set field="invoiceItemField.pctDiscount" from="discount" />
                 <entity-update value-field="invoiceItemField"/>
             </iterate>
 
@@ -6357,22 +6373,21 @@ return
             <parameter name="afecto" type="String"/>
         </out-parameters>
         <actions>
-            <set field="afecto" from="null"/>
+            <set field="afecto" value="true"/>
 
             <entity-find entity-name="mantle.product.category.ProductCategoryMember" list="categoryMemberList">
                 <econdition field-name="productId" from="productId"/>
-                <econdition field-name="productCategoryId" value="ClVatTaxAfecto"/>
+                <econdition field-name="productCategoryId" value="ClVatTaxExento"/>
                 <econdition field-name="thruDate" operator="greater-equals" from="ec.user.nowTimestamp" or-null="true"/>
             </entity-find>
 
             <log level="warn" message="Verificando si item $productId es AFECTO o EXENTO"/>
             <if condition="categoryMemberList"><then>
-                <log message="Item AFECTO encontrado $productId" level="warn"/>
+                <log message="Item EXENTO encontrado $productId" level="warn"/>
                 <set field="afecto" value="true"/>
             </then>
             <else>
-                <log level="warn" message="Item EXENTO $productId"/>
-                <set field="afecto" value="false"/>
+                <log level="warn" message="Item AFECTO $productId"/>
             </else></if>
         </actions>
     </service>
@@ -7856,12 +7871,11 @@ return
                 <set field="tipoDespacho" from="codeOut.siiCode"/>
             </if>
 
-
             <!-- Generacion de guía de despacho -->
             <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-52', emisorS:emisorS, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
                           contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:shipmentItemDetailList,
                           invoiceId:invoiceId, returnId:returnId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, activeOrgId:activeOrgId, receiverPartyId:partyId,
-                          indTraslado:indTraslado, tipoDespacho:tipoDespacho]" out-map="factMapOut"/>
+                          indTraslado:indTraslado, tipoDespacho:tipoDespacho, shipmentId:shipmentId]" out-map="factMapOut"/>
             <set field="fiscalTaxDocumentId" from="factMapOut.fiscalTaxDocumentId"/>
         </actions>
     </service>
@@ -8389,6 +8403,7 @@ return
                 <field-map field-name="partyId" from="activeOrgId"/>
             </entity-find-one>
 
+
             <if condition="type == 'PDF'">
                 <set field="dteParams.pdfTemplate" from="filename.get()"/>
                 <set field="dteParams.pdfTemplateFilename" from="filename.getName()"/>
@@ -8436,6 +8451,85 @@ return
             </then><else>
                 <set field="dteParams.preferredDteTypeEnumId" from="preferredDteTypeEnumId"/>
                 <entity-update value-field="dteParams"/>
+            </else></if>
+        </actions>
+    </service>
+
+    <service verb="get" noun="PreferredDTE">
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="preferredDteTypeEnumId"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams">
+                <field-map field-name="partyId" from="partyId"/>
+            </entity-find-one>
+            <if condition="!dteParams">
+                <return error="true" message="Receptor no tiene datos tributarios"/>
+            </if>
+            <if condition="dteParams.preferredDteTypeEnumId">
+                <set field="preferredDteTypeEnumId" from="dteParams.preferredDteTypeEnumId"/>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="add" noun="ReferenceToInvoice">
+        <in-parameters>
+            <parameter name="invoiceId" required="true"/>
+            <parameter name="referenceText" default-value=" - "/>
+            <parameter name="folioRef"/>
+            <parameter name="tipoDocRef"/>
+            <parameter name="fecha"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.ReferenciaInvoice" value-field="refField" for-update="true">
+                <field-map field-name="invoiceId" from="invoiceId"/>
+                <field-map field-name="fiscalTaxDocumentTypeEnumId" from="tipoDocRef"/>
+            </entity-find-one>
+
+            <if condition="!refField">
+                <then>
+                    <!-- Hay que crear entrada para referencia de invoiceId -->
+                    <set field="createMap" from="[fiscalTaxDocumentTypeEnumId:tipoDocRef, codigoReferenciaEnumId:codigoReferenciaEnumId, fecha:fecha, folio:folioRef, invoiceId:invoiceId]"/>
+                    <service-call name="create#mchile.dte.ReferenciaInvoice" out-map="context" in-map="createMap"/>
+                </then><else>
+                   <!-- Ya existe una referencia -->
+                    <set field="refField.folio" from="folioRef"/>
+                    <set field="refField.fiscalTaxDocumentTypeEnumId" from="tipoDocRef"/>
+                    <set field="refField.fecha" from="fecha"/>
+                    <set field="refField.razonReferencia" from="referenceText"/>
+                    <entity-update value-field="refField"/>
+            </else></if>
+        </actions>
+    </service>
+
+    <service verb="add" noun="ReferenceToShipment">
+        <in-parameters>
+            <parameter name="shipmentId" required="true"/>
+            <parameter name="referenceText" default-value=" - "/>
+            <parameter name="folioRef"/>
+            <parameter name="tipoDocRef"/>
+            <parameter name="fecha"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.ReferenciaShipment" value-field="refField" for-update="true">
+                <field-map field-name="shipmentId" from="shipmentId"/>
+                <field-map field-name="fiscalTaxDocumentTypeEnumId" from="tipoDocRef"/>
+            </entity-find-one>
+            <if condition="!refField">
+                <then>
+                    <!-- Hay que crear entrada para referencia de invoiceId -->
+                    <set field="createMap" from="[fiscalTaxDocumentTypeEnumId:tipoDocRef, codigoReferenciaEnumId:codigoReferenciaEnumId, fecha:fecha, folio:folioRef, shipmentId:shipmentId, razonReferencia:referenceText]"/>
+                    <service-call name="create#mchile.dte.ReferenciaShipment" out-map="context" in-map="createMap"/>
+                </then><else>
+                <!-- Ya existe la referencia -->
+                <set field="refField.folio" from="folioRef"/>
+                <set field="refField.fiscalTaxDocumentTypeEnumId" from="tipoDocRef"/>
+                <set field="refField.fecha" from="fecha"/>
+                <set field="refField.razonReferencia" from="referenceText"/>
+                <entity-update value-field="refField"/>
             </else></if>
         </actions>
     </service>
