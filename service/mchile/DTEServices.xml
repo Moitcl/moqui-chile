@@ -4190,17 +4190,20 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="notasDebitoCreditoFacturasCompra"/>
             <parameter name="activeOrgId" required="true"/>
         </in-parameters>
+        <out-parameters>
+            <parameter name="fiscalTaxDocumentId"/>
+        </out-parameters>
+
         <actions>
-
             <set field="archivoPdf" from="pdf.getName()"/>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="mapOut"/>
-            <set field="fileRoot" from="mapOut.pathRecibidas"/>
-
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <!-- Todo: Fix fileRoot folder -->
+            <!-- set field="fileRoot" from="pathRecibidas"/ -->
+            <set field="fileRoot" value="component/kombuchacha/dte"/>
             <set field="contentLocationPdf" value="${fileRoot}/${archivoPdf}"/>
-
             <set field="docRrPdf" from="ec.resource.getLocationReference(contentLocationPdf)"/>
 
-            <log message="directorio Pdf: $docRrPdf" level="warn"/>
+            <log message="==> Directorio Pdf: ${docRrPdf}" level="warn"/>
             <script>
                 import java.io.ByteArrayOutputStream;
                 import java.io.File;
@@ -4226,20 +4229,15 @@ along with this software (see the LICENSE.md file). If not, see
 
                 DateFormat formatter = new SimpleDateFormat("yyyy-MM-dd");
                 Date date = formatter.parse(fechaEmision);
-                logger.warn("Date: " + date);
                 Timestamp ts = new Timestamp(date.getTime());
-
             </script>
 
-            <set field="purchaseOutMap" type="Map"/>
-            <set field="invoiceOutMap" type="Map"/>
+            <set field="purchaseOutMap" from="[:]"/>
+            <set field="invoiceOutMap" from="[:]"/>
 
             <if condition="!invoiceId">
                 <service-call name="mchile.PurchaseServices.create#Purchase" in-map="[vendorPartyId:issuerPartyId]" out-map="purchaseOutMap"/>
                 <!-- TODO: ¿Faltan items? -->
-
-                <!--service-call name="mchile.PurchaseServices.place#Order" in-map="[orderId:purchaseOutMap.orderId,
-                                    orderPartSeqId:purchaseOutMap.orderPartSeqId,]" out-map="placePurchaseOut"/-->
                 <service-call name="mantle.account.InvoiceServices.create#EntireOrderPartInvoice" in-map="[orderId:purchaseOutMap.orderId, orderPartSeqId:purchaseOutMap.orderPartSeqId]" out-map="invoiceOutMap"/>
                 <set field="invoiceId" from="invoiceOutMap.invoiceId"/>
             </if>
@@ -4247,15 +4245,14 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Creación de FiscalTaxDocument -->
             <set field="createMap" from="[issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber,
                         receiverPartyId:activeOrgId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]"/>
-            <service-call name="create#mchile.dte.FiscalTaxDocument" out-map="mapOut" in-map="createMap"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocument" out-map="context" in-map="createMap"/>
 
-            <!-- Creación de contenido (PDF) -->
-            <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts]"/>
+            <!-- Creación de contenido (Solo PDF) -->
+            <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
-            <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts]"/>
-            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+
             <!-- Entrada en atributos -->
-            <set field="updateMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, emailEmisor:emailEmisor, amount:amount,
+            <set field="updateMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, emailEmisor:emailEmisor, amount:amount,
                                          montoNeto:montoNeto, tasaImpuesto:tasaImpuesto, tipoImpuesto:tipoImpuesto, razonSocial:razonSocial, fechaEmision:fechaEmision, documentoAnulado:documentoAnulado,
                                          montoExento:montoExento, montoIVARecuperable:montoIVARecuperable, codigoIVANoRecuperable:codigoIVANoRecuperable, montoIVANoRecuperable:montoIVANoRecuperable,
                                          montoIVAUsoComun:montoIVAUsoComun, codigoOtroImpuestoORetencion:codigoOtroImpuestoORetencion, tasaOtroImpuestoORetencion:tasaOtroImpuestoORetencion,
@@ -4263,7 +4260,6 @@ along with this software (see the LICENSE.md file). If not, see
                                          montoNetoActivoFijo:montoNetoActivoFijo, montoIVAActivoFijo:montoIVAActivoFijo, montoIVANoRetenido:montoIVANoRetenido, codigoSucursal:codigoSucursal,
                                          notasDebitoCreditoFacturasCompra:notasDebitoCreditoFacturasCompra]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentAttributes" out-map="context" in-map="updateMap"/>
-            <!--return message="Orden de cobro ${purchaseOutMap.orderId} creada" error="false"/-->
         </actions>
     </service>
 
