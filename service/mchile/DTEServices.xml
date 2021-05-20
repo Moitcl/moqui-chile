@@ -4242,13 +4242,12 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <set field="archivoPdf" from="pdf.getName()"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <!-- Todo: Fix fileRoot folder -->
-            <!-- set field="fileRoot" from="pathRecibidas"/ -->
-            <set field="fileRoot" value="component/kombuchacha/dte"/>
+
+            <!-- Unused file location -->
+            <set field="fileRoot" from="pathRecibidas"/>
             <set field="contentLocationPdf" value="${fileRoot}/${archivoPdf}"/>
             <set field="docRrPdf" from="ec.resource.getLocationReference(contentLocationPdf)"/>
 
-            <log message="==> Directorio Pdf: ${docRrPdf}" level="warn"/>
             <script>
                 import java.io.ByteArrayOutputStream;
                 import java.io.File;
@@ -4270,7 +4269,15 @@ along with this software (see the LICENSE.md file). If not, see
                 import java.util.Date;
 
                 fileStream = pdf.getInputStream()
-                try { docRrPdf.putStream(fileStream) } finally { fileStream.close() }
+                // try { docRrPdf.putStream(fileStream) } finally { fileStream.close() }
+                byte[] bArrayDTE = new byte[(int) fileStream.getChannel().size()]
+                try {
+                    fileStream.read(bArrayDTE)
+                    fileStream.close()
+                }
+                catch (IOException ioExp) {
+                    ioExp.printStackTrace();
+                }
 
                 DateFormat formatter = new SimpleDateFormat("yyyy-MM-dd");
                 Date date = formatter.parse(fechaEmision);
@@ -4293,7 +4300,7 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="create#mchile.dte.FiscalTaxDocument" out-map="context" in-map="createMap"/>
 
             <!-- Creación de contenido (Solo PDF) -->
-            <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts]"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:archivoPdf, contentDate:ts, contentData:bArrayDTE]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
 
             <!-- Entrada en atributos -->
