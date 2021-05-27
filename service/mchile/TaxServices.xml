@@ -18,7 +18,7 @@ along with this software (see the LICENSE.md file). If not, see
         <implements service="mantle.other.TaxServices.calculate#SalesTax"/>
         <actions>
             <set field="taxResults" from="[]"/>
-            <set field="taxRate" from="0.19"/>
+            <service-call name="mchile.TaxServices.get#TaxRate" out-map="context"/>
             <set field="baseMap" from="[taxRate:taxRate, taxAuthorityId:'CL_SII', taxName:'IVA', alreadyIncluded:'Y']"/>
             <iterate list="items" entry="item">
                 <if condition="item.itemTypeEnumId == 'ItemProduct'">
@@ -45,6 +45,45 @@ along with this software (see the LICENSE.md file). If not, see
                     </script>
                 </if>
             </iterate>
+        </actions>
+    </service>
+
+    <service verb="get" noun="TaxRate">
+        <in-parameters>
+            <parameter name="date" type="Timestamp" default="ec.user.nowTimestamp"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="taxRate" type="BigDecimal"/>
+        </out-parameters>
+        <actions>
+            <set field="taxRate" from="0.19"/>
+        </actions>
+    </service>
+
+    <service verb="calculate" noun="NetFromGrossPrice">
+        <in-parameters>
+            <parameter name="grossPrice" type="BigDecimal" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="netPrice" type="BigDecimal"/>
+        </out-parameters>
+        <actions>
+            <service-call name="mchile.TaxServices.get#TaxRate" out-map="context"/>
+            <script><![CDATA[
+                grossPrice = grossPrice.setScale(0, BigDecimal.ROUND_HALF_UP)
+                netPrice = (grossPrice / (taxRate + 1)).setScale(0, BigDecimal.ROUND_HALF_UP)
+                calculatedGrossPrice = (netPrice * (taxRate + 1)).setScale(0, BigDecimal.ROUND_HALF_UP)
+                if (calculatedGrossPrice != grossPrice) {
+                    if (calculatedGrossPrice < grossPrice)
+                        netPrice += 1
+                    else if (calculatedGrossPrice > grossPrice)
+                        netPrice -= 1
+                    calculatedGrossPrice = (netPrice * (taxRate + 1)).setScale(0, BigDecimal.ROUND_HALF_UP)
+                    if (calculatedGrossPrice != grossPrice) {
+                        netPrice = (grossPrice / (taxRate + 1)).setScale(1, BigDecimal.ROUND_HALF_UP)
+                    }
+                }
+            ]]></script>
         </actions>
     </service>
 
