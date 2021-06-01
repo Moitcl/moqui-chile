@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="ISO-8859-1"?>
 
 <xsl:stylesheet version="1.1"
 	xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -219,7 +219,7 @@
 										name="DetalleVacio" />
 								</xsl:otherwise>
 							</xsl:choose>
-							<xsl:choose>
+							<!--xsl:choose>
 								<xsl:when
 									test="Detalle[NroLinDet=11]">
 									<xsl:apply-templates
@@ -273,7 +273,7 @@
 									<xsl:call-template
 										name="DetalleVacio" />
 								</xsl:otherwise>
-							</xsl:choose>
+							</xsl:choose-->
 
 	
 							<fo:table-row>
@@ -380,7 +380,7 @@
 
 			<!-- Lista de Referencias -->
 			<fo:block-container absolute-position="absolute" left="2cm"
-								top="17cm">
+								top="15cm">
 				<fo:block font-size="8pt" font-family="monospace"
 						  color="black" text-align="left" space-before="8pt">
 					<fo:table table-layout="fixed" width="100%"
@@ -421,7 +421,7 @@
 			</fo:block-container>
 
 			<xsl:apply-templates select="TED" />
-			<fo:block-container absolute-position="absolute" top="24cm" left="12cm"
+			<fo:block-container absolute-position="absolute" top="25cm" left="12cm"
                         width="7cm">
                                 <fo:block font-size="12pt" font-family="sans-serif"
                                         text-align="right">
@@ -429,6 +429,55 @@
                         </fo:block>
                         </fo:block-container>
 		</fo:block>
+
+		<!-- Acuse de Recibo -->
+                        <fo:block-container absolute-position="absolute" left="9.5cm"
+                                                                top="21.2cm">
+                                <fo:block font-size="9pt" font-family="monospace"
+                                                  color="black" text-align="left" space-before="8pt">
+                                        <fo:table table-layout="fixed" width="100%" border-style="solid">
+                                                <fo:table-column column-width="10.0cm" />
+
+                                                <fo:table-body>
+                                                        <fo:table-row>
+                                                                <fo:table-cell text-align="left"
+                                                                                           border-width="0.5pt">
+                                                                        <fo:block>
+                                                                                <fo:inline>
+                                                                                        Nombre:___________________________________
+                                                                                </fo:inline>
+                                                                        </fo:block>
+                                                                </fo:table-cell>
+							</fo:table-row>
+							<fo:table-row>
+								<fo:table-cell>
+									<fo:block><fo:inline>
+									RUT: ___________________  FECHA: ____________
+									</fo:inline></fo:block>
+								</fo:table-cell>
+
+                                                        </fo:table-row>
+							<fo:table-row>
+								<fo:table-cell>
+								<fo:block><fo:inline>
+							Recinto: _______________ FIRMA: ____________
+								</fo:inline></fo:block>
+								</fo:table-cell>
+							</fo:table-row>
+
+							<fo:table-row>
+                                                                <fo:table-cell>
+                                                                <fo:block><fo:inline>
+El acuse de recibo que se declara en este acto, de acuerdo a lo dispuesto en la letra b) del Art. 4° y la letra c) del Art.5° de la Ley 19.983, acredita que la entrega de mercadería(s) o servicio(s)
+                                                                </fo:inline></fo:block>
+                                                                </fo:table-cell>
+                                                        </fo:table-row>
+
+
+                                                </fo:table-body>
+                                        </fo:table>
+                                </fo:block>
+                        </fo:block-container>
 	</xsl:template>
 
 
@@ -442,7 +491,7 @@
 			top="0cm">
 			<fo:block>
 				<fo:external-graphic
-					src="url('/home/cherrera/moit/cowork/moqui-framework/runtime/component/moquichile/DTE/TEMPLATES/logo-KCC-blanco.png')" width="30%" content-height="30%" content-width="scale-to-fit" scaling="uniform"/>
+					src="url('/home/andmunoz/Documentos/Moit/kombuchacha/moqui-framework/runtime/component/MoquiChile/DTE/TEMPLATES/logo-KCC.png')" width="60%" content-height="60%" content-width="scale-to-fit" scaling="uniform"/>
 			</fo:block>
 		</fo:block-container>
 
@@ -534,7 +583,7 @@
 							margin-top="0.5cm" left="12cm" height="3cm" width="7.5cm">
      		<fo:block font-size="12pt" font-family="monospace"
 				  font-weight="bold" color="red" text-align="center">
-			S.I.I. - Santiago Oriente
+			S.I.I. - Unidad Villarrica
 		</fo:block>
 		</fo:block-container>
 
@@ -659,7 +708,7 @@
 									<xsl:value-of select="GiroRecep" />
 								</fo:block>
 							</fo:table-cell>
-							<fo:table-cell text-align="left">
+							<!--fo:table-cell text-align="left">
 								<fo:block>
 									<fo:inline font-weight="bold">
 										CONDICION VENTA:
@@ -680,7 +729,7 @@
 										</xsl:with-param>
 									</xsl:call-template>
 								</fo:block>
-							</fo:table-cell>
+							</fo:table-cell-->
 						</fo:table-row>
 					</fo:table-body>
 				</fo:table>
@@ -760,19 +809,19 @@
 									</xsl:choose>
 									<xsl:choose>
 										<xsl:when test="TpoDocRef=33">
-											Factura ElectrÃ³nica
+											Factura Electrónica
 										</xsl:when>
 										<xsl:when test="TpoDocRef=34">
-											Factura ElectrÃ³nica Exenta
+											Factura Electrónica Exenta
 										</xsl:when>
 										<xsl:when test="TpoDocRef=52">
-											GuÃ­a de Despacho ElectrÃ³nica
+											Guía de Despacho Electrónica
 										</xsl:when>
 										<xsl:when test="TpoDocRef=56">
-											Nota de DÃ©bito ElectrÃ³nica
+											Nota de Débito Electrónica
 										</xsl:when>
 										<xsl:when test="TpoDocRef=61">
-											Nota de CrÃ©dito ElectrÃ³nica
+											Nota de Crédito Electrónica
 										</xsl:when>
 									</xsl:choose>
 									Nro.
@@ -784,7 +833,7 @@
         </xsl:template>
 
 
-	<!-- Timbre electrÃ³nico -->
+	<!-- Timbre electrónico -->
 	<xsl:template match="TED">
 		<xsl:variable name="myted" select="." />
 		<xsl:variable name="barcode-cfg">
@@ -813,7 +862,7 @@
 			</fo:block>
 			<fo:block font-size="8pt" font-family="sans-serif"
 				text-align="center">
-				Timbre ElectrÃ³nico SII
+				Timbre Electrónico SII
 			</fo:block>
 			<fo:block font-size="8pt" font-family="sans-serif"
 				text-align="center">
@@ -831,14 +880,14 @@
 			<xsl:when test="$medioPago='LT'">Letra</xsl:when>
 			<xsl:when test="$medioPago='EF'">Efectivo</xsl:when>
 			<xsl:when test="$medioPago='PE'">Pago a Cta. Corriente</xsl:when>
-			<xsl:when test="$medioPago='TC'">Tarjeta de CrÃ©dito</xsl:when>
+			<xsl:when test="$medioPago='TC'">Tarjeta de Crédito</xsl:when>
 			<xsl:when test="$medioPago='CF'">Cheque a Fecha</xsl:when>
 			<xsl:when test="$medioPago='OT'">Otro</xsl:when>
 		</xsl:choose>
 
 		<xsl:choose>
 			<xsl:when test="$formaPago=1"> (Contado)</xsl:when>
-			<xsl:when test="$formaPago=2"> (CrÃ©dito)</xsl:when>
+			<xsl:when test="$formaPago=2"> (Crédito)</xsl:when>
 			<xsl:when test="$formaPago=3"> (Sin Valor)</xsl:when>
 		</xsl:choose>
 

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="ISO-8859-1"?>
 
 <xsl:stylesheet version="1.1"
 	xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -8,7 +8,7 @@
 	>
 
 	<xsl:output method="xml" version="1.0" omit-xml-declaration="no"
-		indent="yes" />
+		indent="yes" encoding="ISO-8859-1"/>
 
 	<xsl:decimal-format name="us" decimal-separator='.' grouping-separator=',' />
         <xsl:decimal-format name="european" decimal-separator=',' grouping-separator='.' />
@@ -435,7 +435,7 @@
 			top="0cm">
 			<fo:block>
 				<fo:external-graphic
-					src="url('/home/cherrera/moit/cowork/moqui-framework/runtime/component/moquichile/DTE/TEMPLATES/logo-KCC-blanco.png')" width="30%" content-height="30%" content-width="scale-to-fit" scaling="uniform"/>
+					src="url('/home/andmunoz/Documentos/Moit/kombuchacha/moqui-framework/runtime/component/MoquiChile/DTE/TEMPLATES/logo-KCC.png')" width="60%" content-height="60%" content-width="scale-to-fit" scaling="uniform"/>
 			</fo:block>
 		</fo:block-container>
 
@@ -652,7 +652,7 @@
 									<xsl:value-of select="GiroRecep" />
 								</fo:block>
 							</fo:table-cell>
-							<fo:table-cell text-align="left">
+							<!--fo:table-cell text-align="left">
 								<fo:block>
 									<fo:inline font-weight="bold">
 										CONDICION VENTA:
@@ -673,7 +673,7 @@
 										</xsl:with-param>
 									</xsl:call-template>
 								</fo:block>
-							</fo:table-cell>
+							</fo:table-cell-->
 						</fo:table-row>
 					</fo:table-body>
 				</fo:table>
@@ -753,19 +753,19 @@
 									</xsl:choose>
 									<xsl:choose>
 										<xsl:when test="TpoDocRef=33">
-											Factura Electr贸nica
+											Factura Electr髇ica
 										</xsl:when>
 										<xsl:when test="TpoDocRef=34">
-											Factura Electr贸nica Exenta
+											Factura Electr髇ica Exenta
 										</xsl:when>
 										<xsl:when test="TpoDocRef=52">
-											Gu铆a de Despacho Electr贸nica
+											Gu韆 de Despacho Electr髇ica
 										</xsl:when>
 										<xsl:when test="TpoDocRef=56">
-											Nota de D茅bito Electr贸nica
+											Nota de D閎ito Electr髇ica
 										</xsl:when>
 										<xsl:when test="TpoDocRef=61">
-											Nota de Cr茅dito Electr贸nica
+											Nota de Cr閐ito Electr髇ica
 										</xsl:when>
 									</xsl:choose>
 									Nro.
@@ -777,40 +777,27 @@
         </xsl:template>
 
 
-	<!-- Timbre electr贸nico -->
+	<!-- Timbre electr髇ico -->
 	<xsl:template match="TED">
 		<xsl:variable name="myted" select="." />
-		<xsl:variable name="barcode-cfg">
-			<barcode>
-				<!--  Segun SII, 3cm x 9cm max -->
-				<pdf417>
-					<module-width>0.008in</module-width>
-					<!--  min exigido por Sii 0.0067  -->
-					<row-height>3mw</row-height>
-					<!--  3 veces el ancho -->
-					<quite-zone enabled="true">0.25in</quite-zone>
-					<ec-level>5</ec-level>
-					<columns>14</columns>
-				</pdf417>
-			</barcode>
-		</xsl:variable>
 		<fo:block-container absolute-position="absolute" top="21cm"
 			width="7cm">
 			<fo:block>
 				<fo:instream-foreign-object>
 			
-					<xsl:copy-of
-						select="tedbarcode:generate($barcode-cfg, $myted)" />
+					<xsl:copy-of select="tedbarcode:generate($myted)" />
 			
 				</fo:instream-foreign-object>
+
+                <!--
+				<fo:external-graphic src="url('/tmp/temporary-TED.svg')" width="100%" content-height="100%" content-width="scale-to-fit" scaling="uniform"/>
+                -->
 			</fo:block>
-			<fo:block font-size="8pt" font-family="sans-serif"
-				text-align="center">
-				Timbre Electr贸nico SII
+			<fo:block font-size="8pt" font-family="Helvetica" text-align="center">
+				Timbre Electr髇ico SII
 			</fo:block>
-			<fo:block font-size="8pt" font-family="sans-serif"
-				text-align="center">
-				Res. 99 de 2014 - Verifique Documento: www.sii.cl
+			<fo:block font-size="8pt" font-family="sans-serif" text-align="center">
+				Res. 99 de 2014 - Verifique Documento: https://erp-demo.moit.cl/dte
 			</fo:block>
 		</fo:block-container>
 	</xsl:template>
@@ -824,14 +811,14 @@
 			<xsl:when test="$medioPago='LT'">Letra</xsl:when>
 			<xsl:when test="$medioPago='EF'">Efectivo</xsl:when>
 			<xsl:when test="$medioPago='PE'">Pago a Cta. Corriente</xsl:when>
-			<xsl:when test="$medioPago='TC'">Tarjeta de Cr茅dito</xsl:when>
+			<xsl:when test="$medioPago='TC'">Tarjeta de Cr閐ito</xsl:when>
 			<xsl:when test="$medioPago='CF'">Cheque a Fecha</xsl:when>
 			<xsl:when test="$medioPago='OT'">Otro</xsl:when>
 		</xsl:choose>
 
 		<xsl:choose>
 			<xsl:when test="$formaPago=1"> (Contado)</xsl:when>
-			<xsl:when test="$formaPago=2"> (Cr茅dito)</xsl:when>
+			<xsl:when test="$formaPago=2"> (Cr閐ito)</xsl:when>
 			<xsl:when test="$formaPago=3"> (Sin Valor)</xsl:when>
 		</xsl:choose>
 
