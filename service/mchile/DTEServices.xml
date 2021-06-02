@@ -4232,6 +4232,62 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="create" noun="DteFromUrl">
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+            <parameter name="invoiceId" required="true"/>
+            <parameter name="contentLocation" required="true"/>
+            <parameter name="contentDate" required="true"/>
+            <parameter name="issuerPartyId"/>
+            <parameter name="receiverPartyId"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="fiscalTaxDocumentContentTypeEnumId" default="Ftdct-Pdf"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="fiscalTaxDocumentId"/>
+        </out-parameters>
+        <actions>
+            <log message="[create#DteFromFile] Reading tax document from ${contentLocation}" />
+            <script><![CDATA[
+                        URL url = new URL(contentLocation);
+                        URLConnection hc = url.openConnection();
+                        hc.setRequestProperty("User-Agent", "Mozilla/5.0");
+                        byte[] contentFile;
+                        if (hc.getResponseCode().equals(200)) {
+                            contentFile = hc.getInputStream().getBytes();
+                        }
+                    ]]></script>
+
+            <log message="[create#DteFromFile] orderId: ${orderId}" />
+
+            <set field="fiscalTaxDocumentNumber" from="orderId"/>
+
+            <entity-find entity-name="mantle.order.OrderHeaderAndPart" list="orderList" distinct="true">
+                <econdition field-name="orderId" from="orderId"/>
+            </entity-find>
+            <set field="order" from="orderList?.first"/>
+
+            <set field="issuerPartyId" from="issuerPartyId ? issuerPartyId : order.vendorPartyId"/>
+            <set field="receiverPartyId" from="receiverPartyId ? receiverPartyId : order.customerPartyId"/>
+
+            <set field="createMap" from="[issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber,
+                                                 receiverPartyId:receiverPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:contentDate, invoiceId:invoiceId]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocument" out-map="context" in-map="createMap"/>
+            <set field="fiscalTaxDocumentFileName" from="fiscalTaxDocumentNumber + '.pdf'"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:fiscalTaxDocumentContentTypeEnumId, contentLocation:fiscalTaxDocumentFileName, contentData:contentFile, contentDate:contentDate]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+            <set field="updateMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, emailEmisor:emailEmisor, amount:amount,
+                                                 montoNeto:montoNeto, tasaImpuesto:tasaImpuesto, tipoImpuesto:tipoImpuesto, razonSocial:razonSocial, fechaEmision:fechaEmision, documentoAnulado:documentoAnulado,
+                                                 montoExento:montoExento, montoIVARecuperable:montoIVARecuperable, codigoIVANoRecuperable:codigoIVANoRecuperable, montoIVANoRecuperable:montoIVANoRecuperable,
+                                                 montoIVAUsoComun:montoIVAUsoComun, codigoOtroImpuestoORetencion:codigoOtroImpuestoORetencion, tasaOtroImpuestoORetencion:tasaOtroImpuestoORetencion,
+                                                 montoOtroImpuestoORetencionConCredito:montoOtroImpuestoORetencionConCredito, montoOtroImpuestoORetencionSinCredito:montoOtroImpuestoORetencionSinCredito,
+                                                 montoNetoActivoFijo:montoNetoActivoFijo, montoIVAActivoFijo:montoIVAActivoFijo, montoIVANoRetenido:montoIVANoRetenido, codigoSucursal:codigoSucursal,
+                                                 notasDebitoCreditoFacturasCompra:notasDebitoCreditoFacturasCompra]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentAttributes" out-map="context" in-map="updateMap"/>
+
+        </actions>
+    </service>
+
     <service verb="load" noun="Dt">
         <description>
             Carga documento tributario en papel recibido de tercero
