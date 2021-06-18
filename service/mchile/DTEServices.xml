@@ -1239,35 +1239,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="xml" value="${resultS}/DTE${tipoFactura}-${folio}.xml"/>
             <set field="pdf" value="${pathPdf}/DTE${tipoFactura}-${folio}.pdf"/>
             <set field="pdfCedible" value="${pathPdf}/DTE${tipoFactura}-${folio}-cedible.pdf"/>
-            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, pdfCedible:pdfCedible, activeOrgId:activeOrgId]" out-map="context"/>
-            <set field="bArray2"/>
-
-            <!-- Lectura y conversión a arreglo de bytes de PDF temporal -->
-            <script>
-                File file = new File(pdf);
-                FileInputStream fis = null;
-                byte[] bArray = new byte[(int) file.length()];
-                try {
-                fis = new FileInputStream(file);
-                fis.read(bArray);
-                fis.close();
-                } catch (IOException ioExp) {
-                ioExp.printStackTrace();
-                }
-                logger.warn("pdf largo: " + file.length());
-                bArray2 = bArray;
-
-                File fileCedible = new File(pdfCedible);
-                FileInputStream fisCedible = null;
-                byte[] bArrayCedible = new byte[(int) fileCedible.length()];
-                try {
-                fisCedible = new FileInputStream(fileCedible);
-                fisCedible.read(bArrayCedible);
-                fisCedible.close();
-                } catch (IOException ioExp) {
-                ioExp.printStackTrace();
-                }
-            </script>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[dte:xml, activeOrgId:activeOrgId]" out-map="context"/>
 
             <!-- Creación de registro en FiscalTaxDocument -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
@@ -1300,10 +1272,10 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlName, contentDate:ts, contentData:salida]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
 
-            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfName, contentDate:ts, contentData:bArray2]"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfName, contentDate:ts, contentData:pdfBytes]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
 
-            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedibleName, contentDate:ts, contentData:bArrayCedible]"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedibleName, contentDate:ts, contentData:pdfCedibleBytes]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
             <!-- Creación de registro en FiscalTaxDocumentAttributes -->
             <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, amount:amount, fechaEmision:fechaEmision, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmision,
@@ -1311,18 +1283,6 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="create#mchile.dte.FiscalTaxDocumentAttributes" out-map="context" in-map="createMap"/>
 
             <set field="fiscalTaxDocumentId" from="dteField.fiscalTaxDocumentId"/>
-
-            <!-- Eliminacion de XML temporal -->
-            <script>
-                File XMLfile = new File(xml);
-                XMLfile.delete();
-            </script>
-
-            <!-- Eliminacion de PDF temporal -->
-            <script>
-                file.delete();
-                fileCedible.delete();
-            </script>
         </actions>
     </service>
 
@@ -2179,6 +2139,8 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="nmbContacto"/>
             <parameter name="mailContacto"/>
             <parameter name="fonoContacto"/>
+            <parameter name="oficinaSII"/>
+            <parameter name="transformParameters" type="List"/>
         </out-parameters>
         <actions>
             <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="orgField">
@@ -2254,6 +2216,8 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="nmbContacto" from="orgField.nmbContacto"/>
             <set field="mailContacto" from="orgField.mailContacto"/>
             <set field="fonoContacto" from="orgField.fonoContacto"/>
+            <set field="oficinaSII" from="orgField.oficinaSII"/>
+            <set field="transformParameters" from="[fonoContacto:fonoContacto, mailContacto:mailContacto, oficinaSII:oficinaSII, logo:logo, maxItems:maxItems, nroResol:nroResol, fchResol:fchResol, maxItems:'14']"/>
         </actions>
     </service>
 
@@ -2306,21 +2270,8 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
             <set field="certS" from="pathCert"/>
             <set field="passS" from="passCert"/>
-            <set field="pathResults" from="pathResults"/>
             <set field="template" from="pdfTemplate"/>
-            <set field="pathPdf" from="pathPdf"/>
             <set field="giro" from="giroEmisor"/>
-            <set field="templateFactura" from="templateFactura"/>
-            <set field="pdfTemplate" from="pdfTemplate"/>
-            <set field="pdfTemplateCedible" from="pdfTemplateCedible"/>
-            <set field="pdfTemplateBoleta" from="pdfTemplateBoleta"/>
-            <set field="pdfTemplateBoletaContinua" from="pdfTemplateBoletaContinua"/>
-            <set field="templateEnvio" from="templateEnvio"/>
-            <set field="templateAceptaciones" from="templateAceptaciones"/>
-            <set field="templateLibro" from="templateLibro"/>
-            <set field="logo" from="logo"/>
-            <set field="fchResol" from="fchResol"/>
-            <set field="nroResol" from="nroResol"/>
 
             <!--
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="document" cache="false">
@@ -2336,17 +2287,16 @@ along with this software (see the LICENSE.md file). If not, see
                 import java.security.PrivateKey;
                 import java.security.cert.X509Certificate;
                 import cl.nic.dte.util.Utilities;
+                import javax.xml.transform.stream.StreamSource;
 
                 ec.logger.info("template: ${template}")
                 pdf = "/tmp/factura.pdf"
                 templateStream = ec.resource.getLocationReference("component://kombuchacha/plantillas/plantilla.xsl").openStream()
                 //templateStream = new FileInputStream("/Users/jhp/moqui/DTE/scripts/SETPRUEBAS/plantilla_pdf_invcj-8859.xsl")
                 //ByteArrayInputStream input = new ByteArrayInputStream(dte.getBytes(1, dte.length() as Integer))
-                //Utilities.generatePDF(dte.getBinaryStream(), templateStream, new FileOutputStream(pdf), true);
                 dte = "/Users/jhp/moqui/DTE/scripts/SETPRUEBAS/DTE33-312.xml"
-                Utilities.generatePDF(new FileInputStream(dte), templateStream, new FileOutputStream(pdf), true);
-                logger.warn("---------------");
-                logger.warn("---------------");
+                //ec.resource.xslFoTransform(new StreamSource(templateStream), new StreamSource(new File(dte)), new FileOutputStream(pdf), "application/pdf")
+                ec.resource.xslFoTransform(new StreamSource(new File(dte)), new StreamSource(templateStream), new FileOutputStream(pdf), "application/pdf", transformParameters)
                 //xml = "/tmp/factura.xml"
                 //new File(xml).withOutputStream {it.write dte.getBytes(1, dte.length() as Integer)}
 
@@ -2359,13 +2309,15 @@ along with this software (see the LICENSE.md file). If not, see
             Genera archivo PDF de Factura/Boleta (envio).
         </description>
         <in-parameters>
-            <parameter name="pdf" required="true"/>
-            <parameter name="pdfCedible"/>
             <parameter name="dte" required="true"/>
             <parameter name="activeOrgId" required="true"/>
             <parameter name="boleta"/>
             <parameter name="continua"/>
         </in-parameters>
+        <out-parameters>
+            <parameter name="pdfBytes" type="byte[]"/>
+            <parameter name="pdfCedibleBytes" type="byte[]"/>
+        </out-parameters>
         <actions>
             <!-- Recuperacion de parametros de la organizacion -->
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
@@ -2408,23 +2360,22 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.nic.dte.net.ConexionSii;
                 import cl.nic.dte.util.Utilities;
                 import cl.sii.siiDte.RECEPCIONDTEDocument;
+                import javax.xml.transform.stream.StreamSource;
 
                 logger.warn("Working Directory for PDF/images = " + System.getProperty("user.dir"));
-
-                Utilities.generatePDF(new FileInputStream(dte), template.getBinaryStream(), new FileOutputStream(pdf), false);
+                ByteArrayOutputStream pdf = new ByteArrayOutputStream()
+                ec.resource.xslFoTransform(new StreamSource(new File(dte)), new StreamSource(template.getBinaryStream()), pdf, "application/pdf", transformParameters + [cedible:'false'])
+                pdf.close()
+                pdfBytes = pdf.toByteArray()
             </script>
             <if condition="!boleta">
                 <script>
-                    Utilities.generatePDF(new FileInputStream(dte), template.getBinaryStream(), new FileOutputStream(pdfCedible), true);
+                    pdf = new ByteArrayOutputStream()
+                    ec.resource.xslFoTransform(new StreamSource(new File(dte)), new StreamSource(template.getBinaryStream()), pdf, "application/pdf", transformParameters + [cedible:'true'])
+                    pdf.close()
+                    pdfCedibleBytes = pdf.toByteArray()
                 </script>
             </if>
-            <script>
-
-                logger.warn("---------------");
-                logger.warn("PDF Generado: " + pdf);
-                logger.warn("PDF Cedible Generado: " + pdfCedible);
-                logger.warn("---------------");
-            </script>
         </actions>
     </service>
 
