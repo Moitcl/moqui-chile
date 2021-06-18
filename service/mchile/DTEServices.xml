@@ -320,6 +320,7 @@ along with this software (see the LICENSE.md file). If not, see
                         codigo.setTpoCodigo("Interna")
                         codigo.setVlrCodigo(codigoInterno)
                         det[i].setNmbItem(nombreItem);
+                        //det[i].setDscItem(""); // Descripción Item
                         det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
                         if(uom != null)
                         det[i].setUnmdItem(uom);
@@ -1073,37 +1074,53 @@ along with this software (see the LICENSE.md file). If not, see
                     i = 0;
                 </script>
                 <iterate list="detailList" entry="detailEntry">
-                    <entity-find-one entity-name="mantle.product.Product" value-field="productField" cache="false">
-                        <field-map field-name="productId" from="detailEntry.productId"/>
-                    </entity-find-one>
-                    <set field="nombreItem" from="productField.productName"/>
+
+                    <set field="nombreItem" from="detailEntry.productName"/>
+                    <if condition="nombreItem == null">
+                        <entity-find-one entity-name="mantle.product.Product" value-field="productField" cache="false">
+                            <field-map field-name="productId" from="detailEntry.productId"/>
+                        </entity-find-one>
+                        <set field="nombreItem" from="productField.productName"/>
+                    </if>
 
                     <set field="qtyItem" from="detailEntry.quantity" type="Integer"/>
-
 
                     <service-call name="mchile.DTEServices.check#Afecto" in-map="[productId:detailEntry.productId]" out-map="afectoOutMap"/>
                     <set field="itemAfecto" from="afectoOutMap.afecto"/>
 
-                    <entity-find-one entity-name="mantle.product.ProductPrice" value-field="productPriceField" cache="false">
-                        <field-map field-name="productId" from="detailEntry.productId"/>
-                        <!--field-map field-name="priceTypeEnumId" value="PptCurrent"/-->
-                    </entity-find-one>
-                    <set field="priceItem" type="Integer" value="0"/>
-
-                    <if condition="productPriceField">
-                        <then>
-                            <if condition="productPriceField.price">
-                                <set field="priceItem" from="productPriceField.price"/>
-                            </if>
-                        </then>
+                    <entity-find entity-name="mantle.shipment.ShipmentItemSource" list="sisList">
+                        <econdition field-name="shipmentId"/>
+                        <econdition field-name="productId" from="detailEntry.productId"/>
+                    </entity-find>
+                    <set field="totalItem" type="BigDecimal" from="0"/>
+                    <set field="quantityHandled" from="0"/>
+                    <log message="handling price for productId ${detailEntry.productId}"/>
+                    <if condition="sisList">
+                        <iterate list="sisList" entry="sis">
+                            <log message="processing sis ${sis}"/>
+                            <if condition="sis.invoiceId"><then>
+                                <entity-find-one entity-name="mantle.account.invoice.InvoiceItem" value-field="invoiceItem" auto-field-map="[invoiceId:sis.invoiceId, invoiceItemSeqId:sis.invoiceItemSeqId]"/>
+                                <set field="totalItem" from="totalItem + sis.quantity * invoiceItem.amount"/>
+                                <set field="quantityHandled" from="quantityHandled + sis.quantity"/>
+                            </then><else-if condition="sis.orderId">
+                                <entity-find-one entity-name="mantle.order.OrderItem" value-field="orderItem" auto-field-map="[orderId:sis.orderId, orderItemSeqId:sis.orderItemSeqId]"/>
+                                <set field="totalItem" from="totalItem + sis.quantity * orderItem.unitAmount"/>
+                                <set field="quantityHandled" from="quantityHandled + sis.quantity"/>
+                            </else-if></if>
+                        </iterate>
                     </if>
 
-                    <set field="totalItem" type="Long"/>
-                    <script>
-                        totalItem = Math.round(BigDecimal.valueOf(qtyItem) * BigDecimal.valueOf(priceItem))
-                    </script>
-                    <!--service-call name="mchile.DTEServices.escape#Characters" in-map="[cadenaString:nombreItem]" out-map="context"/>
-                    <set field="nombreItem" from="outString"/-->
+                    <if condition="quantityHandled &lt; qtyItem">
+                        <log message="pending ${qtyItem-quantityHandled} out of ${qtyItem}"/>
+                        <entity-find-one entity-name="mantle.shipment.Shipment" value-field="shipment"/>
+                        <set field="shipmentDate" from="shipment.estimatedShipDate ?: shipment.shipAfterDate ?: shipment.entryDate ?: ec.user.nowTimestamp"/>
+                        <service-call name="mantle.product.PriceServices.get#ProductPrice" in-map="[productId:detailEntry.productId, quantity:qtyItem, validDate:shipmentDate]" out-map="price"/>
+                        <set field="totalItem" from="totalItem + (qtyItem - quantityHandled)*price.price"/>
+                    </if>
+
+                    <set field="priceItem" type="BigDecimal" from="totalItem/qtyItem"/>
+
+                    <set field="totalItem" type="Long" from="totalItem.setScale(0, BigDecimal.ROUND_HALF_UP)"/>
 
                     <script><![CDATA[
                         // Agrego detalles
@@ -1117,7 +1134,7 @@ along with this software (see the LICENSE.md file). If not, see
                             if(Math.round(priceItem) > 0) {
                                 det[i].setPrcItem(BigDecimal.valueOf(Math.round(priceItem)));
                             }
-                            det[i].setMontoItem(totalItem);
+                            det[i].setMontoItem(totalItem as Long);
                             totalInvoice = totalInvoice + totalItem
                             //if(itemAfecto.equals("true")) {
                                 totalNeto = totalNeto + totalItem
@@ -7954,7 +7971,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="shipmentId"/>
                 <order-by field-name="productId"/>
             </entity-find>
-
 
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
                 <econdition field-name="partyId" from="activeOrgId"/>
