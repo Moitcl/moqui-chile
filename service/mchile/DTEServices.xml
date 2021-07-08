@@ -109,7 +109,6 @@ along with this software (see the LICENSE.md file). If not, see
             <!--set field="giro" from="giroEmisor"/-->
             <set field="templateFactura" from="templateFactura"/>
             <set field="templatePdf" from="templatePdf"/>
-            <set field="templatePdfCedible" from="templatePdfCedible"/>
             <set field="templateEnvio" from="templateEnvio"/>
             <set field="templateAceptaciones" from="templateAceptaciones"/>
             <set field="templateLibro" from="templateLibro"/>
@@ -313,14 +312,14 @@ along with this software (see the LICENSE.md file). If not, see
                         <set field="uom" value="Mes"/>
                     </if>
                     <script>
-
                         // Agrego detalles
                         det[i] = Detalle.Factory.newInstance();
                         det[i].setNroLinDet(i+1);
-                        CdgItem codigo = det[i].addNewCdgItem()
+                        cl.sii.siiDte.DTEDefType.Documento.Detalle.CdgItem codigo = det[i].addNewCdgItem()
                         codigo.setTpoCodigo("Interna")
                         codigo.setVlrCodigo(codigoInterno)
                         det[i].setNmbItem(nombreItem);
+                        //det[i].setDscItem(""); // Descripción Item
                         det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
                         if(uom != null)
                         det[i].setUnmdItem(uom);
@@ -589,34 +588,30 @@ along with this software (see the LICENSE.md file). If not, see
 
                     <set field="codRef" from="referenciaEntry.codigoReferenciaEnumId" type="Integer"/>
                     <set field="fechaRef" from="referenciaEntry.fecha"/>
+                    <service-call name="mchile.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]" out-map="codeOut"/>
+                    <set field="tpoDocRef" from="codeOut.siiCode"/>
                     <script>
                         // Agrego referencias
                         ref[i] = Referencia.Factory.newInstance();
                         ref[i].setNroLinRef(i+1);
 
                         if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('Ftdt-0')) {
-                        ref[i].setTpoDocRef('SET');
-                        ref[i].setCodRef(codRef);
-                        ref[i].setFolioRef(referenciaEntry.folio.toString());
+                            ref[i].setTpoDocRef('SET');
+                            ref[i].setCodRef(codRef);
+                            ref[i].setFolioRef(referenciaEntry.folio.toString());
                         } else {
-                    </script>
-                    <service-call name="mchile.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]" out-map="codeOut"/>
-                    <set field="tpoDocRef" from="codeOut.siiCode"/>
-                    <script>
-                        //ref[i].setTpoDocRef(referenciaEntry.fiscalTaxDocumentTypeEnumId);
-                        ref[i].setTpoDocRef(tpoDocRef);
-                        ref[i].setCodRef(codRef);
-                        ref[i].setFolioRef(referenciaEntry.folio.toString());
-                        if((referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-39") || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41")) &amp;&amp; codRef.equals(1) ) {
-                        // Nota de crédito hace referencia a Boletas Electrónicas
-                    </script>
-                    <set field="anulaBoleta" value="true"/>
-                    <set field="folioAnulaBoleta" from="referenciaEntry.folio.toString()"/>
-                    <script>
-                        }
+                            //ref[i].setTpoDocRef(referenciaEntry.fiscalTaxDocumentTypeEnumId);
+                            ref[i].setTpoDocRef(tpoDocRef);
+                            ref[i].setCodRef(codRef);
+                            ref[i].setFolioRef(referenciaEntry.folio.toString());
+                            if((referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-39") || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41")) &amp;&amp; codRef.equals(1) ) {
+                                // Nota de crédito hace referencia a Boletas Electrónicas
+                                anulaBoleta = 'true'
+                                folioAnulaBoleta = referenciaEntry.folio.toString()
+                            }
                         }
                         if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-34")) {
-                        dteExenta = true;
+                            dteExenta = true;
                         }
                         // Valor Opcional
                         //ref[i].xsetIndGlobal('0');
@@ -1074,37 +1069,53 @@ along with this software (see the LICENSE.md file). If not, see
                     i = 0;
                 </script>
                 <iterate list="detailList" entry="detailEntry">
-                    <entity-find-one entity-name="mantle.product.Product" value-field="productField" cache="false">
-                        <field-map field-name="productId" from="detailEntry.productId"/>
-                    </entity-find-one>
-                    <set field="nombreItem" from="productField.productName"/>
+
+                    <set field="nombreItem" from="detailEntry.productName"/>
+                    <if condition="nombreItem == null">
+                        <entity-find-one entity-name="mantle.product.Product" value-field="productField" cache="false">
+                            <field-map field-name="productId" from="detailEntry.productId"/>
+                        </entity-find-one>
+                        <set field="nombreItem" from="productField.productName"/>
+                    </if>
 
                     <set field="qtyItem" from="detailEntry.quantity" type="Integer"/>
-
 
                     <service-call name="mchile.DTEServices.check#Afecto" in-map="[productId:detailEntry.productId]" out-map="afectoOutMap"/>
                     <set field="itemAfecto" from="afectoOutMap.afecto"/>
 
-                    <entity-find-one entity-name="mantle.product.ProductPrice" value-field="productPriceField" cache="false">
-                        <field-map field-name="productId" from="detailEntry.productId"/>
-                        <!--field-map field-name="priceTypeEnumId" value="PptCurrent"/-->
-                    </entity-find-one>
-                    <set field="priceItem" type="Integer" value="0"/>
-
-                    <if condition="productPriceField">
-                        <then>
-                            <if condition="productPriceField.price">
-                                <set field="priceItem" from="productPriceField.price"/>
-                            </if>
-                        </then>
+                    <entity-find entity-name="mantle.shipment.ShipmentItemSource" list="sisList">
+                        <econdition field-name="shipmentId"/>
+                        <econdition field-name="productId" from="detailEntry.productId"/>
+                    </entity-find>
+                    <set field="totalItem" type="BigDecimal" from="0"/>
+                    <set field="quantityHandled" from="0"/>
+                    <log message="handling price for productId ${detailEntry.productId}"/>
+                    <if condition="sisList">
+                        <iterate list="sisList" entry="sis">
+                            <log message="processing sis ${sis}"/>
+                            <if condition="sis.invoiceId"><then>
+                                <entity-find-one entity-name="mantle.account.invoice.InvoiceItem" value-field="invoiceItem" auto-field-map="[invoiceId:sis.invoiceId, invoiceItemSeqId:sis.invoiceItemSeqId]"/>
+                                <set field="totalItem" from="totalItem + sis.quantity * invoiceItem.amount"/>
+                                <set field="quantityHandled" from="quantityHandled + sis.quantity"/>
+                            </then><else-if condition="sis.orderId">
+                                <entity-find-one entity-name="mantle.order.OrderItem" value-field="orderItem" auto-field-map="[orderId:sis.orderId, orderItemSeqId:sis.orderItemSeqId]"/>
+                                <set field="totalItem" from="totalItem + sis.quantity * orderItem.unitAmount"/>
+                                <set field="quantityHandled" from="quantityHandled + sis.quantity"/>
+                            </else-if></if>
+                        </iterate>
                     </if>
 
-                    <set field="totalItem" type="Long"/>
-                    <script>
-                        totalItem = Math.round(BigDecimal.valueOf(qtyItem) * BigDecimal.valueOf(priceItem))
-                    </script>
-                    <!--service-call name="mchile.DTEServices.escape#Characters" in-map="[cadenaString:nombreItem]" out-map="context"/>
-                    <set field="nombreItem" from="outString"/-->
+                    <if condition="quantityHandled &lt; qtyItem">
+                        <log message="pending ${qtyItem-quantityHandled} out of ${qtyItem}"/>
+                        <entity-find-one entity-name="mantle.shipment.Shipment" value-field="shipment"/>
+                        <set field="shipmentDate" from="shipment.estimatedShipDate ?: shipment.shipAfterDate ?: shipment.entryDate ?: ec.user.nowTimestamp"/>
+                        <service-call name="mantle.product.PriceServices.get#ProductPrice" in-map="[productId:detailEntry.productId, quantity:qtyItem, validDate:shipmentDate]" out-map="price"/>
+                        <set field="totalItem" from="totalItem + (qtyItem - quantityHandled)*price.price"/>
+                    </if>
+
+                    <set field="priceItem" type="BigDecimal" from="totalItem/qtyItem"/>
+
+                    <set field="totalItem" type="Long" from="totalItem.setScale(0, BigDecimal.ROUND_HALF_UP)"/>
 
                     <script><![CDATA[
                         // Agrego detalles
@@ -1118,7 +1129,7 @@ along with this software (see the LICENSE.md file). If not, see
                             if(Math.round(priceItem) > 0) {
                                 det[i].setPrcItem(BigDecimal.valueOf(Math.round(priceItem)));
                             }
-                            det[i].setMontoItem(totalItem);
+                            det[i].setMontoItem(totalItem as Long);
                             totalInvoice = totalInvoice + totalItem
                             //if(itemAfecto.equals("true")) {
                                 totalNeto = totalNeto + totalItem
@@ -1224,35 +1235,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="xml" value="${resultS}/DTE${tipoFactura}-${folio}.xml"/>
             <set field="pdf" value="${pathPdf}/DTE${tipoFactura}-${folio}.pdf"/>
             <set field="pdfCedible" value="${pathPdf}/DTE${tipoFactura}-${folio}-cedible.pdf"/>
-            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, pdfCedible:pdfCedible, activeOrgId:activeOrgId]" out-map="context"/>
-            <set field="bArray2"/>
-
-            <!-- Lectura y conversión a arreglo de bytes de PDF temporal -->
-            <script>
-                File file = new File(pdf);
-                FileInputStream fis = null;
-                byte[] bArray = new byte[(int) file.length()];
-                try {
-                fis = new FileInputStream(file);
-                fis.read(bArray);
-                fis.close();
-                } catch (IOException ioExp) {
-                ioExp.printStackTrace();
-                }
-                logger.warn("pdf largo: " + file.length());
-                bArray2 = bArray;
-
-                File fileCedible = new File(pdfCedible);
-                FileInputStream fisCedible = null;
-                byte[] bArrayCedible = new byte[(int) fileCedible.length()];
-                try {
-                fisCedible = new FileInputStream(fileCedible);
-                fisCedible.read(bArrayCedible);
-                fisCedible.close();
-                } catch (IOException ioExp) {
-                ioExp.printStackTrace();
-                }
-            </script>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[dte:xml, activeOrgId:activeOrgId]" out-map="context"/>
 
             <!-- Creación de registro en FiscalTaxDocument -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
@@ -1285,10 +1268,10 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlName, contentDate:ts, contentData:salida]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
 
-            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfName, contentDate:ts, contentData:bArray2]"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfName, contentDate:ts, contentData:pdfBytes]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
 
-            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedibleName, contentDate:ts, contentData:bArrayCedible]"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedibleName, contentDate:ts, contentData:pdfCedibleBytes]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
             <!-- Creación de registro en FiscalTaxDocumentAttributes -->
             <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, amount:amount, fechaEmision:fechaEmision, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmision,
@@ -1296,18 +1279,6 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="create#mchile.dte.FiscalTaxDocumentAttributes" out-map="context" in-map="createMap"/>
 
             <set field="fiscalTaxDocumentId" from="dteField.fiscalTaxDocumentId"/>
-
-            <!-- Eliminacion de XML temporal -->
-            <script>
-                File XMLfile = new File(xml);
-                XMLfile.delete();
-            </script>
-
-            <!-- Eliminacion de PDF temporal -->
-            <script>
-                file.delete();
-                fileCedible.delete();
-            </script>
         </actions>
     </service>
 
@@ -1339,7 +1310,6 @@ along with this software (see the LICENSE.md file). If not, see
             <!--set field="giro" from="giroEmisor"/-->
             <set field="templateFactura" from="templateFactura"/>
             <set field="templatePdf" from="templatePdf"/>
-            <set field="templatePdfCedible" from="templatePdfCedible"/>
             <set field="templateEnvio" from="templateEnvio"/>
             <set field="templateAceptaciones" from="templateAceptaciones"/>
             <set field="templateLibro" from="templateLibro"/>
@@ -1573,7 +1543,6 @@ along with this software (see the LICENSE.md file). If not, see
             <!--set field="giro" from="giroEmisor"/-->
             <set field="templateFactura" from="templateFactura"/>
             <set field="templatePdf" from="templatePdf"/>
-            <set field="templatePdfCedible" from="templatePdfCedible"/>
             <set field="templateAceptaciones" from="templateAceptaciones"/>
             <set field="templateLibro" from="templateLibro"/>
             <set field="logo" from="logo"/>
@@ -2166,6 +2135,8 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="nmbContacto"/>
             <parameter name="mailContacto"/>
             <parameter name="fonoContacto"/>
+            <parameter name="oficinaSII"/>
+            <parameter name="transformParameters" type="List"/>
         </out-parameters>
         <actions>
             <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="orgField">
@@ -2200,6 +2171,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <select-field field-name="nmbContacto"/>
                 <select-field field-name="mailContacto"/>
                 <select-field field-name="fonoContacto"/>
+                <select-field field-name="oficinaSII"/>
             </entity-find-one>
 
             <if condition="!orgField">
@@ -2219,9 +2191,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="templateLibroGuia" from="orgField.templateLibroGuia"/>
             <set field="templateLibroBoletas" from="orgField.templateLibroBoletas"/>
             <set field="templateRcof" from="orgField.templateRcof"/>
-            <set field="logo" from="orgField.logo"/>
-            <set field="fchResol" from="orgField.fchResol"/>
-            <set field="nroResol" from="orgField.nroResol"/>
+            <set field="logo" from="orgField.logo ?: ''"/>
+            <set field="fchResol" from="orgField.fchResol ?: ''"/>
+            <set field="nroResol" from="orgField.nroResol ?: ''"/>
             <set field="rutEmisor" from="orgField.rutEmisor"/>
             <set field="rutEnvia" from="orgField.rutEnvia"/>
             <set field="rznSocEmisor" from="orgField.rznSocEmisor"/>
@@ -2239,8 +2211,10 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="certData" from="orgField.certData"/>
             <set field="passCert" from="orgField.passCert"/>
             <set field="nmbContacto" from="orgField.nmbContacto"/>
-            <set field="mailContacto" from="orgField.mailContacto"/>
-            <set field="fonoContacto" from="orgField.fonoContacto"/>
+            <set field="mailContacto" from="orgField.mailContacto ?: ''"/>
+            <set field="fonoContacto" from="orgField.fonoContacto ?: ''"/>
+            <set field="oficinaSII" from="orgField.oficinaSII ?: ''"/>
+            <set field="transformParameters" from="[fonoContacto:fonoContacto, mailContacto:mailContacto, oficinaSII:oficinaSII, logo:logo, nroResol:nroResol, fchResol:fchResol, maxItems:'14']"/>
         </actions>
     </service>
 
@@ -2285,18 +2259,62 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="download" noun="NewPdf">
+        <in-parameters>
+            <parameter name="activeOrgId" required="true"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <set field="certS" from="pathCert"/>
+            <set field="passS" from="passCert"/>
+            <set field="template" from="pdfTemplate"/>
+            <set field="giro" from="giroEmisor"/>
+
+            <!--
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="document" cache="false">
+                <field-map field-name="fiscalTaxDocumentId" value="Ftdt-33121"/>
+                <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
+            </entity-find-one>
+            <set field="dte" from="document.contentData"/>
+            -->
+
+            <script><![CDATA[
+                import javax.sql.rowset.serial.SerialBlob;
+                import java.security.KeyStore;
+                import java.security.PrivateKey;
+                import java.security.cert.X509Certificate;
+                import cl.nic.dte.util.Utilities;
+                import javax.xml.transform.stream.StreamSource;
+
+                ec.logger.info("template: ${template}")
+                pdf = "/tmp/factura.pdf"
+                templateStream = ec.resource.getLocationReference("component://kombuchacha/plantillas/plantilla.xsl").openStream()
+                //templateStream = new FileInputStream("/Users/jhp/moqui/DTE/scripts/SETPRUEBAS/plantilla_pdf_invcj-8859.xsl")
+                //ByteArrayInputStream input = new ByteArrayInputStream(dte.getBytes(1, dte.length() as Integer))
+                dte = "/Users/jhp/moqui/DTE/scripts/SETPRUEBAS/DTE33-312.xml"
+                //ec.resource.xslFoTransform(new StreamSource(templateStream), new StreamSource(new File(dte)), new FileOutputStream(pdf), "application/pdf")
+                ec.resource.xslFoTransform(new StreamSource(new File(dte)), new StreamSource(templateStream), new FileOutputStream(pdf), "application/pdf", transformParameters)
+                //xml = "/tmp/factura.xml"
+                //new File(xml).withOutputStream {it.write dte.getBytes(1, dte.length() as Integer)}
+
+            ]]></script>
+        </actions>
+    </service>
+
     <service verb="genera" noun="PDF">
         <description>
             Genera archivo PDF de Factura/Boleta (envio).
         </description>
         <in-parameters>
-            <parameter name="pdf" required="true"/>
-            <parameter name="pdfCedible"/>
             <parameter name="dte" required="true"/>
             <parameter name="activeOrgId" required="true"/>
             <parameter name="boleta"/>
             <parameter name="continua"/>
         </in-parameters>
+        <out-parameters>
+            <parameter name="pdfBytes" type="byte[]"/>
+            <parameter name="pdfCedibleBytes" type="byte[]"/>
+        </out-parameters>
         <actions>
             <!-- Recuperacion de parametros de la organizacion -->
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
@@ -2328,9 +2346,6 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="!pdfTemplate">
                 <return error="true" message="Organización emisora no tiene definida plantilla para generar PDF"/>
             </if>
-            <if condition="!pdfTemplateCedible">
-                <return error="true" message="Organización emisora no tiene definida plantilla para generar PDF Cedible"/>
-            </if>
             <script>
                 import java.io.File;
                 import java.io.FileInputStream;
@@ -2342,23 +2357,22 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.nic.dte.net.ConexionSii;
                 import cl.nic.dte.util.Utilities;
                 import cl.sii.siiDte.RECEPCIONDTEDocument;
+                import javax.xml.transform.stream.StreamSource;
 
                 logger.warn("Working Directory for PDF/images = " + System.getProperty("user.dir"));
-
-                Utilities.generatePDF(new FileInputStream(dte), template.getBinaryStream(), new FileOutputStream(pdf), false);
+                ByteArrayOutputStream pdf = new ByteArrayOutputStream()
+                ec.resource.xslFoTransform(new StreamSource(new File(dte)), new StreamSource(template.getBinaryStream()), pdf, "application/pdf", transformParameters + [cedible:'false'])
+                pdf.close()
+                pdfBytes = pdf.toByteArray()
             </script>
             <if condition="!boleta">
                 <script>
-                    Utilities.generatePDF(new FileInputStream(dte), template.getBinaryStream(), new FileOutputStream(pdfCedible), true);
+                    pdf = new ByteArrayOutputStream()
+                    ec.resource.xslFoTransform(new StreamSource(new File(dte)), new StreamSource(template.getBinaryStream()), pdf, "application/pdf", transformParameters + [cedible:'true'])
+                    pdf.close()
+                    pdfCedibleBytes = pdf.toByteArray()
                 </script>
             </if>
-            <script>
-
-                logger.warn("---------------");
-                logger.warn("PDF Generado: " + pdf);
-                logger.warn("PDF Cedible Generado: " + pdfCedible);
-                logger.warn("---------------");
-            </script>
         </actions>
     </service>
 
@@ -2708,10 +2722,7 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="!contactPostalAddressField">
                 <return message="Receptor ${partyId} no tiene dirección postal para impuestos" error="true"/>
             </if>
-            <set field="dirReceptor" from="contactPostalAddressField.address1"/>
-            <script>
-                dirReceptor = dirReceptor + " " + contactPostalAddressField.unitNumber
-            </script>
+            <set field="dirReceptor" value="${contactPostalAddressField.address1?:''}${contactPostalAddressField.unitNumber? (' ' + contactPostalAddressField.unitNumber) : ''}"/>
             <!-- Comuna -->
             <entity-find-one entity-name="moqui.basic.Geo" value-field="geoField">
                 <field-map field-name="geoId" from="contactPostalAddressField.stateProvinceGeoId"/>
@@ -2719,7 +2730,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="cmnaReceptor" from="geoField.geoName"/>
 
-            <set field="ciudadReceptor" from="contactPostalAddressField.city"/>
+            <set field="ciudadReceptor" from="contactPostalAddressField.city?:''"/>
             <!-- ID Contacto receptor -->
             <set field="receptorContactId" from="contactPostalAddressField.telecomContactMechId"/>
 
@@ -2746,10 +2757,9 @@ along with this software (see the LICENSE.md file). If not, see
                 </if>
                 <set field="contactMechId" from="contactMechList.contactMechId.first()"/>
 
-
                 <!-- Organizacion -->
                 <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField"/>
-                <set field="rznSocReceptor" from="organizationField.organizationName"/>
+                <set field="rznSocReceptor" from="organizationField.taxOrganizationName ?: organizationField.organizationName"/>
 
                 <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:toPartyId]" out-map="giroOutMap"/>
                 <set field="giroReceptor" from="giroOutMap.description"/>
@@ -4534,7 +4544,6 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <!-- Se busca el orderId de la devolución -->
             <entity-find entity-name="mantle.order.return.ReturnHeaderDetail" list="returnHeaderList">
-                <search-form-inputs/>
                 <select-field field-name="returnId,statusId,entryDate,facilityId,vendorPartyId,customerPartyId"/>
             </entity-find>
 
@@ -4577,6 +4586,9 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <set field="listItems" from="items instanceof List ? items : items.split(',') as List" default-value="null"/>
 
+            <set field="returnedItemList" type="NewMap" from="[]"/>
+
+
             <iterate list="listItems" entry="detailItem">
                 <set field="listProduct" from="detailItem instanceof List ? detailItem : detailItem.split('-') as List"/>
                 <log message="Leyendo: $listProduct" level="warn"/>
@@ -4589,6 +4601,9 @@ along with this software (see the LICENSE.md file). If not, see
                 </script>
                 <set field="returnItemField.pctDiscount" from="discount"/>
                 <entity-update value-field="returnItemField"/>
+                <script>
+                    returnedItemList.add(listProduct[0]);
+                </script>
             </iterate>
 
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
@@ -4613,6 +4628,7 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Items de la devolución -->
             <entity-find entity-name="mantle.order.return.ReturnItem" list="returnItemList">
                 <econdition field-name="returnId"/>
+                <econdition field-name="returnItemSeqId" operator="in" from="returnedItemList"/>
                 <order-by field-name="returnItemSeqId"/>
             </entity-find>
 
@@ -7881,7 +7897,7 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="generar" noun="GuiaDespacho">
+    <service verb="generar" noun="GuiaDespacho" no-tx-cache="true">
         <description>
             Obtiene datos para generar Guía de Despacho a partir de un shipment
         </description>
@@ -7899,7 +7915,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="shipmentId"/>
                 <order-by field-name="productId"/>
             </entity-find>
-
 
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
                 <econdition field-name="partyId" from="activeOrgId"/>
@@ -8503,7 +8518,6 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="templateFactura"/>
             <parameter name="templateBoleta"/>
             <parameter name="templatePdf"/>
-            <parameter name="templatePdfCedible"/>
             <parameter name="templatePdfBoleta"/>
             <parameter name="templatePdfBoletaContinua"/>
             <parameter name="templateEnvio"/>
@@ -8544,7 +8558,7 @@ along with this software (see the LICENSE.md file). If not, see
                 </then>
                 <else>
                     <service-call name="create#mchile.dte.PartyDteParams"
-                                  in-map="[partyId:partyId, templateFactura:templateFactura, templateBoleta:templateBoleta,  templatePdf:templatePdf, templatePdfCedible:templatePdfCedible, templatePdfBoleta:templatePdfBoleta,
+                                  in-map="[partyId:partyId, templateFactura:templateFactura, templateBoleta:templateBoleta,  templatePdf:templatePdf, templatePdfBoleta:templatePdfBoleta,
                                   templatePdfBoletaContinua:templatePdfBoletaContinua,
                     templateEnvio:templateEnvio, templateEnvioBoleta:templateEnvioBoleta, templateAceptaciones:templateAceptaciones, templateRcof:templateRcof, logo:logo, fchResol:fechResol, nroResol:nroResol, rutEmisor:rutEmisor,
                     rutEnvia:rutEnvia, rznSocEmisor:rznSocEmisor, cdgSIISucur:cdgSIISucur, dirOrigen:dirOrigen, cmnaOrigen:cmnaOrigen, ciudadOrigen:ciudadOrigen, pathResults:pathResults, pathAceptaciones:pathAceptaciones,
