@@ -2480,46 +2480,17 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="invoiceId" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="activeOrgId" required="true"/>
-            <parameter name="items" type="List"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
         </out-parameters>
         <actions>
-            <if condition="!items">
-                <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="items">
-                    <econdition field-name="invoiceId"/>
-                    <order-by field-name="invoiceItemSeqId"/>
-                </entity-find>
-            </if>
-
             <!-- Obtención de descuento global, si es > 0 se aplica -->
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoiceField">
                 <field-map field-name="invoiceId" from="invoiceId"/>
             </entity-find-one>
             <set field="globalDiscount" from="invoiceField.globalDiscount"/>
             <set field="glosaDr" from="invoiceField.glosaDr"/>
-
-            <set field="listItems" type="List"/>
-            <if condition="items">
-                <set field="listItems" from="items instanceof List ? items : items.split(',') as List"/>
-            </if>
-
-
-            <iterate list="listItems" entry="detailItem">
-                <set field="listProduct" from="detailItem instanceof List ? detailItem : detailItem.split('-') as List"/>
-                <log message="Leyendo: $listProduct" level="warn"/>
-                <!-- Con invoiceId se busca en invoiceItem y se actualiza porcentaje de descuento -->
-                <entity-find-one entity-name="mantle.account.invoice.InvoiceItem" value-field="invoiceItemField">
-                    <field-map field-name="invoiceId" from="invoiceId"/>
-                    <field-map field-name="invoiceItemSeqId" value="${listProduct[0]}"/>
-                </entity-find-one>
-                <script>
-                    long discount = Long.valueOf(listProduct[3]);
-                </script>
-                <set field="invoiceItemField.pctDiscount" from="discount"/>
-                <entity-update value-field="invoiceItemField"/>
-            </iterate>
 
             <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
 
