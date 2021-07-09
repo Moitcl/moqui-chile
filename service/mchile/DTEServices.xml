@@ -2422,13 +2422,37 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="load" noun="Caf">
-        <description>
-            Carga CAF en Sistema
-        </description>
         <in-parameters>
             <parameter name="filename" type="org.apache.commons.fileupload.FileItem"/>
             <parameter name="activeOrgId" required="true"/>
         </in-parameters>
+        <actions>
+            <set field="archivo" from="filename.getName()"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <set field="contentLocation" value="dbresource://moit/erp/dte/caf/${activeOrgId}/${archivo}"/>
+
+            <set field="docRr" from="ec.resource.getLocationReference(contentLocation)"/>
+            <script>
+                fileStream = filename.getInputStream()
+                try { docRr.putStream(fileStream) } finally { fileStream.close() }
+            </script>
+
+            <service-call name="mchile.DTEServices.load#CafInternal" in-map="context" out-map="context"/>
+        </actions>
+    </service>
+
+    <service verb="load" noun="CafInternal">
+        <description>
+            Carga CAF en Sistema
+        </description>
+        <in-parameters>
+            <parameter name="contentLocation" required="true"/>
+            <parameter name="activeOrgId" required="true"/>
+            <parameter name="activateCaf" type="Boolean" default="false"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="cafId"/>
+        </out-parameters>
         <actions>
             <!-- Carga de RUT de empresa -->
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
@@ -2446,14 +2470,6 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rut]" out-map="salidaRut"/>
             <set field="rutNoDv" from="salidaRut.rut"/>
 
-            <set field="archivo" from="filename.getName()"/>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="fileRoot" from="pathCaf"/>
-
-            <set field="contentLocation" value="${fileRoot}/${archivo}"/>
-
-            <set field="docRr" from="ec.resource.getLocationReference(contentLocation)"/>
-
             <set field="desde" value=""/>
             <set field="hasta" value=""/>
             <set field="fechaAutorizacion" value=""/>
@@ -2461,18 +2477,11 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="rutCaf" value=""/>
 
             <script>
-                fileStream = filename.getInputStream()
-                try { docRr.putStream(fileStream) } finally { fileStream.close() }
-            </script>
-            <script>
                 import java.io.ByteArrayOutputStream;
                 import java.io.File;
                 import java.io.FileInputStream;
                 import java.math.BigDecimal;
                 import java.math.BigInteger;
-                import java.nio.file.Files;
-                import java.nio.file.Path;
-                import java.nio.file.Paths;
                 import java.security.KeyStore;
                 import java.security.PrivateKey;
                 import java.security.cert.X509Certificate;
@@ -2509,7 +2518,9 @@ along with this software (see the LICENSE.md file). If not, see
                 opts.setLoadSubstituteNamespaces(namespaces);
 
                 AutorizacionType caf;
-                caf = AUTORIZACIONDocument.Factory.parse(filename.getInputStream(), opts).getAUTORIZACION();
+                docRr = ec.resource.getLocationReference(contentLocation)
+                ec.logger.info("Got docRr: ${docRr}, isFile: ${docRr.isFile()}")
+                caf = AUTORIZACIONDocument.Factory.parse(docRr.openStream(), opts).getAUTORIZACION();
                 desde = caf.getCAF().getDA().getRNG().getD().toString();
                 hasta = caf.getCAF().getDA().getRNG().getH().toString();
                 fechaAutorizacion = caf.getCAF().getDA().getFA().toString();
@@ -2524,7 +2535,7 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
 
             <set field="updateMap"
-                 from="[filename:archivo,desde:desde, hasta:hasta, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, ultimoFolio:desde, issuerPartyId:activeOrgId, cafData:filename.get()]"/>
+                 from="[filename:docRr.fileName,desde:desde, hasta:hasta, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, ultimoFolio:desde, issuerPartyId:activeOrgId, cafData:docRr.text]"/>
             <service-call name="create#mchile.dte.Caf" out-map="context" in-map="updateMap"/>
 
             <!-- Creación de registros para reservar folios -->
@@ -2540,6 +2551,7 @@ along with this software (see the LICENSE.md file). If not, see
             <script><![CDATA[
                 }
             ]]></script>
+            <if condition="activateCaf"><service-call name="mchile.DTEServices.activar#Caf" in-map="context"/></if>
 
         </actions>
     </service>
