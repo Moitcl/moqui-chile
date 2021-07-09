@@ -1910,11 +1910,9 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="dataField">
                 <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
                 <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
-                <select-field field-name="contentData"/>
                 <select-field field-name="contentLocation"/>
             </entity-find-one>
 
-            <set field="contentData" from="dataField.contentData"/>
             <set field="contentLocation" from="dataField.contentLocation"/>
 
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
@@ -1933,18 +1931,6 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
             <set field="enviadorS" value="${rutEnvia}"/>
 
-            <!-- Se escribe archivo temporal para crear documentoS -->
-            <script>
-                int largo = contentData.length()
-                long inicio = 1
-                byte[] bytes = contentData.getBytes(inicio, largo)
-                FileOutputStream fout = new FileOutputStream(contentLocation);
-                fout.write(bytes);
-                fout.flush();
-                fout.close();
-                // Useful for testing
-                //contentLocation = '/home/cherrera/git/moqui-moit/moqui-framework/runtime/component/MoquiChile/DTE/TEMP/TESTBO.xml';
-            </script>
             <service-call name="mchile.DTEServices.enviaSII#Boleta" in-map="[compaS:emisorS, enviadorS:enviadorS, documentoS:contentLocation, activeOrgId:activeOrgId]" out-map="context"/>
             <!-- TODO: Eliminar archivo temporal -->
             <!-- Marcar boleta como enviada -->
@@ -1968,7 +1954,7 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="compaS" required="true"/>
             <parameter name="enviadorS" required="true"/>
-            <parameter name="documentoS" required="true"/>
+            <parameter name="documentContentLocation" required="true"/>
             <parameter name="activeOrgId" required="true"/>
         </in-parameters>
         <out-parameters>
@@ -1992,13 +1978,14 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.nic.dte.net.ConexionSiiBoleta;
                 import cl.nic.dte.util.Utilities;
                 import org.json.simple.JSONObject;
+                import org.moqui.resource.ResourceReference;
 
                 ConexionSiiBoleta con = new ConexionSiiBoleta();
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
                 ks.load(certData.getBinaryStream(), passS.toCharArray());
                 String alias = ks.aliases().nextElement();
-                logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS);
+                //logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS);
 
                 X509Certificate x509 = (X509Certificate) ks.getCertificate(alias);
                 PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray());
@@ -2007,7 +1994,8 @@ along with this software (see the LICENSE.md file). If not, see
 
                 String enviadorS = Utilities.getRutFromCertificate(x509);
 
-                JSONObject recp = con.uploadEnvioCertificacion(enviadorS, compaS, new File(documentoS), token);
+                ResourceReference documentoRr = ec.resource.getLocationReference(documentContentLocation)
+                JSONObject recp = con.uploadEnvioCertificacion(enviadorS, compaS, documentoRr.openStream(), token);
 
                 String estado = (String) recp.get("estado");
                 trackId = String.valueOf(recp.get("trackid"));
