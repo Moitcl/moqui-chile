@@ -1307,6 +1307,7 @@ along with this software (see the LICENSE.md file). If not, see
             <script>
                 import java.text.SimpleDateFormat;
                 import java.util.Date;
+                import org.moqui.resource.ResourceReference;
 
                 Date dNow = new Date();
                 SimpleDateFormat ft = new SimpleDateFormat("yyMMddhhmmssMs");
@@ -1325,7 +1326,7 @@ along with this software (see the LICENSE.md file). If not, see
                 </entity-find-one>
                 <set field="xml" from="dteField.contentLocation"/>
                 <script>
-                    DTEList[j] = xmlData;
+                    DTEList[j] = ec.resource.getLocationReference(xml);
                     logger.warn("Agregado: " + DTEList[j])
                     j++;
                 </script>
@@ -1381,7 +1382,7 @@ along with this software (see the LICENSE.md file). If not, see
                 // Debo agregar el schema location (Sino SII rechaza)
                 XmlCursor cursor = envio.newCursor();
                 if (cursor.toFirstChild()) {
-                cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioDTE_v10.xsd");
+                    cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioDTE_v10.xsd");
                 }
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
@@ -1417,7 +1418,7 @@ along with this software (see the LICENSE.md file). If not, see
                 HashMap&lt;Integer, Integer&gt; hashTot = new HashMap&lt;Integer, Integer&gt;();
 
                 for (int i = 0; i &lt; DTEList.length; i++) {
-                dtes[i] = DTEDocument.Factory.parse(DTEList[i].getBinaryStream(), opts).getDTE();
+                dtes[i] = DTEDocument.Factory.parse(DTEList[i].openStream(), opts).getDTE();
                 // armar hash para totalizar por tipoDTE
                 if (hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) != null) {
                 hashTot.put(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue(),
@@ -3085,7 +3086,6 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <set field="envio" from="content"/>
 
-
             <set field="salida" value=""/>
             <set field="statusXML" value=""/>
 
@@ -3110,7 +3110,7 @@ along with this software (see the LICENSE.md file). If not, see
                 opts.setLoadSubstituteNamespaces(namespaces);
 
                 //DTEDocument doc = DTEDocument.Factory.parse(new FileInputStream(envio), opts);
-                DTEDocument doc = DTEDocument.Factory.parse(contentData.getBinaryStream(), opts);
+                DTEDocument doc = DTEDocument.Factory.parse(contentRef.openStream(), opts);
                 ConexionSii con = new ConexionSii();
 
                 // leo certificado y llave privada del archivo pkcs12
@@ -3216,12 +3216,12 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Recuperacion de xml para parsear -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="contentField">
-                <select-field field-name="contentData"/>
+                <select-field field-name="contentLocation"/>
             </entity-find-one>
             <if condition="!contentField">
                 <return error="true" message="Boleta no tiene XML generado"/>
             </if>
-            <set field="xmlData" from="contentField.contentData"/>
+            <set field="xmlDataRef" from="ec.resource.getLocationReference(contentField.contentLocation)"/>
             <script>
                 import javax.xml.parsers.*;
                 import org.w3c.dom.*;
@@ -3234,7 +3234,7 @@ along with this software (see the LICENSE.md file). If not, see
                 Document document = null;
 
                 builder = factory.newDocumentBuilder();
-                document = builder.parse(xmlData.getBinaryStream());
+                document = builder.parse(xmlDataRef.openStream());
                 document.getDocumentElement().normalize();
                 Element root = document.getDocumentElement();
 
@@ -3703,10 +3703,10 @@ along with this software (see the LICENSE.md file). If not, see
                         receiverPartyId:activeOrgId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocument" out-map="mapOut" in-map="createMap"/>
             <!-- Se guarda contenido asociado a la DTE, todas las DTE que vienen en el mismo envío comparten el mismo XML -->
-            <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts, , contentData:xml.get()]]"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
             <if condition="contentLocationPdf">
-                <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts, , contentData:pdf.get()]]"/>
+                <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts]"/>
                 <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
             </if>
             <script>
@@ -4070,10 +4070,10 @@ along with this software (see the LICENSE.md file). If not, see
                         receiverPartyId:activeOrgId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]"/>
                 <service-call name="create#mchile.dte.FiscalTaxDocument" out-map="mapOut" in-map="createMap"/>
                 <!-- Se guarda contenido asociado a la DTE, todas las DTE que vienen en el mismo envío comparten el mismo XML -->
-                <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts, contentData:xml.get()]"/>
+                <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts]"/>
                 <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
                 <if condition="contentLocationPdf">
-                    <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts, contentData:pdf.get()]"/>
+                    <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts]"/>
                     <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
                 </if>
             </if>
@@ -6364,14 +6364,17 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <out-parameters>
             <parameter name="content"/>
-            <parameter name="contentData"/>
+            <parameter name="contentRef"/>
         </out-parameters>
         <actions>
             <set field="content" from="null"/>
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="contentField"/>
             <if condition="contentField">
                 <set field="content" from="contentField.contentLocation"/>
-                <set field="contentData" from="contentField.contentData"/>
+                <script>
+                    docRr = ec.resource.getLocationReference(contentField.contentLocation)
+                </script>
+                <set field="contentRef" from="docRr"/>
             </if>
         </actions>
     </service>
@@ -8324,7 +8327,11 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="fiscalTaxDocumentContentTypeEnumId" from="fiscalTaxDocumentContentTypeEnumId"/>
             </entity-find>
 
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="fiscalTaxDocument"/>
+            <set field="tipoFactura" from="fiscalTaxDocument.FiscalTaxDocumentType.sequenceNum"/>
+
             <iterate list="ftdtList" entry="ftdtEntry">
+                <set field="xmlName" value="dbresource://moit/erp/dte/${emisorS}/DTE${tipoFactura}-${folio}.xml"/>
                 <set field="ftdtEntry.contentData" from="filename.get()"/>
                 <entity-update value-field="ftdtEntry"/>
             </iterate>
