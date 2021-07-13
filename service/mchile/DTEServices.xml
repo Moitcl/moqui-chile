@@ -98,12 +98,9 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Recuperacion de parametros de la organizacion -->
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <!--set field="certS" from="pathCert"/-->
             <set field="certS" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="resultS" from="pathResults"/>
-            <set field="pathTemp" from="pathTemp"/>
-            <set field="pathPdf" from="pathPdf"/>
             <set field="cafS" from="pathCaf"/>
             <set field="plantillaS" from="templateFactura"/>
             <!--set field="giro" from="giroEmisor"/-->
@@ -1183,7 +1180,7 @@ along with this software (see the LICENSE.md file). If not, see
                 doc = DTEDocument.Factory.parse(doc.newInputStream(opts), opts);
 
 
-                logger.warn("Documento: " + doc);
+                //logger.warn("Documento: " + doc);
 
                 // Guardo
                 opts = new XmlOptions();
@@ -1194,41 +1191,33 @@ along with this software (see the LICENSE.md file). If not, see
                 FechaHoraType now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()));
 
                 if (doc.getDTE().isSetDocumento()) {
-                uri = doc.getDTE().getDocumento().getID();
-                doc.getDTE().getDocumento().xsetTmstFirma(now);
+                    uri = doc.getDTE().getDocumento().getID();
+                    doc.getDTE().getDocumento().xsetTmstFirma(now);
                 } else if (doc.getDTE().isSetLiquidacion()) {
-                uri = doc.getDTE().getLiquidacion().getID();
-                doc.getDTE().getLiquidacion().xsetTmstFirma(now);
+                    uri = doc.getDTE().getLiquidacion().getID();
+                    doc.getDTE().getLiquidacion().xsetTmstFirma(now);
                 } else if (doc.getDTE().isSetExportaciones()) {
-                uri = doc.getDTE().getExportaciones().getID();
-                doc.getDTE().getExportaciones().xsetTmstFirma(now);
+                    uri = doc.getDTE().getExportaciones().getID();
+                    doc.getDTE().getExportaciones().xsetTmstFirma(now);
                 }
 
                 uri = "#" + uri;
 
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
-                //doc.save(new File(resultS + "DTE" + tipoFactura + "-" + folio + "-sinfirma.xml"), opts);
                 doc.save(out, opts);
                 Document doc2 = XMLUtil.parseDocument(out.toByteArray());
-                byte[] salida = Signer.sign(doc2, uri, key, cert, uri, "Documento");
-                doc2 = XMLUtil.parseDocument(salida);
+                byte[] facturaXml = Signer.sign(doc2, uri, key, cert, uri, "Documento");
+                doc2 = XMLUtil.parseDocument(facturaXml);
 
                 if (Signer.verify(doc2, "Documento")) {
-                Path path = Paths.get(resultS + "DTE" + tipoFactura + "-" + folio + ".xml");
-                Files.write(path, salida);
-                logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                    logger.warn("DTE folio ${folio} generada OK");
                 } else {
-                Path path = Paths.get(resultS + "DTE" + tipoFactura + "-" + folio + "-mala.xml");
-                Files.write(path, salida);
-                logger.warn("Error al generar factura folio "+folio);
+                    logger.warn("Error al generar DTE folio ${folio}");
                 }
             </script>
             <!-- Registro de DTE en base de datos y generación de PDF -->
             <set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/>
-            <set field="xml" value="${resultS}/DTE${tipoFactura}-${folio}.xml"/>
-            <set field="pdf" value="${pathPdf}/DTE${tipoFactura}-${folio}.pdf"/>
-            <set field="pdfCedible" value="${pathPdf}/DTE${tipoFactura}-${folio}-cedible.pdf"/>
-            <service-call name="mchile.DTEServices.genera#PDF" in-map="[dte:xml, activeOrgId:activeOrgId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[dte:facturaXml, activeOrgId:activeOrgId]" out-map="context"/>
 
             <!-- Creación de registro en FiscalTaxDocument -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
@@ -1254,18 +1243,20 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-update value-field="dteField"/>
 
             <!-- Creacion de registros en FiscalTaxDocumentContent -->
-            <set field="xmlName" value="DTE${tipoFactura}-${folio}.xml"/>
-            <set field="pdfName" value="DTE${tipoFactura}-${folio}.pdf"/>
-            <set field="pdfCedibleName" value="DTE${tipoFactura}-${folio}-cedible.pdf"/>
+            <set field="xmlName" value="dbresource://moit/erp/dte/${emisorS}/DTE${tipoFactura}-${folio}.xml"/>
+            <set field="pdfName" value="dbresource://moit/erp/dte/${emisorS}/DTE${tipoFactura}-${folio}.pdf"/>
+            <set field="pdfCedibleName" value="dbresource://moit/erp/dte/${emisorS}/DTE${tipoFactura}-${folio}-cedible.pdf"/>
 
-            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlName, contentDate:ts, contentData:salida]"/>
-            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+            <set field="createMapBase" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, contentDte:ts]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlName]"/>
+            <script>ec.resource.getLocationReference(xmlName).putBytes(facturaXml)</script>
 
-            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfName, contentDate:ts, contentData:pdfBytes]"/>
-            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfName]"/>
+            <script>ec.resource.getLocationReference(pdfName).putBytes(pdfBytes)</script>
 
-            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedibleName, contentDate:ts, contentData:pdfCedibleBytes]"/>
-            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedibleName]"/>
+            <script>ec.resource.getLocationReference(pdfCedibleName).putBytes(pdfCedibleBytes)</script>
+
             <!-- Creación de registro en FiscalTaxDocumentAttributes -->
             <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, amount:amount, fechaEmision:fechaEmision, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmision,
                                          montoExento:montoExento, montoIVARecuperable:montoIVARecuperable]"/>
@@ -1292,12 +1283,9 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Recuperacion de parametros de la organizacion -->
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <!--set field="certS" from="pathCert"/-->
             <set field="certS" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="resultS" from="pathResults"/>
-            <set field="pathTemp" from="pathTemp"/>
-            <set field="pathPdf" from="pathPdf"/>
             <set field="cafS" from="pathCaf"/>
             <set field="plantillaS" from="templateFactura"/>
             <!--set field="giro" from="giroEmisor"/-->
@@ -1319,6 +1307,7 @@ along with this software (see the LICENSE.md file). If not, see
             <script>
                 import java.text.SimpleDateFormat;
                 import java.util.Date;
+                import org.moqui.resource.ResourceReference;
 
                 Date dNow = new Date();
                 SimpleDateFormat ft = new SimpleDateFormat("yyMMddhhmmssMs");
@@ -1337,7 +1326,7 @@ along with this software (see the LICENSE.md file). If not, see
                 </entity-find-one>
                 <set field="xml" from="dteField.contentLocation"/>
                 <script>
-                    DTEList[j] = xmlData;
+                    DTEList[j] = ec.resource.getLocationReference(xml);
                     logger.warn("Agregado: " + DTEList[j])
                     j++;
                 </script>
@@ -1351,7 +1340,6 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="pathResultS" from="pathResults"/>
@@ -1394,7 +1382,7 @@ along with this software (see the LICENSE.md file). If not, see
                 // Debo agregar el schema location (Sino SII rechaza)
                 XmlCursor cursor = envio.newCursor();
                 if (cursor.toFirstChild()) {
-                cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioDTE_v10.xsd");
+                    cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioDTE_v10.xsd");
                 }
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
@@ -1430,7 +1418,7 @@ along with this software (see the LICENSE.md file). If not, see
                 HashMap&lt;Integer, Integer&gt; hashTot = new HashMap&lt;Integer, Integer&gt;();
 
                 for (int i = 0; i &lt; DTEList.length; i++) {
-                dtes[i] = DTEDocument.Factory.parse(DTEList[i].getBinaryStream(), opts).getDTE();
+                dtes[i] = DTEDocument.Factory.parse(DTEList[i].openStream(), opts).getDTE();
                 // armar hash para totalizar por tipoDTE
                 if (hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) != null) {
                 hashTot.put(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue(),
@@ -1523,12 +1511,9 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <!-- Recuperacion de parametros de la organizacion -->
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <!--set field="certS" from="pathCert"/-->
             <set field="certS" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="resultS" from="pathResults"/>
-            <set field="pathTemp" from="pathTemp"/>
-            <set field="pathPdf" from="pathPdf"/>
             <set field="cafS" from="pathCaf"/>
             <set field="plantillaS" from="templateFactura"/>
             <!--set field="giro" from="giroEmisor"/-->
@@ -1580,7 +1565,6 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="pathResultS" from="pathResults"/>
@@ -1846,7 +1830,6 @@ along with this software (see the LICENSE.md file). If not, see
 
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
 
@@ -1924,7 +1907,6 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="pathTemp" from="pathTemp"/>
 
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="dataField">
                 <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
@@ -1998,7 +1980,6 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
 
@@ -2112,12 +2093,9 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="dirOrigen"/>
             <parameter name="cmnaOrigen"/>
             <parameter name="ciudadOrigen"/>
-            <parameter name="pathCert"/>
             <parameter name="pathResults"/>
             <parameter name="pathAceptaciones"/>
             <parameter name="pathRecibidas"/>
-            <parameter name="pathPdf"/>
-            <parameter name="pathTemp"/>
             <parameter name="pathCaf"/>
             <parameter name="certData"/>
             <parameter name="passCert"/>
@@ -2153,9 +2131,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <select-field field-name="dirOrigen"/>
                 <select-field field-name="cmnaOrigen"/>
                 <select-field field-name="ciudadOrigen"/>
-                <select-field field-name="pathCert"/>
                 <select-field field-name="certData"/>
-                <select-field field-name="pathTemp"/>
                 <select-field field-name="passCert"/>
                 <select-field field-name="nmbContacto"/>
                 <select-field field-name="mailContacto"/>
@@ -2190,13 +2166,6 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="dirOrigen" from="orgField.dirOrigen"/>
             <set field="cmnaOrigen" from="orgField.cmnaOrigen"/>
             <set field="ciudadOrigen" from="orgField.ciudadOrigen"/>
-            <set field="pathCert" from="orgField.pathCert"/>
-            <set field="pathResults" from="orgField.pathTemp"/>
-            <set field="pathAceptaciones" from="orgField.pathTemp"/>
-            <set field="pathRecibidas" from="orgField.pathTemp"/>
-            <set field="pathPdf" from="orgField.pathTemp"/>
-            <set field="pathTemp" from="orgField.pathTemp"/>
-            <set field="pathCaf" from="orgField.pathTemp"/>
             <set field="certData" from="orgField.certData"/>
             <set field="passCert" from="orgField.passCert"/>
             <set field="nmbContacto" from="orgField.nmbContacto"/>
@@ -2248,110 +2217,12 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="download" noun="NewPdf">
-        <in-parameters>
-            <parameter name="activeOrgId" required="true"/>
-        </in-parameters>
-        <actions>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
-            <set field="passS" from="passCert"/>
-            <set field="template" from="pdfTemplate"/>
-            <set field="giro" from="giroEmisor"/>
-
-            <!--
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="document" cache="false">
-                <field-map field-name="fiscalTaxDocumentId" value="Ftdt-33121"/>
-                <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
-            </entity-find-one>
-            <set field="dte" from="document.contentData"/>
-            -->
-
-            <script><![CDATA[
-                import javax.sql.rowset.serial.SerialBlob;
-                import java.security.KeyStore;
-                import java.security.PrivateKey;
-                import java.security.cert.X509Certificate;
-                import cl.nic.dte.util.Utilities;
-                import javax.xml.transform.stream.StreamSource;
-
-                ec.logger.info("template: ${template}")
-                pdf = "/tmp/factura.pdf"
-                templateStream = ec.resource.getLocationReference("component://kombuchacha/plantillas/plantilla.xsl").openStream()
-                //templateStream = new FileInputStream("/Users/jhp/moqui/DTE/scripts/SETPRUEBAS/plantilla_pdf_invcj-8859.xsl")
-                //ByteArrayInputStream input = new ByteArrayInputStream(dte.getBytes(1, dte.length() as Integer))
-                dte = "/Users/jhp/moqui/DTE/scripts/SETPRUEBAS/DTE33-312.xml"
-                //ec.resource.xslFoTransform(new StreamSource(templateStream), new StreamSource(new File(dte)), new FileOutputStream(pdf), "application/pdf")
-                ec.resource.xslFoTransform(new StreamSource(new File(dte)), new StreamSource(templateStream), new FileOutputStream(pdf), "application/pdf", transformParameters)
-                //xml = "/tmp/factura.xml"
-                //new File(xml).withOutputStream {it.write dte.getBytes(1, dte.length() as Integer)}
-
-            ]]></script>
-        </actions>
-    </service>
-
-    <service verb="download" noun="NewPdf">
-        <in-parameters>
-            <parameter name="activeOrgId" required="true"/>
-        </in-parameters>
-        <actions>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
-            <set field="passS" from="passCert"/>
-            <set field="pathResults" from="pathResults"/>
-            <set field="template" from="pdfTemplate"/>
-            <set field="pathPdf" from="pathPdf"/>
-            <set field="giro" from="giroEmisor"/>
-            <set field="templateFactura" from="templateFactura"/>
-            <set field="pdfTemplate" from="pdfTemplate"/>
-            <set field="pdfTemplateCedible" from="pdfTemplateCedible"/>
-            <set field="pdfTemplateBoleta" from="pdfTemplateBoleta"/>
-            <set field="pdfTemplateBoletaContinua" from="pdfTemplateBoletaContinua"/>
-            <set field="templateEnvio" from="templateEnvio"/>
-            <set field="templateAceptaciones" from="templateAceptaciones"/>
-            <set field="templateLibro" from="templateLibro"/>
-            <set field="logo" from="logo"/>
-            <set field="fchResol" from="fchResol"/>
-            <set field="nroResol" from="nroResol"/>
-
-            <!--
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="document" cache="false">
-                <field-map field-name="fiscalTaxDocumentId" value="Ftdt-33121"/>
-                <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
-            </entity-find-one>
-            <set field="dte" from="document.contentData"/>
-            -->
-
-            <script><![CDATA[
-                import javax.sql.rowset.serial.SerialBlob;
-                import java.security.KeyStore;
-                import java.security.PrivateKey;
-                import java.security.cert.X509Certificate;
-                import cl.nic.dte.util.Utilities;
-
-                ec.logger.info("template: ${template}")
-                pdf = "/tmp/factura.pdf"
-                templateStream = ec.resource.getLocationReference("component://kombuchacha/plantillas/plantilla.xsl").openStream()
-                //templateStream = new FileInputStream("/Users/jhp/moqui/DTE/scripts/SETPRUEBAS/plantilla_pdf_invcj-8859.xsl")
-                //ByteArrayInputStream input = new ByteArrayInputStream(dte.getBytes(1, dte.length() as Integer))
-                //Utilities.generatePDF(dte.getBinaryStream(), templateStream, new FileOutputStream(pdf), true);
-                dte = "/Users/jhp/moqui/DTE/scripts/SETPRUEBAS/DTE33-312.xml"
-                Utilities.generatePDF(new FileInputStream(dte), templateStream, new FileOutputStream(pdf), true);
-                logger.warn("---------------");
-                logger.warn("---------------");
-                //xml = "/tmp/factura.xml"
-                //new File(xml).withOutputStream {it.write dte.getBytes(1, dte.length() as Integer)}
-
-            ]]></script>
-        </actions>
-    </service>
-
     <service verb="genera" noun="PDF">
         <description>
             Genera archivo PDF de Factura/Boleta (envio).
         </description>
         <in-parameters>
-            <parameter name="dte" required="true"/>
+            <parameter name="dte" type="Object" required="true"/>
             <parameter name="activeOrgId" required="true"/>
             <parameter name="boleta"/>
             <parameter name="continua"/>
@@ -2363,11 +2234,9 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <!-- Recuperacion de parametros de la organizacion -->
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
             <set field="passS" from="passCert"/>
             <set field="pathResults" from="pathResults"/>
             <set field="template" from="pdfTemplate"/>
-            <set field="pathPdf" from="pathPdf"/>
             <set field="giro" from="giroEmisor"/>
             <set field="templateFactura" from="templateFactura"/>
             <set field="pdfTemplate" from="pdfTemplate"/>
@@ -2404,16 +2273,16 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.sii.siiDte.RECEPCIONDTEDocument;
                 import javax.xml.transform.stream.StreamSource;
 
-                logger.warn("Working Directory for PDF/images = " + System.getProperty("user.dir"));
                 ByteArrayOutputStream pdf = new ByteArrayOutputStream()
-                ec.resource.xslFoTransform(new StreamSource(new File(dte)), new StreamSource(template.getBinaryStream()), pdf, "application/pdf", transformParameters + [cedible:'false'])
+
+                ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(template.getBinaryStream()), pdf, "application/pdf", transformParameters + [cedible:'false'])
                 pdf.close()
                 pdfBytes = pdf.toByteArray()
             </script>
             <if condition="!boleta">
                 <script>
                     pdf = new ByteArrayOutputStream()
-                    ec.resource.xslFoTransform(new StreamSource(new File(dte)), new StreamSource(template.getBinaryStream()), pdf, "application/pdf", transformParameters + [cedible:'true'])
+                    ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(template.getBinaryStream()), pdf, "application/pdf", transformParameters + [cedible:'true'])
                     pdf.close()
                     pdfCedibleBytes = pdf.toByteArray()
                 </script>
@@ -3262,7 +3131,6 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="statusSii" value=""/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
 
@@ -3273,7 +3141,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="DTE no existe"/>
             </if>
             <set field="envio" from="content"/>
-
 
             <set field="salida" value=""/>
             <set field="statusXML" value=""/>
@@ -3299,7 +3166,7 @@ along with this software (see the LICENSE.md file). If not, see
                 opts.setLoadSubstituteNamespaces(namespaces);
 
                 //DTEDocument doc = DTEDocument.Factory.parse(new FileInputStream(envio), opts);
-                DTEDocument doc = DTEDocument.Factory.parse(contentData.getBinaryStream(), opts);
+                DTEDocument doc = DTEDocument.Factory.parse(contentRef.openStream(), opts);
                 ConexionSii con = new ConexionSii();
 
                 // leo certificado y llave privada del archivo pkcs12
@@ -3358,7 +3225,6 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
 
@@ -3406,12 +3272,12 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Recuperacion de xml para parsear -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="contentField">
-                <select-field field-name="contentData"/>
+                <select-field field-name="contentLocation"/>
             </entity-find-one>
             <if condition="!contentField">
                 <return error="true" message="Boleta no tiene XML generado"/>
             </if>
-            <set field="xmlData" from="contentField.contentData"/>
+            <set field="xmlDataRef" from="ec.resource.getLocationReference(contentField.contentLocation)"/>
             <script>
                 import javax.xml.parsers.*;
                 import org.w3c.dom.*;
@@ -3424,7 +3290,7 @@ along with this software (see the LICENSE.md file). If not, see
                 Document document = null;
 
                 builder = factory.newDocumentBuilder();
-                document = builder.parse(xmlData.getBinaryStream());
+                document = builder.parse(xmlDataRef.openStream());
                 document.getDocumentElement().normalize();
                 Element root = document.getDocumentElement();
 
@@ -3500,7 +3366,6 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="statusSii" value=""/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
 
@@ -3894,10 +3759,10 @@ along with this software (see the LICENSE.md file). If not, see
                         receiverPartyId:activeOrgId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocument" out-map="mapOut" in-map="createMap"/>
             <!-- Se guarda contenido asociado a la DTE, todas las DTE que vienen en el mismo envío comparten el mismo XML -->
-            <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts, , contentData:xml.get()]]"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
             <if condition="contentLocationPdf">
-                <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts, , contentData:pdf.get()]]"/>
+                <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts]"/>
                 <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
             </if>
             <script>
@@ -4261,10 +4126,10 @@ along with this software (see the LICENSE.md file). If not, see
                         receiverPartyId:activeOrgId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]"/>
                 <service-call name="create#mchile.dte.FiscalTaxDocument" out-map="mapOut" in-map="createMap"/>
                 <!-- Se guarda contenido asociado a la DTE, todas las DTE que vienen en el mismo envío comparten el mismo XML -->
-                <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts, contentData:xml.get()]"/>
+                <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts]"/>
                 <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
                 <if condition="contentLocationPdf">
-                    <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts, contentData:pdf.get()]"/>
+                    <set field="createMap" from="[fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts]"/>
                     <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
                 </if>
             </if>
@@ -5196,12 +5061,9 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Recuperacion de parametros de la organizacion -->
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="resultS" from="pathAceptaciones"/>
-            <set field="pathTemp" from="pathTemp"/>
-            <set field="pathPdf" from="pathPdf"/>
             <set field="cafS" from="pathCaf"/>
             <set field="plantillaS" from="templateAceptaciones"/>
             <set field="rutEnviador" from="rutEnviador"/>
@@ -5687,12 +5549,9 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Recuperacion de parametros de la organizacion -->
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="resultS" from="pathAceptaciones"/>
-            <set field="pathTemp" from="pathTemp"/>
-            <set field="pathPdf" from="pathPdf"/>
             <set field="cafS" from="pathCaf"/>
             <set field="plantillaS" from="templateAceptaciones"/>
             <set field="rutEnviador" from="rutEnvia"/>
@@ -6126,12 +5985,9 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Recuperacion de parametros de la organizacion -->
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="resultS" from="pathAceptaciones"/>
-            <set field="pathTemp" from="pathTemp"/>
-            <set field="pathPdf" from="pathPdf"/>
             <set field="cafS" from="pathCaf"/>
             <set field="plantillaS" from="templateAceptaciones"/>
             <set field="rutEnviador" from="rutEnviador"/>
@@ -6565,15 +6421,17 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <out-parameters>
             <parameter name="content"/>
-            <parameter name="contentData"/>
+            <parameter name="contentRef"/>
         </out-parameters>
         <actions>
             <set field="content" from="null"/>
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="contentField"/>
             <if condition="contentField">
                 <set field="content" from="contentField.contentLocation"/>
-                <!-- ToDo: Cambiar por obtener la información desde el dbresource -->
-                <set field="contentData" from="contentField.contentData"/>
+                <script>
+                    docRr = ec.resource.getLocationReference(contentField.contentLocation)
+                </script>
+                <set field="contentRef" from="docRr"/>
             </if>
         </actions>
     </service>
@@ -6682,12 +6540,9 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Recuperacion de parametros de la organizacion -->
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="resultS" from="pathResults"/>
-            <set field="pathTemp" from="pathTemp"/>
-            <set field="pathPdf" from="pathPdf"/>
             <set field="cafS" from="pathCaf"/>
             <set field="plantillaS" from="templateBoleta"/>
             <set field="enviadorS" from="rutEnviador"/>
@@ -7257,16 +7112,16 @@ along with this software (see the LICENSE.md file). If not, see
                 opts2.setSavePrettyPrintIndent(0);
 
                 try {
-                envioBoletaDocument = EnvioBOLETADocument.Factory.parse(envioBoletaDocument.newInputStream(opts2), opts2);
+                    envioBoletaDocument = EnvioBOLETADocument.Factory.parse(envioBoletaDocument.newInputStream(opts2), opts2);
                 } catch (Exception e) {
-                logger.warn("Error al parsear XML:"+e.printStackTrace());
-                return
+                    logger.warn("Error al parsear XML:"+e.printStackTrace());
+                    return
                 }
 
                 // Debo agregar el schema location (Sino SII rechaza)
                 XmlCursor cursor = envioBoletaDocument.newCursor();
                 if (cursor.toFirstChild()) {
-                cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioBOLETA_v11.xsd");
+                    cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioBOLETA_v11.xsd");
                 }
                 cursor.dispose();
 
@@ -7345,24 +7200,14 @@ along with this software (see the LICENSE.md file). If not, see
                 //byte[] salidaBoleta = Signer.signEmbededBoleta(doc2, uriBoleta, key, cert);
                 //doc2 = XMLUtil.parseDocument(salidaBoleta);
                 // Firma de EnvioBOLETA
-                byte[] salida = Signer.sign(doc2, uri, key, cert, uri, "SetDTE");
-                doc2 = XMLUtil.parseDocument(salida);
+                byte[] facturaXml = Signer.sign(doc2, uri, key, cert, uri, "SetDTE");
+                doc2 = XMLUtil.parseDocument(facturaXml);
 
 
                 if (Signer.verify(doc2, "SetDTE")) {
-                Path path = Paths.get(resultS + "BOL" + tipoFactura + "-" + folio + ".xml");
-                Files.write(path, salida);
-
-                File file = new File(resultS + "BOLOK" + tipoFactura + "-" + folio + ".xml");
-                FileOutputStream fos = null;
-                fos = new FileOutputStream(file);
-                // Writes bytes from the specified byte array to this file output stream
-                fos.write(salida);
-                logger.warn("Factura "+path+" folio "+folio+" generada OK");
+                    logger.warn("Factura "+path+" folio "+folio+" generada OK");
                 } else {
-                Path path = Paths.get(resultS + "BOL" + tipoFactura + "-" + folio + "-mala.xml");
-                Files.write(path, salida);
-                logger.warn("Error al generar boleta folio "+folio);
+                    logger.warn("Error al generar boleta folio "+folio);
                 }
 
 
@@ -7371,24 +7216,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoFacturaS}"/>
             <set field="xml" value="${resultS}BOL${tipoFactura}-${folio}.xml"/>
             <set field="pdf" value="${pathPdf}BOL${tipoFactura}-${folio}.pdf"/>
-            <service-call name="mchile.DTEServices.genera#PDF" in-map="[pdf:pdf, dte:xml, activeOrgId:activeOrgId, boleta:true, continua:continua]" out-map="context"/>
-
-            <set field="bArray2"/>
-            <!-- Lectura y conversión a arreglo de bytes de PDF temporal -->
-            <script>
-                File file = new File(pdf);
-                FileInputStream fis = null;
-                byte[] bArray = new byte[(int) file.length()];
-                try {
-                fis = new FileInputStream(file);
-                fis.read(bArray);
-                fis.close();
-                } catch (IOException ioExp) {
-                ioExp.printStackTrace();
-                }
-                logger.warn("pdf largo: " + file.length());
-                bArray2 = bArray;
-            </script>
+            <service-call name="mchile.DTEServices.genera#PDF" in-map="[dte:facturaXml, activeOrgId:activeOrgId, boleta:true, continua:continua]" out-map="context"/>
 
             <!-- Creación de registro en FiscalTaxDocument -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteField" for-update="true">
@@ -7424,23 +7252,22 @@ along with this software (see the LICENSE.md file). If not, see
                                          montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmision,
                                          montoExento:montoExento, montoIVARecuperable:montoIVARecuperable
                                          ]"/>
-
             <service-call name="create#mchile.dte.FiscalTaxDocumentAttributes" out-map="context" in-map="updateMap"/>
 
             <!-- Creacion de registros en FiscalTaxDocumentContent -->
-            <set field="xmlName" value="${resultS}BOL${tipoFactura}-${folio}.xml"/>
-            <set field="pdfName" value="${pathPdf}BOL${tipoFactura}-${folio}.pdf"/>
-            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlName, contentDate:ts, contentData:salida]"/>
-            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+            <set field="xmlName" value="dbresource://moit/erp/dte/${emisorS}/DTE${tipoFactura}-${folio}.xml"/>
+            <set field="pdfName" value="dbresource://moit/erp/dte/${emisorS}/DTE${tipoFactura}-${folio}.pdf"/>
+            <set field="createMapBase" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, contentDte:ts]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlName]"/>
+            <script>ec.resource.getLocationReference(xmlName).putBytes(facturaXml)</script>
 
-            <set field="createMap" from="[fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfName, contentDate:ts, contentData:bArray2]"/>
-            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfName]"/>
+            <script>ec.resource.getLocationReference(pdfName).putBytes(pdfBytes)</script>
 
             <set field="fiscalTaxDocumentId" from="dteField.fiscalTaxDocumentId"/>
 
         </actions>
     </service>
-
 
     <service verb="genera" noun="RCOF">
         <description>
@@ -7473,11 +7300,9 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Recuperacion de parametros de la organizacion -->
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="certS" from="pathCert"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
             <set field="resultS" from="pathResults"/>
-            <set field="pathTemp" from="pathTemp"/>
             <set field="pathPdf" from="pathPdf"/>
             <set field="cafS" from="pathCaf"/>
             <set field="plantillaS" from="templateRcof"/>
@@ -7863,8 +7688,8 @@ along with this software (see the LICENSE.md file). If not, see
 
 
                 //Document doc2 = XMLUtil.parseDocument(out.toByteArray());
-                //byte[] salida = Signer.sign(doc2, uri, key, cert, uri, "DocumentoConsumoFolios");
-                //doc2 = XMLUtil.parseDocument(salida);
+                //byte[] facturaXml = Signer.sign(doc2, uri, key, cert, uri, "DocumentoConsumoFolios");
+                //doc2 = XMLUtil.parseDocument(facturaXml);
 
                 FirmaRcof firmaLibro = new FirmaRcof();
 
@@ -8559,7 +8384,11 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="fiscalTaxDocumentContentTypeEnumId" from="fiscalTaxDocumentContentTypeEnumId"/>
             </entity-find>
 
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="fiscalTaxDocument"/>
+            <set field="tipoFactura" from="fiscalTaxDocument.FiscalTaxDocumentType.sequenceNum"/>
+
             <iterate list="ftdtList" entry="ftdtEntry">
+                <set field="xmlName" value="dbresource://moit/erp/dte/${emisorS}/DTE${tipoFactura}-${folio}.xml"/>
                 <set field="ftdtEntry.contentData" from="filename.get()"/>
                 <entity-update value-field="ftdtEntry"/>
             </iterate>
@@ -8591,10 +8420,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="pathResults"/>
             <parameter name="pathAceptaciones"/>
             <parameter name="pathRecibidas"/>
-            <parameter name="pathPdf"/>
-            <parameter name="pathTemp"/>
             <parameter name="pathCaf"/>
-            <parameter name="pathCert"/>
             <parameter name="passCert"/>
             <parameter name="nmbContacto"/>
             <parameter name="mailContacto"/>
@@ -8616,7 +8442,7 @@ along with this software (see the LICENSE.md file). If not, see
                                   templatePdfBoletaContinua:templatePdfBoletaContinua,
                     templateEnvio:templateEnvio, templateEnvioBoleta:templateEnvioBoleta, templateAceptaciones:templateAceptaciones, templateRcof:templateRcof, logo:logo, fchResol:fechResol, nroResol:nroResol, rutEmisor:rutEmisor,
                     rutEnvia:rutEnvia, rznSocEmisor:rznSocEmisor, cdgSIISucur:cdgSIISucur, dirOrigen:dirOrigen, cmnaOrigen:cmnaOrigen, ciudadOrigen:ciudadOrigen, pathResults:pathResults, pathAceptaciones:pathAceptaciones,
-                    pathRecibidas:pathRecibidas, pathPdf:pathPdf, pathTemp:pathTemp, pathCaf:pathCaf, pathCert:pathCert, passCert:passCert, nmbContacto:nmbContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]"/>
+                    pathRecibidas:pathRecibidas, pathCaf:pathCaf, passCert:passCert, nmbContacto:nmbContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]"/>
                 </else>
             </if>
         </actions>
@@ -8808,33 +8634,11 @@ along with this software (see the LICENSE.md file). If not, see
                 <field-map field-name="fiscalTaxDocumentContentTypeEnumId"/>
             </entity-find-one>
             <script>
-                import org.apache.commons.io.IOUtils
-                if(!document?.contentData)
+                docRr = ec.resource.getLocationReference(document.contentLocation)
+                if(docRr?.exists)
+                    ec.web.sendResourceResponse(document.contentLocation)
+                else
                     ec.message.addError(ec.resource.expand('No se encontró archivo en [${fiscalTaxDocumentId}]',''))
-                int largo = document.contentData.length()
-                long inicio = 1
-                byte[] bytes = document.contentData.getBytes(inicio, largo)
-
-                if (bytes.length > 0) {
-                    fileExtension = null
-                    if(fileType == 'Ftdct-Xml') {
-                        ec.web.response.setContentType("xml")
-                        fileExtension = "xml"
-                    } else {
-                        ec.web.response.setContentType("pdf")
-                        fileExtension = "pdf"
-                    }
-                    if (fileExtension) {
-                        fileName = document.contentLocation
-                        contentDisposition = "attachment; filename=\"${fileName}\"; filename*=utf-8''${encodeAsciiFilename(fileName)}"
-                    } else {
-                        contentDisposition = "attachment"
-                    }
-                    ec.web.response.addHeader("Content-Disposition", contentDisposition)
-                    IOUtils.write(bytes, ec.web.response.outputStream)
-                } else {
-                    ec.message.addError(ec.resource.expand('No se encontró archivo en [${fiscalTaxDocumentId}]',''))
-                }
             </script>
         </actions>
     </service>
