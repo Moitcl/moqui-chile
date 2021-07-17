@@ -1911,11 +1911,9 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="dataField">
                 <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
                 <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
-                <select-field field-name="contentData"/>
                 <select-field field-name="contentLocation"/>
             </entity-find-one>
 
-            <set field="contentData" from="dataField.contentData"/>
             <set field="contentLocation" from="dataField.contentLocation"/>
 
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
@@ -1934,18 +1932,6 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
             <set field="enviadorS" value="${rutEnvia}"/>
 
-            <!-- Se escribe archivo temporal para crear documentoS -->
-            <script>
-                int largo = contentData.length()
-                long inicio = 1
-                byte[] bytes = contentData.getBytes(inicio, largo)
-                FileOutputStream fout = new FileOutputStream(contentLocation);
-                fout.write(bytes);
-                fout.flush();
-                fout.close();
-                // Useful for testing
-                //contentLocation = '/home/cherrera/git/moqui-moit/moqui-framework/runtime/component/MoquiChile/DTE/TEMP/TESTBO.xml';
-            </script>
             <service-call name="mchile.DTEServices.enviaSII#Boleta" in-map="[compaS:emisorS, enviadorS:enviadorS, documentoS:contentLocation, activeOrgId:activeOrgId]" out-map="context"/>
             <!-- TODO: Eliminar archivo temporal -->
             <!-- Marcar boleta como enviada -->
@@ -1969,7 +1955,7 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="compaS" required="true"/>
             <parameter name="enviadorS" required="true"/>
-            <parameter name="documentoS" required="true"/>
+            <parameter name="documentContentLocation" required="true"/>
             <parameter name="activeOrgId" required="true"/>
         </in-parameters>
         <out-parameters>
@@ -1993,13 +1979,14 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.nic.dte.net.ConexionSiiBoleta;
                 import cl.nic.dte.util.Utilities;
                 import org.json.simple.JSONObject;
+                import org.moqui.resource.ResourceReference;
 
                 ConexionSiiBoleta con = new ConexionSiiBoleta();
                 // leo certificado y llave privada del archivo pkcs12
                 KeyStore ks = KeyStore.getInstance("PKCS12");
                 ks.load(certData.getBinaryStream(), passS.toCharArray());
                 String alias = ks.aliases().nextElement();
-                logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS);
+                //logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS);
 
                 X509Certificate x509 = (X509Certificate) ks.getCertificate(alias);
                 PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray());
@@ -2008,7 +1995,8 @@ along with this software (see the LICENSE.md file). If not, see
 
                 String enviadorS = Utilities.getRutFromCertificate(x509);
 
-                JSONObject recp = con.uploadEnvioCertificacion(enviadorS, compaS, new File(documentoS), token);
+                ResourceReference documentoRr = ec.resource.getLocationReference(documentContentLocation)
+                JSONObject recp = con.uploadEnvioCertificacion(enviadorS, compaS, documentoRr.openStream(), token);
 
                 String estado = (String) recp.get("estado");
                 trackId = String.valueOf(recp.get("trackid"));
@@ -2465,61 +2453,17 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="invoiceId" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="activeOrgId" required="true"/>
-            <parameter name="items"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
         </out-parameters>
         <actions>
-            <if condition="!items">
-                <!-- Si no viene lista de items se intenta crearla -->
-                <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemList">
-                    <econdition field-name="invoiceId"/>
-                    <order-by field-name="invoiceItemSeqId"/>
-                </entity-find>
-                <log level="warn" message="Lista: $invoiceItemList"/>
-                <iterate list="invoiceItemList" entry="itemEntry">
-                    <log level="warn" message="Item: $itemEntry"/>
-                    <script>
-                        discount = 0;
-                        if(itemEntry.pctDiscount != null)
-                        discount = itemEntry.pctDiscount;
-                        if(items == null) {
-                        items = itemEntry.invoiceItemSeqId+"-"+itemEntry.quantity+"-"+itemEntry.amount+"-" +discount+"-"+itemEntry.description;
-                        } else {
-                        items = items + "," + itemEntry.invoiceItemSeqId+"-"+itemEntry.quantity+"-"+itemEntry.amount+"-" +discount+"-"+itemEntry.description;
-                        }
-                    </script>
-                </iterate>
-            </if>
-
             <!-- Obtención de descuento global, si es > 0 se aplica -->
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoiceField">
                 <field-map field-name="invoiceId" from="invoiceId"/>
             </entity-find-one>
             <set field="globalDiscount" from="invoiceField.globalDiscount"/>
             <set field="glosaDr" from="invoiceField.glosaDr"/>
-
-            <set field="listItems" type="List"/>
-            <if condition="items">
-                <set field="listItems" from="items instanceof List ? items : items.split(',') as List"/>
-            </if>
-
-
-            <iterate list="listItems" entry="detailItem">
-                <set field="listProduct" from="detailItem instanceof List ? detailItem : detailItem.split('-') as List"/>
-                <log message="Leyendo: $listProduct" level="warn"/>
-                <!-- Con invoiceId se busca en invoiceItem y se actualiza porcentaje de descuento -->
-                <entity-find-one entity-name="mantle.account.invoice.InvoiceItem" value-field="invoiceItemField">
-                    <field-map field-name="invoiceId" from="invoiceId"/>
-                    <field-map field-name="invoiceItemSeqId" value="${listProduct[0]}"/>
-                </entity-find-one>
-                <script>
-                    long discount = Long.valueOf(listProduct[3]);
-                </script>
-                <set field="invoiceItemField.pctDiscount" from="discount"/>
-                <entity-update value-field="invoiceItemField"/>
-            </iterate>
 
             <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
 
@@ -4482,7 +4426,6 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="!items">
                 <return error="true" message="Deben existir items a corregir en Nota de Crédito"/>
             </if>
-            <set field="listItems" from="items instanceof List ? items : items.split(',') as List" default-value="null"/>
 
             <set field="returnedItemList" type="NewMap" from="[]"/>
 
