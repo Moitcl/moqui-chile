@@ -110,7 +110,7 @@ class NotaDeCreditoTests extends Specification {
 
       // Creacion de Nota de Credito
       Map factOut = ec.service.sync().name("mchile.DTEServices.generar#NotaCredito")
-              .parameters([returnId:returnId, invoiceId:invoiceId, activeOrgId:partyId, fiscalTaxDocumentTypeEnumId:'Ftdt-61',items:items])
+              .parameters([returnId:returnId, invoiceId:invoiceId, issuerPartyId:partyId, fiscalTaxDocumentTypeEnumId:'Ftdt-61',items:items])
               .call()
       String fiscalTaxDocumentId = factOut.fiscalTaxDocumentId
 
