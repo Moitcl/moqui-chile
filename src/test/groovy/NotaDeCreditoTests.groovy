@@ -106,13 +106,11 @@ class NotaDeCreditoTests extends Specification {
               .call()
 
       // Lista de items
-      //List items = [['01-1-10000-0-HORAS PROGRAMADOR']]
-      List<String> items = new ArrayList<>()
-      items.add('01-1-10000-0-HORAS PROGRAMADOR')
+      ArrayList items= [[returnItemSeqId:'01', returnQuantity:'1', returnPrice: 10000, pctDiscount:0, description:'HORAS PROGRAMADOR']]
 
       // Creacion de Nota de Credito
       Map factOut = ec.service.sync().name("mchile.DTEServices.generar#NotaCredito")
-              .parameters([returnId:returnId, invoiceId:invoiceId, activeOrgId:partyId, fiscalTaxDocumentTypeEnumId:'Ftdt-61',items:items])
+              .parameters([returnId:returnId, invoiceId:invoiceId, issuerPartyId:partyId, fiscalTaxDocumentTypeEnumId:'Ftdt-61',items:items])
               .call()
       String fiscalTaxDocumentId = factOut.fiscalTaxDocumentId
 
