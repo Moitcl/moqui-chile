@@ -77,6 +77,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="glosaDr"/>
             <parameter name="indTraslado"/>
             <parameter name="tipoDespacho"/>
+            <parameter name="settlementTermId"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
@@ -124,9 +125,32 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="fechaEmision"/>
 
+            <!-- Formas de pago -->
+            <set field="formaPago"/>
+            <if condition="settlementTermId.equals('FpaImmediate')">
+                <set field="formaPago" value="1"/><!-- Contado -->
+            </if>
+            <if condition="settlementTermId.equals('Net10')">
+                <set field="formaPago" value="2"/><!-- Credito (usar GlosaPagos) -->
+            </if>
+            <if condition="settlementTermId.equals('Net15')">
+                <set field="formaPago" value="2"/><!-- Credito (usar GlosaPagos) -->
+            </if>
+            <if condition="settlementTermId.equals('Net30')">
+                <set field="formaPago" value="2"/><!-- Credito (usar GlosaPagos) -->
+            </if>
+            <if condition="settlementTermId.equals('Net60')">
+                <set field="formaPago" value="2"/><!-- Credito (usar GlosaPagos) -->
+            </if>
+            <if condition="settlementTermId.equals('Net90')">
+                <set field="formaPago" value="2"/><!-- Credito (usar GlosaPagos) -->
+            </if>
+            <if condition="settlementTermId == 3">
+                <set field="formaPago" value="3"/><!-- Sin costo -->
+            </if>
+
             <!-- Obtención de folio y path de CAF -->
             <service-call name="mchile.DTEServices.get#Folio" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]" out-map="context"/>
-
             <set field="folioS" from="folio" type="Integer"/>
             <set field="codRef" value="0" type="Integer"/>
 
@@ -185,6 +209,8 @@ along with this software (see the LICENSE.md file). If not, see
                 // Leo el folio
                 folio = Integer.valueOf(folioS);
                 tipoFactura = Integer.valueOf(tipoFacturaS);
+
+                // Forma de pago
                 if(formaPago != null)
                 frmPago = Integer.valueOf(formaPago);
 
@@ -200,7 +226,6 @@ along with this software (see the LICENSE.md file). If not, see
                 caf = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts).getAUTORIZACION();
 
                 // Construyo base a partir del template
-                //doc = DTEDocument.Factory.parse(new File(plantillaS), opts);
                 doc = DTEDocument.Factory.parse(ec.resource.getLocationStream(plantillaS), opts);
 
                 // leo certificado y llave privada del archivo pkcs12
@@ -218,8 +243,6 @@ along with this software (see the LICENSE.md file). If not, see
                 IdDoc iddoc = doc.getDTE().getDocumento().getEncabezado().addNewIdDoc();
                 iddoc.setFolio(folio);
                 // Obtención de ID distinto
-                //logger.warn("id: " + System.nanoTime());
-                //doc.getDTE().getDocumento().setID("N" + iddoc.getFolio());
                 doc.getDTE().getDocumento().setID("N" + System.nanoTime());
 
                 // Tipo de DTE
@@ -316,7 +339,6 @@ along with this software (see the LICENSE.md file). If not, see
                         codigo.setTpoCodigo("Interna")
                         codigo.setVlrCodigo(codigoInterno)
                         det[i].setNmbItem(nombreItem);
-                        //det[i].setDscItem(""); // Descripción Item
                         det[i].setQtyItem(BigDecimal.valueOf(qtyItem));
                         if(uom != null)
                         det[i].setUnmdItem(uom);
@@ -2419,11 +2441,13 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="invoiceId" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="settlementTermId"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
         </out-parameters>
         <actions>
+            <return error="true" message="Pago: $settlementTermId"/>
             <!-- Obtención de descuento global, si es > 0 se aplica -->
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoiceField">
                 <field-map field-name="invoiceId"/>
