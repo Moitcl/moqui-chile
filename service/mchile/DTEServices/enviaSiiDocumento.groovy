@@ -11,17 +11,17 @@ ExecutionContext ec
 // Validación rut -->
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", enviadorS).call()
 context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", activeOrgId).call())
-passS = passCert
 
 ConexionSii con = new ConexionSii()
 // leo certificado y llave privada del archivo pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
-ks.load(certData.getBinaryStream(), passS.toCharArray())
+ks.load(certData.getBinaryStream(), ((String)passCert).toCharArray())
 String alias = ks.aliases().nextElement()
-ec.logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
+String rutCertificado = Utilities.getRutFromCertificate(x509)
+ec.logger.warn("Usando certificado ${alias}, Rut ${rutCertificado}")
 
 X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
-PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray())
+PrivateKey pKey = (PrivateKey) ks.getKey(alias, ((String)paCert).toCharArray())
 
 String token = con.getToken(pKey, x509)
 

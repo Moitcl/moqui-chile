@@ -37,16 +37,13 @@ ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rut
 // Recuperacion de parametros de la organizacion -->
 context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", issuerPartyId).call())
 
-certS = certData
-passS = passCert
-
 // Giro Emisor
 giroOutMap = ec.service.sync().name("mchile.DTEServices.get#GiroPrimario").parameter("partyId", issuerPartyId).call()
 giro = giroOutMap.description
 
 // Recuperación del código SII de DTE -->
 codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameter("fiscalTaxDocumentTypeEnumId", fiscalTaxDocumentTypeEnumId).call()
-String tipoFacturaS = codeOut.siiCode
+tipoFactura = codeOut.siiCode
 
 fechaEmision = null
 
@@ -58,11 +55,9 @@ DTEDocument doc
 AutorizacionType caf
 X509Certificate cert
 PrivateKey key
-int tipoFactura
 int frmPago = 1
 int listSize = 0
 
-tipoFactura = Integer.valueOf(tipoFacturaS)
 if(formaPago != null)
     frmPago = Integer.valueOf(formaPago)
 
@@ -82,13 +77,13 @@ doc = DTEDocument.Factory.parse(ec.resource.getLocationStream(templateFactura), 
 
 // leo certificado y llave privada del archivo pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
-ks.load(certData.getBinaryStream(), passS.toCharArray())
+ks.load(certData.getBinaryStream(), passCert.toCharArray())
 String alias = ks.aliases().nextElement()
-
-ec.logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
-
 cert = (X509Certificate) ks.getCertificate(alias)
-key = (PrivateKey) ks.getKey(alias, passS.toCharArray())
+String rutCertificado = Utilities.getRutFromCertificate(cert)
+ec.logger.warn("Usando certificado ${alias} con Rut ${rutCertificado}")
+
+key = (PrivateKey) ks.getKey(alias, passCert.toCharArray())
 
 // Se recorre lista de productos para armar documento (detailList)
 
@@ -100,7 +95,7 @@ iddoc.setFolio(folio)
 doc.getDTE().getDocumento().setID("N" + System.nanoTime())
 
 // Tipo de DTE
-iddoc.setTipoDTE(BigInteger.valueOf(tipoFactura))
+iddoc.setTipoDTE(tipoFactura as BigInteger)
 iddoc.xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
 
 SimpleDateFormat formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd")
@@ -125,8 +120,8 @@ if (medioPago != null ) {
 iddoc.setFmaPago(BigInteger.valueOf(frmPago))
 
 // Si es guía de despacho se configura indicador de traslado
-if(BigInteger.valueOf(tipoFactura) == 52) {
-    iddoc.setIndTraslado(Long.valueOf(indTraslado))
+if(tipoFactura == 52) {
+    iddoc.setIndTraslado(indTraslado)
     if(tipoDespacho != null) {
         iddoc.setTipoDespacho(Long.valueOf(tipoDespacho))
     }
@@ -236,7 +231,7 @@ if (tipoFactura == 33) {
             codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call
             tpoDocRef = codeOut.siiCode
             //ref[i].setTpoDocRef(referenciaEntry.fiscalTaxDocumentTypeEnumId)
-            ref[i].setTpoDocRef(tpoDocRef)
+            ref[i].setTpoDocRef(tpoDocRef as String)
             ref[i].setRUTOtr(rutReceptor)
             Date date
             if (fechaRef instanceof java.sql.Date) {
@@ -271,7 +266,7 @@ if (tipoFactura == 33) {
         dscGlobal.setTpoMov(DscRcgGlobal.TpoMov.Enum.forString("D"))
         dscGlobal.setTpoValor(cl.sii.siiDte.DineroPorcentajeType.Enum.forString("%"))
         //dscGlobal.setValorDR(BigDecimal.valueOf(descuento));// Porcentaje Dscto
-        dscGlobal.setValorDR(BigDecimal.valueOf(Integer.valueOf(globalDiscount)));// Porcentaje Dscto
+        dscGlobal.setValorDR(BigDecimal.valueOf(Integer.valueOf(globalDiscount)))// Porcentaje Dscto
         dscGlobal.setGlosaDR(glosaDr)
         DscRcgGlobal[] dscGB = new DscRcgGlobal[1]
         dscGB[0] = dscGlobal
@@ -360,7 +355,7 @@ if (tipoFactura == 34) {
             codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
             tpoDocRef = codeOut.siiCode
             //ref[i].setTpoDocRef(referenciaEntry.fiscalTaxDocumentTypeEnumId)
-            ref[i].setTpoDocRef(tpoDocRef)
+            ref[i].setTpoDocRef(tpoDocRef as String)
             ref[i].setRUTOtr(rutReceptor)
             Date date
             if (fechaRef instanceof java.sql.Date) {
@@ -432,7 +427,7 @@ if (tipoFactura == 61) {
             ref[i].setFolioRef(referenciaEntry.folio.toString())
         } else {
             //ref[i].setTpoDocRef(referenciaEntry.fiscalTaxDocumentTypeEnumId)
-            ref[i].setTpoDocRef(tpoDocRef)
+            ref[i].setTpoDocRef(tpoDocRef as String)
             ref[i].setCodRef(codRef)
             ref[i].setFolioRef(referenciaEntry.folio.toString())
             if((referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-39") || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41")) && codRef.equals(1) ) {
@@ -675,7 +670,7 @@ if (tipoFactura == 56) {
             tpoDocRef = codeOut.siiCode
         }
         //ref[i].setTpoDocRef(referenciaEntry.fiscalTaxDocumentTypeEnumId)
-        ref[i].setTpoDocRef(tpoDocRef)
+        ref[i].setTpoDocRef(tpoDocRef as String)
         //ref[i].setTpoDocRef(referenciaEntry.fiscalTaxDocumentTypeEnumId)
         ref[i].setCodRef(codRef)
         ref[i].setFolioRef(referenciaEntry.folio.toString())
@@ -739,7 +734,7 @@ if (tipoFactura == 56) {
                 det[i].setPrcItem(Long.valueOf(priceItem))
                 det[i].setMontoItem(Long.valueOf(totalItemTmp))
             } else {
-                det[i].setMontoItem(0);// En simulación debe ser igual a monto de DTE anulada
+                det[i].setMontoItem(0)// En simulación debe ser igual a monto de DTE anulada
                 //det[i].setMontoItem(Long.valueOf(totalItemTmp));// En simulación debe ser igual a monto de DTE anulada
                 det[i].setNmbItem("ANULA DOCUMENTO DE REFERENCIA")
             }
@@ -779,7 +774,6 @@ if (tipoFactura == 56) {
             tot.setMntNeto(montoNeto)
             tot.setMntTotal(montoTotal)
             montoExento = montoExe
-            montoNeto = montoNeto
             montoIvaRecuperable = montoIva
             amount = montoTotal
         } else { // Cod con factura exenta en la NC
@@ -846,7 +840,7 @@ if (tipoFactura == 52) {
             codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
             tpoDocRef = codeOut.siiCode
             //ref[i].setTpoDocRef(referenciaEntry.fiscalTaxDocumentTypeEnumId)
-            ref[i].setTpoDocRef(tpoDocRef)
+            ref[i].setTpoDocRef(tpoDocRef as String)
             //ref[i].setCodRef(codRef)
             ref[i].setFolioRef(referenciaEntry.folio.toString())
         }
@@ -1014,7 +1008,7 @@ if (Signer.verify(doc2, "Documento")) {
 }
 
 // Registro de DTE en base de datos y generación de PDF -->
-fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoFacturaS}"
+fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoFactura}"
 context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([dte:facturaXml, issuerPartyId:issuerPartyId]).call())
 
 // Creación de registro en FiscalTaxDocument -->

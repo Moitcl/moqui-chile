@@ -40,13 +40,8 @@ rutEmisor = partyIdentificationList.first.idValue
 
 // Recuperacion de parametros de la organizacion
 context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
-passS = passCert
-resultS = pathResults
 plantillaS = templateRcof
-// Giro del emisor
-giroOutMap = ec.service.sync().name("mchile.DTEServices.get#GiroPrimario").parameters([partyId:activeOrgId]).call()
-giroEmisor = giroOutMap.description
-resultadoFirmado = resultS
+resultadoFirmado = pathResults
 
 // Buscar lista de DTE 39 que se hayan emitido/anulado
 mapBoleta = ec.service.sync().name("mchile.DTEServices.get#ResumenRcof").parameters([fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-39', activeOrgId:activeOrgId]).call()
@@ -62,7 +57,6 @@ idS = idS + datetime
 
 LectorFichero lectorFichero = new LectorFichero()
 
-PrivateKey key
 int tipoFactura
 int frmPago = 1
 int listSize = 0
@@ -92,14 +86,14 @@ dcf.setID("RCOF"+idS)
 
 // leo certificado y llave privada del archivo pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
-//ks.load(new FileInputStream(certS), passS.toCharArray())
-ks.load(certData.getBinaryStream(), passS.toCharArray())
+ks.load(certData.getBinaryStream(), passCert.toCharArray())
 String alias = ks.aliases().nextElement()
-ec.logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
+X509Certificate cert = (X509Certificate) ks.getCertificate(alias)
+String rutCertificado = Utilities.getRutFromCertificate(cert)
+ec.logger.warn("Usando certificado ${alias} con Rut ${rutCertificado}")
 
-X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
-String enviadorS = Utilities.getRutFromCertificate(x509)
-PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray())
+String enviadorS = Utilities.getRutFromCertificate(cert)
+PrivateKey pKey = (PrivateKey) ks.getKey(alias, passCert.toCharArray())
 
 //dcf.setVersion("1.0")
 
@@ -231,7 +225,7 @@ mapBoletaExenta.rangosFoliosAnulados.each { rangoField ->
 }
 resumen.setRangoAnuladosArray(rangoAnuladosArray)
 
-resumenArray[1] = resumen; // Resumen de Boleta Exenta Electrónica
+resumenArray[1] = resumen // Resumen de Boleta Exenta Electrónica
 
 // *****************************************************************
 // Resumen de Notas de Crédito (61)
@@ -277,7 +271,7 @@ mapNotaCredito.rangosFoliosAnulados.each { rangoField ->
 }
 resumen.setRangoAnuladosArray(rangoAnuladosArray)
 
-resumenArray[2] = resumen; // Resumen de Notas de Crédito
+resumenArray[2] = resumen // Resumen de Notas de Crédito
 dcf.setResumenArray(resumenArray)
 
 
@@ -310,15 +304,10 @@ uri = cf.getDocumentoConsumoFolios().getID()
 ec.logger.warn("URI: " + uri)
 
 ByteArrayOutputStream out = new ByteArrayOutputStream()
-consumoFoliosDocument.save(new File(resultS + "RCOF-" + uri + "-sinfirma.xml"), opts)
+consumoFoliosDocument.save(new File(pathResults + "RCOF-" + uri + "-sinfirma.xml"), opts)
 consumoFoliosDocument.save(out, opts)
 
 ec.logger.warn("XML2:" + consumoFoliosDocument)
-
-
-//Document doc2 = XMLUtil.parseDocument(out.toByteArray())
-//byte[] facturaXml = Signer.sign(doc2, uri, key, cert, uri, "DocumentoConsumoFolios")
-//doc2 = XMLUtil.parseDocument(facturaXml)
 
 FirmaRcof firmaLibro = new FirmaRcof()
 
@@ -326,17 +315,16 @@ SimpleDateFormat formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd")
 Date dateFechaEmision = new Date()
 fechaEmision = formatterFechaEmision.format(dateFechaEmision)
 
-//logger.warn("cert:" + certS + " passS: " + passS)
 outPDF=lectorFichero.crearFicheroMMDDFlex(resultadoFirmado, fchResol)
 outPDF+="/RCOF-firmado-"+uri+".xml"
 
-String mensaje=firmaLibro.firmarRcof(certS, passS, resultS + "RCOF-" + uri + "-sinfirma.xml",outPDF,10,"ENVIADO","qq","pp","xmlasdas","ESPECIAL")
+String mensaje=firmaLibro.firmarRcof(certS, passCert, pathResults + "RCOF-" + uri + "-sinfirma.xml",outPDF,10,"ENVIADO","qq","pp","xmlasdas","ESPECIAL")
 
 return
 
 // Registro de DTE en base de datos y generación de PDF
 //fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoFacturaS}"
-xml = "${resultS}BOL${tipoFactura}-${folio}.xml"
+xml = "${pathResults}BOL${tipoFactura}-${folio}.xml"
 pdf = "${pathPdf}BOL${tipoFactura}-${folio}.pdf"
 context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([pdf:pdf, dte:xml, issuerPartyId:activeOrgId, boleta:true]).call())
 

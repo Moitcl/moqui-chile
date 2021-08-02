@@ -11,7 +11,7 @@ import org.moqui.context.ExecutionContext
 ExecutionContext ec
 
 // Carga de RUT de empresa -->
-partyIdentificationList = ec.entity.find(mantle.party.PartyIdentification).condition([partyId:organizationPartyId, partyIdTypeEnumId:"PtidNationalTaxId"]).list()
+partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:organizationPartyId, partyIdTypeEnumId:"PtidNationalTaxId"]).list()
 if (!partyIdentificationList) {
     ec.message.addError("Organización $organizationPartyId no tiene RUT definido")
     return
@@ -27,7 +27,7 @@ fileRoot = pathRecibidas
 contentLocationXml = "${fileRoot}/${archivoXml}"
 docRrXml = ec.resource.getLocationReference(contentLocationXml)
 
-fileStream = xml.getInputStream()
+InputStream fileStream = xml.getInputStream()
 try { docRrXml.putStream(fileStream) } finally { fileStream.close() }
 
 // Carga PDF
@@ -56,19 +56,17 @@ EnvioDTE envio = EnvioDTEDocument.Factory.parse(xml.getInputStream()).getEnvioDT
 
 // Caratula
 rutEmisor = envio.setDTE.getCaratula().getRutEmisor().toString()
-rutReceptor = envio.setDTE.getCaratula().getRutReceptor().toString()
 
 // DTE
-montoNeto = envio.setDTE.getDTEArray().toString()
 cl.sii.siiDte.DTEDefType[] dteArray = envio.setDTE.getDTEArray()
 for (int i = 0; i < dteArray.size(); i++) {
     // tipo de DTE
     tipoDte = dteArray[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().toString()
     folioDte = dteArray[i].getDocumento().getEncabezado().getIdDoc().getFolio().toString()
 
-    ec.logger.warn("folio: " + folioDte)
+    ec.logger.warn("folio: ${folioDte}")
 
-    fechaEmision = dteArray[i].getDocumento().getEncabezado().getIdDoc().getFchEmis().toString()
+    String fechaEmision = dteArray[i].getDocumento().getEncabezado().getIdDoc().getFchEmis().toString()
     razonSocialEmisor = dteArray[i].getDocumento().getEncabezado().getEmisor().getRznSoc().toString()
     // Totales
     montoNeto = dteArray[i].getDocumento().getEncabezado().getTotales().getMntNeto().toString()
@@ -80,7 +78,7 @@ for (int i = 0; i < dteArray.size(); i++) {
     // Datos receptor
     rutReceptor = dteArray[i].getDocumento().getEncabezado().getReceptor().getRUTRecep().toString()
 
-    ec.logger.warn("RUT Receptor: " + rutReceptor)
+    ec.logger.warn("RUT Receptor: ${rutReceptor}")
 
     DateFormat formatter = new SimpleDateFormat("yyyy-MM-dd")
     Date date = formatter.parse(fechaEmision)
@@ -122,16 +120,16 @@ for (int i = 0; i < dteArray.size(); i++) {
         purchaseOutMap = ec.service.syn().name("mchile.PurchaseServices.create#Purchase").parameter("vendorPartyId", issuerPartyId).call()
         montoItem 0 as Long
         Detalle[] detalleArray = dteArray[i].getDocumento().getDetalleArray()
-        ec.logger.warn("Recorriendo detalles:" + detalleArray.size())
+        ec.logger.warn("Recorriendo detalles: ${detalleArray.size()}")
         for (int j = 0; j < detalleArray.size(); j++) {
             // Adición de items a orden
             ec.logger.warn("-----------------------------------")
             ec.logger.warn("Leyendo línea detalle " + j + ",")
-            ec.logger.warn("Indicador exento: " + detalleArray[j].getIndExe())
-            ec.logger.warn("Nombre item: " + detalleArray[j].getNmbItem())
-            ec.logger.warn("Cantidad: " + detalleArray[j].getQtyItem())
-            ec.logger.warn("Precio: " + detalleArray[j].getPrcItem())
-            ec.logger.warn("Monto: " + detalleArray[j].getMontoItem())
+            ec.logger.warn("Indicador exento: ${detalleArray[j].getIndExe()}")
+            ec.logger.warn("Nombre item: ${detalleArray[j].getNmbItem()}")
+            ec.logger.warn("Cantidad: ${detalleArray[j].getQtyItem()}")
+            ec.logger.warn("Precio: ${detalleArray[j].getPrcItem()}")
+            ec.logger.warn("Monto: ${detalleArray[j].getMontoItem()}")
             itemDescription = detalleArray[j].getNmbItem()
             quantity = detalleArray[j].getQtyItem()
             price = detalleArray[j].getPrcItem()
@@ -156,7 +154,7 @@ for (int i = 0; i < dteArray.size(); i++) {
                     ec.logger.warn("Buscando código item")
                     cl.sii.siiDte.DTEDefType.Documento.Detalle.CdgItem[] cdgItem = detalleArray[j].getCdgItemArray()
                     for (int k = 0; k < cdgItem.size(); k++) {
-                        ec.logger.warn("Leyendo codigo " + k + ", valor: " + cdgItem[k].getVlrCodigo())
+                        ec.logger.warn("Leyendo codigo ${k}, valor: ${cdgItem[k].getVlrCodigo()}")
                         pseudoId = cdgItem[k].getVlrCodigo()
                         productEv = ec.entity.find("mantle.product.Product").condition("pseudoId", pseudoId).one()
                         if (productEv) {

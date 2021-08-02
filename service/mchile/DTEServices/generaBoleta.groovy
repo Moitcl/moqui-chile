@@ -62,8 +62,7 @@ giroEmisor = giroOutMap.description
 
 // Recuperación del código SII de DTE
 codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]).call()
-tipoFactura = codeOut.siiCode
-tipoFacturaS = codeOut.siiCode
+Integer tipoFactura = codeOut.siiCode
 
 // Obtención de folio y path de CAF -->
 context.putAll(ec.service.sync().name("mchile.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:activeOrgId]).call())
@@ -79,11 +78,9 @@ String uriBoleta = "#"+idS
 AutorizacionType caf
 X509Certificate cert
 PrivateKey key
-int tipoFactura
 int frmPago = 1
 int listSize = 0
 
-tipoFactura = Integer.valueOf(tipoFacturaS)
 if(formaPago != null)
     frmPago = Integer.valueOf(formaPago)
 
@@ -125,8 +122,8 @@ String alias = ks.aliases().nextElement()
 
 cert = (X509Certificate) ks.getCertificate(alias)
 key = (PrivateKey) ks.getKey(alias, passS.toCharArray())
-
-ec.logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + cert)
+String rutCertificado = Utilities.getRutFromCertificate(cert)
+ec.logger.warn("Usando certificado ${alias} con Rut ${rutCertificado}")
 
 // Se recorre lista de productos para armar documento (detailList)
 //doc.addNewDocumento()
@@ -145,7 +142,7 @@ boleta.setVersion(new BigDecimal("1.0"))
 System.out.println("BOLETA2:"+boleta.xmlText())
 
 // Tipo de DTE
-boleta.getDocumento().getEncabezado().getIdDoc().setTipoDTE(BigInteger.valueOf(tipoFactura))
+boleta.getDocumento().getEncabezado().getIdDoc().setTipoDTE(tipoFactura as BigInteger)
 boleta.getDocumento().getEncabezado().getIdDoc().xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
 
 SimpleDateFormat formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd")
@@ -266,7 +263,7 @@ if (tipoFactura == 39) {
         } else {
             codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
             tpoDocRef = codeOut.siiCode
-            //ref[i].setTpoDocRef(tpoDocRef)
+            //ref[i].setTpoDocRef(tpoDocRef as String)
             ref[i].setRUTOtr(rutReceptor)
             SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd")
             Date date = formatter.parse(fechaRef)
@@ -353,7 +350,7 @@ if (tipoFactura == 41) {
             codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
             tpoDocRef = codeOut.siiCode
             //ref[i].setTpoDocRef(referenciaEntry.fiscalTaxDocumentTypeEnumId)
-            ref[i].setTpoDocRef(tpoDocRef)
+            ref[i].setTpoDocRef(tpoDocRef as String)
             ref[i].setRUTOtr(rutReceptor)
             SimpleDateFormat formatter = new SimpleDateFormat("yyyy-mm-dd")
             Date date = formatter.parse(fechaRef)
@@ -431,7 +428,7 @@ caratula.xsetTmstFirmaEnv(now)
 // Subtotales
 SubTotDTE[] subtDtes = new SubTotDTE[1]
 SubTotDTE subt = SubTotDTE.Factory.newInstance()
-subt.setTpoDTE(new BigInteger(tipoFactura.toString()))
+subt.setTpoDTE(tipoFactura as BigInteger)
 subt.setNroDTE(new BigInteger(1))
 subtDtes[0] = subt
 caratula.setSubTotDTEArray(subtDtes)
@@ -570,7 +567,7 @@ if (Signer.verify(doc2, "SetDTE")) {
 
 // Registro de DTE en base de datos y generación de PDF -->
 
-fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoFacturaS}"
+fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoFactura}"
 xml = "${resultS}BOL${tipoFactura}-${folio}.xml"
 pdf = "${pathPdf}BOL${tipoFactura}-${folio}.pdf"
 context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([dte:facturaXml, issuerPartyId:issuerPartyId, boleta:true, continua:continua]).call())

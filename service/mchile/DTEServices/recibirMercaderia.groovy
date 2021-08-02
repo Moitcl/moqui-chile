@@ -34,7 +34,6 @@ rutResponde = partyIdentificationList.idValue[0]
 // Recuperacion de parametros de la organizacion -->
 context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
 
-passS = passCert
 resultS = pathAceptaciones
 rutEnviador = rutEnvia
 
@@ -45,13 +44,13 @@ context.putAll(ec.service.sync().name("create#mchile.dte.AceptacionDte").paramet
 
 // Recuperación de datos para emitir aceptación
 dteEv = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).selectField("contentLocation").one()
-envioRecibido = dteEv.contentLocation
+String envioRecibido = dteEv.contentLocation
 idS = (int) (System.currentTimeMillis() / 1000L)
 
 X509Certificate cert
 PrivateKey key
 
-EnvioDTEDocument envio = null
+EnvioDTEDocument envio
 try {
     envio = EnvioDTEDocument.Factory.parse(new FileInputStream(envioRecibido))
 } catch (Exception e) {
@@ -65,7 +64,7 @@ String errorEsquema = ""
 String errorFirma = ""
 
 if( !resl.isOk()) {
-    ec.logger.error("Envio recibido: Estructura XML incorrecta: " + resl.getMessage())
+    ec.logger.error("Envio recibido: Estructura XML incorrecta: ${resl.getMessage()}")
     errorEsquema = resl.getMessage()
     envioEsquemaOK = false
 } else {
@@ -85,22 +84,20 @@ String rutContribuyente = rutResponde
 rutEmisor = envio.getEnvioDTE().getSetDTE().getCaratula().getRutEmisor()
 
 if(!rutContribuyente.equals(envio.getEnvioDTE().getSetDTE().getCaratula().getRutReceptor())) {
-    ec.logger.error("Error: carátula de envioDTE recibido dice que rut de receptor es: " + envio.getEnvioDTE().getSetDTE().getCaratula().getRutReceptor() +
-            " el cual es distinto al de nuestra empresa: " + rutContribuyente)
+    ec.logger.error("Error: carátula de envioDTE recibido dice que rut de receptor es: ${envio.getEnvioDTE().getSetDTE().getCaratula().getRutReceptor()} el cual es distinto al de nuestra empresa: ${rutContribuyente}")
     envioRutOK = false
 }
 
-//Certificado cert = new Certificado()
-//CertificadoLlave certLlave = cert.getCertificado(certS, passS)
-// leo certificado y llave privada del archivo pkcs12
+// leo certificado y llave privada del pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
-//ks.load(new FileInputStream(certS), passS.toCharArray())
-ks.load(certData.getBinaryStream(), passS.toCharArray())
+//ks.load(new FileInputStream(certS), passCert.toCharArray())
+ks.load(certData.getBinaryStream(), passCert.toCharArray())
 String alias = ks.aliases().nextElement()
-ec.logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
-
 cert = (X509Certificate) ks.getCertificate(alias)
-key = (PrivateKey) ks.getKey(alias, passS.toCharArray())
+String rutCertificado = Utilities.getRutFromCertificate(cert)
+ec.logger.warn("Usando certificado ${alias}, Rut ${rutCertificado}")
+
+key = (PrivateKey) ks.getKey(alias, passCert.toCharArray())
 
 ReciboDocument recibo = ReciboDocument.Factory.newInstance()
 ReciboDefType rec = recibo.addNewRecibo()
@@ -138,17 +135,15 @@ for (DTEDefType dte : envio.getEnvioDTE().getSetDTE().getDTEArray()) {
 
     boolean firmaOKDTE = true
     if(!resl.isOk()) {
-        ec.logger.warn("Validando DTE ID " + dte.getDocumento().getID() + " : Firma XML Incorrecta: " + resl.getMessage())
+        ec.logger.warn("Validando DTE ID ${dte.getDocumento().getID()}: Firma XML Incorrecta: ${resl.getMessage()}")
         firmaOKDTE = false
     } else {
-        ec.logger.warn("Validando DTE ID " + dte.getDocumento().getID() + " : Firma XML OK")
+        ec.logger.warn("Validando DTE ID ${dte.getDocumento().getID()}: Firma XML OK")
     }
     boolean rutDTEOK = true
 
     if(!rutContribuyente.equals(dte.getDocumento().getEncabezado().getReceptor().getRUTRecep())) {
-        ec.logger.warn("Error, DTE id: " + dte.getDocumento().getID() + " folio: " + dte.getDocumento().getEncabezado().getIdDoc().getFolio()
-                + " tipo: " + dte.getDocumento().getEncabezado().getIdDoc().getTipoDTE().toString() + " contiene RUT de receptor ["
-                + dte.getDocumento().getEncabezado().getReceptor().getRUTRecep() + "] que no corresponde a nuestra empresa [" + rutContribuyente + "]")
+        ec.logger.warn("Error, DTE id: ${dte.getDocumento().getID()} folio: ${dte.getDocumento().getEncabezado().getIdDoc().getFolio()} tipo: ${dte.getDocumento().getEncabezado().getIdDoc().getTipoDTE()} contiene RUT de receptor [${dte.getDocumento().getEncabezado().getReceptor().getRUTRecep()}] que no corresponde a nuestra empresa [${rutContribuyente}]")
         rutDTEOK = false
     }
     DocumentoRecibo dr
@@ -207,18 +202,9 @@ try {
 // firma del recibo
 //recibo.getRecibo().sign(key, cert)
 
-
-// leo certificado y llave privada del archivo pkcs12
-ks = KeyStore.getInstance("PKCS12")
-//ks.load(new FileInputStream(certS), passS.toCharArray())
-ks.load(certData.getBinaryStream(), passS.toCharArray())
-String alias2 = ks.aliases().nextElement()
-ec.logger.warn("Usando certificado " + alias2 + " del archivo PKCS12: " + certS)
-
 //rec.setDocumentoRecibo(dr)
 rec.setVersion(new BigDecimal("1.0"))
 rec.sign(key, cert)
-
 
 HashMap<String, String> namespaces = new HashMap<String, String>()
 namespaces.put("", "http://www.sii.cl/SiiDte")

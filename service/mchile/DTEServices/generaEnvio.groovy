@@ -50,7 +50,7 @@ documentIdList.each { documentId ->
     fiscalTaxDocument = documentId
     dteEv = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).selectField("contentLocation").one()
     xml = dteEv.contentLocation
-    DTEList[j] = ec.resource.getLocationReference(xml)
+    DTEList[j] = ec.resource.getLocationReference((String)xml)
     ec.logger.warn("Agregado: " + DTEList[j])
     j++
 }
@@ -61,7 +61,7 @@ if (rutReceptor) {
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rutenviador]).call()
 
 // Construyo Envio
-EnvioDTEDocument envio = EnvioDTEDocument.Factory.parse(ec.resource.getLocationStream(plantillaEnvio))
+EnvioDTEDocument envio = EnvioDTEDocument.Factory.parse(ec.resource.getLocationStream((String)plantillaEnvio))
 
 // Debo agregar el schema location (Sino SII rechaza)
 XmlCursor cursor = envio.newCursor()

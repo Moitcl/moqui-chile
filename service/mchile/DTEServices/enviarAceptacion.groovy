@@ -93,16 +93,14 @@ if(!rutContribuyente.equals(envio.getEnvioDTE().getSetDTE().getCaratula().getRut
     envioRutOK = false
 }
 
-//Certificado cert = new Certificado()
-//CertificadoLlave certLlave = cert.getCertificado(certS, passS)
-// leo certificado y llave privada del archivo pkcs12
+// certificado y llave privada del pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
-//ks.load(new FileInputStream(certS), passS.toCharArray())
 ks.load(certData.getBinaryStream(), passS.toCharArray())
 String alias = ks.aliases().nextElement()
-ec.logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
-
 cert = (X509Certificate) ks.getCertificate(alias)
+String rutCertificado = Utilities.getRutFromCertificate(cert)
+ec.logger.warn("Usando certificado ${alias} con Rut ${rutCertificado}")
+
 key = (PrivateKey) ks.getKey(alias, passS.toCharArray())
 
 ArrayList<RecepcionDTE> arrRecepcionDTE = new ArrayList<RecepcionDTE>()
@@ -118,17 +116,16 @@ rre.setEstadoRecepEnv(0)
 rre.setRecepEnvGlosa("Envio Recibido Conforme")
 
 fchRecep = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date())).toString()
-envioDteId = envio.getEnvioDTE().getSetDTE().getID()
 estadoRecepEnvEnumId = 0
 
 if (envioFirmaOK && envioEsquemaOK && envioRutOK ) {
     X509Certificate x509 = XMLUtil.getCertificate(envio.getEnvioDTE().getSignature())
-    ec.logger.warn("Firmado por: " + x509.getSubjectX500Principal().getName())
+    ec.logger.warn("Firmado por: ${x509.getSubjectX500Principal().getName()}, Rut ${Utilities.getRutFromCertificate(x509)}")
 
     for (DTEDefType dte : envio.getEnvioDTE().getSetDTE().getDTEArray()) {
 
         x509 = XMLUtil.getCertificate(dte.getSignature())
-        ec.logger.warn("DTE ID " + dte.getDocumento().getID() + " Firmado por: " + x509.getSubjectX500Principal().getName())
+        ec.logger.warn("DTE ID ${dte.getDocumento().getID()} Firmado por: ${x509.getSubjectX500Principal().getName()}, Rut ${Utilities.getRutFromCertificate(x509)}")
         ec.logger.warn("Por almacenar en " + dirS)
         String nombreDTE = dirS + "dte-"+dte.getDocumento().getEncabezado().getEmisor().getRUTEmisor()+"-"+dte.getDocumento().getEncabezado().getIdDoc().getFolio()+".xml"
         rutEmisor = dte.getDocumento().getEncabezado().getEmisor().getRUTEmisor()
@@ -289,17 +286,6 @@ opts.setSavePrettyPrintIndent(0)
 opts.setSaveSuggestedPrefixes(namespaces)
 opts.setCharacterEncoding("ISO-8859-1")
 
-// leo certificado y llave privada del archivo pkcs12
-ks = KeyStore.getInstance("PKCS12")
-//ks.load(new FileInputStream(certS), passS.toCharArray())
-ks.load(certData.getBinaryStream(), passS.toCharArray())
-String alias2 = ks.aliases().nextElement()
-ec.logger.warn("Usando certificado " + alias2 + " del archivo PKCS12: " + certS)
-
-X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
-String enviadorS = Utilities.getRutFromCertificate(x509)
-PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray())
-
 XmlCursor cursor = respuesta.newCursor()
 if(cursor.toFirstChild()) {
     cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte RespuestaEnvioDTE_v10.xsd")
@@ -309,12 +295,11 @@ try {
 } catch (Exception e) {
     ec.logger.warn("Error al obtener respuesta con formato antes de firmar", e)
 }
-uri = "#RESP-10000"
 try {
     ec.logger.warn("Respuesta antes de firmar: " + new String(respuesta.getBytes()))
     //respuesta.sign(certLlave.getPkey(), certLlave.getX509())
-    respuesta.sign(pKey, x509)
-    //respDTE.sign(pKey, x509)
+    respuesta.sign(key, cert)
+    //respDTE.sign(key, cert)
 } catch (Exception e) {
     ec.logger.error("Error al firmar respuesta" + e.printStackTrace())
     return
@@ -323,12 +308,6 @@ try {
 opts = new XmlOptions()
 opts.setCharacterEncoding("ISO-8859-1")
 opts.setSaveImplicitNamespaces(namespaces)
-
-uri = ""
-
-now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()))
-
-uri = "#" + uri
 
 opts = new XmlOptions()
 opts.setCharacterEncoding("ISO-8859-1")

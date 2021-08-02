@@ -17,7 +17,7 @@ if (!partyIdentificationList) {
 }
 rut = partyIdentificationList.idValue[0]
 // Validación rut
-salidaRut = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rut]).call()
+ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rut]).call()
 // Carga XML
 archivoXml = xml.getName()
 context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
@@ -26,7 +26,7 @@ contentLocationXml = "${fileRoot}/${archivoXml}"
 docRrXml = ec.resource.getLocationReference(contentLocationXml)
 
 // Se guardan ambos archivos
-fileStream = xml.getInputStream()
+InputStream fileStream = xml.getInputStream()
 try { docRrXml.putStream(fileStream) } finally { fileStream.close() }
 
 // Carga PDF
@@ -39,14 +39,7 @@ if (archivoPdf) {
     try { docRrPdf.putStream(fileStream) } finally { fileStream.close() }
 }
 
-montoNeto = 0
 totalIva = 0 as Long
-rutEmisor = ""
-rutReceptor = ""
-razonSocialEmisor = ""
-tipoDte = ""
-folioDte = ""
-fechaEmision = ""
 
 // Debo meter el namespace porque SII no lo genera
 HashMap<String, String> namespaces = new HashMap<String, String>()
@@ -65,8 +58,8 @@ opts.setLoadAdditionalNamespaces(namespaces)
 
 cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA boleta = EnvioBOLETADocument.Factory.parse(xml.getInputStream()).getEnvioBOLETA()
 // Caratula
-rutEmisor = boleta.setDTE.getCaratula().getRutEmisor().toString()
-rutReceptor = boleta.setDTE.getCaratula().getRutReceptor().toString()
+String rutEmisor = boleta.setDTE.getCaratula().getRutEmisor().toString()
+String rutReceptor = boleta.setDTE.getCaratula().getRutReceptor().toString()
 
 ec.logger.warn("Emisor: " + rutEmisor + ", receptor: " + rutReceptor)
 
@@ -79,7 +72,7 @@ for (int i = 0; i < boletaArray.size(); i++) {
     // tipo de DTE
     tipoDte = boletaArray[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().toString()
     folioDte = boletaArray[i].getDocumento().getEncabezado().getIdDoc().getFolio().toString()
-    fechaEmision = boletaArray[i].getDocumento().getEncabezado().getIdDoc().getFchEmis().toString()
+    String fechaEmision = boletaArray[i].getDocumento().getEncabezado().getIdDoc().getFchEmis().toString()
     razonSocialEmisor = boletaArray[i].getDocumento().getEncabezado().getEmisor().getRznSocEmisor().toString()
     // Totales
     montoNeto = boletaArray[i].getDocumento().getEncabezado().getTotales().getMntNeto().toString()
@@ -88,8 +81,8 @@ for (int i = 0; i < boletaArray.size(); i++) {
     //tasaIva = boletaArray[i].getDocumento().getEncabezado().getTotales().getTasaIVA().toString()
     iva = boletaArray[i].getDocumento().getEncabezado().getTotales().getIVA().toString()
 
-    ec.logger.warn("Leído: " + tipoDte + " - " + folioDte + " - " + fechaEmision + " - " + montoNeto + " - " + iva)
-    ec.logger.warn("MontoExe: " + montoExento + "- Razon social: " + razonSocialEmisor)
+    ec.logger.warn("Leído: ${tipoDte} - ${folioDte} - ${fechaEmision} - ${montoNeto} - ${iva}")
+    ec.logger.warn("MontoExe: ${montoExento} - Razon social: ${razonSocialEmisor}")
     DateFormat formatter = new SimpleDateFormat("yyyy-MM-dd")
     Date date = formatter.parse(fechaEmision)
     ec.logger.warn("Date: " + date)
@@ -109,7 +102,7 @@ for (int i = 0; i < boletaArray.size(); i++) {
     }
     issuerPartyId = partyIdentificationList.partyId[0]
     // Verificación de Razón Social en XML vs lo guardado en Moqui
-    partyEv = ec.entity.find("mantle.party.Party").condition("partyId, issuerPartyId").one()
+    partyEv = ec.entity.find("mantle.party.Party").condition("partyId", issuerPartyId).one()
     if (!partyEv) {
         ec.message.addError("Receptor no existe")
         return
@@ -140,16 +133,16 @@ for (int i = 0; i < boletaArray.size(); i++) {
     pseudoId = ""
     montoItem = 0 as Long
     Detalle[] detalleArray = boletaArray[i].getDocumento().getDetalleArray()
-    ec.logger.warn("Recorriendo detalles:" + detalleArray.size())
+    ec.logger.warn("Recorriendo detalles: ${detalleArray.size()}")
     for (int j = 0; j < detalleArray.size(); j++) {
         // Adición de items a orden
         ec.logger.warn("-----------------------------------")
         ec.logger.warn("Leyendo línea detalle " + j + ",")
-        ec.logger.warn("Indicador exento: " + detalleArray[j].getIndExe())
-        ec.logger.warn("Nombre item: " + detalleArray[j].getNmbItem())
-        ec.logger.warn("Cantidad: " + detalleArray[j].getQtyItem())
-        ec.logger.warn("Precio: " + detalleArray[j].getPrcItem())
-        ec.logger.warn("Monto: " + detalleArray[j].getMontoItem())
+        ec.logger.warn("Indicador exento: ${detalleArray[j].getIndExe()}")
+        ec.logger.warn("Nombre item: ${detalleArray[j].getNmbItem()}")
+        ec.logger.warn("Cantidad: ${detalleArray[j].getQtyItem()}")
+        ec.logger.warn("Precio: ${detalleArray[j].getPrcItem()}")
+        ec.logger.warn("Monto: ${detalleArray[j].getMontoItem()}")
         itemDescription = detalleArray[j].getNmbItem()
         quantity = detalleArray[j].getQtyItem()
         price = detalleArray[j].getPrcItem()
@@ -178,7 +171,7 @@ for (int i = 0; i < boletaArray.size(); i++) {
                 ec.logger.warn("Buscando código item")
                 cl.sii.siiDte.DTEDefType.Documento.Detalle.CdgItem[] cdgItem = detalleArray[j].getCdgItemArray()
                 for (int k = 0; k < cdgItem.size(); k++) {
-                    ec.logger.warn("Leyendo codigo "+k+", valor: " + cdgItem[k].getVlrCodigo())
+                    ec.logger.warn("Leyendo codigo ${k}, valor: ${cdgItem[k].getVlrCodigo()}")
                     pseudoId = cdgItem[k].getVlrCodigo()
 
                     productEv = ec.entity.find("mantle.product.Product").condition("pseudoId", pseudoId).one()
