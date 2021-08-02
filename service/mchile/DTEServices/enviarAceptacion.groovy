@@ -49,7 +49,7 @@ context.putAll(ec.service.sync().name("create#mchile.dte.AceptacionDte").paramet
 
 //  Recuperación de datos para emitir aceptación
 dteField = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).selectField("contentLocation").one()
-envioRecibido = dteField.contentLocation
+String envioRecibido = dteField.contentLocation
 idS = (int) (System.currentTimeMillis() / 1000L)
 rutEmisor = ""
 rutReceptor = ""
