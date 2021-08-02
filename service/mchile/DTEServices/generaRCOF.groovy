@@ -21,7 +21,7 @@ import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument.ConsumoFolios.Documento
 import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument.ConsumoFolios.DocumentoConsumoFolios.Resumen.RangoUtilizados
 import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument.ConsumoFolios.DocumentoConsumoFolios.Resumen.RangoAnulados
 
-ExecutionContext ec
+ExecutionContext ec = context.ec
 
 if (fechaInicio > fechaFin) {
     ec.message.addError("Fecha fin debe ser mayor o igual a fecha inicio")
@@ -39,7 +39,7 @@ rutEmisor = partyIdentificationList.first.idValue
 // ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rutReceptor]).call()
 
 // Recuperacion de parametros de la organizacion
-context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
 plantillaS = templateRcof
 resultadoFirmado = pathResults
 
@@ -325,7 +325,7 @@ return
 //fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoFacturaS}"
 xml = "${pathResults}BOL${tipoFactura}-${folio}.xml"
 pdf = "${pathPdf}BOL${tipoFactura}-${folio}.pdf"
-context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([pdf:pdf, dte:xml, issuerPartyId:activeOrgId, boleta:true]).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([pdf:pdf, dte:xml, issuerPartyId:activeOrgId, boleta:true]).call())
 
 // Creación de registro en FiscalTaxDocument
 dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio]).forUpdate(true).one()
@@ -343,7 +343,7 @@ Timestamp ts = new Timestamp(date.getTime())
 dteEv.date = ts
 dteEv.update()
 createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xml, contentDate:ts]
-context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
 createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts]
-context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
 fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId

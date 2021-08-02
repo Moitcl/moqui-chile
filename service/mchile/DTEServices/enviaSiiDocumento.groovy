@@ -6,11 +6,13 @@ import cl.nic.dte.net.ConexionSii
 import cl.nic.dte.util.Utilities
 import cl.sii.siiDte.RECEPCIONDTEDocument
 
-ExecutionContext ec
+import org.moqui.context.ExecutionContext
+
+ExecutionContext ec = context.ec
 
 // Validación rut -->
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", enviadorS).call()
-context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", activeOrgId).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", activeOrgId).call())
 
 ConexionSii con = new ConexionSii()
 // leo certificado y llave privada del archivo pkcs12

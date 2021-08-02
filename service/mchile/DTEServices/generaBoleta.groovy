@@ -29,7 +29,7 @@ import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE
 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula
 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula.SubTotDTE
 
-ExecutionContext ec
+ExecutionContext ec = context.ec
 
 partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:activeOrgId, partyIdTypeEnumId:"PtidNationalTaxId"]).list()
 if (!partyIdentificationList) {
@@ -42,7 +42,7 @@ rutEmisor = partyIdentificationList.idValue[0]
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutReceptor).call()
 
 // Recuperacion de parametros de la organizacion -->
-context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", activeOrgId).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", activeOrgId).call())
 passS = passCert
 resultS = pathResults
 // REVISAR
@@ -65,7 +65,7 @@ codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameters([f
 Integer tipoFactura = codeOut.siiCode
 
 // Obtención de folio y path de CAF -->
-context.putAll(ec.service.sync().name("mchile.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:activeOrgId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:activeOrgId]).call())
 codRef = 0 as Integer
 idS = "BO"
 
@@ -570,7 +570,7 @@ if (Signer.verify(doc2, "SetDTE")) {
 fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoFactura}"
 xml = "${resultS}BOL${tipoFactura}-${folio}.xml"
 pdf = "${pathPdf}BOL${tipoFactura}-${folio}.pdf"
-context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([dte:facturaXml, issuerPartyId:issuerPartyId, boleta:true, continua:continua]).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([dte:facturaXml, issuerPartyId:issuerPartyId, boleta:true, continua:continua]).call())
 
 // Creación de registro en FiscalTaxDocument
 dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio]).forUpdate(true).one()
@@ -593,15 +593,15 @@ dteFeild.update()
 updateMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, emailEmisor:emailEmisor, amount:amount,
              montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmision,
              montoExento:montoExento, montoIVARecuperable:montoIVARecuperable]
-context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(updateMap).call())
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(updateMap).call())
 
 // Creacion de registros en FiscalTaxDocumentContent
 xmlName = "dbresource://moit/erp/dte/${rutEmisor}/DTE${tipoFactura}-${folio}.xml"
 pdfName = "dbresource://moit/erp/dte/${rutEmisor}/DTE${tipoFactura}-${folio}.pdf"
 createMapBase = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, contentDte:ts]
-context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlName]).call())
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlName]).call())
 ec.resource.getLocationReference(xmlName).putBytes(facturaXml)
 
-context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfName]).call())
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfName]).call())
 ec.resource.getLocationReference(pdfName).putBytes(pdfBytes)
 fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId

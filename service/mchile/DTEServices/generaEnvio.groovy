@@ -25,9 +25,10 @@ import cl.sii.siiDte.EnvioDTEDocument
 import cl.sii.siiDte.FechaHoraType
 import cl.sii.siiDte.EnvioDTEDocument.EnvioDTE.SetDTE.Caratula.SubTotDTE
 
-ExecutionContext ec
+ExecutionContext ec = context.ec
+
 // Recuperacion de parametros de la organizacion
-context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
 passS = passCert
 plantillaEnvio = templateEnvio
 //giro = giroEmisor
@@ -159,7 +160,7 @@ if (Signer.verify(doc2, "SetDTE")) {
 // Se guarda referencia a XML de envío en BD -->
 documentIdList.each { documentId ->
     createMap = [fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Misc', contentLocation:archivoEnvio, contentDate:ts]
-    context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
+    ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
 
     // Se marca DTE como enviada -->
     idDte = documentId

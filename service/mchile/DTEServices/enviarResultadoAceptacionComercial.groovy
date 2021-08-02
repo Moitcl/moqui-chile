@@ -20,7 +20,7 @@ import cl.sii.siiDte.RespuestaDTEDocument.RespuestaDTE.Resultado.Caratula
 import cl.sii.siiDte.RespuestaDTEDocument.RespuestaDTE.Resultado.ResultadoDTE
 import cl.sii.siiDte.FechaHoraType
 
-ExecutionContext ec
+ExecutionContext ec = context.ec
 
 // No se envían aceptaciones por boletas
 if ((fiscalTaxDocumentTypeEnumId == 'Ftdt-39') || (fiscalTaxDocumentTypeEnumId == 'Ftdt-41') || (fiscalTaxDocumentTypeEnumId == 'PvtBoleta')) {
@@ -35,7 +35,7 @@ if (!partyIdentificationList) {
 rutResponde = partyIdentificationList.idValue[0]
 
 // Recuperacion de parametros de la organizacion
-context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", activeOrgId).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", activeOrgId).call())
 
 passS = passCert
 resultS = pathAceptaciones
@@ -44,7 +44,7 @@ dirS = pathRecibidos
 // Se guarda aceptacion para obtener el aceptacionDteId
 createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nmbContacto:nmbContacto,
              fonoContacto:fonoContacto, mailContacto:mailContacto, issuerPartyId:activeOrgId]
-context.putAll(ec.service.sync().name("create#mchile.dte.AceptacionDte").parameters(createMap).call())
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.AceptacionDte").parameters(createMap).call())
 
 // Recuperación de datos para emitir aceptación -->
 dteEv = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).selectField("contentLocation").one()
@@ -311,7 +311,7 @@ fiscalTaxDocumentEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("
 folioAceptacion = fiscalTaxDocumentEv.fiscalTaxDocumentNumber
 createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nmbContacto:nmbContacto,
              fonoContacto:fonoContacto, mailContacto:mailContacto]
-context.putAll(ec.service.sync().name("create#mchile.dte.AceptacionDte").parameters(createMap).call())
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.AceptacionDte").parameters(createMap).call())
 
 aceptacionEv = ec.entity.find("mchile.dte.AceptacionDte").condition("aceptacionDteId", aceptacionDteId).forUpdate(true).one()
 

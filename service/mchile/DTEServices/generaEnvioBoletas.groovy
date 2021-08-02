@@ -25,10 +25,10 @@ import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula
 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula.SubTotDTE
 import cl.sii.siiDte.FechaHoraType
 
-ExecutionContext ec
+ExecutionContext ec = context.ec
 
 // Recuperacion de parametros de la organizacion -->
-context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
 if (!templateEnvio) {
     ec.message.addError("Organizacion no tiene plantilla para envio al SII")
     return
@@ -56,7 +56,7 @@ if (recepS)
     ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:recepS]).call()
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:enviadorS]).call()
 
-context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
 passS = passCert
 pathResultS = pathResults
 plantillaEnvio = templateEnvioBoleta
@@ -237,7 +237,7 @@ if (Signer.verify(doc2, "SetDTE")) {
 // Se guarda referencia a XML de envío en BD -->
 documentIdList.each { documentId ->
     createMap = [fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Misc', contentLocation:archivoEnvio, contentDate:ts]
-    context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
+    ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
 
 // Se marca DTE como enviada
     idDte = documentId

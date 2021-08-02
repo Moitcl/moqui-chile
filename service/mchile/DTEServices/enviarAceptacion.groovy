@@ -22,7 +22,7 @@ import cl.sii.siiDte.RespuestaDTEDocument.RespuestaDTE.Resultado.RecepcionEnvio.
 import cl.sii.siiDte.RespuestaDTEDocument.RespuestaDTE.Resultado.ResultadoDTE
 import cl.sii.siiDte.FechaHoraType
 
-ExecutionContext ec
+ExecutionContext ec = context.ec
 
 // No se envían aceptaciones por boletas -->
 if ((fiscalTaxDocumentTypeEnumId == 'Ftdt-39') || (fiscalTaxDocumentTypeEnumId == 'Ftdt-41') || (fiscalTaxDocumentTypeEnumId == 'PvtBoleta')) {
@@ -38,14 +38,14 @@ if (!partyIdentificationList) {
 rutResponde = partyIdentificationList.first.idValue
 
 // Recuperacion de parametros de la organizacion
-context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", activeOrgId).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", activeOrgId).call())
 passS = passCert
 resultS = pathAceptaciones
 dirS = pathRecibidas
 
 // Se guarda aceptacion para obtener el aceptacionDteId
 createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nmbContacto:nmbContacto, fonoContacto:fonoContacto, mailContacto:mailContacto, issuerPartyId:activeOrgId]
-context.putAll(ec.service.sync().name("create#mchile.dte.AceptacionDte").parameters(createMap).call())
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.AceptacionDte").parameters(createMap).call())
 
 //  Recuperación de datos para emitir aceptación
 dteEv = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).selectField("contentLocation").one()
@@ -340,7 +340,7 @@ folioAceptacion = fiscalTaxDocumentEv.fiscalTaxDocumentNumber
 createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nmbContacto:nmbContacto, fonoContacto:fonoContacto, mailContacto:mailContacto,
              fchRecep:fchRecep, codEnvio:idS, rutEmisor:rutEmisor, envioDteId:"RESP-${idS}", rutReceptor:rutReceptor, estadoRecepEnvEnumId:estadoRecepEnvEnumId, nroDetalles:1,
              xml:"${resultS}RESP-${idS}.xml"]
-context.putAll(ec.service.sync().name("create#mchile.dte.AceptacionDte").parameters(createMap).call())
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.AceptacionDte").parameters(createMap).call())
 
 /*
 bodyParameters = [fiscalTaxDocumentId:folioAceptacion, nmbContacto:nmbContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]

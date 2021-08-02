@@ -7,7 +7,7 @@ import cl.sii.siiDte.boletas.EnvioBOLETADocument
 import cl.sii.siiDte.boletas.BOLETADefType.Documento.Detalle
 import org.moqui.context.ExecutionContext
 
-ExecutionContext ec
+ExecutionContext ec = context.ec
 
 // Carga de RUT de empresa
 partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:activeOrgId, partyIdTypeEnumId:"PtidNationalTaxId"])
@@ -20,7 +20,7 @@ rut = partyIdentificationList.idValue[0]
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rut]).call()
 // Carga XML
 archivoXml = xml.getName()
-context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
 fileRoot = pathRecibidas
 contentLocationXml = "${fileRoot}/${archivoXml}"
 docRrXml = ec.resource.getLocationReference(contentLocationXml)
@@ -164,7 +164,7 @@ for (int i = 0; i < boletaArray.size(); i++) {
         if (!invoiceId) {
             if (productMatch == 'false') {
 
-                context.putAll(ec.service.sync().name("mantle.order.OrderServices.create#OrderItem").parameters([orderId:purchaseOutMap.orderId,
+                ec.context.putAll(ec.service.sync().name("mantle.order.OrderServices.create#OrderItem").parameters([orderId:purchaseOutMap.orderId,
                                    orderPartSeqId:purchaseOutMap.orderPartSeqId, itemDescription:itemDescription, quantity:quantity, unitAmount:price, itemTypeEnumId:'ItemExpOther']).call())
             } else {
                 // Se especificó buscar productos preexistentes, pueden haber hasta 5 códigos
@@ -178,11 +178,11 @@ for (int i = 0; i < boletaArray.size(); i++) {
                     if (productEv) {
                         productId = productEv.productId
                         ec.logger.info("Agregando producto preexistente $productId, cantidad $quantity ***************")
-                        context.putAll(ec.service.sync().name("mantle.order.OrderServices.add#OrderProductQuantity").parameters([orderId:purchaseOutMap.orderId,
+                        ec.context.putAll(ec.service.sync().name("mantle.order.OrderServices.add#OrderProductQuantity").parameters([orderId:purchaseOutMap.orderId,
                             orderPartSeqId:purchaseOutMap.orderPartSeqId, productId:productId, description:itemDescription, quantity:quantity, unitAmount:price]).call())
                     } else {
                         ec.logger.warn("Producto $itemDescription no existe en el sistema, se creará como genérico")
-                        context.putAll(ec.service.sync().name("mantle.order.OrderServices.create#OrderItem").parameters([orderId:purchaseOutMap.orderId,
+                        ec.context.putAll(ec.service.sync().name("mantle.order.OrderServices.create#OrderItem").parameters([orderId:purchaseOutMap.orderId,
                             orderPartSeqId:purchaseOutMap.orderPartSeqId, itemDescription:itemDescription, quantity:quantity, unitAmount:price, itemTypeEnumId:'ItemExpOther']).call())
                     }
                 }
@@ -192,7 +192,7 @@ for (int i = 0; i < boletaArray.size(); i++) {
     ec.logger.warn("Total IVA: $totalIva")
     if (!invoiceId) {
         if (totalIva > 0) {
-            context.putAll(ec.service.sync().name("mantle.order.OrderServices.create#OrderItem").parameters([orderId:purchaseOutMap.orderId,
+            ec.context.putAll(ec.service.sync().name("mantle.order.OrderServices.create#OrderItem").parameters([orderId:purchaseOutMap.orderId,
                                 orderPartSeqId:purchaseOutMap.orderPartSeqId, itemDescription:'Monto IVA Total', quantity:1, unitAmount:totalIva,
                                 itemTypeEnumId:'ItemVatTax']).call())
         }
@@ -210,10 +210,10 @@ for (int i = 0; i < boletaArray.size(); i++) {
     mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call()
     // Se guarda contenido asociado a la DTE, todas las DTE que vienen en el mismo envío comparten el mismo XML
     createMap = [fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts]
-    context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
+    ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
     if (contentLocationPdf) {
         createMap = [fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts]
-        context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
+        ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
 
     }
 }
