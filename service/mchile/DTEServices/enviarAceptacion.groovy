@@ -95,7 +95,7 @@ if(!rutContribuyente.equals(envio.getEnvioDTE().getSetDTE().getCaratula().getRut
 
 // certificado y llave privada del pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
-ks.load(certData.getBinaryStream(), passS.toCharArray())
+ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
 String alias = ks.aliases().nextElement()
 cert = (X509Certificate) ks.getCertificate(alias)
 String rutCertificado = Utilities.getRutFromCertificate(cert)

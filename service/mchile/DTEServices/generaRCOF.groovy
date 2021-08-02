@@ -86,13 +86,12 @@ dcf.setID("RCOF"+idS)
 
 // leo certificado y llave privada del archivo pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
-ks.load(certData.getBinaryStream(), passCert.toCharArray())
+ks.load(new ByteArrayInputStream(certData.decodeBase64()), passCert.toCharArray())
 String alias = ks.aliases().nextElement()
 X509Certificate cert = (X509Certificate) ks.getCertificate(alias)
 String rutCertificado = Utilities.getRutFromCertificate(cert)
 ec.logger.warn("Usando certificado ${alias} con Rut ${rutCertificado}")
 
-String enviadorS = Utilities.getRutFromCertificate(cert)
 PrivateKey pKey = (PrivateKey) ks.getKey(alias, passCert.toCharArray())
 
 //dcf.setVersion("1.0")

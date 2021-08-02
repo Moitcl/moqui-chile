@@ -96,7 +96,7 @@ opts.setSavePrettyPrint()
 opts.setSavePrettyPrintIndent(0)
 
 // Recuperación de archivo CAF desde BD
-caf = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts).getAUTORIZACION()
+caf = AUTORIZACIONDocument.Factory.parse(new ByteArrayInputStream(cafData.getBytes()), opts).getAUTORIZACION()
 
 BOLETADefType boleta; // boleta tiene cargada toda la información correspondiente
 
@@ -117,7 +117,7 @@ boleta.getDocumento().addNewDetalle()
 
 // leo certificado y llave privada del archivo pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
-ks.load(certData.getBinaryStream(), passS.toCharArray())
+ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
 String alias = ks.aliases().nextElement()
 
 cert = (X509Certificate) ks.getCertificate(alias)

@@ -15,7 +15,7 @@ context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").param
 ConexionSii con = new ConexionSii()
 // leo certificado y llave privada del archivo pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
-ks.load(certData.getBinaryStream(), ((String)passCert).toCharArray())
+ks.load(new ByteArrayInputStream(certData.decodeBase64()), ((String)passCert).toCharArray())
 String alias = ks.aliases().nextElement()
 String rutCertificado = Utilities.getRutFromCertificate(x509)
 ec.logger.warn("Usando certificado ${alias}, Rut ${rutCertificado}")

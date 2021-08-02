@@ -78,7 +78,7 @@ System.out.println("XML: "+envioBoletaDocument.toString())
 //}
 // leo certificado y llave privada del archivo pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
-ks.load(certData.getBinaryStream(), passS.toCharArray())
+ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
 String alias = ks.aliases().nextElement()
 
 X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)

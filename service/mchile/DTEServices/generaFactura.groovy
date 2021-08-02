@@ -69,7 +69,7 @@ XmlOptions opts = new XmlOptions()
 opts.setLoadSubstituteNamespaces(namespaces)
 
 // Recuperación de archivo CAF desde BD
-caf = AUTORIZACIONDocument.Factory.parse(cafData.getBinaryStream(), opts).getAUTORIZACION()
+caf = AUTORIZACIONDocument.Factory.parse(new ByteArrayInputStream(cafData.getBytes()), opts).getAUTORIZACION()
 
 // Construyo base a partir del template
 //doc = DTEDocument.Factory.parse(new File(templateFactura), opts)
@@ -77,7 +77,7 @@ doc = DTEDocument.Factory.parse(ec.resource.getLocationStream(templateFactura), 
 
 // leo certificado y llave privada del archivo pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
-ks.load(certData.getBinaryStream(), passCert.toCharArray())
+ks.load(new ByteArrayInputStream(certData.decodeBase64()), passCert.toCharArray())
 String alias = ks.aliases().nextElement()
 cert = (X509Certificate) ks.getCertificate(alias)
 String rutCertificado = Utilities.getRutFromCertificate(cert)
