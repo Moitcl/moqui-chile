@@ -341,22 +341,22 @@ pdf = "${pathPdf}BOL${tipoFactura}-${folio}.pdf"
 context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([pdf:pdf, dte:xml, issuerPartyId:activeOrgId, boleta:true]).call())
 
 // Creación de registro en FiscalTaxDocument
-dteField = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio]).forUpdate(true).one()
-dteField.issuerPartyId = activeOrgId
+dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio]).forUpdate(true).one()
+dteEv.issuerPartyId = activeOrgId
 if (rutReceptor != '66666666-6') {
-    dteField.receiverPartyId = receiverPartyId
-    dteField.receiverPartyIdTypeEnumId = PtidNationalTaxId
+    dteEv.receiverPartyId = receiverPartyId
+    dteEv.receiverPartyIdTypeEnumId = PtidNationalTaxId
 }
-dteField.fiscalTaxDocumentStatusEnumId = "Ftdt-Issued"
-dteField.fiscalTaxDocumentSentStatusEnumId = "Ftdt-NotSent"
-dteField.invoiceId = invoiceId
+dteEv.fiscalTaxDocumentStatusEnumId = "Ftdt-Issued"
+dteEv.fiscalTaxDocumentSentStatusEnumId = "Ftdt-NotSent"
+dteEv.invoiceId = invoiceId
 
 Date date = new Date()
 Timestamp ts = new Timestamp(date.getTime())
-dteField.date = ts
-dteField.update()
-createMap = [fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xml, contentDate:ts]
+dteEv.date = ts
+dteEv.update()
+createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xml, contentDate:ts]
 context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
-createMap = [fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts]
+createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdf, contentDate:ts]
 context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
-fiscalTaxDocumentId = dteField.fiscalTaxDocumentId
+fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId

@@ -44,8 +44,8 @@ createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, r
 context.putAll(ec.service.sync().name("create#mchile.dte.AceptacionDte").parameters(createMap).call())
 
 // Recuperación de datos para emitir aceptación
-dteField = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).selectField("contentLocation").one()
-envioRecibido = dteField.contentLocation
+dteEv = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).selectField("contentLocation").one()
+envioRecibido = dteEv.contentLocation
 idS = (int) (System.currentTimeMillis() / 1000L)
 
 X509Certificate cert
@@ -285,12 +285,12 @@ erd.save(outTemp, opts)
 return
 
 // Recuperación del email de destinatario de aceptación
-partyAceptacionField = ec.entity.find("mantle.party.PartyIdentification").condition([idValue:rutEmisor, partyIdTypeEnumId:"PtidNationalTaxId"]).one()
-if (!partyAceptacionField) {
+partyAceptacionEv = ec.entity.find("mantle.party.PartyIdentification").condition([idValue:rutEmisor, partyIdTypeEnumId:"PtidNationalTaxId"]).one()
+if (!partyAceptacionEv) {
     ec.message.addError("Organización a enviar aceptación no tiene RUT definido")
     return
 }
-contactOut = ec.service.sync().name("mantle.party.ContactServices.get#PartyContactInfo").parameters([partyId:partyAceptacionField.partyId, postalContactMechPurposeId:'PostalTax']).call()
+contactOut = ec.service.sync().name("mantle.party.ContactServices.get#PartyContactInfo").parameters([partyId:partyAceptacionEv.partyId, postalContactMechPurposeId:'PostalTax']).call()
 if (!contactOut.postalContactMechId) {
     ec.message.addError("Receptor de aceptación no tiene contacto tributario asignado")
     return
@@ -298,24 +298,24 @@ if (!contactOut.postalContactMechId) {
 emailAceptacion = contactOut.emailAddress
 
 // Recuperación de algunos datos desde FiscalTaxDocument
-fiscalTaxDocumentField = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentId:fiscalTaxDocumentId]).one()
-folioAceptacion = fiscalTaxDocumentIdField.fiscalTaxDocumentNumber
+fiscalTaxDocumentEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentId:fiscalTaxDocumentId]).one()
+folioAceptacion = fiscalTaxDocumentEv.fiscalTaxDocumentNumber
 
 createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nmbContacto:nmbContacto, fonoContacto:fonoContacto, mailContacto:mailContacto]
 context.putAll(ec.service.sync().name("create#mchile.dte.AceptacionDte").parameters(createMap).call())
 
-aceptacionField = ec.entity.find("mchile.dte.AceptacionDte").condition("aceptacionDteId", aceptacionDteId).forUpdate(true).one()
-//aceptacionField.nmbEnvio = fiscalTaxDocumentField.razonSocial
-aceptacionField.fchRecep = fchRecep
-aceptacionField.codEnvio = idS
-aceptacionField.rutEmisor = rutEmisor
-aceptacionField.envioDteId = RESP-${idS}
-aceptacionField.rutEmisor = rutEmisor
-aceptacionField.rutReceptor = rutResponde
-aceptacionField.estadoRecepEnvEnumId = estadoRecepEnvEnumId
-aceptacionField.nroDetalles = 1
-aceptacionField.xml = "${resultS}RESP-${idS}.xml"
-aceptacionField.update()
+aceptacionEv = ec.entity.find("mchile.dte.AceptacionDte").condition("aceptacionDteId", aceptacionDteId).forUpdate(true).one()
+//aceptacionEv.nmbEnvio = fiscalTaxDocumentEv.razonSocial
+aceptacionEv.fchRecep = fchRecep
+aceptacionEv.codEnvio = idS
+aceptacionEv.rutEmisor = rutEmisor
+aceptacionEv.envioDteId = RESP-${idS}
+aceptacionEv.rutEmisor = rutEmisor
+aceptacionEv.rutReceptor = rutResponde
+aceptacionEv.estadoRecepEnvEnumId = estadoRecepEnvEnumId
+aceptacionEv.nroDetalles = 1
+aceptacionEv.xml = "${resultS}RESP-${idS}.xml"
+aceptacionEv.update()
 
 bodyParameters = [fiscalTaxDocumentId:folioAceptacion, nmbContacto:nmbContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]
 ec.service.async().name("org.moqui.impl.EmailServices.send#EmailTemplate").parameters([fiscalTaxDocumentId: folioAceptacion, emailTypeEnumId: emailTypeEnumId, toAddresses:emailAceptacion,

@@ -43,13 +43,13 @@ SimpleDateFormat ft = new SimpleDateFormat("yyMMddhhmmssMs")
 String datetime = ft.format(dNow)
 idS = idS + datetime
 
-ResourceReference[] DTEList = new ResourceReference[documentList.size()]
+ResourceReference[] DTEList = new ResourceReference[documentIdList.size()]
 int j = 0
 
-documentList.each { docField ->
-    fiscalTaxDocument = docField
-    dteField = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).selectField("contentLocation").one()
-    xml = dteField.contentLocation
+documentIdList.each { documentId ->
+    fiscalTaxDocument = documentId
+    dteEv = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).selectField("contentLocation").one()
+    xml = dteEv.contentLocation
     DTEList[j] = ec.resource.getLocationReference(xml)
     ec.logger.warn("Agregado: " + DTEList[j])
     j++
@@ -157,13 +157,13 @@ if (Signer.verify(doc2, "SetDTE")) {
 }
 
 // Se guarda referencia a XML de envío en BD -->
-documentList.each { docField ->
-    createMap = [fiscalTaxDocumentId:docField, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Misc', contentLocation:archivoEnvio, contentDate:ts]
+documentIdList.each { documentId ->
+    createMap = [fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Misc', contentLocation:archivoEnvio, contentDate:ts]
     context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
 
     // Se marca DTE como enviada -->
-    idDte = docField
-    dteField = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("fiscalTaxDocumentId", idDte).forUpdate(true).one()
-    dteField.fiscalTaxDocumentSentStatusEnumId = "Ftdt-Sent"
-    dteField.update()
+    idDte = documentId
+    dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("fiscalTaxDocumentId", idDte).forUpdate(true).one()
+    dteEv.fiscalTaxDocumentSentStatusEnumId = "Ftdt-Sent"
+    dteEv.update()
 }

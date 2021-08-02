@@ -95,8 +95,8 @@ for (int i = 0; i < boletaArray.size(); i++) {
     ec.logger.warn("Date: " + date)
     Timestamp ts = new Timestamp(date.getTime())
 
-    receiverField = ec.entity.find("mantle.party.PartyIdentification").condition([idValue:rutReceptor, partyIdTypeEnumId:"PtidNationalTaxId"]).one()
-    receiverPartyId = receiverField.partyId
+    receiverEv = ec.entity.find("mantle.party.PartyIdentification").condition([idValue:rutReceptor, partyIdTypeEnumId:"PtidNationalTaxId"]).one()
+    receiverPartyId = receiverEv.partyId
     if (receiverPartyId != organizationPartyId) {
         ec.message.addError("Receptor en Boleta no corresponde a receptor especificado ($receiverPartyId != $organizationPartyId)")
         return
@@ -109,20 +109,20 @@ for (int i = 0; i < boletaArray.size(); i++) {
     }
     issuerPartyId = partyIdentificationList.partyId[0]
     // Verificación de Razón Social en XML vs lo guardado en Moqui
-    partyField = ec.entity.find("mantle.party.Party").condition("partyId, issuerPartyId").one()
-    if (!partyField) {
+    partyEv = ec.entity.find("mantle.party.Party").condition("partyId, issuerPartyId").one()
+    if (!partyEv) {
         ec.message.addError("Receptor no existe")
         return
     }
-    partyTypeEnumId = partyField.partyTypeEnumId
+    partyTypeEnumId = partyEv.partyTypeEnumId
     razonSocialMoqui = null
-    if (partyTypeenumId == "PtyOrganization") {
-        partyOrgField = ec.entity.find("mantle.party.Organization").condition("partyId", issuerPartyId).one()
-        if (partyOrgField)
-            razonSocialMoqui = partyOrgField.organizationName
+    if (partyTypeEnumId == "PtyOrganization") {
+        partyOrgEv = ec.entity.find("mantle.party.Organization").condition("partyId", issuerPartyId).one()
+        if (partyOrgEv)
+            razonSocialMoqui = partyOrgEv.organizationName
     } else {
-        partyPersonField = ec.entity.find("mantle.party.Person").condition("partyId", issuerPartyId).one()
-        razonSocialMoqui = partyPersonField.firstName + " " + partyPersonField.lastName
+        partyPersonEv = ec.entity.find("mantle.party.Person").condition("partyId", issuerPartyId).one()
+        razonSocialMoqui = partyPersonEv.firstName + " " + partyPersonEv.lastName
     }
     if ((razonSocialEmisor != razonSocialMoqui) && (partyTypeEnumId == 'PtyOrganization')) {
         ec.message.addError("Razón social en XML no coindice con la registrada: $razonSocialEmisor != $razonSocialMoqui")
@@ -181,9 +181,9 @@ for (int i = 0; i < boletaArray.size(); i++) {
                     ec.logger.warn("Leyendo codigo "+k+", valor: " + cdgItem[k].getVlrCodigo())
                     pseudoId = cdgItem[k].getVlrCodigo()
 
-                    productField = ec.entity.find("mantle.product.Product").condition("pseudoId", pseudoId).one()
-                    if (productField) {
-                        productId = productField.productId
+                    productEv = ec.entity.find("mantle.product.Product").condition("pseudoId", pseudoId).one()
+                    if (productEv) {
+                        productId = productEv.productId
                         ec.logger.info("Agregando producto preexistente $productId, cantidad $quantity ***************")
                         context.putAll(ec.service.sync().name("mantle.order.OrderServices.add#OrderProductQuantity").parameters([orderId:purchaseOutMap.orderId,
                             orderPartSeqId:purchaseOutMap.orderPartSeqId, productId:productId, description:itemDescription, quantity:quantity, unitAmount:price]).call())

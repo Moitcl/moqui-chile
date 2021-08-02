@@ -48,8 +48,8 @@ createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, r
 context.putAll(ec.service.sync().name("create#mchile.dte.AceptacionDte").parameters(createMap).call())
 
 //  Recuperación de datos para emitir aceptación
-dteField = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).selectField("contentLocation").one()
-String envioRecibido = dteField.contentLocation
+dteEv = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).selectField("contentLocation").one()
+String envioRecibido = dteEv.contentLocation
 idS = (int) (System.currentTimeMillis() / 1000L)
 rutEmisor = ""
 rutReceptor = ""
@@ -342,13 +342,13 @@ ByteArrayOutputStream outTemp = new ByteArrayOutputStream()
 respuesta.save(outTemp, opts)
 
 // Recuperación del email de destinatario de aceptación
-partyAceptacionField = ec.entity.find("mantle.party.PartyIdentification").condition([idValue:rutEmisor, partyIdTypeEnumId:"PtidNationalTaxId"]).one()
-if (!partyAceptacionField) {
+partyAceptacionEv = ec.entity.find("mantle.party.PartyIdentification").condition([idValue:rutEmisor, partyIdTypeEnumId:"PtidNationalTaxId"]).one()
+if (!partyAceptacionEv) {
     ec.message.addError("Organización a enviar aceptación no tiene RUT definido")
     return
 }
 
-contactOut = ec.service.sync().name("mantle.party.ContactServices.get#PartyContactInfo").parameters([partyId:partyAceptacionField.partyId, postalContactMechPurposeId:'PostalTax']).call()
+contactOut = ec.service.sync().name("mantle.party.ContactServices.get#PartyContactInfo").parameters([partyId:partyAceptacionEv.partyId, postalContactMechPurposeId:'PostalTax']).call()
 if (!contactOut.postalContactMechId) {
     ec.message.addError("Receptor de aceptación no tiene contacto tributario asignado")
     return
@@ -356,8 +356,8 @@ if (!contactOut.postalContactMechId) {
 emailAceptacion = contactOut.emailAddress
 
 // Recuperación de algunos datos desde FiscalTaxDocument
-fiscalTaxDocumentField = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("fiscalTaxDocumentId", fiscalTaxDocumentId).one()
-folioAceptacion = fiscalTaxDocumentField.fiscalTaxDocumentNumber
+fiscalTaxDocumentEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("fiscalTaxDocumentId", fiscalTaxDocumentId).one()
+folioAceptacion = fiscalTaxDocumentEv.fiscalTaxDocumentNumber
 createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nmbContacto:nmbContacto, fonoContacto:fonoContacto, mailContacto:mailContacto,
              fchRecep:fchRecep, codEnvio:idS, rutEmisor:rutEmisor, envioDteId:"RESP-${idS}", rutReceptor:rutReceptor, estadoRecepEnvEnumId:estadoRecepEnvEnumId, nroDetalles:1,
              xml:"${resultS}RESP-${idS}.xml"]

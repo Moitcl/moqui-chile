@@ -576,24 +576,24 @@ pdf = "${pathPdf}BOL${tipoFactura}-${folio}.pdf"
 context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([dte:facturaXml, issuerPartyId:issuerPartyId, boleta:true, continua:continua]).call())
 
 // Creación de registro en FiscalTaxDocument
-dteField = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio]).forUpdate(true).one()
-dteField.issuerPartyId = activeOrgId
+dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio]).forUpdate(true).one()
+dteEv.issuerPartyId = activeOrgId
 
 if (rutReceptor != "66666666-6") {
-    dteField.receiverPartyid = receiverPartyId
-    dteField.receiverPartyIdTypeEnumId = "PtidNationalTaxId"
+    dteEv.receiverPartyid = receiverPartyId
+    dteEv.receiverPartyIdTypeEnumId = "PtidNationalTaxId"
 }
-dteField.fiscalTaxDocumentStatusEnumId = "Ftdt-Issued"
-dteField.fiscalTaxDocumentSentStatusEnumId = "Ftdt-NotSent"
-dteField.invoiceId = invoiceId
-dteField.date = ec.user.nowTimestamp
+dteEv.fiscalTaxDocumentStatusEnumId = "Ftdt-Issued"
+dteEv.fiscalTaxDocumentSentStatusEnumId = "Ftdt-NotSent"
+dteEv.invoiceId = invoiceId
+dteEv.date = ec.user.nowTimestamp
 dteFeild.update()
 // Creación de registro en FiscalTaxDocumentAttributes
 // montoNeto
 // montoIVARecuperable
 // montoExento
 // Amount
-updateMap = [fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, emailEmisor:emailEmisor, amount:amount,
+updateMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, emailEmisor:emailEmisor, amount:amount,
              montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmision,
              montoExento:montoExento, montoIVARecuperable:montoIVARecuperable]
 context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(updateMap).call())
@@ -601,10 +601,10 @@ context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttrib
 // Creacion de registros en FiscalTaxDocumentContent
 xmlName = "dbresource://moit/erp/dte/${rutEmisor}/DTE${tipoFactura}-${folio}.xml"
 pdfName = "dbresource://moit/erp/dte/${rutEmisor}/DTE${tipoFactura}-${folio}.pdf"
-createMapBase = [fiscalTaxDocumentId:dteField.fiscalTaxDocumentId, contentDte:ts]
+createMapBase = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, contentDte:ts]
 context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlName]).call())
 ec.resource.getLocationReference(xmlName).putBytes(facturaXml)
 
 context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfName]).call())
 ec.resource.getLocationReference(pdfName).putBytes(pdfBytes)
-fiscalTaxDocumentId = dteField.fiscalTaxDocumentId
+fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId
