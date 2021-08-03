@@ -700,15 +700,10 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- ID Contacto receptor -->
             <set field="receptorContactId" from="contactPostalAddressField.telecomContactMechId"/>
 
-
-            <!-- TODO: party puede ser Organization o Persona -->
             <entity-find-one entity-name="mantle.party.Party" value-field="partyEv"/>
             <set field="partyTypeEnumId" from="partyEv.partyTypeEnumId"/>
-
             <set field="rznSocReceptor" value=""/>
             <set field="giroReceptor" value="Sin Giro"/>
-
-
             <if condition="partyTypeEnumId == 'PtyOrganization'">
                 <!-- email -->
                 <entity-find entity-name="mantle.party.contact.PartyContactMech" list="contactMechList">
@@ -1845,9 +1840,7 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="generar" noun="NotaCredito">
-        <description>
-            Obtiene datos para llamar a método generar#Factura para Nota de Crédito
-        </description>
+        <description>Obtiene datos para llamar a método generar#Factura para Nota de Crédito</description>
         <in-parameters>
             <parameter name="returnId" required="true"/>
             <parameter name="invoiceId" required="true"/>
@@ -1865,21 +1858,14 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="returnedItemList" type="NewMap" from="[]"/>
 
-            <iterate list="listItems" entry="detailItem">
-                <set field="listProduct" from="detailItem instanceof List ? detailItem : detailItem.split('-') as List"/>
-                <log message="Leyendo: $listProduct" level="warn"/>
+            <iterate list="items" entry="detailItem">
                 <entity-find-one entity-name="mantle.order.return.ReturnItem" value-field="returnItemField">
                     <field-map field-name="returnId" from="returnId"/>
-                    <field-map field-name="returnItemSeqId" value="${listProduct[0]}"/>
+                    <field-map field-name="returnItemSeqId" from="detailItem.returnItemSeqId"/>
                 </entity-find-one>
-                <script>
-                    long discount = Long.valueOf(listProduct[3])
-                </script>
-                <set field="returnItemField.pctDiscount" from="discount"/>
+                <set field="returnItemField.pctDiscount" from="detailItem.pctDiscount"/>
                 <entity-update value-field="returnItemField"/>
-                <script>
-                    returnedItemList.add(listProduct[0])
-                </script>
+                <script>returnedItemList.add(detailItem.returnItemSeqId)</script>
             </iterate>
 
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
@@ -1887,10 +1873,10 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
             </entity-find>
 
-            <if condition="!partyIdentificationList.idValue[0]">
+            <if condition="!partyIdentificationList">
                 <return error="true" message="Organización emisora no tiene RUT definido"/>
             </if>
-            <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
+            <set field="rutEmisor" from="partyIdentificationList.first.idValue"/>
 
             <!-- Datos de devolución, para armar nota de crédito -->
             <service-call name="mantle.order.ReturnServices.get#ReturnDisplayInfo" in-map="[returnId:returnId]" out-map="context"/>
@@ -1970,7 +1956,6 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!--set field="contactMechId" from="contactMechField.contactMechId"/-->
             <set field="contactMechId" from="contactMechList.contactMechId.first()"/>
-
 
             <!-- Datos de contacto -->
             <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressField"/>

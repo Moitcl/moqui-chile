@@ -623,7 +623,6 @@ if (tipoFactura == 61) {
     // tot.setMntExe(totalExento)
     //}
 
-    ec.message.addError("Test")
 }
 
 // Nota de Débito Electrónica
