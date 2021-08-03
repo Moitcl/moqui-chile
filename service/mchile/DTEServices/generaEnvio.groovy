@@ -28,7 +28,7 @@ import cl.sii.siiDte.EnvioDTEDocument.EnvioDTE.SetDTE.Caratula.SubTotDTE
 ExecutionContext ec = context.ec
 
 // Recuperacion de parametros de la organizacion
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
 passS = passCert
 plantillaEnvio = templateEnvio
 //giro = giroEmisor

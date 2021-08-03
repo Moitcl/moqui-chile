@@ -12,7 +12,7 @@ ExecutionContext ec = context.ec
 
 // Validación rut -->
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", enviadorS).call()
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", activeOrgId).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", organizationPartyId).call())
 
 ConexionSii con = new ConexionSii()
 // leo certificado y llave privada del archivo pkcs12

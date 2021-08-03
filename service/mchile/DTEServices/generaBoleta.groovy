@@ -31,7 +31,7 @@ import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula.Sub
 
 ExecutionContext ec = context.ec
 
-partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:activeOrgId, partyIdTypeEnumId:"PtidNationalTaxId"]).list()
+partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:issuerPartyId, partyIdTypeEnumId:"PtidNationalTaxId"]).list()
 if (!partyIdentificationList) {
     ec.message.addError("Organización no tiene RUT definido")
     return
@@ -42,7 +42,7 @@ rutEmisor = partyIdentificationList.idValue[0]
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutReceptor).call()
 
 // Recuperacion de parametros de la organizacion -->
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", activeOrgId).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", issuerPartyId).call())
 passS = passCert
 resultS = pathResults
 // REVISAR
@@ -57,7 +57,7 @@ if (!pdfTemplateBoleta) {
 }
 
 // Giro del emisor
-giroOutMap = ec.service.sync().name("mchile.DTEServices.get#GiroPrimario").parameter("partyId", activeOrgId).call()
+giroOutMap = ec.service.sync().name("mchile.DTEServices.get#GiroPrimario").parameter("partyId", issuerPartyId).call()
 giroEmisor = giroOutMap.description
 
 // Recuperación del código SII de DTE
@@ -65,7 +65,7 @@ codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameters([f
 Integer tipoFactura = codeOut.siiCode
 
 // Obtención de folio y path de CAF -->
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:activeOrgId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call())
 codRef = 0 as Integer
 idS = "BO"
 
@@ -574,7 +574,7 @@ ec.context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parame
 
 // Creación de registro en FiscalTaxDocument
 dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio]).forUpdate(true).one()
-dteEv.issuerPartyId = activeOrgId
+dteEv.issuerPartyId = issuerPartyId
 
 if (rutReceptor != "66666666-6") {
     dteEv.receiverPartyid = receiverPartyId

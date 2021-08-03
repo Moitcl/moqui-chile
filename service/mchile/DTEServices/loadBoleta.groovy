@@ -10,9 +10,9 @@ import org.moqui.context.ExecutionContext
 ExecutionContext ec = context.ec
 
 // Carga de RUT de empresa
-partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:activeOrgId, partyIdTypeEnumId:"PtidNationalTaxId"])
+partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:organizationPartyId, partyIdTypeEnumId:"PtidNationalTaxId"])
 if (!partyIdentificationList) {
-    ec.message.addError("Organización $activeOrgId no tiene RUT definido")
+    ec.message.addError("Organización $organizationPartyId no tiene RUT definido")
     return
 }
 rut = partyIdentificationList.idValue[0]
@@ -20,7 +20,7 @@ rut = partyIdentificationList.idValue[0]
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rut]).call()
 // Carga XML
 archivoXml = xml.getName()
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
 fileRoot = pathRecibidas
 contentLocationXml = "${fileRoot}/${archivoXml}"
 docRrXml = ec.resource.getLocationReference(contentLocationXml)
@@ -206,7 +206,7 @@ for (int i = 0; i < boletaArray.size(); i++) {
     }
     // Se guarda DTE recibido en la base de datos -->
     createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', fiscalTaxDocumentTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte,
-                receiverPartyId:activeOrgId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]
+                receiverPartyId:organizationPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]
     mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call()
     // Se guarda contenido asociado a la DTE, todas las DTE que vienen en el mismo envío comparten el mismo XML
     createMap = [fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts]

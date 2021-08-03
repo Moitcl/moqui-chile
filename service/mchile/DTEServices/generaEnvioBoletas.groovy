@@ -28,7 +28,7 @@ import cl.sii.siiDte.FechaHoraType
 ExecutionContext ec = context.ec
 
 // Recuperacion de parametros de la organizacion -->
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
 if (!templateEnvio) {
     ec.message.addError("Organizacion no tiene plantilla para envio al SII")
     return
@@ -56,8 +56,7 @@ if (recepS)
     ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:recepS]).call()
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:enviadorS]).call()
 
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
-passS = passCert
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
 pathResultS = pathResults
 plantillaEnvio = templateEnvioBoleta
 // Variable para guardar nombre de archivo del envio -->
@@ -78,12 +77,12 @@ System.out.println("XML: "+envioBoletaDocument.toString())
 //}
 // leo certificado y llave privada del archivo pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
-ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
+ks.load(new ByteArrayInputStream(certData.decodeBase64()), passCert.toCharArray())
 String alias = ks.aliases().nextElement()
 
 X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
 String enviadorS = Utilities.getRutFromCertificate(x509)
-PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray())
+PrivateKey pKey = (PrivateKey) ks.getKey(alias, passCert.toCharArray())
 
 ec.logger.warn("RUT envia: " + enviadorS)
 

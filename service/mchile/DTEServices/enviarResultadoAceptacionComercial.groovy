@@ -27,7 +27,7 @@ if ((fiscalTaxDocumentTypeEnumId == 'Ftdt-39') || (fiscalTaxDocumentTypeEnumId =
     ec.message.addError("Boletas no requieren envío de aceptación")
     return
 }
-partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:activeOrgId, partyIdTypeEnumId:"PtidNationalTaxId"]).list()
+partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:organizationPartyId, partyIdTypeEnumId:"PtidNationalTaxId"]).list()
 if (!partyIdentificationList) {
     ec.message.addError("Organización no tiene RUT definido")
     return
@@ -35,7 +35,7 @@ if (!partyIdentificationList) {
 rutResponde = partyIdentificationList.idValue[0]
 
 // Recuperacion de parametros de la organizacion
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", activeOrgId).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", organizationPartyId).call())
 
 passS = passCert
 resultS = pathAceptaciones
@@ -43,7 +43,7 @@ dirS = pathRecibidos
 
 // Se guarda aceptacion para obtener el aceptacionDteId
 createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nmbContacto:nmbContacto,
-             fonoContacto:fonoContacto, mailContacto:mailContacto, issuerPartyId:activeOrgId]
+             fonoContacto:fonoContacto, mailContacto:mailContacto, issuerPartyId:organizationPartyId]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.AceptacionDte").parameters(createMap).call())
 
 // Recuperación de datos para emitir aceptación -->

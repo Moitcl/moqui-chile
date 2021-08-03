@@ -51,7 +51,7 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="rutReceptor" default-value="60803000-K"><description>El receptor del envio es el SII</description></parameter>
             <parameter name="rutEnviador" required="true"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
             <parameter name="documentIdList" required="true" type="List"/>
         </in-parameters>
         <out-parameters>
@@ -66,7 +66,7 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="recepS"/>
             <parameter name="enviadorS" required="true"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
             <parameter name="documentIdList" required="true" type="List"/>
         </in-parameters>
         <out-parameters>
@@ -85,7 +85,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="compaS" required="true"/>
             <parameter name="enviadorS" required="true"/>
             <parameter name="documentoS" required="true"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="trackId"/>
@@ -98,13 +98,13 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="trackId"/>
         </out-parameters>
         <actions>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
 
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="contentEv">
                 <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
@@ -115,22 +115,22 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="contentLocation" from="contentEv.contentLocation"/>
 
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                <econdition field-name="partyId" from="activeOrgId"/>
+                <econdition field-name="partyId" from="organizationPartyId"/>
                 <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
             </entity-find>
 
             <if condition="!partyIdentificationList.idValue[0]">
-                <return error="true" message="Organización $activeOrgId no tiene RUT definido"/>
+                <return error="true" message="Organización $organizationPartyId no tiene RUT definido"/>
             </if>
             <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
 
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
             <set field="enviadorS" value="${rutEnvia}"/>
 
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
             <set field="enviadorS" value="${rutEnvia}"/>
 
-            <service-call name="mchile.DTEServices.enviaSII#Boleta" in-map="[compaS:rutEmisor, enviadorS:enviadorS, documentoS:contentLocation, activeOrgId:activeOrgId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.enviaSII#Boleta" in-map="[compaS:rutEmisor, enviadorS:enviadorS, documentoS:contentLocation, organizationPartyId:organizationPartyId]" out-map="context"/>
             <!-- TODO: Eliminar archivo temporal -->
             <!-- Marcar boleta como enviada -->
             <!-- Se marca DTE como enviada -->
@@ -154,7 +154,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="compaS" required="true"/>
             <parameter name="enviadorS" required="true"/>
             <parameter name="documentContentLocation" required="true"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="trackId"/>
@@ -163,7 +163,7 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Validación rut -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/>
 
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
 
@@ -304,47 +304,6 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="get" noun="DTEFilename">
-        <description>
-            Retorna nombre de archivo de DTE
-        </description>
-        <in-parameters>
-            <parameter name="fiscalTaxDocumentId" required="true"/>
-            <parameter name="fiscalTaxDocumentContentTypeEnumId" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="filename"/>
-        </out-parameters>
-        <actions>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="pathResults" from="pathResults"/>
-
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="document"/>
-            <set field="filename" value="${document.contentLocation}"/>
-        </actions>
-    </service>
-
-    <service verb="get" noun="AceptacionFilename">
-        <description>
-            Retorna nombre de archivo de acuse recibo DTE Terceros
-        </description>
-        <in-parameters>
-            <parameter name="aceptacionDteId" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="filename"/>
-            <parameter name="path"/>
-        </out-parameters>
-        <actions>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="pathResults" from="pathAceptaciones"/>
-
-            <entity-find-one entity-name="mchile.dte.AceptacionDte" value-field="document"/>
-            <set field="filename" value="${document.xml}"/>
-            <set field="path" value="${pathResults}"/>
-        </actions>
-    </service>
-
     <service verb="genera" noun="PDF">
         <description>
             Genera archivo PDF de Factura/Boleta (envio).
@@ -421,12 +380,12 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="load" noun="Caf">
         <in-parameters>
             <parameter name="filename" type="org.apache.commons.fileupload.FileItem"/>
-            <parameter name="partyId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
         <actions>
             <set field="archivo" from="filename.getName()"/>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:partyId]" out-map="context"/>
-            <set field="contentLocation" value="dbresource://moit/erp/dte/caf/${partyId}/${archivo}"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
+            <set field="contentLocation" value="dbresource://moit/erp/dte/caf/${organizationPartyId}/${archivo}"/>
 
             <set field="docRr" from="ec.resource.getLocationReference(contentLocation)"/>
             <script>
@@ -434,7 +393,7 @@ along with this software (see the LICENSE.md file). If not, see
                 try { docRr.putStream(fileStream) } finally { fileStream.close() }
             </script>
 
-            <service-call name="mchile.DTEServices.load#CafInternal" in-map="context" out-map="context"/>
+            <service-call name="mchile.DTEServices.load#CafInternal" in-map="context+[organizationPartyId:organizationPartyId]" out-map="context"/>
         </actions>
     </service>
 
@@ -444,7 +403,7 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="contentLocation" required="true"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
             <parameter name="activateCaf" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
@@ -453,12 +412,12 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <!-- Carga de RUT de empresa -->
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                <econdition field-name="partyId" from="activeOrgId"/>
+                <econdition field-name="partyId" from="organizationPartyId"/>
                 <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
             </entity-find>
 
             <if condition="!partyIdentificationList.idValue[0]">
-                <return error="true" message="Organización $activeOrgId no tiene RUT definido"/>
+                <return error="true" message="Organización $organizationPartyId no tiene RUT definido"/>
             </if>
             <set field="rut" from="partyIdentificationList.idValue[0]"/>
 
@@ -531,7 +490,7 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
 
             <set field="updateMap"
-                 from="[filename:docRr.fileName,desde:desde, hasta:hasta, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, ultimoFolio:desde, issuerPartyId:activeOrgId, cafData:docRr.getText()]"/>
+                 from="[filename:docRr.fileName,desde:desde, hasta:hasta, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, ultimoFolio:desde, issuerPartyId:organizationPartyId, cafData:docRr.getText()]"/>
             <service-call name="create#mchile.dte.Caf" out-map="context" in-map="updateMap"/>
 
             <!-- Creación de registros para reservar folios -->
@@ -540,7 +499,7 @@ along with this software (see the LICENSE.md file). If not, see
                 int fin = Integer.parseInt(hasta)
                 for (int folio = inicio; folio <= fin; folio++) {
                     fiscalTaxDocumentId = "$fiscalTaxDocumentTypeEnumId$folio$rutNoDv"
-                    createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:activeOrgId,
+                    createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:organizationPartyId,
                         issuerPartyIdTypeEnumId:'PtidNationalTaxId', fiscalTaxDocumentStatusEnumId:'Ftdt-NotIssued', fiscalTaxDocumentSentStatusEnumId:'Ftdt-NotSent']
                     context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call())
                 }
@@ -847,7 +806,7 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoiceEv">
                 <field-map field-name="invoiceId" from="invoiceId"/>
             </entity-find-one>
-            <set field="activeOrgId" from="invoiceEv.fromPartyId"/>
+            <set field="organizationPartyId" from="invoiceEv.fromPartyId"/>
             <set field="globalDiscount" from="invoiceEv.globalDiscount"/>
             <set field="glosaDr" from="invoiceEv.glosaDr"/>
 
@@ -1117,37 +1076,37 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="documentIds" required="true"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
             <parameter name="libro"/>
             <parameter name="boleta"/>
         </in-parameters>
         <actions>
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                <econdition field-name="partyId" from="activeOrgId"/>
+                <econdition field-name="partyId" from="organizationPartyId"/>
                 <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
             </entity-find>
 
             <if condition="!partyIdentificationList.idValue[0]">
-                <return error="true" message="Organización $activeOrgId no tiene RUT definido"/>
+                <return error="true" message="Organización $organizationPartyId no tiene RUT definido"/>
             </if>
             <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
 
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
-            <set field="enviadorS" value="${rutEnvia}"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
+            <set field="rutEmisor" value="${rutEnvia}"/>
 
             <set field="documentIdList" from="documentIds instanceof List ? documentIds : documentIds.split(',') as List"/>
 
             <if condition="!libro &amp;&amp; !boleta">
                 <then>
-                    <service-call name="mchile.DTEServices.generaEnvio#Documentos" in-map="[recepS:recepS, activeOrgId:activeOrgId, enviadorS:enviadorS, documentIdList:documentIdList ]" out-map="context"/>
+                    <service-call name="mchile.DTEServices.generaEnvio#Documentos" in-map="[recepS:recepS, organizationPartyId:organizationPartyId, enviadorS:rutEmisor, documentIdList:documentIdList ]" out-map="context"/>
                     <set field="documentoS" from="archivoEnvio"/>
-                    <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:rutEmisor, enviadorS:enviadorS , documentoS:documentoS, activeOrgId:activeOrgId]" out-map="context"/>
+                    <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:rutEmisor, enviadorS:rutEmisor , documentoS:documentoS, organizationPartyId:organizationPartyId]" out-map="context"/>
                     <service-call name="mchile.DTEServices.marcarEnviados#Documentos" in-map="[trackId:trackId, documentIdList:documentIdList]"/>
                 </then>
                 <else-if condition="boleta">
-                    <service-call name="mchile.DTEServices.generaEnvio#Boletas" in-map="[recepS:recepS, activeOrgId:activeOrgId, enviadorS:enviadorS, documentIdList:documentIdList ]" out-map="context"/>
+                    <service-call name="mchile.DTEServices.generaEnvio#Boletas" in-map="[recepS:recepS, organizationPartyId:organizationPartyId, enviadorS:rutEmisor, documentIdList:documentIdList ]" out-map="context"/>
                     <set field="documentoS" from="archivoEnvio"/>
-                    <service-call name="mchile.DTEServices.enviaSII#Boleta" in-map="[compaS:rutEmisor, enviadorS:enviadorS , documentoS:documentoS, activeOrgId:activeOrgId]" out-map="context"/>
+                    <service-call name="mchile.DTEServices.enviaSII#Boleta" in-map="[compaS:rutEmisor, enviadorS:rutEmisor , documentoS:documentoS, organizationPartyId:organizationPartyId]" out-map="context"/>
                     <service-call name="mchile.DTEServices.marcarEnviados#Boletas" in-map="[trackId:trackId, documentIdList:documentIdList]"/>
                 </else-if>
             </if>
@@ -1162,10 +1121,10 @@ along with this software (see the LICENSE.md file). If not, see
                     </entity-find-one>
                     <set field="xml" from="libroField.xml"/>
 
-                    <service-call name="mchile.DTEServices.generaEnvio#Libro" in-map="[enviadorS:enviadorS, activeOrgId:activeOrgId, idS:'ID178', xml:xml ]" out-map="context"/>
+                    <service-call name="mchile.DTEServices.generaEnvio#Libro" in-map="[enviadorS:rutEmisor, organizationPartyId:organizationPartyId, idS:'ID178', xml:xml ]" out-map="context"/>
                     <set field="documentoS" from="archivoEnvio"/>
 
-                    <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:rutEmisor, enviadorS:enviadorS , documentoS:xml, activeOrgId:activeOrgId]" out-map="context"/>
+                    <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:rutEmisor, enviadorS:rutEmisor , documentoS:xml, organizationPartyId:organizationPartyId]" out-map="context"/>
                 </iterate>
             </if>
         </actions>
@@ -1179,7 +1138,7 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="statusSii" required="true"/>
@@ -1189,7 +1148,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="statusSii" value=""/>
 
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
 
@@ -1276,13 +1235,13 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="salida" required="true"/>
         </out-parameters>
         <actions>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
 
@@ -1414,7 +1373,7 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
             <parameter name="trackId" required="true"/>
         </in-parameters>
         <out-parameters>
@@ -1423,7 +1382,7 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <set field="statusSii" value=""/>
 
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
 
@@ -1483,7 +1442,7 @@ along with this software (see the LICENSE.md file). If not, see
             Servicio para simplificar carga de Facturas vs Boletas discriminando por los dos grandes tipos antes de parsear el XML
         </description>
         <in-parameters>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
             <parameter name="invoiceId"/>
             <parameter name="xml" type="org.apache.commons.fileupload.FileItem" required="true"/>
             <parameter name="pdf" type="org.apache.commons.fileupload.FileItem" required="true"/>
@@ -1494,10 +1453,10 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <if condition="fiscalTaxDocumentAggrEnumId == 'Ftdt-Boletas'">
                 <then>
-                    <service-call name="mchile.DTEServices.load#Boleta" in-map="[xml:xml, pdf:pdf, activeOrgId:activeOrgId, productMatch:productMatch, organizationPartyId:organizationPartyId]"/>
+                    <service-call name="mchile.DTEServices.load#Boleta" in-map="[xml:xml, pdf:pdf, organizationPartyId:organizationPartyId, productMatch:productMatch, organizationPartyId:organizationPartyId]"/>
                 </then>
                 <else>
-                    <service-call name="mchile.DTEServices.load#Dte" in-map="[xml:xml, pdf:pdf, activeOrgId:activeOrgId, productMatch:productMatch, organizationPartyId:organizationPartyId, invoiceId:invoiceId]"/>
+                    <service-call name="mchile.DTEServices.load#Dte" in-map="[xml:xml, pdf:pdf, organizationPartyId:organizationPartyId, productMatch:productMatch, organizationPartyId:organizationPartyId, invoiceId:invoiceId]"/>
                 </else>
             </if>
         </actions>
@@ -1508,7 +1467,7 @@ along with this software (see the LICENSE.md file). If not, see
             Carga boleta en XML recibida por la organización
         </description>
         <in-parameters>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
             <parameter name="invoiceId"/>
             <parameter name="xml" type="org.apache.commons.fileupload.FileItem" required="true"/>
             <parameter name="pdf" type="org.apache.commons.fileupload.FileItem" required="true"/>
@@ -1522,7 +1481,7 @@ along with this software (see the LICENSE.md file). If not, see
             Carga DTE recibida al sistema y llama a servicio que crea orden de compra + invoice correspondiente
         </description>
         <in-parameters>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
             <parameter name="invoiceId"/>
             <parameter name="xml" type="org.apache.commons.fileupload.FileItem" required="true"/>
             <parameter name="pdf" type="org.apache.commons.fileupload.FileItem" required="true"/>
@@ -1663,14 +1622,14 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="montoIVANoRetenido"/>
             <parameter name="codigoSucursal"/>
             <parameter name="notasDebitoCreditoFacturasCompra"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="receiverPartyId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
         </out-parameters>
         <actions>
             <set field="archivoPdf" from="pdf.getName()"/>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:activeOrgId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:receiverPartyId]" out-map="context"/>
 
             <!-- Unused file location -->
             <set field="fileRoot" from="pathRecibidas"/>
@@ -1725,7 +1684,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Creación de FiscalTaxDocument -->
             <set field="createMap" from="[issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber,
-                        receiverPartyId:activeOrgId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]"/>
+                        receiverPartyId:receiverPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocument" out-map="context" in-map="createMap"/>
 
             <!-- Creación de contenido (Solo PDF) -->
@@ -1753,7 +1712,7 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
         <actions>
 
@@ -1802,7 +1761,7 @@ along with this software (see the LICENSE.md file). If not, see
 
 
             <set field="issuerId" from="dteEv.issuerPartyId"/>
-            <if condition="issuerId == activeOrgId">
+            <if condition="issuerId == organizationPartyId">
                 <then>
                     <set field="dteEv.fiscalTaxDocumentStatusEnumId" value="Ftdt-NotIssued"/>
                     <!-- TODO: Revisar que dejar receiverPartyID tal cual no afecte -->
@@ -1834,7 +1793,7 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
         <actions>
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteEv" for-update="true">
@@ -1905,7 +1864,6 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
 
             <set field="returnedItemList" type="NewMap" from="[]"/>
-
 
             <iterate list="listItems" entry="detailItem">
                 <set field="listProduct" from="detailItem instanceof List ? detailItem : detailItem.split('-') as List"/>
@@ -2110,8 +2068,9 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fiscalTaxDocumentIdNotaDebito"/>
         </out-parameters>
         <actions>
+            <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                <econdition field-name="partyId" from="activeOrgId"/>
+                <econdition field-name="partyId" from="issuerPartyId"/>
                 <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
             </entity-find>
 
@@ -2121,7 +2080,6 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
 
 
-            <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="factField"/>
 
             <if condition="!factField">
@@ -2263,10 +2221,10 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="referenciaList" type="NewMap" from="[]"/>
             <script>referenciaList.add(referenciaListOld)</script>
 
-            <!-- Generacion de nota de crédito -->
+            <!-- Generacion de nota de débito -->
             <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-56', rutEmisor:rutEmisor, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
                           contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:itemList,
-                          invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaListOld, issuerPartyId:activeOrgId, receiverPartyId:partyId]" out-map="factMapOut"/>
+                          invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaListOld, issuerPartyId:issuerPartyId, receiverPartyId:partyId]" out-map="factMapOut"/>
 
             <set field="fiscalTaxDocumentIdNotaDebito" from="factMapOut.fiscalTaxDocumentId"/>
 
@@ -2429,7 +2387,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fiscalTaxDocumentId" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="fiscalTaxDocumentNumber" required="true"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
     </service>
 
@@ -2443,11 +2401,11 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fiscalTaxDocumentId" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="fiscalTaxDocumentNumber" required="true"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
     </service>
 
-    <service verb="enviar" noun="ResultadoAprobacionComercial" type="script" location="component://MoquiChile/service/mchile/DTEServices/enviarResultaqdoAceptacionComercial.groovy">
+    <service verb="enviar" noun="ResultadoAprobacionComercial" type="script" location="component://MoquiChile/service/mchile/DTEServices/enviarResultadoAceptacionComercial.groovy">
         <description>
             Envío de respuesta a emisor DTE.
 
@@ -2459,7 +2417,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fiscalTaxDocumentId" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="fiscalTaxDocumentNumber" required="true"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
     </service>
 
@@ -2578,7 +2536,7 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="genera" noun="RCOF" type="script" location="component://MoquiChile/service/mchile/DTEServices/generaRCOF.groovy">
         <description>Generación de Registro de Consumo de Folios</description>
         <in-parameters>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
             <parameter name="fechaInicio"/>
             <parameter name="fechaFin"/>
         </in-parameters>
@@ -2886,7 +2844,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="fechaInicio" required="true" type="Timestamp"/>
             <parameter name="fechaFin" required="true" type="Timestamp"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="totalMontoNeto" type="BigDecimal"/>
@@ -2926,7 +2884,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
                     <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Cancelled"/>
                 </econditions>
-                <econdition field-name="issuerPartyId" from="activeOrgId"/>
+                <econdition field-name="issuerPartyId" from="organizationPartyId"/>
                 <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
                 <econdition field-name="date" operator="less-equals" from="fechaFin"/>
                 <order-by field-name="fiscalTaxDocumentId"/>
@@ -2969,7 +2927,7 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
                 <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
                 <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
-                <econdition field-name="issuerPartyId" from="activeOrgId"/>
+                <econdition field-name="issuerPartyId" from="organizationPartyId"/>
                 <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
                 <econdition field-name="date" operator="less-equals" from="fechaFin"/>
                 <order-by field-name="fiscalTaxDocumentId"/>
@@ -3004,7 +2962,7 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
                 <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
                 <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Cancelled"/>
-                <econdition field-name="issuerPartyId" from="activeOrgId"/>
+                <econdition field-name="issuerPartyId" from="organizationPartyId"/>
                 <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
                 <econdition field-name="date" operator="less-equals" from="fechaFin"/>
                 <order-by field-name="fiscalTaxDocumentId"/>
@@ -3046,7 +3004,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="fechaInicio" required="true" type="Timestamp"/>
             <parameter name="fechaFin" required="true" type="Timestamp"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="totalMontoNeto" type="BigDecimal"/>
@@ -3086,7 +3044,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
                     <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Cancelled"/>
                 </econditions>
-                <econdition field-name="issuerPartyId" from="activeOrgId"/>
+                <econdition field-name="issuerPartyId" from="organizationPartyId"/>
                 <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
                 <econdition field-name="date" operator="less-equals" from="fechaFin"/>
                 <order-by field-name="fiscalTaxDocumentId"/>
@@ -3129,7 +3087,7 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
                 <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
                 <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
-                <econdition field-name="issuerPartyId" from="activeOrgId"/>
+                <econdition field-name="issuerPartyId" from="organizationPartyId"/>
                 <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
                 <econdition field-name="date" operator="less-equals" from="fechaFin"/>
                 <order-by field-name="fiscalTaxDocumentId"/>
@@ -3164,7 +3122,7 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
                 <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
                 <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Cancelled"/>
-                <econdition field-name="issuerPartyId" from="activeOrgId"/>
+                <econdition field-name="issuerPartyId" from="organizationPartyId"/>
                 <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
                 <econdition field-name="date" operator="less-equals" from="fechaFin"/>
                 <order-by field-name="fiscalTaxDocumentId"/>
@@ -3288,12 +3246,12 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="filename" type="org.apache.commons.fileupload.FileItem"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
             <parameter name="passCert" required="true"/>
         </in-parameters>
         <actions>
             <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams" for-update="true">
-                <field-map field-name="partyId" from="activeOrgId"/>
+                <field-map field-name="partyId" from="organizationPartyId"/>
             </entity-find-one>
             <if condition="!dteParams">
                 <return error="true" message="Primero complete parametros de organizacion"/>
@@ -3311,12 +3269,12 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="filename" type="org.apache.commons.fileupload.FileItem"/>
-            <parameter name="activeOrgId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
             <parameter name="type" required="true"/>
         </in-parameters>
         <actions>
             <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams" for-update="true">
-                <field-map field-name="partyId" from="activeOrgId"/>
+                <field-map field-name="partyId" from="organizationPartyId"/>
             </entity-find-one>
 
 

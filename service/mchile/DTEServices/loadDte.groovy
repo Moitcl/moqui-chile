@@ -22,7 +22,7 @@ ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rut]
 
 // Carga XML
 archivoXml = xml.getName()
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
 fileRoot = pathRecibidas
 contentLocationXml = "${fileRoot}/${archivoXml}"
 docRrXml = ec.resource.getLocationReference(contentLocationXml)
@@ -189,13 +189,13 @@ for (int i = 0; i < dteArray.size(); i++) {
         invoiceOutMap = ec.service.sync().name("mantle.account.InvoiceServices.create#EntireOrderPartInvoice").parameters([orderId:purchaseOutMap.orderId, orderPartSeqId:purchaseOutMap.orderPartSeqId]).call()
         ec.logger.warn("Invoice $invoiceOutMap.invoiceId creada para factura XML")
         receiveOrderOut = ec.service.sync().name("mchile.PurchaseServices.receive#Order").parameters([orderId:purchaseOutMap.orderId,
-                                                                                                      orderPartSeqId:purchaseOutMap.orderPartSeqId,facilityId:facilityId, activeOrgId:activeOrgId]).call()
+                                                                                                      orderPartSeqId:purchaseOutMap.orderPartSeqId,facilityId:facilityId, activeOrgId:organizationPartyId]).call()
         invoiceId = invoiceOutMap.invoiceId
     }
 
     // Se guarda DTE recibido en la base de datos
     createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', fiscalTaxDocumentTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte,
-                 receiverPartyId:activeOrgId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]
+                 receiverPartyId:organizationPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]
     mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call()
 
     // Se guarda contenido asociado a la DTE, todas las DTE que vienen en el mismo envío comparten el mismo XML
