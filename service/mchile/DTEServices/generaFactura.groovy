@@ -49,7 +49,25 @@ tipoFactura = codeOut.siiCode
 
 fechaEmision = null
 
-// Obtención de folio y path de CAF -->
+// Formas de pago
+if (settlementTermId.equals('FpaImmediate'))
+    formaPago = "1" // Contado
+else if (settlementTermId.equals('Net10'))
+    formaPago = "2" // Credito (usar GlosaPagos)
+else if (settlementTermId.equals('Net15'))
+    formaPago = "2" // Credito (usar GlosaPagos)
+else if (settlementTermId.equals('Net30'))
+    formaPago = "2" // Credito (usar GlosaPagos)
+else if (settlementTermId.equals('Net60'))
+    formaPago = "2" // Credito (usar GlosaPagos)
+else if (settlementTermId.equals('Net90'))
+    formaPago = "2" // Credito (usar GlosaPagos)
+else if (settlementTermId == "3")
+    formaPago = "3" // Sin costo
+else
+    formaPago = ""
+
+//Obtención de folio y path de CAF -->
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call())
 codRef = 0 as Integer
 
@@ -60,6 +78,7 @@ PrivateKey key
 int frmPago = 1
 int listSize = 0
 
+// Forma de pago
 if(formaPago != null)
     frmPago = Integer.valueOf(formaPago)
 
@@ -1010,7 +1029,7 @@ if (Signer.verify(doc2, "Documento")) {
 
 // Registro de DTE en base de datos y generación de PDF -->
 fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoFactura}"
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([dte:facturaXml, issuerPartyId:issuerPartyId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([dte:facturaXml, issuerPartyId:issuerPartyId, glosaPagos:glosaPagos]).call())
 
 // Creación de registro en FiscalTaxDocument -->
 dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:issuerPartyId]).one()

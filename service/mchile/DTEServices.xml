@@ -38,8 +38,10 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="referenciaList" type="List"/>
             <parameter name="globalDiscount"/>
             <parameter name="glosaDr"/>
+            <parameter name="glosaPagos"/>
             <parameter name="indTraslado" type="Integer"/>
             <parameter name="tipoDespacho" type="Integer"/>
+            <parameter name="settlementTermId"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
@@ -313,6 +315,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="issuerPartyId" required="true"/>
             <parameter name="boleta"/>
             <parameter name="continua"/>
+            <parameter name="glosaPagos"/>
         </in-parameters>
         <out-parameters>
             <parameter name="pdfBytes" type="byte[]"/>
@@ -362,14 +365,14 @@ along with this software (see the LICENSE.md file). If not, see
 
                 ByteArrayOutputStream pdf = new ByteArrayOutputStream()
 
-                ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(template.getBinaryStream()), pdf, "application/pdf", transformParameters + [cedible:'false'])
+                ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(template.getBinaryStream()), pdf, "application/pdf", transformParameters + [cedible:'false'])// + [glosaPagos:glosaPagos]
                 pdf.close()
                 pdfBytes = pdf.toByteArray()
             </script>
             <if condition="!boleta">
                 <script>
                     pdf = new ByteArrayOutputStream()
-                    ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(template.getBinaryStream()), pdf, "application/pdf", transformParameters + [cedible:'true'])
+                    ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(template.getBinaryStream()), pdf, "application/pdf", transformParameters + [cedible:'true'])// + [glosaPagos:glosaPagos]
                     pdf.close()
                     pdfCedibleBytes = pdf.toByteArray()
                 </script>
@@ -576,6 +579,7 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="invoiceId" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="settlementTermId"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
@@ -634,6 +638,19 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="!paymentId">
                 <set field="medioPago" value="PE"/>
                 <set field="formaPago" value="2"/>
+            </if>
+
+            <!-- Glosa para pago a credito -->
+            <set field="glosaPagos"/>
+            <if condition="settlementTermId">
+                <entity-find-one entity-name="mantle.account.invoice.SettlementTerm" value-field="settlementField">
+                    <field-map field-name="settlementTermId" from="settlementTermId"/>
+                    <select-field field-name="description"/>
+                </entity-find-one>
+                <if condition="!settlementTermId">
+                    <return error="true" message="Términos de crédito no existente"/>
+                </if>
+                <set field="glosaPagos" from="settlementField.description"/>
             </if>
 
             <!-- Datos principales de invoice -->
@@ -777,7 +794,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <!-- Generacion de factura -->
                     <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
                       contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
-                          invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId, globalDiscount:globalDiscount, glosaDr:glosaDr]" out-map="context"/>
+                          invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId, globalDiscount:globalDiscount, glosaDr:glosaDr, glosaPagos:glosaPagos]" out-map="context"/>
                 </else>
             </if>
         </actions>
