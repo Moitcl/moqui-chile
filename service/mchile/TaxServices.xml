@@ -18,8 +18,9 @@ along with this software (see the LICENSE.md file). If not, see
         <implements service="mantle.other.TaxServices.calculate#SalesTax"/>
         <actions>
             <set field="taxResults" from="[]"/>
-            <set field="taxRate" from="0.19"/>
-            <set field="baseMap" from="[taxRate:taxRate, taxAuthorityId:'CL_SII', taxName:'IVA', alreadyIncluded:'Y']"/>
+            <service-call name="mchile.TaxServices.get#VatTaxRate" out-map="vatTaxMap"/>
+            <set field="vatTaxRate" from="vatTaxMap.taxRate"/>
+            <set field="vatBaseMap" from="[taxRate:vatTaxRate, taxAuthorityId:'CL_SII', taxName:'IVA', itemTypeEnumId:'ItemVatTax', taxQuantity:1]"/>
             <iterate list="items" entry="item">
                 <if condition="item.itemTypeEnumId == 'ItemProduct'">
                     <entity-find-count entity-name="mantle.product.category.ProductCategoryMember" count-field="exentoCount">
@@ -28,23 +29,48 @@ along with this software (see the LICENSE.md file). If not, see
                         <date-filter/>
                     </entity-find-count>
                     <if condition="exentoCount > 0"><continue/></if>
-                    <script>
-                        <![CDATA[
-                            itemAmount = item.unitAmount
-                            // taxAmount = itemAmount / (1 + taxRate) * taxRate (itemAmount ES neto)
-                            taxAmount = (itemAmount + (item.discountTotal/item.quantity)) * taxRate
-                            taxResults += baseMap + [itemId:item.itemId, taxAmount:taxAmount]
-
-                            println "item.quantity: "+item.quantity
-                            println "item.unitAmount :"+item.unitAmount
-                            println "taxRate :"+taxRate
-                            println "itemAmount :"+itemAmount
-                            println "taxAmount :"+taxAmount
-                            println "taxResults :"+taxResults
-                        ]]>
-                    </script>
+                    <script>taxResults.add(vatBaseMap+[itemId:item.itemId, taxAmount:(item.itemTotal + item.discountTotal)*vatTaxRate])</script>
                 </if>
             </iterate>
+        </actions>
+    </service>
+
+    <service verb="get" noun="VatTaxRate">
+        <in-parameters>
+            <parameter name="date" type="Timestamp" default="ec.user.nowTimestamp"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="taxRate" type="BigDecimal"/>
+        </out-parameters>
+        <actions>
+            <set field="taxRate" from="0.19"/>
+        </actions>
+    </service>
+
+    <service verb="calculate" noun="NetFromGrossPrice">
+        <in-parameters>
+            <parameter name="grossPrice" type="BigDecimal" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="netPrice" type="BigDecimal"/>
+        </out-parameters>
+        <actions>
+            <service-call name="mchile.TaxServices.get#VatTaxRate" out-map="context"/>
+            <script><![CDATA[
+                grossPrice = grossPrice.setScale(0, BigDecimal.ROUND_HALF_UP)
+                netPrice = (grossPrice / (taxRate + 1)).setScale(0, BigDecimal.ROUND_HALF_UP)
+                calculatedGrossPrice = (netPrice * (taxRate + 1)).setScale(0, BigDecimal.ROUND_HALF_UP)
+                if (calculatedGrossPrice != grossPrice) {
+                    if (calculatedGrossPrice < grossPrice)
+                        netPrice += 1
+                    else if (calculatedGrossPrice > grossPrice)
+                        netPrice -= 1
+                    calculatedGrossPrice = (netPrice * (taxRate + 1)).setScale(0, BigDecimal.ROUND_HALF_UP)
+                    if (calculatedGrossPrice != grossPrice) {
+                        netPrice = (grossPrice / (taxRate + 1)).setScale(1, BigDecimal.ROUND_HALF_UP)
+                    }
+                }
+            ]]></script>
         </actions>
     </service>
 

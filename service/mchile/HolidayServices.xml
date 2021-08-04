@@ -14,13 +14,34 @@ along with this software (see the LICENSE.md file). If not, see
 -->
 <services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
 
-    <!-- Información detallada: http://www.feriados.cl/ -->
+    <!--
+          No contempla feriados anteriores al año 1915 (Ley 2.977) (Ej: Adoración de los Santos Reyes (Epifanía), Carnaval, Purificación de la Virgen, etc)
+          Información detallada: http://www.feriados.cl/ y http://feriadoschilenos.cl/
+
+          Pendientes:
+           * Día Nacional del Cinematografista (entre 1973 hasta 1981, para ciertos trabajadores)
+           * Ascensión del Señor (Hasta 1968)
+           * Corpus Christi
+           * Feriado bancario de fin de semestre
+           * Día Nacional del Campesino
+           * Nacimiento del Prócer de la Independencia
+           * Día de la Unidad Nacional
+           * 11 de Septiembre (referido como "Aniversario de la Liberación Nacional" en feriadoschilenos.cl)
+           * Víspera de Fiestas Patrias
+           * 20 de septiembre (entre 1932 y 1944)
+           * Día de los Estudiantes o Fiesta de la Primavera
+      -->
 
     <service verb="calculate" noun="Holiday" type="interface">
         <in-parameters><parameter name="year" required="true" type="Integer"/></in-parameters>
         <out-parameters>
             <parameter name="month" type="Integer"/>
             <parameter name="day" type="Integer"/>
+            <parameter name="description"><description>Description when it is different than the one defined in the corresponding Enumeration</description>
+            </parameter>
+            <parameter name="categoryList" type="List">
+                <parameter name="workEffortCategoryId"/>
+            </parameter>
         </out-parameters>
     </service>
 
@@ -51,7 +72,18 @@ along with this software (see the LICENSE.md file). If not, see
                          from="[workEffortId:id, purposeEnumId:'WepHoliday', workEffortTypeEnumId:'WetEvent',
                                 visibilityEnumId:'WevAllUsers', workEffortName:holiday.description,
                                 allDayStart:cal.time]"/>
-                    <service-call name="store#mantle.work.effort.WorkEffort" in-map="workEffortMap"/>
+                    <entity-find-one entity-name="mantle.work.effort.WorkEffort" value-field="workEffort">
+                        <field-map field-name="workEffortId" from="id"/>
+                    </entity-find-one>
+                    <if condition="!workEffort">
+                        <service-call name="store#mantle.work.effort.WorkEffort" in-map="workEffortMap"/>
+                        <if condition="out.categoryList">
+                            <set field="outList" from="out.categoryList"/>
+                            <iterate list="outList" entry="workEffortCategory">
+                                <service-call name="create#mantle.work.effort.WorkEffortCategoryAppl" in-map="[workEffortId:id, workEffortCategoryId:workEffortCategory]"/>
+                            </iterate>
+                        </if>
+                    </if>
                 </if>
             </iterate>
         </actions>
@@ -59,24 +91,33 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="calculate" noun="HChlANVO">
         <implements service="mchile.HolidayServices.calculate#Holiday"/>
-        <!-- Leyes 2.977 y 19.973 -->
         <actions>
+            <!-- Ley 2.977 -->
+            <if condition="year &lt; 1916"><return/></if>
             <set field="month" from="1"/>
             <set field="day" from="1"/>
+            <if condition="year &lt; 2013">
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil']"/>
+                <return/>
+            </if>
+            <!-- Ley 19.973 -->
+            <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil', 'HolidayChlIrrenunciable']"/>
         </actions>
     </service>
 
     <service verb="calculate" noun="HChl2ENE">
         <implements service="mchile.HolidayServices.calculate#Holiday"/>
-        <!-- 2 de Enero si 1 de Enero cae en día domingo -->
-        <!-- Ley 20.983 -->
         <actions>
+            <!-- Ley 20.983 -->
+            <!-- 2 de Enero si 1 de Enero cae en día domingo -->
+            <if condition="year &lt; 2017"><return/></if>
             <script><![CDATA[
                 cal = Calendar.instance
                 cal.set(year, 0, 1)
                 if (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
                     month = 1
                     day = 2
+                    categoryList = ['HolidayChl', 'HolidayChlCivil']
                 }
             ]]></script>
         </actions>
@@ -91,67 +132,107 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="month" type="Integer"/>
             <parameter name="day" type="Integer"/>
         </out-parameters>
-        <!-- Usando Anonymous Gregorian algorithm (Meeus/Jones/Butcher), funciona
-             para años entre 1900 y 2199 inclusive -->
-        <actions><script><![CDATA[
-            int a = year % 19;
-	        int b = year / 100;
-	        int c = year % 100;
-	        int d = b / 4;
-        	int e = b % 4;
-        	int f = (b + 8) / 25;
-	        int g = (b - f + 1) / 3;
-	        int h = (19 * a + b - d - g + 15) % 30;
-	        int i = c / 4;
-	        int k = c % 4;
-	        int l = (32 + 2 * e + 2 * i - h - k) % 7;
-	        int m = (a + 11 * h + 22 * l) / 451;
-	        int n = (h + l - 7 * m + 114) / 31;
-	        int p = (h + l - 7 * m + 114) % 31;
-	        Calendar easterSundayDate = GregorianCalendar.getInstance();
-	        easterSundayDate.clear();
-	        easterSundayDate.set(year, n - 1, p + 1);
-	        month = easterSundayDate.get(Calendar.MONTH) + 1
-	        day = easterSundayDate.get(Calendar.MONTH)
-            easterSundayDate.add(Calendar.DAY_OF_MONTH, -daysPrevious)
-	        month = easterSundayDate.get(Calendar.MONTH) + 1
-	        day = easterSundayDate.get(Calendar.DAY_OF_MONTH)
-        ]]></script></actions>
+        <actions>
+            <!-- Usando Anonymous Gregorian algorithm (Meeus/Jones/Butcher), funciona para años entre 1900 y 2199 inclusive -->
+            <if condition="year &lt; 1900 || year &gt; 2199">
+                <return error="true" message="Unsupported year ${year}"/>
+            </if>
+            <script><![CDATA[
+                int a = year % 19;
+                int b = year / 100;
+                int c = year % 100;
+                int d = b / 4;
+                int e = b % 4;
+                int f = (b + 8) / 25;
+                int g = (b - f + 1) / 3;
+                int h = (19 * a + b - d - g + 15) % 30;
+                int i = c / 4;
+                int k = c % 4;
+                int l = (32 + 2 * e + 2 * i - h - k) % 7;
+                int m = (a + 11 * h + 22 * l) / 451;
+                int n = (h + l - 7 * m + 114) / 31;
+                int p = (h + l - 7 * m + 114) % 31;
+                Calendar easterSundayDate = GregorianCalendar.getInstance();
+                easterSundayDate.clear();
+                easterSundayDate.set(year, n - 1, p + 1);
+                month = easterSundayDate.get(Calendar.MONTH) + 1
+                day = easterSundayDate.get(Calendar.MONTH)
+                easterSundayDate.add(Calendar.DAY_OF_MONTH, -daysPrevious)
+                month = easterSundayDate.get(Calendar.MONTH) + 1
+                day = easterSundayDate.get(Calendar.DAY_OF_MONTH)
+            ]]></script>
+        </actions>
     </service>
 
     <service verb="calculate" noun="HChlVSTO">
         <implements service="mchile.HolidayServices.calculate#Holiday"/>
         <actions>
+            <!-- Ley 2.977 -->
+            <if condition="year &lt; 1915"><return/></if>
             <set field="daysPrevious" from="2"/>
-            <service-call name="mchile.HolidayServices.calculate#EasterSundayDate" in-map="context"
-                          out-map="context"/>
+            <service-call name="mchile.HolidayServices.calculate#EasterSundayDate" in-map="context" out-map="context"/>
+            <set field="categoryList" from="['HolidayChl', 'HolidayChlReligious']"/>
         </actions>
     </service>
 
     <service verb="calculate" noun="HChlSSTO">
         <implements service="mchile.HolidayServices.calculate#Holiday"/>
         <actions>
+            <!-- Ley 2.977 -->
+            <if condition="year &lt; 1915"><return/></if>
             <set field="daysPrevious" from="1"/>
-            <service-call name="mchile.HolidayServices.calculate#EasterSundayDate" in-map="context"
-                          out-map="context"/>
+            <service-call name="mchile.HolidayServices.calculate#EasterSundayDate" in-map="context" out-map="context"/>
+            <set field="categoryList" from="['HolidayChl', 'HolidayChlReligious']"/>
+        </actions>
+    </service>
+
+    <service verb="calculate" noun="HChlCOCHR">
+        <implements service="mchile.HolidayServices.calculate#Holiday"/>
+        <actions>
+            <!-- Indulto Apostólico de 1824, Ley 2.977 -->
+            <if condition="year &lt; 1824"><return/></if>
+            <!-- Ley 16.840 -->
+            <set field="daysPrevious" from="1"/>
+            <service-call name="mchile.HolidayServices.calculate#EasterSundayDate" in-map="context" out-map="context"/>
+            <set field="categoryList" from="['HolidayChl', 'HolidayChlReligious']"/>
         </actions>
     </service>
 
     <service verb="calculate" noun="HChlTBJO">
         <implements service="mchile.HolidayServices.calculate#Holiday"/>
-        <!-- Ley 19.973 (Código del Trabajo) -->
         <actions>
+            <if condition="year &lt; 1932"><return/></if>
+            <!-- DFL 178 de 1931 del Ministerio de Bienestar Social (Artículo 322) -->
+            <if condition="year &lt; 2003">
+                <set field="month" from="5"/>
+                <set field="day" from="1"/>
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil']"/>
+                <if condition="year &lt; 1982">
+                    <!-- Ley 18.018 cambia el nombre a "Día Nacional del Trabajo" -->
+                    <set field="description" value="Fiesta del Trabajo"/>
+                </if>
+                <return/>
+            </if>
+            <!-- Código del Trabajo -->
             <set field="month" from="5"/>
             <set field="day" from="1"/>
+            <!-- Ley 19.973 -->
+            <if condition="year &lt; 2005">
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil']"/>
+                <return/>
+            </if>
+            <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil', 'HolidayChlIrrenunciable']"/>
         </actions>
     </service>
 
     <service verb="calculate" noun="HChlGNAV">
         <implements service="mchile.HolidayServices.calculate#Holiday"/>
-        <!-- Ley 2.977 -->
         <actions>
+            <!-- Ley 2.977 -->
+            <if condition="year &lt; 1916"><return/></if>
             <set field="month" from="5"/>
             <set field="day" from="21"/>
+            <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil']"/>
         </actions>
     </service>
 
@@ -200,30 +281,77 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="calculate" noun="HChlPUEI">
+        <implements service="mchile.HolidayServices.calculate#Holiday"/>
+        <actions>
+            <!-- Ley 21.357 -->
+            <if condition="year &lt; 2021"><return/></if>
+            <if condition="year == 2021">
+                <!-- Artículo transitorio.- Excepcionalmente, para el año 2021, el feriado legal a que se refiere el artículo único de la presente ley corresponderá al día 21 de junio de dicho año -->
+                <set field="month" from="6"/>
+                <set field="day" from="21"/>
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil']"/>
+                <return/>
+            </if>
+            <!-- Artículo único: Declárase feriado legal el día del solsticio de invierno de cada año en el hemisferio sur, Día Nacional de los Pueblos Indígenas -->
+            <if condition="year in [2022, 2023, 2026, 2027, 2030, 2031, 2034, 2035, 2038, 2039, 2042, 2043, 2046, 2047, 2051, 2055, 2059, 2063, 2067]">
+                <set field="month" from="6"/>
+                <set field="day" from="21"/>
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil']"/>
+            </if>
+            <if condition="year in [2024, 2025, 2028, 2029, 2032, 2033, 2036, 2037, 2040, 2041, 2044, 2045, 2048, 2049, 2050, 2052, 2053, 2054, 2056, 2057, 2058, 2060, 2061, 2062, 2064, 2065, 2066, 2068, 2069, 2070]">
+                <set field="month" from="6"/>
+                <set field="day" from="20"/>
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil']"/>
+            </if>
+            <return error="true" message="Not yet implemented"/>
+        </actions>
+    </service>
+
     <service verb="calculate" noun="HChlPEPA">
         <implements service="mchile.HolidayServices.calculate#Holiday"/>
-        <!-- Leyes 2.977, 18.432, 19.668 -->
         <actions>
-            <service-call name="mchile.HolidayServices.apply#Ley19668" in-map="[year:year, day:29, month:6]"
-                          out-map="context"/>
+            <!-- Ley 2.977 -->
+            <if condition="year &lt; 1916"><return/></if>
+            <!-- Ley 16.840 -->
+            <if condition="year &lt; 1968">
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlReligious']"/>
+                <set field="day" from="29"/>
+                <set field="month" from="6"/>
+                <return/>
+            </if>
+            <if condition="year &lt; 1986"><return/></if>
+            <!-- Ley 18.432 -->
+            <set field="categoryList" from="['HolidayChl', 'HolidayChlReligious']"/>
+            <if condition="year &lt; 2000">
+                <set field="day" from="29"/>
+                <set field="month" from="6"/>
+                <return/>
+            </if>
+            <!-- Ley 19.668 -->
+            <service-call name="mchile.HolidayServices.apply#Ley19668" in-map="[year:year, day:29, month:6]" out-map="context"/>
         </actions>
     </service>
 
     <service verb="calculate" noun="HChlVICA">
         <implements service="mchile.HolidayServices.calculate#Holiday"/>
-        <!-- Ley 20.148 -->
         <actions>
+            <!-- Ley 20.148 -->
+            <if condition="year &lt; 2007"><return/></if>
             <set field="month" from="7"/>
             <set field="day" from="16"/>
+            <set field="categoryList" from="['HolidayChl', 'HolidayChlReligious']"/>
         </actions>
     </service>
 
     <service verb="calculate" noun="HChlASVI">
         <implements service="mchile.HolidayServices.calculate#Holiday"/>
-        <!-- Ley 2.977 -->
         <actions>
+            <!-- Ley 2.977 -->
+            <if condition="year &lt; 1916"><return/></if>
             <set field="month" from="8"/>
             <set field="day" from="15"/>
+            <set field="categoryList" from="['HolidayChl', 'HolidayChlReligious']"/>
         </actions>
     </service>
 
@@ -231,60 +359,102 @@ along with this software (see the LICENSE.md file). If not, see
         <implements service="mchile.HolidayServices.calculate#Holiday"/>
         <!-- Leyes 2.977, 19.973 -->
         <actions>
+            <!-- Ley 2.977 -->
+            <if condition="year &lt; 1916"><return/></if>
             <set field="month" from="9"/>
             <set field="day" from="18"/>
+            <!-- Leyes 19.973, 20.215 y 20.918 (cambios a irenunciabilidad) -->
+            <if condition="year &lt; 2004"><then>
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil']"/>
+            </then><else>
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil', 'HolidayChlIrrenunciable']"/>
+            </else></if>
         </actions>
     </service>
 
     <service verb="calculate" noun="HChlINDA">
         <implements service="mchile.HolidayServices.calculate#Holiday"/>
-        <!-- Ley 20.215
-             En cada año calendario que los días 18 y 19 de septiembre sean días martes y miércoles,
-             respectivamente, o miércoles y jueves, respectivamente, será feriado el día lunes 17 o
-             el día viernes 20 de dicho mes, según el caso.
+        <!-- Este feriado combina tres feriados definidos de forma independiente pero cuyo sentido es extender la
+             celebración del 18 de Septiembre, y que no se pueden traslapar ni confundir:
+             * el 7 de Septiembre de 2004 que se definió como feriado como día en particular (Ley 19.973)
+             * Lunes 17 o viernes 20 de Septiembre a partir de 2007 (Ley 20.215)
+             * Viernes 17 de Septiembre a partir de 2017 (San Viernes, Ley 20.983)
          -->
         <actions>
+            <if condition="year == 2004">
+                <!-- Ley 19.973, artículo 1 -->
+                <set field="month" from="9"/>
+                <set field="day" from="17"/>
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil']"/>
+            </if>
+            <!-- Ley 20.215 -->
+            <if condition="year &lt; 2007"><return/></if>
             <script><![CDATA[
                 cal = Calendar.instance
                 cal.set(year, 8, 18)
                 dow = cal.get(Calendar.DAY_OF_WEEK)
-                if (dow == Calendar.TUESDAY) {
-                    month = 9
-                    day = 17
-                } else if (dow == Calendar.WEDNESDAY) {
-                    month = 9
-                    day = 20
-                }
             ]]></script>
+            <if condition="dow == Calendar.TUESDAY"><then>
+                <set field="month" from="9"/>
+                <set field="day" from="17"/>
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil']"/>
+            </then><else-if condition="dow == Calendar.WEDNESDAY">
+                <set field="month" from="9"/>
+                <set field="day" from="20"/>
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil']"/>
+            </else-if><else-if condition="year &lt; 2017">
+                <return/>
+            </else-if></if>
+            <!-- Ley 20.983 -->
+            <if condition="dow == Calendar.SATURDAY">
+                <set field="month" from="9"/>
+                <set field="day" from="17"/>
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil']"/>
+            </if>
         </actions>
     </service>
 
     <service verb="calculate" noun="HChlGLEJ">
         <implements service="mchile.HolidayServices.calculate#Holiday"/>
-        <!-- Leyes 2.977, 20.629 -->
         <actions>
+            <!-- Ley 2.977 -->
+            <if condition="year &lt; 1916"><return/></if>
+            <!-- Decreto Ley 11 de 1973 (suspende feriado para ese año) -->
+            <if condition="year == 1973"><return/></if>
             <set field="month" from="9"/>
             <set field="day" from="19"/>
+            <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil']"/>
+            <!-- Leyes 20.465, 20.538, 20.629 y 20.918 (diferentes cambios a irrenunciabilidad)-->
+            <if condition="year >= 2010">
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil', 'HolidayChlIrrenunciable']"/>
+            </if>
         </actions>
     </service>
 
     <service verb="calculate" noun="HChl2MDO">
         <implements service="mchile.HolidayServices.calculate#Holiday"/>
-        <!-- Leyes 2.977, 18.432, 19.668 -->
         <actions>
-            <service-call name="mchile.HolidayServices.apply#Ley19668" in-map="[year:year, day:12, month:10]"
-                          out-map="context"/>
+            <!-- Ley 3.810 -->
+            <if condition="year &lt; 1922"><return/></if>
+            <!-- Decreto Ley 63 de 1973 (suspende feriado) y Decreto Ley 687 de 1974 (deja sin efecto el DL 63 y reestablece el feriado) -->
+            <if condition="year == 1973"><return/></if>
+            <!-- Ley 19.668 -->
+            <if condition="year &lt; 2000">
+                <set field="description" value="Aniversario del Descubrimiento de América"/>
+                <set field="day" from="12"/>
+                <set field="month" from="10"/>
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil']"/>
+                <return/>
+            </if>
+            <service-call name="mchile.HolidayServices.apply#Ley19668" in-map="[year:year, day:12, month:10]" out-map="context"/>
         </actions>
     </service>
 
     <service verb="calculate" noun="HChlIGEV">
         <implements service="mchile.HolidayServices.calculate#Holiday"/>
-        <!-- Ley 20.299
-        "Artículo 1°.- Declárase feriado el día 31 de octubre, por conmemorarse el Día Nacional de las Iglesias Evangélicas y Protestantes.
-
-     Artículo 2°.- Trasládase el feriado señalado en el artículo anterior al día viernes de la misma semana en caso de corresponder el 31 de octubre a día miércoles, y trasládase al día viernes de la semana inmediatamente anterior en caso de corresponder dicha fecha a día martes.".
-         -->
         <actions>
+            <!-- Ley 20.299 -->
+            <if condition="year &lt; 2008"><return/></if>
             <script><![CDATA[
                 cal = Calendar.instance
                 cal.set(year, 9, 31)
@@ -296,33 +466,109 @@ along with this software (see the LICENSE.md file). If not, see
                 month = cal.get(Calendar.MONTH) + 1
                 day = cal.get(Calendar.DAY_OF_MONTH)
             ]]></script>
+            <set field="categoryList" from="['HolidayChl', 'HolidayChlReligious']"/>
         </actions>
     </service>
 
     <service verb="calculate" noun="HChlTDST">
         <implements service="mchile.HolidayServices.calculate#Holiday"/>
-        <!-- Ley 2.977 -->
         <actions>
+            <!-- Ley 2.977 -->
+            <if condition="year &lt; 1916"><return/></if>
             <set field="month" from="11"/>
             <set field="day" from="1"/>
+            <set field="categoryList" from="['HolidayChl', 'HolidayChlReligious']"/>
         </actions>
     </service>
 
     <service verb="calculate" noun="HChlICON">
         <implements service="mchile.HolidayServices.calculate#Holiday"/>
-        <!-- Ley 2.977 -->
         <actions>
+            <!-- Ley 2.977 -->
+            <if condition="year &lt; 1916"><return/></if>
             <set field="month" from="12"/>
             <set field="day" from="8"/>
+            <set field="categoryList" from="['HolidayChl', 'HolidayChlReligious']"/>
         </actions>
     </service>
 
     <service verb="calculate" noun="HChlNAVI">
         <implements service="mchile.HolidayServices.calculate#Holiday"/>
-        <!-- Leyes 2.977, 19.973 -->
         <actions>
+            <!-- Ley 2.977 -->
+            <if condition="year &lt; 1916"><return/></if>
             <set field="month" from="12"/>
             <set field="day" from="25"/>
+            <!-- Leyes 19.973, 20.215 y 20.918 (diferentes cambios a irrenunciabilidad) -->
+            <if condition="year &lt; 2004"><then>
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlReligious']"/>
+            </then><else>
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlReligious', 'HolidayChlIrrenunciable']"/>
+            </else></if>
+        </actions>
+    </service>
+
+    <service verb="calculate" noun="HChlELECA">
+        <implements service="mchile.HolidayServices.calculate#Holiday"/>
+        <actions>
+            <!-- Ley 18.695, Ley 18.700, Ley 21.221, Ley 19.175, Ley 21.317, Ley 21.324, Ley 21.341 -->
+            <if condition="year == 2021">
+                <set field="day" from="15"/>
+                <set field="month" from="5"/>
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil', 'HolidayChlIrrenunciable', 'HolidayChlElections']"/>
+                <set field="description" value="Elecciones Alcaldes, Consejales, Gobernadores Regionales y Constituyentes (día 1)"/>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="calculate" noun="HChlELECB">
+        <implements service="mchile.HolidayServices.calculate#Holiday"/>
+        <actions>
+            <!-- Ley 18.695, Ley 18.700, Ley 21.221, Ley 19.175, Ley 21.317, Ley 21.324, Ley 21.341 -->
+            <if condition="year == 2021">
+                <set field="day" from="16"/>
+                <set field="month" from="5"/>
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil', 'HolidayChlIrrenunciable', 'HolidayChlElections']"/>
+                <set field="description" value="Elecciones Alcaldes, Consejales, Gobernadores Regionales y Constituyentes (día 2)"/>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="calculate" noun="HChlELECA2VLTA">
+        <implements service="mchile.HolidayServices.calculate#Holiday"/>
+        <actions>
+            <!-- Ley 18.695, Ley 18.700, Ley 21.221, Ley 19.175, Ley 21.317, Ley 21.324, Ley 21.341 -->
+            <if condition="year == 2021">
+                <set field="day" from="13"/>
+                <set field="month" from="6"/>
+                <set field="categoryList" from="['HolidayChl', 'HolidayChlCivil', 'HolidayChlIrrenunciable', 'HolidayChlElections']"/>
+                <set field="description" value="Elecciones Gobernadores Regionales (segunda vuelta)"/>
+                <return/>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="create" noun="YearHolidays">
+        <in-parameters>
+            <parameter name="year"/>
+        </in-parameters>
+        <actions>
+            <script><![CDATA[
+                import java.util.Calendar;
+                if (year == null) {
+                    Calendar nowCalendar = ec.user.nowCalendar
+                    year= nowCalendar.get(Calendar.YEAR)
+                }
+            ]]></script>
+            <entity-find entity-name="mantle.work.effort.WorkEffort" list="workEffortList">
+                <econdition field-name="workEffortId" operator="like" value="CHL_${year}_%"/>
+                <econdition field-name="purposeEnumId" value="WepHoliday"/>
+                <econdition field-name="workEffortTypeEnumId" value="WetEvent"/>
+            </entity-find>
+
+            <if condition="!workEffortList">
+                <service-call name="mchile.HolidayServices.calculate#Holidays" in-map="[year:year]"/>
+            </if>
         </actions>
     </service>
 
