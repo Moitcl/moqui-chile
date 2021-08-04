@@ -65,7 +65,7 @@ else if (settlementTermId.equals('Net90'))
 else if (settlementTermId == "3")
     formaPago = "3" // Sin costo
 else
-    formaPago = ""
+    formaPago = "2"
 
 //Obtención de folio y path de CAF -->
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call())
