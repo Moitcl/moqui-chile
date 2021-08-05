@@ -93,8 +93,26 @@ opts.setLoadSubstituteNamespaces(namespaces)
 caf = AUTORIZACIONDocument.Factory.parse(new ByteArrayInputStream(cafData.getBytes()), opts).getAUTORIZACION()
 
 // Construyo base a partir del template
-//doc = DTEDocument.Factory.parse(new File(templateFactura), opts)
-doc = DTEDocument.Factory.parse(ec.resource.getLocationStream(templateFactura), opts)
+actecoTag = codigosActividadEconomica.split(',').collect { "        <Acteco>${it}</Acteco>\n"}.join()
+templateFactura = """
+<DTE version="1.0">
+  <Documento ID="N150">
+    <Encabezado>
+      <Emisor>
+        <RUTEmisor>${rutEmisor}</RUTEmisor>
+        <RznSoc>${rznSocEmisor}</RznSoc>
+        <GiroEmis>${giro}</GiroEmis>
+        <Telefono>${fonoContacto}</Telefono>
+        <CorreoEmisor>${mailContacto}</CorreoEmisor>
+${actecoTag}        <DirOrigen>${dirOrigen}</DirOrigen>
+        <CmnaOrigen>${cmnaOrigen}</CmnaOrigen>
+        <CiudadOrigen>${ciudadOrigen}</CiudadOrigen>
+      </Emisor>
+    </Encabezado>
+  </Documento>
+</DTE>
+"""
+doc = DTEDocument.Factory.parse(new ByteArrayInputStream(templateFactura.bytes), opts)
 
 // leo certificado y llave privada del archivo pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
@@ -178,11 +196,15 @@ if (tipoFactura == 33) {
     detailList.each { detailEntry ->
         nombreItem = detailEntry.description
         Integer qtyItem = detailEntry.quantity
-        codigoInterno = detailEntry.productId
+        codigoInterno = detailEntry.productId?:""
         Integer priceItem = detailEntry.amount
         totalItem = qtyItem * priceItem
-        afectoOutMap = ec.service.sync().name("mchile.DTEServices.check#Afecto").parameter("productId", detailEntry.productId).call()
-        itemAfecto = afectoOutMap.afecto
+        if (detailEntry.productId) {
+            afectoOutMap = ec.service.sync().name("mchile.DTEServices.check#Afecto").parameter("productId", detailEntry.productId).call()
+            itemAfecto = afectoOutMap.afecto
+        } else {
+            itemAfecto = "true"
+        }
         pctDiscount = detailEntry.pctDiscount
         if (detailEntry.quantityUomId.equals('TF_hr'))
             uom = "Hora"
