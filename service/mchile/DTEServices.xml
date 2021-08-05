@@ -257,6 +257,8 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <out-parameters>
             <auto-parameters entity-name="mchile.dte.PartyDteParams"/>
+            <parameter name="rutEmisor"/>
+            <parameter name="rutEnvia"/>
             <parameter name="transformParameters"/>
         </out-parameters>
         <actions>
@@ -265,10 +267,32 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find-one>
 
             <if condition="!dteParams">
-                <return error="true" message="Organización no tiene datos para generar DTE"/>
+                <message error="true">Organización no tiene datos para generar DTE</message>
             </if>
 
-            <set field="templateFactura" from="dteParams.templateFactura"/>
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="context" out-map="context"/>
+            <set field="rutEmisor" from="rut"/>
+            <if condition="rut == null"><message error="true">No se encuentra RUT para emisor (partyId ${partyId})</message></if>
+
+            <check-errors/>
+
+            <set field="certData" from="dteParams.certData"/>
+            <set field="passCert" from="dteParams.passCert"/>
+            <script><![CDATA[
+                import java.security.KeyStore
+                import java.security.cert.X509Certificate
+                import cl.nic.dte.util.Utilities
+
+                String rutEnvia
+                if (certData && passCert) {
+                    KeyStore ks = KeyStore.getInstance("PKCS12")
+                    ks.load(new ByteArrayInputStream(certData.decodeBase64()), passCert.toCharArray())
+                    String alias = ks.aliases().nextElement()
+                    X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
+                    rutEnvia = Utilities.getRutFromCertificate(x509)
+                }
+            ]]></script>
+
             <set field="templateBoleta" from="dteParams.templateBoleta"/>
             <set field="pdfTemplate" from="dteParams.pdfTemplate"/>
             <set field="pdfTemplateBoleta" from="dteParams.pdfTemplateBoleta"/>
@@ -283,15 +307,11 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="logo" from="dteParams.logo ?: ''"/>
             <set field="fchResol" from="dteParams.fchResol ?: ''"/>
             <set field="nroResol" from="dteParams.nroResol ?: ''"/>
-            <set field="rutEmisor" from="dteParams.rutEmisor"/>
-            <set field="rutEnvia" from="dteParams.rutEnvia"/>
             <set field="rznSocEmisor" from="dteParams.rznSocEmisor"/>
             <set field="cdgSIISucur" from="dteParams.cdgSIISucur"/>
             <set field="dirOrigen" from="dteParams.dirOrigen"/>
             <set field="cmnaOrigen" from="dteParams.cmnaOrigen"/>
             <set field="ciudadOrigen" from="dteParams.ciudadOrigen"/>
-            <set field="certData" from="dteParams.certData"/>
-            <set field="passCert" from="dteParams.passCert"/>
             <set field="nmbContacto" from="dteParams.nmbContacto"/>
             <set field="mailContacto" from="dteParams.mailContacto ?: ''"/>
             <set field="fonoContacto" from="dteParams.fonoContacto ?: ''"/>
