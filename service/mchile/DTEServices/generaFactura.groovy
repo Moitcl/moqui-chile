@@ -205,46 +205,7 @@ if (tipoFactura == 33) {
     doc.getDTE().getDocumento().setDetalleArray(det)
     doc.getDTE().getDocumento().setReferenciaArray(ref)
 
-    // Descuento Global
-    if(globalDiscount != null && Integer.valueOf(globalDiscount) > 0) {
-        if (totalNeto != null)
-            totalNeto = totalNeto - Math.round(totalNeto?:0 * (Long.valueOf(globalDiscount) / 100))
-        if (totalExento != null)
-            totalExento = totalExento - Math.round(totalExento?:0 * (Long.valueOf(globalDiscount) / 100))
-        // Creación entradas en XML
-        DscRcgGlobal dscGlobal = DscRcgGlobal.Factory.newInstance()
-        // iddoc.setMedioPago(MedioPagoType.Enum.forString("CH"))
-        dscGlobal.setNroLinDR(BigInteger.valueOf(1))
-        dscGlobal.setTpoMov(DscRcgGlobal.TpoMov.Enum.forString("D"))
-        dscGlobal.setTpoValor(cl.sii.siiDte.DineroPorcentajeType.Enum.forString("%"))
-        //dscGlobal.setValorDR(BigDecimal.valueOf(descuento));// Porcentaje Dscto
-        dscGlobal.setValorDR(BigDecimal.valueOf(Integer.valueOf(globalDiscount)))// Porcentaje Dscto
-        dscGlobal.setGlosaDR(glosaDr)
-        DscRcgGlobal[] dscGB = new DscRcgGlobal[1]
-        dscGB[0] = dscGlobal
-        doc.getDTE().getDocumento().setDscRcgGlobalArray(dscGB)
-    }
-    // Totales
-    Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales()
-    if (totalNeto != null) {
-        tot.setMntNeto(Math.round(totalNeto))
-        tot.setTasaIVA(BigDecimal.valueOf(19))
-        // Valor de solo IVA
-        long totalIVA = Math.round(totalNeto * 0.19)
-        montoIVARecuperable = totalIVA
-        tot.setIVA(totalIVA)
-        totalInvoice = totalNeto + totalIVA + totalExento
-    } else
-        totalInvoice = totalExento
-    tot.setMntTotal(Math.round(totalInvoice))
-    ec.logger.warn("Total Exento: " + totalExento)
-    if(totalExento != null && totalExento > 0) {
-        tot.setMntExe(Math.round(totalExento))
-    }
-    amount = totalInvoice
-}
-
-if (tipoFactura == 34) {
+} else if (tipoFactura == 34) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     det = detMap.detailArray
     Long totalInvoice = detMap.totalInvoice
@@ -257,17 +218,8 @@ if (tipoFactura == 34) {
 
     doc.getDTE().getDocumento().setReferenciaArray(ref)
     doc.getDTE().getDocumento().setDetalleArray(det)
-    // Totales
-    Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales()
-    tot.setMntExe(totalInvoice)
-    tot.setMntTotal(totalInvoice)
-    montoTotal = totalInvoice
-    montoExento = totalInvoice
-    amount = totalInvoice
-}
-
-// Nota de Crédito Electrónica
-if (tipoFactura == 61) {
+} else if (tipoFactura == 61) {
+    // Nota de Crédito Electrónica
     ec.logger.warn("Creando DTE tipo 61")
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(referenciaList, rutReceptor, tipoFactura)
     Referencia[] ref = refMap.referenceArray
@@ -285,77 +237,15 @@ if (tipoFactura == 61) {
         ec.message.addError("codRef = 2 && det.length = ${det.length}")
         return
     }
-    // Totales
-    Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales()
 
-    long montoExe = 0
-    montoNeto = Long.valueOf(Math.round(totalNeto))
-    long montoIva = Math.round(montoNeto * 0.19)
-    long montoTotal = montoIva + montoNeto + totalExento
-    long montoIvaExento = 0
     // Si la razon es modifica texto (2) no van los montos
     ec.logger.warn("Codref: " + codRef + ", dteExenta: " + dteExenta)
-    if(BigDecimal.valueOf(codRef) == 1) { // Anulación
-        ec.logger.warn("IF:" )
-        if(!dteExenta) {
-            ec.logger.warn("IF2:" + montoIva)
-            tot.setTasaIVA(BigDecimal.valueOf(19))
-            tot.setMntExe(totalExento)
-            tot.setIVA(montoIva)
-            tot.setMntNeto(montoNeto)
-            tot.setMntTotal(montoTotal)
-            montoExento = totalExento
-            montoIVARecuperable = montoIva
-            amount = montoTotal
-        } else {
-            ec.logger.warn("IF3: montoNeto: " +montoNeto + ", montoExento: " + montoExento)
-            tot.setMntExe(montoExento)
-            tot.setMntTotal(montoExento)
-            montoExento = montoNeto
-            montoIVARecuperable = 0
-            amount = montoNeto
-        }
-    } else if(BigDecimal.valueOf(codRef) != 2) {
-        ec.logger.warn("codRef != 2")
-        if(!dteExenta) {
-            ec.logger.warn("DTE no Exenta")
-            tot.setTasaIVA(BigDecimal.valueOf(19))
-            tot.setMntExe(totalExento)
-            tot.setIVA(montoIva)
-            tot.setMntNeto(montoNeto)
-            tot.setMntTotal(montoTotal)
-            montoExento = montoExe
-            montoIVARecuperable = montoIva
-            amount = montoTotal
-        } else {
-            ec.logger.warn("DTE Exenta, monto neto:"+ montoNeto)
-            //tot.setMntTotal(montoNeto)
-            if(!dteExenta) {
-                montoExento = montoNeto
-            }
-            tot.setMntExe(montoExento)
-            tot.setMntTotal(montoExento)
-            montoIVARecuperable = 0
-            amount = montoNeto
-        }
-    } else { // Modifica Texto
-        if(!dteExenta) {
-            //tot.setMntExe(montoNeto)
-            //tot.setMntTotal(montoTotal)
-            tot.setMntNeto(0)
-            tot.setTasaIVA(BigDecimal.valueOf(19))
-            tot.setIVA(0)
-            tot.setMntTotal(0)
-            amount = 0
-        } else {
-            tot.setMntTotal(0)
-            amount = 0
-        }
+    if(codRef == 2) {
+        totalNeto = 0
+        totalExento = 0
     }
-}
-
-// Nota de Débito Electrónica
-if (tipoFactura == 56) {
+} else if (tipoFactura == 56) {
+    // Nota de Débito Electrónica
     //iddoc.setMntBruto(BigInteger.valueOf(1))
     int i = 0
     if(detailList != null) {
@@ -378,58 +268,17 @@ if (tipoFactura == 56) {
     totalInvoice = detMap.totalInvoice
 
     doc.getDTE().getDocumento().setDetalleArray(det)
-    // Totales
-    Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales()
 
-    long montoExe = 0
-    montoNeto = Long.valueOf(totalInvoice)
-    long montoIva = montoNeto * 0.19
-    long montoTotal = montoIva + montoNeto
-
-    ec.logger.warn("codRef:" + codRef +", dteExenta:" +dteExenta)
     // Si la razon es modifica texto (2) no van los montos
     // Notas de débito son siempre afectas
-    if(codRef != 2 && codRef != 1) {
-        if(!dteExenta) {
-            ec.logger.warn("Else 4")
-            tot.setTasaIVA(BigDecimal.valueOf(19))
-            tot.setMntExe(montoExe)
-            tot.setIVA(montoIva)
-            tot.setMntNeto(montoNeto)
-            tot.setMntTotal(montoTotal)
-            montoExento = montoExe
-            montoIvaRecuperable = montoIva
-            amount = montoTotal
-        } else { // Cod con factura exenta en la NC
-            tot.setMntExe(montoNeto)
-            tot.setMntTotal(montoNeto)
-            tot.setMntNeto(0)
-            tot.setIVA(0)
-            //tot.setTasaIVA(BigDecimal.valueOf(19))
-            montoExento = montoNeto
-            montoIVARecuperable = 0
-            amount = montoNeto
-        }
-    } else {
-        ec.logger.warn("CodRef == 1, " + dteExenta)
-        if(!dteExenta) {
-            //tot.setMntExe(montoNeto)
-            tot.setMntTotal(0)
-            tot.setMntTotal(montoTotal)
-            amount = 0
-        } else {
-            tot.setMntTotal(0)
-            tot.setMntTotal(montoTotal)
-            amount = 0
-        }
+    if(codRef == 2) {
+        totalNeto = 0
+        totalExento = 0
     }
-    i = 0
 
     doc.getDTE().getDocumento().setReferenciaArray(ref)
-}
-
-// Guías de Despacho
-if (tipoFactura == 52) {
+} else if (tipoFactura == 52) {
+    // Guías de Despacho
     int i = 0
     listSize = detailList.size()
     Detalle[] det = new Detalle[listSize]
@@ -447,26 +296,44 @@ if (tipoFactura == 52) {
     doc.getDTE().getDocumento().setReferenciaArray(ref)
     ec.logger.info("det: ${det}")
     doc.getDTE().getDocumento().setDetalleArray(det)
-    // Totales
-    Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales()
-
-    long montoExe = 0
-    montoNeto = Long.valueOf(Math.round(totalNeto))
-    long montoIva = Math.round(montoNeto * 0.19)
-    long montoTotal = montoIva + montoNeto + totalExento
-    long montoIvaExento = 0
-    // Si la razon es modifica texto (2) no van los montos
-    ec.logger.warn("Codref: " + codRef + ", dteExenta: " + dteExenta)
-    tot.setTasaIVA(BigDecimal.valueOf(19))
-    tot.setMntExe(totalExento)
-    tot.setIVA(montoIva)
-    tot.setMntNeto(montoNeto)
-    tot.setMntTotal(montoTotal)
-    montoExento = montoExe
-    //montoIvaRecuperable = montoIva
-
-    amount = montoTotal
 }
+
+// Descuento Global
+if(globalDiscount != null && Integer.valueOf(globalDiscount) > 0) {
+    if (totalNeto != null)
+        totalNeto = totalNeto - Math.round(totalNeto?:0 * (Long.valueOf(globalDiscount) / 100))
+    if (totalExento != null)
+        totalExento = totalExento - Math.round(totalExento?:0 * (Long.valueOf(globalDiscount) / 100))
+    // Creación entradas en XML
+    DscRcgGlobal dscGlobal = DscRcgGlobal.Factory.newInstance()
+    // iddoc.setMedioPago(MedioPagoType.Enum.forString("CH"))
+    dscGlobal.setNroLinDR(BigInteger.valueOf(1))
+    dscGlobal.setTpoMov(DscRcgGlobal.TpoMov.Enum.forString("D"))
+    dscGlobal.setTpoValor(cl.sii.siiDte.DineroPorcentajeType.Enum.forString("%"))
+    //dscGlobal.setValorDR(BigDecimal.valueOf(descuento));// Porcentaje Dscto
+    dscGlobal.setValorDR(BigDecimal.valueOf(Integer.valueOf(globalDiscount)))// Porcentaje Dscto
+    dscGlobal.setGlosaDR(glosaDr)
+    DscRcgGlobal[] dscGB = new DscRcgGlobal[1]
+    dscGB[0] = dscGlobal
+    doc.getDTE().getDocumento().setDscRcgGlobalArray(dscGB)
+}
+// Totales
+Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales()
+if (totalNeto != null) {
+    tot.setMntNeto(Math.round(totalNeto))
+    tot.setTasaIVA(BigDecimal.valueOf(19))
+    // Valor de solo IVA
+    long totalIVA = Math.round(totalNeto * 0.19)
+    montoIVARecuperable = totalIVA
+    tot.setIVA(totalIVA)
+    totalInvoice = totalNeto + totalIVA + totalExento
+} else
+    totalInvoice = totalExento
+tot.setMntTotal(Math.round(totalInvoice))
+if(totalExento != null && totalExento > 0) {
+    tot.setMntExe(Math.round(totalExento))
+}
+amount = totalInvoice
 
 // Timbro
 
