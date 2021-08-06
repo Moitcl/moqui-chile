@@ -316,7 +316,10 @@ if (tipoFactura == 33) {
     dteExenta = refMap.dteExenta
     codRef = refMap.codRef
 
-    det = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "ShipmentItem")
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "ShipmentItem", codRef)
+    Detalle[] det = detMap.detailArray
+    totalNeto = detMap.totalNeto
+    totalInvoice = detMap.totalInvoice
 
     doc.getDTE().getDocumento().setReferenciaArray(ref)
     ec.logger.info("det: ${det}")
