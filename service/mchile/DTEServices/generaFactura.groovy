@@ -24,6 +24,7 @@ import cl.sii.siiDte.FechaHoraType
 import cl.sii.siiDte.FechaType
 import cl.sii.siiDte.MedioPagoType
 
+import org.moqui.entity.EntityValue
 import org.moqui.context.ExecutionContext
 
 ExecutionContext ec = context.ec
@@ -191,6 +192,32 @@ totalExento = 0 as Long
 // Campo para guardar resumen atributos -->
 amount = 0 as Long
 uom = null
+
+        /*
+        <!-- Reference to buying order -->
+        <entity-find-one entity-name="mantle.order.OrderPart" value-field="orderPart">
+        <field-map field-name="orderId" from="orderId"/>
+        <field-map field-name="orderPartSeqId" value="01"/>
+        </entity-find-one>
+            <set field="folio" from="orderPart.otherPartyOrderId"/>
+        <set field="referenceDate" from="orderPart.otherPartyOrderDate?:ec.user.nowTimestamp"/>
+
+        <set field="referenceText" value="Orden ${orderId}"/>
+         */
+
+// Reference to buying order
+if (invoiceId) {
+    EntityValue invoice = ec.entity.find("mantle.account.invoice.Invoice").condition([invoiceId:invoiceId]).one()
+    if (invoice.otherPartyOrderId) {
+        itemBillingList = ec.entity.find("mantle.order.OrderItemBilling").condition([invoiceId:invoiceId]).selectField("orderId,orderItemSeqId").list()
+        if (itemBillingList) {
+            orderList = ec.entity.find("mantle.order.OrderItemAndPart").condition([otherPartyOrderId:invoice.otherPartyOrderId, orderId:itemBillingList.orderId, orderId_op:"in", orderItemSeqId:itemBillingList.orderItemSeqId, orderItemSeqId_op:"in"]).orderBy("-otherPartyOrderDate").list()
+            fecha = orderList.first?.otherPartyOrderDate?:ec.user.nowTimestamp
+        } else
+            fecha = ec.user.nowTimestamp
+        referenciaList.add([folio:invoice.otherPartyOrderId, razonReferencia:"Orden de Compra", fecha:fecha, fiscalTaxDocumentTypeEnumId:"Ftdt-801"])
+    }
+}
 if (tipoFactura == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     Detalle[] det = detMap.detailArray
