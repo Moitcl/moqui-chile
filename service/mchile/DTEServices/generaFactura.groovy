@@ -308,10 +308,6 @@ if (tipoFactura == 33) {
     doc.getDTE().getDocumento().setReferenciaArray(ref)
 } else if (tipoFactura == 52) {
     // Guías de Despacho
-    int i = 0
-    listSize = detailList.size()
-    Detalle[] det = new Detalle[listSize]
-    totalInvoice = 0 as Integer
     ec.logger.warn("Creando DTE tipo 52")
 
     // TODO: Si la referencia es tipo fe de erratas, Monto Item puede ser 0
@@ -433,21 +429,20 @@ Timestamp ts = new Timestamp(date.getTime())
 dteEv.date = ts
 dteEv.update()
 
-xmlName = "dbresource://moit/erp/dte/${rutEmisor}/DTE${tipoFactura}-${folio}.xml"
-pdfName = "dbresource://moit/erp/dte/${rutEmisor}/DTE${tipoFactura}-${folio}.pdf"
-pdfCedibleName = "dbresource://moit/erp/dte/${rutEmisor}/DTE${tipoFactura}-${folio}-cedible.pdf"
+xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoFactura}-${folio}.xml"
+pdfContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoFactura}-${folio}.pdf"
+pdfCedibleContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoFactura}-${folio}-cedible.pdf"
 
 // Creacion de registros en FiscalTaxDocumentContent
 createMapBase = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, contentDte:ts]
-ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlName]).call())
-ec.resource.getLocationReference(xmlName).putBytes(facturaXml)
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlContentLocation]).call())
+ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
 
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfContentLocation]).call())
+ec.resource.getLocationReference(pdfContentLocation).putBytes(pdfBytes)
 
-ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfName]).call())
-ec.resource.getLocationReference(pdfName).putBytes(pdfBytes)
-
-ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedibleName]).call())
-ec.resource.getLocationReference(pdfCedibleName).putBytes(pdfCedibleBytes)
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedibleContentLocation]).call())
+ec.resource.getLocationReference(pdfCedibleContentLocation).putBytes(pdfCedibleBytes)
 
 // Creación de registro en FiscalTaxDocumentAttributes
 createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:amount, fechaEmision:fechaEmision, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmision,

@@ -1,12 +1,12 @@
 package cl.moit.dte
 
+import cl.nic.dte.util.Utilities
 import cl.sii.siiDte.DTEDefType.Documento.Detalle
 import cl.sii.siiDte.DTEDefType.Documento.Referencia
 import cl.sii.siiDte.FechaType
-import cl.nic.dte.util.Utilities
-import org.moqui.entity.EntityValue
-import org.moqui.context.ExecutionContext
 import org.moqui.BaseArtifactException
+import org.moqui.context.ExecutionContext
+import org.moqui.entity.EntityValue
 
 import java.sql.Timestamp
 
@@ -31,36 +31,42 @@ class MoquiDTEUtils {
                 nombreItem = productEv.productName
             }
             Integer qtyItem = detailType == "ReturnItem" ? detailEntry.returnQuantity : detailEntry.quantity
-            Integer priceItem = detailType == "ReturnItem" ? detailEntry.returnPrice : detailEntry.amount
             String uom = null
-            if (detailEntry.quantityUomId.equals('TF_hr'))
-                uom = "Hora"
-            else if (detailEntry.quantityUomId.equals('TF_mon'))
-                uom = "Mes"
+            BigDecimal pctDiscount
+            if (detailType != "ShipmentItem") {
+                if (detailEntry.quantityUomId.equals('TF_hr'))
+                    uom = "Hora"
+                else if (detailEntry.quantityUomId.equals('TF_mon'))
+                    uom = "Mes"
+                pctDiscount = detailEntry.pctDiscount
+            }
             String itemAfecto = "true"
             if (detailEntry.productId) {
                 Map<String, Object> afectoOutMap = ec.service.sync().name("mchile.DTEServices.check#Afecto").parameter("productId", detailEntry.productId).call()
                 itemAfecto = afectoOutMap.afecto
             }
 
+            Integer priceItem
             BigDecimal totalItem = 0
             if (detailType == "ShipmentItem") {
                 ec.logger.info("handling price for productId ${detailEntry.productId}")
                 Integer quantityHandled = 0
-                List<EntityValue> sisList = ec.entity.find("mantle.shipment.ShipmentItemSource").condition([shipmentId: shipmentId, productId: detailEntry.productId]).list()
+                List<EntityValue> sisList = ec.entity.find("mantle.shipment.ShipmentItemSource").condition([shipmentId:detailEntry.shipmentId, productId: detailEntry.productId]).list()
                 if (sisList) {
                     sisList.each { sis ->
                         ec.logger.info("processing sis ${sis}")
+                        EntityValue item
                         if (sis.invoiceId) {
-                            EntityValue invoiceItem = ec.entity.find("mantle.account.invoice.InvoiceItem").condition([invoiceId: sis.invoiceId, invoiceItemSeqId: sis.invoiceItemSeqId]).one()
-                            totalItem = totalItem + sis.quantity * invoiceItem.amount
-                            quantityHandled = quantityHandled + sis.quantity
+                            item = ec.entity.find("mantle.account.invoice.InvoiceItem").condition([invoiceId: sis.invoiceId, invoiceItemSeqId: sis.invoiceItemSeqId]).one()
                         } else if (sis.orderId) {
-                            EntityValue orderItem = ec.entity.find("mantle.account.order.OrderItem").condition([orderId: sis.orderId, orderItemSeqId: sis.orderItemSeqId]).one()
-                            totalItem = totalItem + sis.quantity * orderItem.unitAmount
-                            quantityHandled = quantityHandled + sis.quantity
+                            item = ec.entity.find("mantle.account.order.OrderItem").condition([orderId: sis.orderId, orderItemSeqId: sis.orderItemSeqId]).one()
                         }
-
+                        totalItem = totalItem + sis.quantity * item.amount
+                        quantityHandled = quantityHandled + sis.quantity
+                        if (item.quantityUomId.equals('TF_hr'))
+                            uom = "Hora"
+                        else if (item.quantityUomId.equals('TF_mon'))
+                            uom = "Mes"
                     }
                 }
                 if (quantityHandled < qtyItem) {
@@ -81,13 +87,17 @@ class MoquiDTEUtils {
                     priceItem = null
                     nombreItem = "ANULA DOCUMENTO DE REFERENCIA"
                     totalItem = 0
-                }
+                } else
+                    priceItem = detailEntry.amount
             } else if (detailType == "ReturnItem" && codRef == 2) {
                 qtyItem = null
                 priceItem = null
                 nombreItem = "CORRIGE GIROS"
                 totalItem = 0
+            } else if (detailType == "ReturnItem") {
+                priceItem = detailEntry.returnPrice
             } else {
+                priceItem = detailEntry.amount
                 totalItem = qtyItem * priceItem
             }
 
@@ -111,7 +121,6 @@ class MoquiDTEUtils {
                 det[i].setQtyItem(BigDecimal.valueOf(qtyItem))
             if(uom != null)
                 det[i].setUnmdItem(uom)
-            BigDecimal pctDiscount = detailEntry.pctDiscount
             if((pctDiscount != null) && (pctDiscount > 0)) {
                 ec.logger.warn("Aplicando descuento " + pctDiscount+"% a precio "+ priceItem )
                 BigDecimal descuento = totalItem * pctDiscount / 100
@@ -155,7 +164,7 @@ class MoquiDTEUtils {
         referenciaList.each { referenciaEntry ->
             String folioRef = referenciaEntry.folio
             Integer codRef = referenciaEntry.codigoReferenciaEnumId
-            Timestamp fechaRef = referenciaEntry.fecha
+            Timestamp fechaRef = referenciaEntry.fecha instanceof java.sql.Date? new Timestamp(referenciaEntry.fecha.time) : referenciaEntry.fecha
 
             // Agrego referencias
             ref[i] = Referencia.Factory.newInstance()

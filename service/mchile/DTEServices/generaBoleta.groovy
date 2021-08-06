@@ -596,12 +596,12 @@ updateMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, emailEmisor:emailEmi
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(updateMap).call())
 
 // Creacion de registros en FiscalTaxDocumentContent
-xmlName = "dbresource://moit/erp/dte/${rutEmisor}/DTE${tipoFactura}-${folio}.xml"
-pdfName = "dbresource://moit/erp/dte/${rutEmisor}/DTE${tipoFactura}-${folio}.pdf"
+xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoFactura}-${folio}.xml"
+pdfContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoFactura}-${folio}.pdf"
 createMapBase = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, contentDte:ts]
-ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlName]).call())
-ec.resource.getLocationReference(xmlName).putBytes(facturaXml)
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlContentLocation]).call())
+ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
 
-ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfName]).call())
-ec.resource.getLocationReference(pdfName).putBytes(pdfBytes)
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfContentLocation]).call())
+ec.resource.getLocationReference(pdfContentLocation).putBytes(pdfBytes)
 fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId
