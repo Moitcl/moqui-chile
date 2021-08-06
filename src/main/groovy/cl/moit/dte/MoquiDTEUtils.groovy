@@ -2,12 +2,13 @@ package cl.moit.dte
 
 import cl.sii.siiDte.DTEDefType.Documento.Detalle
 import cl.sii.siiDte.DTEDefType.Documento.Referencia
+import cl.sii.siiDte.FechaType
+import cl.nic.dte.util.Utilities
 import org.moqui.entity.EntityValue
 import org.moqui.context.ExecutionContext
 import org.moqui.BaseArtifactException
 
 import java.sql.Timestamp
-import java.text.SimpleDateFormat
 
 class MoquiDTEUtils {
 
@@ -143,7 +144,7 @@ class MoquiDTEUtils {
         return [detailArray:det, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
     }
 
-    public static Map<String, Object> prepareReferences(List<HashMap> referenciaList, String rutReceptor, Long tipoFactura) {
+    public static Map<String, Object> prepareReferences(ExecutionContext ec, List<HashMap> referenciaList, String rutReceptor, Long tipoFactura) {
         int listSize = referenciaList.size()
         Referencia[] ref = new Referencia[listSize]
         String anulaBoleta = null
@@ -166,7 +167,7 @@ class MoquiDTEUtils {
             if (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('Ftdt-0')) { // Used for Set de Pruebas SII
                 ref[i].setTpoDocRef('SET')
             } else {
-                Map<String, Object> codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call
+                Map<String, Object> codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
                 Integer tpoDocRef = codeOut.siiCode
                 //ref[i].setTpoDocRef(referenciaEntry.fiscalTaxDocumentTypeEnumId)
                 ref[i].setTpoDocRef(tpoDocRef as String)

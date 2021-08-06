@@ -215,7 +215,12 @@ if (invoiceId) {
             fecha = orderList.first?.otherPartyOrderDate?:ec.user.nowTimestamp
         } else
             fecha = ec.user.nowTimestamp
-        referenciaList.add([folio:invoice.otherPartyOrderId, razonReferencia:"Orden de Compra", fecha:fecha, fiscalTaxDocumentTypeEnumId:"Ftdt-801"])
+        reference = ec.entity.makeValue("mchile.dte.ReferenciaInvoice")
+        reference.folio = invoice.otherPartyOrderId
+        reference.razonReferencia = "Orden de Compra"
+        reference.fecha = fecha
+        reference.fiscalTaxDocumentTypeEnumId = "Ftdt-801"
+        referenciaList.add(reference)
     }
 }
 if (tipoFactura == 33) {
@@ -226,7 +231,7 @@ if (tipoFactura == 33) {
     numberExentos = detMap.numberExentos
     if (numberAfectos == 0 && numberExentos > 0)
         throw new BaseArtifactException("Factura afecta tiene solamente ítemes exentos")
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(referenciaList, rutReceptor, tipoFactura)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoFactura)
     Referencia[] ref = refMap.referenceArray
 
     doc.getDTE().getDocumento().setDetalleArray(det)
@@ -240,7 +245,7 @@ if (tipoFactura == 33) {
     numberExentos = detMap.numberExentos
     if (numberAfectos > 0)
         throw new BaseArtifactException("Factura exenta tiene ítemes afectos")
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(referenciaList, rutReceptor, tipoFactura)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoFactura)
     Referencia[] ref = refMap.referenceArray
 
     doc.getDTE().getDocumento().setReferenciaArray(ref)
@@ -248,7 +253,7 @@ if (tipoFactura == 33) {
 } else if (tipoFactura == 61) {
     // Nota de Crédito Electrónica
     ec.logger.warn("Creando DTE tipo 61")
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(referenciaList, rutReceptor, tipoFactura)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoFactura)
     Referencia[] ref = refMap.referenceArray
     anulaBoleta = refMap.anulaBoleta
     folioAnulaBoleta = refMap.folioAnulaBoleta
@@ -280,11 +285,8 @@ if (tipoFactura == 33) {
     } else {
         listSize = 0
     }
-    Detalle[] det = new Detalle[listSize]
-    totalInvoice = 0 as Long
-    totalItempTmp = 0 as Long
 
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(referenciaList, rutReceptor, tipoFactura)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoFactura)
     Referencia[] ref = refMap.referenceArray
     dteExenta = refMap.dteExenta
     codRef = refMap.codRef
@@ -313,7 +315,7 @@ if (tipoFactura == 33) {
     ec.logger.warn("Creando DTE tipo 52")
 
     // TODO: Si la referencia es tipo fe de erratas, Monto Item puede ser 0
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(referenciaList, rutReceptor, tipoFactura)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoFactura)
     Referencia[] ref = refMap.referenceArray
     dteExenta = refMap.dteExenta
     codRef = refMap.codRef
