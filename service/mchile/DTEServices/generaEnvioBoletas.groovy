@@ -29,10 +29,6 @@ ExecutionContext ec = context.ec
 
 // Recuperacion de parametros de la organizacion -->
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
-if (!templateEnvio) {
-    ec.message.addError("Organizacion no tiene plantilla para envio al SII")
-    return
-}
 idS = "Doc"
 
 Date dNow = new Date()
@@ -57,13 +53,20 @@ if (recepS)
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:enviadorS]).call()
 
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
-pathResultS = pathResults
-plantillaEnvio = templateEnvioBoleta
-// Variable para guardar nombre de archivo del envio -->
 
 // Construyo Envio
-cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument = EnvioBOLETADocument.Factory.parse(ec.resource.getLocationStream(templateEnvioBoleta))
-System.out.println("Plantilla leida: "+templateEnvioBoleta)
+templateEnvioBoleta = """
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<EnvioBOLETA version="1.0" xmlns="http://www.sii.cl/SiiDte" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sii.cl/SiiDte EnvioBOLETA_v11.xsd">
+    <SetDTE>
+        <Caratula version="1.0">
+            <RutEmisor>${rutEmisor}</RutEmisor>
+            <FchResol>${fchResol}</FchResol>
+            <NroResol>${nroResol}</NroResol>
+        </Caratula>
+    </SetDTE>
+</EnvioBOLETA>"""
+cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument = EnvioBOLETADocument.Factory.parse(new ByteArrayInputStream(templateEnvioBoleta.bytes))
 System.out.println("XML: "+envioBoletaDocument.toString())
 
 // Debo agregar el schema location (Sino SII rechaza)

@@ -29,14 +29,6 @@ ExecutionContext ec = context.ec
 
 // Recuperacion de parametros de la organizacion
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
-passS = passCert
-plantillaEnvio = templateEnvio
-//giro = giroEmisor
-
-if (!templateEnvio) {
-    ec.message.addError("Organizacion no tiene plantilla para envio al SII")
-    return
-}
 idS = "Doc"
 
 Date dNow = new Date()
@@ -62,7 +54,19 @@ if (rutReceptor) {
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rutenviador]).call()
 
 // Construyo Envio
-EnvioDTEDocument envio = EnvioDTEDocument.Factory.parse(ec.resource.getLocationStream((String)plantillaEnvio))
+plantillaEnvio = """
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<EnvioDTE version="1.0" xmlns="http://www.sii.cl/SiiDte">
+	<SetDTE>
+		<Caratula version="1.0">
+			<RutEmisor>${rutEmisor}</RutEmisor>
+			<FchResol>${fchResol}</FchResol>
+			<NroResol>${nroResol}</NroResol>
+		</Caratula>
+	</SetDTE>
+</EnvioDTE>
+"""
+EnvioDTEDocument envio = EnvioDTEDocument.Factory.parse(new ByteArrayInputStream(plantillaEnvio.bytes))
 
 // Debo agregar el schema location (Sino SII rechaza)
 XmlCursor cursor = envio.newCursor()
@@ -71,12 +75,12 @@ if (cursor.toFirstChild()) {
 }
 // leo certificado y llave privada del archivo pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
-ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
+ks.load(new ByteArrayInputStream(certData.decodeBase64()), passCert.toCharArray())
 String alias = ks.aliases().nextElement()
 
 X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
 String rutEnviador = Utilities.getRutFromCertificate(x509)
-PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray())
+PrivateKey pKey = (PrivateKey) ks.getKey(alias, passCert.toCharArray())
 
 ec.logger.warn("RUT envia: " + rutEnviador)
 
