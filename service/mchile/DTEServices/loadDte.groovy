@@ -10,15 +10,8 @@ import org.moqui.context.ExecutionContext
 
 ExecutionContext ec = context.ec
 
-// Carga de RUT de empresa -->
-partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:organizationPartyId, partyIdTypeEnumId:"PtidNationalTaxId"]).list()
-if (!partyIdentificationList) {
-    ec.message.addError("Organización $organizationPartyId no tiene RUT definido")
-    return
-}
-rut = partyIdentificationList.idValue[0]
-// Validación rut
-ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rut]).call()
+// Carga de RUT de empresa (ya validado)
+rut = ec.service.sync("mchile.GeneralServices.get#RutForParty").parameters([partyId:organizationPartyId, failIfNotFound:true]).call().rut
 
 // Carga XML
 archivoXml = xml.getName()

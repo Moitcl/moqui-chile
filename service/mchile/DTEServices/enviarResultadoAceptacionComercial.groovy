@@ -27,12 +27,7 @@ if ((fiscalTaxDocumentTypeEnumId == 'Ftdt-39') || (fiscalTaxDocumentTypeEnumId =
     ec.message.addError("Boletas no requieren envío de aceptación")
     return
 }
-partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:organizationPartyId, partyIdTypeEnumId:"PtidNationalTaxId"]).list()
-if (!partyIdentificationList) {
-    ec.message.addError("Organización no tiene RUT definido")
-    return
-}
-rutResponde = partyIdentificationList.idValue[0]
+rutResponde = ec.service.sync("mchile.GeneralServices.get#RutForParty").parameters([partyId:organizationPartyId, failIfNotFound:true]).call().rut
 
 // Recuperacion de parametros de la organizacion
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", organizationPartyId).call())

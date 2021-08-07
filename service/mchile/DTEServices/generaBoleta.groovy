@@ -31,12 +31,7 @@ import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula.Sub
 
 ExecutionContext ec = context.ec
 
-partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:issuerPartyId, partyIdTypeEnumId:"PtidNationalTaxId"]).list()
-if (!partyIdentificationList) {
-    ec.message.addError("Organización no tiene RUT definido")
-    return
-}
-rutEmisor = partyIdentificationList.idValue[0]
+rutEmisor = ec.service.sync("mchile.GeneralServices.get#RutForParty").parameters([partyId:issuerPartyId, failIfNotFound:true]).call().rut
 
 // Validación rut
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutReceptor).call()

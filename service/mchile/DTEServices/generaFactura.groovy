@@ -29,16 +29,10 @@ import org.moqui.context.ExecutionContext
 
 ExecutionContext ec = context.ec
 
-partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:issuerPartyId, partyIdTypeEnumId:'PtidNationalTaxId']).list()
-if (!partyIdentificationList) {
-    ec.message.addError("Organización $issuerPartyId no tiene RUT definido")
-    return
-}
-rutEmisor = partyIdentificationList.first.idValue
+rutEmisor = ec.service.sync("mchile.GeneralServices.get#RutForParty").parameters([partyId:issuerPartyId, failIfNotFound:true]).call().rut
 
 // Validación rut
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutReceptor).call()
-ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEmisor).call()
 
 // Recuperacion de parametros de la organizacion -->
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", issuerPartyId).call())

@@ -28,12 +28,7 @@ if (fechaInicio > fechaFin) {
     return
 }
 
-partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:organizationPartyId, partyIdTypeEnumId:"PtidNationalTaxId"]).one()
-if (!partyIdentificationList) {
-    ec.message.addError("Organización no tiene RUT definido")
-    return
-}
-rutEmisor = partyIdentificationList.first.idValue
+rutEmisor = ec.service.sync("mchile.GeneralServices.get#RutForParty").parameters([partyId:organizationPartyId, failIfNotFound:true]).call().rut
 
 // Validación rut
 // ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rutReceptor]).call()
