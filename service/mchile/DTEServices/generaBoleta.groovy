@@ -524,29 +524,14 @@ ec.logger.warn("URI: " + uri)
 
 opts = new XmlOptions()
 opts.setCharacterEncoding("ISO-8859-1")
+
+if (saveSinFirma) {
+    xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoFactura}-${folio}-sinfirma.xml"
+    envioBoletaDocument.save(xmlContentLocation.outputStream, opts)
+}
+
 ByteArrayOutputStream out = new ByteArrayOutputStream()
-
-envioBoletaDocument.save(new File(resultS + "BOL" + tipoFactura + "-" + folio + "-sinfirma.xml"),opts)
-
-archivoEnvio = pathResults + "BOL" + tipoFactura + "-"+folio+ ".xml"
-
-//byte[] salida = Files.readAllBytes(Paths.get(archivoEnvio))
-
-
-//cursor1 = envioBoletaDocument.newCursor()
-cl.sii.siiDte.boletas.BOLETADefType pp = envioBoletaDocument.envioBOLETA.getSetDTE().getDTEArray(0)
-cursor1 = pp.newCursor()
-//cursor1.toFirstChild()
-//cursor1.toChild(3)
-//cursor1.toNextToken()
-//while(cursor1.hasNextToken()) {
-//System.out.println("********************** Token type: " + cursor1.currentTokenType() + " / " + cursor1.xmlText())
-//cursor1.setAttributeText(new QName("", "xmlns"), "http://www.sii.cl/SiiDte")
-//cursor1.toNextToken()
-//}
-//cursor1.dispose()
 envioBoletaDocument.save(out, opts)
-System.out.println("BOLETA7:"+out)
 
 Document doc2 = XMLUtil.parseDocument(out.toByteArray())
 
@@ -564,7 +549,6 @@ byte[] salidaBoleta = BoletaSigner.signBoleta(doc2, key, cert)
 // Firma de EnvioBOLETA
 byte[] facturaXml = Signer.sign(doc2, uri, key, cert, uri, "SetDTE")
 doc2 = XMLUtil.parseDocument(facturaXml)
-
 
 if (Signer.verify(doc2, "SetDTE")) {
     ec.logger.warn("Factura "+path+" folio "+folio+" generada OK")
