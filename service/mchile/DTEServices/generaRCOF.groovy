@@ -40,7 +40,6 @@ rutEmisor = partyIdentificationList.first.idValue
 
 // Recuperacion de parametros de la organizacion
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
-plantillaS = templateRcof
 resultadoFirmado = pathResults
 
 // Buscar lista de DTE 39 que se hayan emitido/anulado
@@ -77,7 +76,11 @@ opts.setLoadSubstituteNamespaces(namespaces)
 
 ec.logger.warn("Generando RCOF\n")
 cl.sii.siiDte.consumofolios.ConsumoFoliosDocument consumoFoliosDocument = ConsumoFoliosDocument.Factory.newInstance()
-consumoFoliosDocument = ConsumoFoliosDocument.Factory.parse(new FileInputStream(plantillaS))
+
+plantillaRcof = """<?xml version="1.0" encoding="ISO-8859-1"?>
+<ConsumoFolios xmlns="http://www.sii.cl/SiiDte" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sii.cl/SiiDte ConsumoFolio_v10.xsd" version="1.0">
+</ConsumoFolios>"""
+consumoFoliosDocument = ConsumoFoliosDocument.Factory.parse(new ByteArrayInputStream(plantillaRcof.bytes))
 ConsumoFolios cf = consumoFoliosDocument.getConsumoFolios()
 // Datos de carátula
 DocumentoConsumoFolios dcf = cf.addNewDocumentoConsumoFolios()
