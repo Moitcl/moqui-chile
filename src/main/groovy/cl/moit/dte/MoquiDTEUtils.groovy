@@ -33,7 +33,7 @@ class MoquiDTEUtils {
             Integer qtyItem = detailType == "ReturnItem" ? detailEntry.returnQuantity : detailEntry.quantity
             String uom = null
             BigDecimal pctDiscount
-            if (detailType != "ShipmentItem") {
+            if (!detailType in ["ShipmentItem", "ReturnItem"]) {
                 if (detailEntry.quantityUomId.equals('TF_hr'))
                     uom = "Hora"
                 else if (detailEntry.quantityUomId.equals('TF_mon'))
