@@ -96,7 +96,7 @@ opts.setLoadSubstituteNamespaces(namespaces)
 // Recuperación de archivo CAF desde BD
 caf = AUTORIZACIONDocument.Factory.parse(new ByteArrayInputStream(cafData.getBytes()), opts).getAUTORIZACION()
 
-// Construyo base a partir del template
+// Construyo base a partir de String XML
 actecoTag = codigosActividadEconomica.split(',').collect { "        <Acteco>${it}</Acteco>\n"}.join()
 templateFactura = """
 <DTE version="1.0">

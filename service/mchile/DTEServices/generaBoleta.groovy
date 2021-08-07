@@ -401,7 +401,20 @@ boleta.getDocumento().xsetTmstFirma(now)
 //boleta.sign(key, cert)
 //boleta.verifySignature(BOLETADefType.Factory.parse(boleta.newInputStream(opts)))
 
-cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument = EnvioBOLETADocument.Factory.parse(ec.resource.getLocationStream(templateEnvioBoleta))
+// Construyo base a partir de String XML
+templateEnvioBoleta = """
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<EnvioBOLETA version="1.0" xmlns="http://www.sii.cl/SiiDte" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sii.cl/SiiDte EnvioBOLETA_v11.xsd">
+    <SetDTE>
+        <Caratula version="1.0">
+            <RutEmisor>${rutEmisor}</RutEmisor>
+            <FchResol>${fchResol}</FchResol>
+            <NroResol>${nroResol}</NroResol>
+        </Caratula>
+    </SetDTE>
+</EnvioBOLETA>
+"""
+cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument = EnvioBOLETADocument.Factory.parse(new ByteArrayInputStream(templateEnvioBoleta.bytes))
 EnvioBOLETA eb = EnvioBOLETA.Factory.newInstance()
 SetDTE sdte = SetDTE.Factory.newInstance()
 
