@@ -55,6 +55,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="rutEnviador" required="true"/>
             <parameter name="organizationPartyId" required="true"/>
             <parameter name="documentIdList" required="true" type="List"/>
+            <parameter name="saveSinFirma" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
             <parameter name="archivoEnvio"/>
@@ -70,6 +71,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="enviadorS" required="true"/>
             <parameter name="organizationPartyId" required="true"/>
             <parameter name="documentIdList" required="true" type="List"/>
+            <parameter name="saveSinFirma" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
             <parameter name="archivoEnvio"/>
@@ -341,10 +343,8 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Recuperacion de parametros de la organizacion -->
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:issuerPartyId]" out-map="context"/>
             <set field="passS" from="passCert"/>
-            <set field="pathResults" from="pathResults"/>
             <set field="template" from="pdfTemplate"/>
             <set field="giro" from="giroEmisor"/>
-            <set field="templateFactura" from="templateFactura"/>
             <set field="pdfTemplate" from="pdfTemplate"/>
             <set field="pdfTemplateBoleta" from="pdfTemplateBoleta"/>
             <set field="pdfTemplateBoletaContinua" from="pdfTemplateBoletaContinua"/>
@@ -1658,11 +1658,6 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="archivoPdf" from="pdf.getName()"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:receiverPartyId]" out-map="context"/>
 
-            <!-- Unused file location -->
-            <set field="fileRoot" from="pathRecibidas"/>
-            <set field="contentLocationPdf" value="${fileRoot}/${archivoPdf}"/>
-            <set field="docRrPdf" from="ec.resource.getLocationReference(contentLocationPdf)"/>
-
             <script>
                 import java.io.ByteArrayOutputStream
                 import java.io.File
@@ -1682,17 +1677,6 @@ along with this software (see the LICENSE.md file). If not, see
                 import java.text.ParseException
                 import java.text.SimpleDateFormat
                 import java.util.Date
-
-                fileStream = pdf.getInputStream()
-                // try { docRrPdf.putStream(fileStream) } finally { fileStream.close() }
-                byte[] bArrayDTE = new byte[(int) fileStream.getChannel().size()]
-                try {
-                    fileStream.read(bArrayDTE)
-                    fileStream.close()
-                }
-                catch (IOException ioExp) {
-                    ioExp.printStackTrace()
-                }
 
                 DateFormat formatter = new SimpleDateFormat("yyyy-MM-dd")
                 Date date = formatter.parse(fechaEmision)
@@ -1716,9 +1700,10 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Creación de contenido (Solo PDF) -->
             <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:issuerPartyId]" out-map="issuerRut"/>
-            <set field="pdfContentLocation" value="dbresource://moit/erp/dte/${issuerRut?.rutSinFormato?:issuerPartyId}/DTE-${fiscalTaxDocumentTypeEnumId}-${fiscalTaxDocumentNumber}.pdf"/>
+            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="dteType" auto-field-map="[enumId:fiscalTaxDocumentTypeEnumId]"/>
+            <set field="pdfContentLocation" value="dbresource://moit/erp/dte/${issuerRut?.rutSinFormato?:issuerPartyId}/DT-${dteType.enumCode}-${fiscalTaxDocumentNumber}.pdf"/>
             <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, contentDate:ts, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:pdfContentLocation]"/>
-            <script>ec.resource.getLocationReference(xmlName).putBytes(bArrayDTE)</script>
+            <script>ec.resource.getLocationReference(pdfContentLocation).putStream(pdf.inputStream)</script>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
 
             <!-- Entrada en atributos -->
@@ -2544,7 +2529,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="formaPago"/>
             <parameter name="referenciaList" type="List"/>
             <parameter name="continua"/>
-            <parameter name="saveSinFirmat" type="Boolean" default="false"/>
+            <parameter name="saveSinFirma" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
@@ -2557,6 +2542,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="organizationPartyId" required="true"/>
             <parameter name="fechaInicio"/>
             <parameter name="fechaFin"/>
+            <parameter name="saveSinFirma" type="Boolean" default="false"/>
         </in-parameters>
     </service>
 
@@ -3232,10 +3218,9 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="paramsList"><then>
                 <service-call name="update#mchile.dte.PartyDteParams" in-map="context"/>
             </then><else>
-                <service-call name="create#mchile.dte.PartyDteParams" in-map="[partyId:partyId, templateFactura:templateFactura, templatePdf:templatePdf, templatePdfBoleta:templatePdfBoleta,
+                <service-call name="create#mchile.dte.PartyDteParams" in-map="[partyId:partyId, templatePdf:templatePdf, templatePdfBoleta:templatePdfBoleta,
                                   templatePdfBoletaContinua:templatePdfBoletaContinua, logo:logo, fchResol:fechResol, nroResol:nroResol, rutEmisor:rutEmisor,
                                   rutEnvia:rutEnvia, rznSocEmisor:rznSocEmisor, cdgSIISucur:cdgSIISucur, dirOrigen:dirOrigen, cmnaOrigen:cmnaOrigen, ciudadOrigen:ciudadOrigen,
-                                  pathResults:pathResults, pathAceptaciones:pathAceptaciones, pathRecibidas:pathRecibidas, pathCaf:pathCaf,
                                   passCert:passCert, nmbContacto:nmbContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]"/>
             </else></if>
         </actions>

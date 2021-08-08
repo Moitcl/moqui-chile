@@ -20,6 +20,7 @@ import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument.ConsumoFolios.Documento
 import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument.ConsumoFolios.DocumentoConsumoFolios.Resumen
 import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument.ConsumoFolios.DocumentoConsumoFolios.Resumen.RangoUtilizados
 import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument.ConsumoFolios.DocumentoConsumoFolios.Resumen.RangoAnulados
+import org.moqui.resource.ResourceReference
 
 ExecutionContext ec = context.ec
 
@@ -300,11 +301,12 @@ uri = cf.getDocumentoConsumoFolios().getID()
 
 ec.logger.warn("URI: " + uri)
 
+if (saveSinFirma) {
+    ResourceReference xmlContentResource = "dbresource://moit/erp/dte/${rutEmisor}/RCOF-${uri}-sinfirma.xml"
+    consumoFoliosDocument.save(xmlContentReference.outputStream, opts)
+}
 ByteArrayOutputStream out = new ByteArrayOutputStream()
-consumoFoliosDocument.save(new File(pathResults + "RCOF-" + uri + "-sinfirma.xml"), opts)
 consumoFoliosDocument.save(out, opts)
-
-ec.logger.warn("XML2:" + consumoFoliosDocument)
 
 FirmaRcof firmaLibro = new FirmaRcof()
 
@@ -312,10 +314,15 @@ SimpleDateFormat formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd")
 Date dateFechaEmision = new Date()
 fechaEmision = formatterFechaEmision.format(dateFechaEmision)
 
-outPDF=lectorFichero.crearFicheroMMDDFlex(resultadoFirmado, fchResol)
-outPDF+="/RCOF-firmado-"+uri+".xml"
+ResourceReference xmlContentResource
+int i = 0
+do {
+    i++
+    xmlContentResource = "dbresource://moit/erp/dte/${rutEmisor}/RCOF-${uri}-firmado-${i}.xml"
+} while (xmlContentReference.exists)
+consumoFoliosDocument.save(xmlContentReference.outputStream, opts)
 
-String mensaje=firmaLibro.firmarRcof(certS, passCert, pathResults + "RCOF-" + uri + "-sinfirma.xml",outPDF,10,"ENVIADO","qq","pp","xmlasdas","ESPECIAL")
+//String mensaje=firmaLibro.firmarRcof(certS, passCert, pathResults + "RCOF-" + uri + "-sinfirma.xml",outPDF,10,"ENVIADO","qq","pp","xmlasdas","ESPECIAL")
 
 return
 

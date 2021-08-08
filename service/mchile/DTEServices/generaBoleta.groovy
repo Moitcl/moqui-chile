@@ -1,4 +1,6 @@
 import org.moqui.context.ExecutionContext
+import org.moqui.impl.context.reference.BaseResourceReference
+
 import java.text.SimpleDateFormat
 import cl.sii.siiDte.FechaHoraType
 import cl.sii.siiDte.FechaType
@@ -38,7 +40,6 @@ ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rut
 
 // Recuperacion de parametros de la organizacion -->
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", issuerPartyId).call())
-resultS = pathResults
 // REVISAR
 if (cdgSIISucur == "LOCAL")
     cdgSIISucur = "0"
@@ -526,8 +527,8 @@ opts = new XmlOptions()
 opts.setCharacterEncoding("ISO-8859-1")
 
 if (saveSinFirma) {
-    xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoFactura}-${folio}-sinfirma.xml"
-    envioBoletaDocument.save(xmlContentLocation.outputStream, opts)
+    BaseResourceReference xmlContentRr = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoFactura}-${folio}-sinfirma.xml")
+    envioBoletaDocument.save(xmlContentRr.outputStream, opts)
 }
 
 ByteArrayOutputStream out = new ByteArrayOutputStream()
@@ -559,8 +560,6 @@ if (Signer.verify(doc2, "SetDTE")) {
 // Registro de DTE en base de datos y generación de PDF -->
 
 fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoFactura}"
-xml = "${resultS}BOL${tipoFactura}-${folio}.xml"
-pdf = "${pathPdf}BOL${tipoFactura}-${folio}.pdf"
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([dte:facturaXml, issuerPartyId:issuerPartyId, boleta:true, continua:continua]).call())
 
 // Creación de registro en FiscalTaxDocument

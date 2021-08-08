@@ -1,4 +1,5 @@
 import org.moqui.context.ExecutionContext
+import org.moqui.impl.context.reference.BaseResourceReference
 
 import java.text.SimpleDateFormat
 import org.moqui.resource.ResourceReference
@@ -139,25 +140,25 @@ envio.getEnvioDTE().getSetDTE().getCaratula().xsetTmstFirmaEnv(now)
 
 opts = new XmlOptions()
 opts.setCharacterEncoding("ISO-8859-1")
+
+if (saveSinFirma) {
+    ResourceReference xmlContentReference = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}-sinfirma.xml")
+    envioBoletaDocument.save(xmlContentReference.outputStream, opts)
+}
 ByteArrayOutputStream out = new ByteArrayOutputStream()
-
-envio.save(new File(pathResults + "ENV" + idS + "-sinfirma.xml"), opts)
 envio.save(out, opts)
-
 Document doc2 = XMLUtil.parseDocument(out.toByteArray())
 
 byte[] salida = Signer.sign(doc2, "#" + idS, pKey, x509, "#" + idS,"SetDTE")
 doc2 = XMLUtil.parseDocument(salida)
 
 if (Signer.verify(doc2, "SetDTE")) {
-    archivoEnvio = pathResults + "ENV" + idS + ".xml"
-    Path path = Paths.get(pathResults + "ENV" + idS + ".xml")
-    Files.write(path, salida)
+    xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}.xml"
+    ec.resource.getLocationReference(xmlContentLocation).putBytes(salida)
     ec.logger.warn("Envio generado OK")
 } else {
-    archivoEnvio = pathResults + "ENV" + idS + "-mala.xml"
-    Path path = Paths.get(pathResults + "ENV" + idS + "-mala.xml")
-    Files.write(path, salida)
+    xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}-mala.xml"
+    ec.resource.getLocationReference(xmlContentLocation).putBytes(salida)
     ec.logger.warn("Error al generar envio")
 }
 

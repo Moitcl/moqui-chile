@@ -185,38 +185,28 @@ opts2.setSavePrettyPrintIndent(0)
 String uri = envioBoletaDocument.getEnvioBOLETA().getSetDTE().getID()
 ec.logger.warn("URI: " + uri)
 
-ByteArrayOutputStream out = new ByteArrayOutputStream()
-envioBoletaDocument.save(new File(pathResults + "ENVBOL" + idS + "-sinfirma.xml"), opts2)
+if (saveSinFirma) {
+    xmlContentReference = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/ENVBOL-${idS}-sinfirma.xml")
+    envioBoletaDocument.save(xmlContentReference.outputStream, opts2)
+}
 
 envioBoletaDocument.sign(pKey, x509)
+ByteArrayOutputStream out = new ByteArrayOutputStream()
 envioBoletaDocument.save(out, opts2)
 
-envioBoletaDocument.save(new File(pathResults + "ENVBOL" + idS + ".xml"), opts2)
+xmlContentReference = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/ENVBOL-${idS}.xml")
+envioBoletaDocument.save(xmlContentLocation.outputStream, opts2)
 
 Document doc2 = XMLUtil.parseDocument(out.toByteArray())
 
-archivoEnvio = pathResults + "ENVBOL" + idS + ".xml"
-
-//byte[] salida = Signer.sign(doc2, uri, pKey, x509, uri, "Documento")
-//doc2 = XMLUtil.parseDocument(salida)
-
-/*if (Signer.verify(doc2, "Documento")) {
-    archivoEnvio = pathResults + "ENVBOL" + idS + ".xml"
-    Path path = Paths.get(pathResults + "ENVBOL" + idS + ".xml")
-    Files.write(path, salida)
-    ec.logger.warn("Envio generado OK")
-} else {
-    archivoEnvio = pathResults + "ENVBOL" + idS + "-mala.xml"
-    Path path = Paths.get(pathResults + "ENVBOL" + idS + "-mala.xml")
-    Files.write(path, salida)
-    ec.logger.warn("Error al generar envio")
-}*/
-
 opts = new XmlOptions()
 opts.setCharacterEncoding("ISO-8859-1")
-out = new ByteArrayOutputStream()
 
-envio.save(new File(pathResults + "ENV" + idS + "-sinfirma.xml"), opts)
+if (saveSinFirma) {
+    ResourceReference xmlContentResource = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}-sinfirma.xml")
+    envioBoletaDocument.save(xmlContentReference.outputStream, opts)
+}
+out = new ByteArrayOutputStream()
 envio.save(out, opts)
 
 doc2 = XMLUtil.parseDocument(out.toByteArray())
@@ -225,14 +215,12 @@ byte[] salida = Signer.sign(doc2, "#" + idS, pKey, x509, "#" + idS,"SetDTE")
 doc2 = XMLUtil.parseDocument(salida)
 
 if (Signer.verify(doc2, "SetDTE")) {
-    archivoEnvio = pathResults + "ENV" + idS + ".xml"
-    Path path = Paths.get(pathResults + "ENV" + idS + ".xml")
-    Files.write(path, salida)
+    xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}.xml"
+    ec.resource.getLocationReference(xmlContentLocation).putBytes(salida)
     ec.logger.warn("Envio generado OK")
 } else {
-    archivoEnvio = pathResults + "ENV" + idS + "-mala.xml"
-    Path path = Paths.get(pathResults + "ENV" + idS + "-mala.xml")
-    Files.write(path, salida)
+    xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}-mala.xml"
+    ec.resource.getLocationReference(xmlContentLocation).putBytes(salida)
     ec.logger.warn("Error al generar envio")
 }
 

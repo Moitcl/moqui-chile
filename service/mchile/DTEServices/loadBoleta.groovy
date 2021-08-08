@@ -14,8 +14,7 @@ rut = ec.service.sync("mchile.GeneralServices.get#RutForParty").parameters([part
 // Carga XML
 archivoXml = xml.getName()
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
-fileRoot = pathRecibidas
-contentLocationXml = "${fileRoot}/${archivoXml}"
+contentLocationXml = "dbresource://moit/erp/dte/${rut}/DTERECIBIDA-39-${invoiceId}.xml"
 docRrXml = ec.resource.getLocationReference(contentLocationXml)
 
 // Se guardan ambos archivos
@@ -25,7 +24,7 @@ try { docRrXml.putStream(fileStream) } finally { fileStream.close() }
 // Carga PDF
 archivoPdf = pdf.getName()
 if (archivoPdf) {
-    contentLocationPdf = "${fileRoot}/${archivoPdf}"
+    contentLocationPdf = "dbresource://moit/erp/dte/${rut}/DTERECIBIDA-39-${invoiceId}.pdf"
     docRrPdf = ec.resource.getLocationReference(contentLocationPdf)
     // Se guardan ambos archivos
     fileStream = pdf.getInputStream()

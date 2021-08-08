@@ -33,7 +33,6 @@ rutResponde = ec.service.sync("mchile.GeneralServices.get#RutForParty").paramete
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", organizationPartyId).call())
 
 passS = passCert
-resultS = pathAceptaciones
 dirS = pathRecibidos
 
 // Se guarda aceptacion para obtener el aceptacionDteId
@@ -278,14 +277,11 @@ opts.setSaveImplicitNamespaces(namespaces)
 
 opts = new XmlOptions()
 opts.setCharacterEncoding("ISO-8859-1")
+ResourceReference xmlContentResource = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/APROBCOM-${idS}.xml")
+ec.logger.warn("Escribiendo ${xmlContentResource.location}")
+respuesta.save(xmlContentReference.outputStream, opts)
 ByteArrayOutputStream out2 = new ByteArrayOutputStream()
-ec.logger.warn("Escribiendo " + resultS + "APROBCOM-" + idS + ".xml")
-respuesta.save(new File(resultS + "APROBCOM-" + idS + ".xml"), opts)
 respuesta.save(out2, opts)
-ec.logger.warn("Escribiendo archivo temporal para attachment" + resultS + "APROBCOM.xml")
-respuesta.save(new File(resultS + "APROBCOM.xml"), opts)
-ByteArrayOutputStream outTemp = new ByteArrayOutputStream()
-respuesta.save(outTemp, opts)
 
 return
 
@@ -319,7 +315,7 @@ aceptacionEv.rutEmisor = rutEmisor
 aceptacionEv.rutReceptor = rutResponde
 aceptacionEv.estadoRecepEnvEnumId = estadoRecepEnvEnumId
 aceptacionEv.nroDetalles = 1 as Integer
-aceptacionEv.xml = "${resultS}RESP-${idS}.xml"
+aceptacionEv.xml = xmlContentResource.location
 aceptacionEv.update()
 bodyParameters = [fiscalTaxDocumentId:folioAceptacion, nmbContacto:nmbContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]
 ec.service.async().name("org.moqui.impl.EmailServices.send#EmailTemplate").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId,
