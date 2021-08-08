@@ -33,7 +33,7 @@ import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula.Sub
 
 ExecutionContext ec = context.ec
 
-rutEmisor = ec.service.sync("mchile.GeneralServices.get#RutForParty").parameters([partyId:issuerPartyId, failIfNotFound:true]).call().rut
+rutEmisor = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").parameters([partyId:issuerPartyId, failIfNotFound:true]).call().rut
 
 // Validación rut
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutReceptor).call()

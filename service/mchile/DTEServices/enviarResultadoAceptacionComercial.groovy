@@ -27,7 +27,7 @@ if ((fiscalTaxDocumentTypeEnumId == 'Ftdt-39') || (fiscalTaxDocumentTypeEnumId =
     ec.message.addError("Boletas no requieren envío de aceptación")
     return
 }
-rutResponde = ec.service.sync("mchile.GeneralServices.get#RutForParty").parameters([partyId:organizationPartyId, failIfNotFound:true]).call().rut
+rutResponde = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").parameters([partyId:organizationPartyId, failIfNotFound:true]).call().rut
 
 // Recuperacion de parametros de la organizacion
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", organizationPartyId).call())

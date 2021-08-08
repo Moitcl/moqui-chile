@@ -29,7 +29,7 @@ if (fechaInicio > fechaFin) {
     return
 }
 
-rutEmisor = ec.service.sync("mchile.GeneralServices.get#RutForParty").parameters([partyId:organizationPartyId, failIfNotFound:true]).call().rut
+rutEmisor = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").parameters([partyId:organizationPartyId, failIfNotFound:true]).call().rut
 
 // Validación rut
 // ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rutReceptor]).call()

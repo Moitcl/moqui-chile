@@ -10,7 +10,7 @@ import org.moqui.context.ExecutionContext
 ExecutionContext ec = context.ec
 
 // Carga de RUT de empresa (ya validado)
-rut = ec.service.sync("mchile.GeneralServices.get#RutForParty").parameters([partyId:organizationPartyId, failIfNotFound:true]).call().rut
+rut = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").parameters([partyId:organizationPartyId, failIfNotFound:true]).call().rut
 // Carga XML
 archivoXml = xml.getName()
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
