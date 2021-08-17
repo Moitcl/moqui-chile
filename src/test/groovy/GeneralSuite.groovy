@@ -12,8 +12,6 @@
  * <http://creativecommons.org/publicdomain/zero/1.0/>.
  */
 
-
-import DTE.NotaDeCreditoTests
 import org.junit.AfterClass
 import org.junit.runner.RunWith
 import org.junit.runners.Suite
@@ -28,9 +26,9 @@ import org.moqui.Moqui
  */
 
 @RunWith(Suite.class)
-@Suite.SuiteClasses([ DTE.FacturacionTests.class, DTE.FacturacionAfectaTests.class, DTE.NotaDeCreditoTests.class, DTE.NotaDeDebitoTests.class ])
+@Suite.SuiteClasses([ General.RutTests.class ])
 
-class DTESuite {
+class GeneralSuite {
     @AfterClass
     public static void destroyMoqui() {
         Moqui.destroyActiveExecutionContextFactory();
