@@ -30,6 +30,16 @@ import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA
 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE
 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula
 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula.SubTotDTE
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.nio.file.Files
+
+// Prueba
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import java.io.StringWriter;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 
 ExecutionContext ec = context.ec
 
@@ -93,6 +103,7 @@ opts.setSavePrettyPrintIndent(0)
 // Recuperación de archivo CAF desde BD
 caf = AUTORIZACIONDocument.Factory.parse(new ByteArrayInputStream(cafData.getBytes()), opts).getAUTORIZACION()
 
+
 BOLETADefType boleta; // boleta tiene cargada toda la información correspondiente
 
 // (emisor, receptor, detalle, totales, etc)
@@ -100,6 +111,8 @@ opts = new XmlOptions()
 opts.setSavePrettyPrint()
 opts.setSavePrettyPrintIndent(0)
 boleta = BOLETADefType.Factory.newInstance(opts)
+
+
 
 System.out.println("BOLETA1:"+boleta.toString())
 
@@ -109,6 +122,7 @@ boleta.getDocumento().addNewEncabezado()
 boleta.getDocumento().getEncabezado().addNewIdDoc()
 // Detalles
 boleta.getDocumento().addNewDetalle()
+
 
 // leo certificado y llave privada del archivo pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
@@ -209,9 +223,13 @@ if (tipoFactura == 39) {
         unmdItem = detailEntry.quantityUomId
 
         // Verificar si item es afecto o exento
-        afectoOutMap = ec.service.sync().name("mchile.DTEServices.check#Afecto").parameter("productId", detailEntry.productId).call()
-        itemAfecto = afectoOutMap.afecto
-        ec.logger.warn("Item afecto: $itemAfecto, $totalItem")
+        afectoOutMap = null
+        if(detailEntry.productId != null)
+            afectoOutMap = ec.service.sync().name("mchile.DTEServices.check#Afecto").parameter("productId", detailEntry.productId).call()
+        itemAfecto = null
+        if(afectoOutMap != null)
+            itemAfecto = afectoOutMap.afecto
+        ec.logger.warn("Item afecto: $nombreItem, $totalItem")
 
         // Agrego detalles
         det[i] = Detalle.Factory.newInstance()
@@ -225,7 +243,6 @@ if (tipoFactura == 39) {
             montoExento = montoExento + totalItem
             det[i].setIndExe(1)
         }
-
         // TODO: Unidad de medida en última caso de prueba (UnmdItem, antes de precio)
         det[i].setNroLinDet(i+1)
         det[i].setNmbItem(nombreItem)
@@ -269,6 +286,8 @@ if (tipoFactura == 39) {
         }
         i = i + 1
     }
+
+
     boleta.getDocumento().setReferenciaArray(ref)
 
     boleta.getDocumento().setDetalleArray(det)
@@ -280,6 +299,7 @@ if (tipoFactura == 39) {
     tot.setMntTotal(totalInvoice)
     amount=totalInvoice
 }
+ec.logger.warn("Procesando boleta tipo "+tipoFactura)
 
 if (tipoFactura == 41) {
     int i = 0
@@ -393,12 +413,13 @@ opts.setUseDefaultNamespace()
 
 boleta.timbrar(caf.getCAF(), caf.getPrivateKey(null))
 boleta.getDocumento().xsetTmstFirma(now)
-//boleta.sign(key, cert)
+boleta.sign(key, cert)
 //boleta.verifySignature(BOLETADefType.Factory.parse(boleta.newInputStream(opts)))
 
 // Construyo base a partir de String XML
+rutEmisor="76222457-7"  // Corregir //<?xml version="1.0" encoding="ISO-8859-1"?>
+fchResol = "2014-04-20"
 templateEnvioBoleta = """
-<?xml version="1.0" encoding="ISO-8859-1"?>
 <EnvioBOLETA version="1.0" xmlns="http://www.sii.cl/SiiDte" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sii.cl/SiiDte EnvioBOLETA_v11.xsd">
     <SetDTE>
         <Caratula version="1.0">
@@ -409,7 +430,12 @@ templateEnvioBoleta = """
     </SetDTE>
 </EnvioBOLETA>
 """
-cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument = EnvioBOLETADocument.Factory.parse(new ByteArrayInputStream(templateEnvioBoleta.bytes))
+
+System.out.println("dodododod"+fchResol +","+ nroResol+","+templateEnvioBoleta)
+
+cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument = EnvioBOLETADocument.Factory.parse(new ByteArrayInputStream(templateEnvioBoleta.getBytes("ISO-8859-1")))
+System.out.println("ppppp:")
+
 EnvioBOLETA eb = EnvioBOLETA.Factory.newInstance()
 SetDTE sdte = SetDTE.Factory.newInstance()
 
@@ -417,6 +443,7 @@ BOLETADefType[] bolArr = new BOLETADefType[1]
 bolArr[0] = boleta
 sdte.setDTEArray(bolArr)
 sdte.setID("ENVBO" + System.nanoTime())
+
 
 // Datos de carátula
 Caratula caratula = sdte.addNewCaratula()
@@ -474,6 +501,7 @@ opts2.setLoadAdditionalNamespaces(namespaces2)
 opts2.setSavePrettyPrint()
 opts2.setSavePrettyPrintIndent(0)
 
+
 try {
     envioBoletaDocument = EnvioBOLETADocument.Factory.parse(envioBoletaDocument.newInputStream(opts2), opts2)
 } catch (Exception e) {
@@ -526,15 +554,23 @@ ec.logger.warn("URI: " + uri)
 opts = new XmlOptions()
 opts.setCharacterEncoding("ISO-8859-1")
 
+// Borrar, solo prueba
+ByteArrayOutputStream out = new ByteArrayOutputStream()
+pathResults = "/home/cherrera/moit/cowork/moqui-framework/runtime/component/moquichile/DTE/TEMP/"
+envioBoletaDocument.save(new File(pathResults + "BOL" + tipoFactura + "-" + folio + "-sinfirma.xml"),opts)
+archivoEnvio = pathResults + "BOL" + tipoFactura + "-"+folio+ ".xml"
+
 if (saveSinFirma) {
     BaseResourceReference xmlContentRr = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoFactura}-${folio}-sinfirma.xml")
     envioBoletaDocument.save(xmlContentRr.outputStream, opts)
 }
 
-ByteArrayOutputStream out = new ByteArrayOutputStream()
-envioBoletaDocument.save(out, opts)
+ByteArrayOutputStream out2 = new ByteArrayOutputStream()
+envioBoletaDocument.save(out2, opts)
 
-Document doc2 = XMLUtil.parseDocument(out.toByteArray())
+System.out.println("Prueba: "+envioBoletaDocument)
+
+Document doc2 = XMLUtil.parseDocument(out2.toByteArray())
 
 // Firma de BOLETA
 envioBoletaDocument.envioBOLETA.getSetDTE().getDTEArray(0).getDocumento().xsetTmstFirma(now)
@@ -543,15 +579,28 @@ envioBoletaDocument.envioBOLETA.getSetDTE().getDTEArray(0).getDocumento().xsetTm
 // Deja firma de boleta en lugar correcto, con URI correcta
 //byte[] salidaBoleta = Signer.sign2(doc2, uriBoleta, key, cert, uriBoleta, "Documento")
 // Firma con metodo alterno (xpath)
-byte[] salidaBoleta = BoletaSigner.signBoleta(doc2, key, cert)
-//byte[] salidaBoleta = BoletaSigner2.signBoleta(doc2, key, cert, uriBoleta)
-//byte[] salidaBoleta = Signer.signEmbededBoleta(doc2, uriBoleta, key, cert)
-//doc2 = XMLUtil.parseDocument(salidaBoleta)
+//byte[] salidaBoleta = BoletaSigner.signBoleta(doc2, key, cert)
 // Firma de EnvioBOLETA
 byte[] facturaXml = Signer.sign(doc2, uri, key, cert, uri, "SetDTE")
-doc2 = XMLUtil.parseDocument(facturaXml)
+//Document doc3 = BoletaSigner.signBoleta(doc2, key, cert);
+//doc2 = XMLUtil.parseDocument(facturaXml)
+
+//DOMSource source = new DOMSource(doc3);
+//TransformerFactory transformerFactory = TransformerFactory.newInstance();
+//Transformer transformer = transformerFactory.newTransformer();
+//ByteArrayOutputStream bos=new ByteArrayOutputStream();
+//StreamResult result=new StreamResult(bos);
+//transformer.transform(source, result);
+//byte []facturaXml=bos.toByteArray();
+
+System.out.println("ppppppp2:"+facturaXml)
 
 if (Signer.verify(doc2, "SetDTE")) {
+    FileOutputStream outputStream = new FileOutputStream(pathResults + "BOL" + tipoFactura + "-" + folio + ".xml")
+    outputStream.write(facturaXml);
+    outputStream.close();
+    //Path path = Paths.get(pathResults + "BOL" + tipoFactura + "-" + folio + ".xml");
+    //Files.write(path, salida);
     ec.logger.warn("Factura "+path+" folio "+folio+" generada OK")
 } else {
     ec.logger.warn("Error al generar boleta folio "+folio)
@@ -567,19 +616,21 @@ dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocum
 dteEv.issuerPartyId = issuerPartyId
 
 if (rutReceptor != "66666666-6") {
-    dteEv.receiverPartyid = receiverPartyId
+    dteEv.receiverPartyId = receiverPartyId
     dteEv.receiverPartyIdTypeEnumId = "PtidNationalTaxId"
 }
 dteEv.fiscalTaxDocumentStatusEnumId = "Ftdt-Issued"
 dteEv.fiscalTaxDocumentSentStatusEnumId = "Ftdt-NotSent"
 dteEv.invoiceId = invoiceId
 dteEv.date = ec.user.nowTimestamp
-dteFeild.update()
+dteEv.update()
+//dteField.update()
 // Creación de registro en FiscalTaxDocumentAttributes
 // montoNeto
 // montoIVARecuperable
 // montoExento
 // Amount
+
 updateMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, emailEmisor:emailEmisor, amount:amount,
              montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmision,
              montoExento:montoExento, montoIVARecuperable:montoIVARecuperable]
