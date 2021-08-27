@@ -209,9 +209,10 @@ if (invoiceId) {
             fecha = orderList.first?.otherPartyOrderDate?:ec.user.nowTimestamp
         } else
             fecha = ec.user.nowTimestamp
-        reference = ec.entity.makeValue("mchile.dte.ReferenciaInvoice")
+        reference = ec.entity.makeValue("mchile.dte.ReferenciaDte")
         reference.folio = invoice.otherPartyOrderId
         reference.razonReferencia = "Orden de Compra"
+        reference.referenceTypeEnumId = "RefDteTypeInvoice"
         reference.fecha = fecha
         reference.fiscalTaxDocumentTypeEnumId = "Ftdt-801"
         referenciaList.add(reference)
