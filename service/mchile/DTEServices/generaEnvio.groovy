@@ -1,12 +1,8 @@
 import org.moqui.context.ExecutionContext
-import org.moqui.impl.context.reference.BaseResourceReference
 
 import java.text.SimpleDateFormat
 import org.moqui.resource.ResourceReference
 
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
 import java.security.KeyStore
 import java.security.PrivateKey
 import java.security.cert.X509Certificate
