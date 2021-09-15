@@ -557,7 +557,7 @@
 
     <!-- Timbre electrónico -->
     <xsl:template match="TED">
-        <xsl:variable name="myted" select="." />
+        <xsl:variable name="myted" select="."/>
         <fo:block-container margin-top="4pt" margin-left="1pt">
             <fo:block><fo:instream-foreign-object content-width="5.6cm"><xsl:copy-of select="tedbarcode:generate($myted)"/></fo:instream-foreign-object></fo:block>
             <fo:block font-size="7pt" font-family="sans-serif" text-align="center">Timbre Electrónico SII</fo:block>

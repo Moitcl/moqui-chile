@@ -8,31 +8,31 @@
 	>
 
 	<xsl:output method="xml" version="1.0" omit-xml-declaration="no"
-		indent="yes" />
+		indent="yes"/>
 
-	<xsl:decimal-format name="us" decimal-separator='.' grouping-separator=',' />
-	<xsl:decimal-format name="european" decimal-separator=',' grouping-separator='.' />
+	<xsl:decimal-format name="us" decimal-separator='.' grouping-separator=','/>
+	<xsl:decimal-format name="european" decimal-separator=',' grouping-separator='.'/>
 	<xsl:decimal-format name="example" decimal-separator="." grouping-separator=","
 	   infinity="INFINITY" minus-sign="-" NaN="Not a Number" percent="%"
-	   per-mille="m" zero-digit="0" digit="#" pattern-separator=";" /> 
+	   per-mille="m" zero-digit="0" digit="#" pattern-separator=";"/>
 
-	<xsl:param name="versionParam" select="'1.0'" />
+	<xsl:param name="versionParam" select="'1.0'"/>
 	<xsl:template match="/">
 		<fo:root xmlns:fo="http://www.w3.org/1999/XSL/Format">
 			<fo:layout-master-set>
 				<fo:simple-page-master master-name="simple"
 					page-height="27.9cm" page-width="21.6cm" margin-top="1cm"
 					margin-bottom="2cm" margin-left="1cm" margin-right="1cm">
-					<fo:region-body margin-top="0cm" />
-					<fo:region-before extent="3cm" />
-					<fo:region-after extent="1.5cm" />
+					<fo:region-body margin-top="0cm"/>
+					<fo:region-before extent="3cm"/>
+					<fo:region-after extent="1.5cm"/>
 				</fo:simple-page-master>
 			</fo:layout-master-set>
 
 
 			<fo:page-sequence master-reference="simple">
 				<fo:flow flow-name="xsl-region-body">
-					<xsl:apply-templates select="EnvioBOLETA/SetDTE/DTE/Documento" />
+					<xsl:apply-templates select="EnvioBOLETA/SetDTE/DTE/Documento"/>
 				</fo:flow>
 			</fo:page-sequence>
 
@@ -44,21 +44,21 @@
 		<fo:block>
 			<xsl:apply-templates select="Encabezado/Emisor">
 				<xsl:with-param name="folio">
-					<xsl:value-of select="Encabezado/IdDoc/Folio" />
+					<xsl:value-of select="Encabezado/IdDoc/Folio"/>
 				</xsl:with-param>
 				<xsl:with-param name="tipo">
-					<xsl:value-of select="Encabezado/IdDoc/TipoDTE" />
+					<xsl:value-of select="Encabezado/IdDoc/TipoDTE"/>
 				</xsl:with-param>
 			</xsl:apply-templates>
 			<xsl:apply-templates select="Encabezado/Receptor">
 				<xsl:with-param name="fecha">
-					<xsl:value-of select="Encabezado/IdDoc/FchEmis" />
+					<xsl:value-of select="Encabezado/IdDoc/FchEmis"/>
 				</xsl:with-param>
 				<xsl:with-param name="medioPago">
-					<xsl:value-of select="Encabezado/IdDoc/MedioPago" />
+					<xsl:value-of select="Encabezado/IdDoc/MedioPago"/>
 				</xsl:with-param>
 				<xsl:with-param name="formaPago">
-					<xsl:value-of select="Encabezado/IdDoc/FmaPago" />
+					<xsl:value-of select="Encabezado/IdDoc/FmaPago"/>
 				</xsl:with-param>
 			</xsl:apply-templates>
 
@@ -69,11 +69,11 @@
 					color="black" text-align="left" space-before="8pt">
 					<fo:table table-layout="fixed" width="100%"
 						border-collapse="collapse">
-						<fo:table-column column-width="2cm" />
-						<fo:table-column column-width="9.5cm" />
-						<fo:table-column column-width="2.5cm" />
-						<fo:table-column column-width="2.5cm" />
-						<fo:table-column column-width="2.5cm" />
+						<fo:table-column column-width="2cm"/>
+						<fo:table-column column-width="9.5cm"/>
+						<fo:table-column column-width="2.5cm"/>
+						<fo:table-column column-width="2.5cm"/>
+						<fo:table-column column-width="2.5cm"/>
 
 						<fo:table-body>
 							<fo:table-row>
@@ -121,157 +121,157 @@
 							<xsl:choose>
 								<xsl:when test="Detalle[NroLinDet=1]">
 									<xsl:apply-templates
-										select="Detalle[NroLinDet=1]" />
+										select="Detalle[NroLinDet=1]"/>
 								</xsl:when>
 								<xsl:otherwise>
 									<xsl:call-template
-										name="DetalleVacio" />
+										name="DetalleVacio"/>
 								</xsl:otherwise>
 							</xsl:choose>
 							<xsl:choose>
 								<xsl:when test="Detalle[NroLinDet=2]">
 									<xsl:apply-templates
-										select="Detalle[NroLinDet=2]" />
+										select="Detalle[NroLinDet=2]"/>
 								</xsl:when>
 								<xsl:otherwise>
 									<xsl:call-template
-										name="DetalleVacio" />
+										name="DetalleVacio"/>
 								</xsl:otherwise>
 							</xsl:choose>
 							<xsl:choose>
 								<xsl:when test="Detalle[NroLinDet=3]">
 									<xsl:apply-templates
-										select="Detalle[NroLinDet=3]" />
+										select="Detalle[NroLinDet=3]"/>
 								</xsl:when>
 								<xsl:otherwise>
 									<xsl:call-template
-										name="DetalleVacio" />
+										name="DetalleVacio"/>
 								</xsl:otherwise>
 							</xsl:choose>
 							<xsl:choose>
 								<xsl:when test="Detalle[NroLinDet=4]">
 									<xsl:apply-templates
-										select="Detalle[NroLinDet=4]" />
+										select="Detalle[NroLinDet=4]"/>
 								</xsl:when>
 								<xsl:otherwise>
 									<xsl:call-template
-										name="DetalleVacio" />
+										name="DetalleVacio"/>
 								</xsl:otherwise>
 							</xsl:choose>
 							<xsl:choose>
 								<xsl:when test="Detalle[NroLinDet=5]">
 									<xsl:apply-templates
-										select="Detalle[NroLinDet=5]" />
+										select="Detalle[NroLinDet=5]"/>
 								</xsl:when>
 								<xsl:otherwise>
 									<xsl:call-template
-										name="DetalleVacio" />
+										name="DetalleVacio"/>
 								</xsl:otherwise>
 							</xsl:choose>
 							<xsl:choose>
 								<xsl:when test="Detalle[NroLinDet=6]">
 									<xsl:apply-templates
-										select="Detalle[NroLinDet=6]" />
+										select="Detalle[NroLinDet=6]"/>
 								</xsl:when>
 								<xsl:otherwise>
 									<xsl:call-template
-										name="DetalleVacio" />
+										name="DetalleVacio"/>
 								</xsl:otherwise>
 							</xsl:choose>
 							<xsl:choose>
 								<xsl:when test="Detalle[NroLinDet=7]">
 									<xsl:apply-templates
-										select="Detalle[NroLinDet=7]" />
+										select="Detalle[NroLinDet=7]"/>
 								</xsl:when>
 								<xsl:otherwise>
 									<xsl:call-template
-										name="DetalleVacio" />
+										name="DetalleVacio"/>
 								</xsl:otherwise>
 							</xsl:choose>
 							<xsl:choose>
 								<xsl:when test="Detalle[NroLinDet=8]">
 									<xsl:apply-templates
-										select="Detalle[NroLinDet=8]" />
+										select="Detalle[NroLinDet=8]"/>
 								</xsl:when>
 								<xsl:otherwise>
 									<xsl:call-template
-										name="DetalleVacio" />
+										name="DetalleVacio"/>
 								</xsl:otherwise>
 							</xsl:choose>
 							<xsl:choose>
 								<xsl:when test="Detalle[NroLinDet=9]">
 									<xsl:apply-templates
-										select="Detalle[NroLinDet=9]" />
+										select="Detalle[NroLinDet=9]"/>
 								</xsl:when>
 								<xsl:otherwise>
 									<xsl:call-template
-										name="DetalleVacio" />
+										name="DetalleVacio"/>
 								</xsl:otherwise>
 							</xsl:choose>
 							<xsl:choose>
 								<xsl:when
 									test="Detalle[NroLinDet=10]">
 									<xsl:apply-templates
-										select="Detalle[NroLinDet=10]" />
+										select="Detalle[NroLinDet=10]"/>
 								</xsl:when>
 								<xsl:otherwise>
 									<xsl:call-template
-										name="DetalleVacio" />
+										name="DetalleVacio"/>
 								</xsl:otherwise>
 							</xsl:choose>
 							<xsl:choose>
 								<xsl:when
 									test="Detalle[NroLinDet=11]">
 									<xsl:apply-templates
-										select="Detalle[NroLinDet=11]" />
+										select="Detalle[NroLinDet=11]"/>
 								</xsl:when>
 								<xsl:otherwise>
 									<xsl:call-template
-										name="DetalleVacio" />
+										name="DetalleVacio"/>
 								</xsl:otherwise>
 							</xsl:choose>
 							<xsl:choose>
 								<xsl:when
 									test="Detalle[NroLinDet=12]">
 									<xsl:apply-templates
-										select="Detalle[NroLinDet=12]" />
+										select="Detalle[NroLinDet=12]"/>
 								</xsl:when>
 								<xsl:otherwise>
 									<xsl:call-template
-										name="DetalleVacio" />
+										name="DetalleVacio"/>
 								</xsl:otherwise>
 							</xsl:choose>
 							<xsl:choose>
 								<xsl:when
 									test="Detalle[NroLinDet=13]">
 									<xsl:apply-templates
-										select="Detalle[NroLinDet=13]" />
+										select="Detalle[NroLinDet=13]"/>
 								</xsl:when>
 								<xsl:otherwise>
 									<xsl:call-template
-										name="DetalleVacio" />
+										name="DetalleVacio"/>
 								</xsl:otherwise>
 							</xsl:choose>
 							<xsl:choose>
 								<xsl:when
 									test="Detalle[NroLinDet=14]">
 									<xsl:apply-templates
-										select="Detalle[NroLinDet=14]" />
+										select="Detalle[NroLinDet=14]"/>
 								</xsl:when>
 								<xsl:otherwise>
 									<xsl:call-template
-										name="DetalleVacio" />
+										name="DetalleVacio"/>
 								</xsl:otherwise>
 							</xsl:choose>
 							<xsl:choose>
 								<xsl:when
 									test="Detalle[NroLinDet=15]">
 									<xsl:apply-templates
-										select="Detalle[NroLinDet=15]" />
+										select="Detalle[NroLinDet=15]"/>
 								</xsl:when>
 								<xsl:otherwise>
 									<xsl:call-template
-										name="DetalleVacio" />
+										name="DetalleVacio"/>
 								</xsl:otherwise>
 							</xsl:choose>
 
@@ -282,7 +282,7 @@
 									border-right-width="0.5pt" border-right-style="solid"
 									border-bottom-width="0.5pt" border-bottom-style="solid"
 									number-columns-spanned="5">Prueba
-									<fo:block />
+									<fo:block/>
 								</fo:table-cell>
 							</fo:table-row>
 							<fo:table-row>
@@ -308,15 +308,15 @@
 				</fo:block>
 			</fo:block-container>
 
-			<xsl:apply-templates select="TED" />
+			<xsl:apply-templates select="TED"/>
 		</fo:block>
 	</xsl:template>
 
 
 	<!-- Datos del emisor -->
 	<xsl:template match="Emisor">
-		<xsl:param name="folio" />
-		<xsl:param name="tipo" />
+		<xsl:param name="folio"/>
+		<xsl:param name="tipo"/>
 
 		<!--  El logo -->
 		<fo:block-container absolute-position="absolute" left="0cm"
@@ -332,31 +332,31 @@
 
 			<fo:block font-size="18pt" font-family="Helvetica"
 				font-weight="bold" text-align="left" color="blue">
-				<xsl:value-of select="RznSocEmisor" />
+				<xsl:value-of select="RznSocEmisor"/>
 			</fo:block>
 
 			<xsl:if test="Sucursal">
 				<fo:block font-weight="bold" font-size="12pt" font-family="monospace"
 					language="es" hyphenate="true" color="black" text-align="left">
-					Sucursal: <xsl:value-of select="Sucursal" /> (Codigo SII: <xsl:value-of select="CdgSIISucur" />)
+					Sucursal: <xsl:value-of select="Sucursal"/> (Codigo SII: <xsl:value-of select="CdgSIISucur"/>)
 				</fo:block>
 			</xsl:if>
 
 			<fo:block font-weight="bold" font-size="12pt" font-family="monospace"
 				language="es" hyphenate="true" color="black" text-align="left">
-				<xsl:value-of select="GiroEmisor" />
+				<xsl:value-of select="GiroEmisor"/>
 			</fo:block>
 
 			<fo:block font-weight="bold" font-size="12pt" font-family="monospace"
 				language="es" hyphenate="true" color="black" text-align="left">
-				<xsl:value-of select="DirOrigen" />
+				<xsl:value-of select="DirOrigen"/>
 			</fo:block>
 
 			<fo:block font-weight="bold" font-size="12pt" font-family="monospace"
 				language="es" hyphenate="true" color="black" text-align="left">
-				<xsl:value-of select="CmnaOrigen" />
+				<xsl:value-of select="CmnaOrigen"/>
 				-
-				<xsl:value-of select="CiudadOrigen" />
+				<xsl:value-of select="CiudadOrigen"/>
 			</fo:block>
 
 		</fo:block-container>
@@ -371,7 +371,7 @@
 				R.U.T.:
 				<xsl:call-template name="RutFormat">
 					<xsl:with-param name="rut">
-						<xsl:value-of select="RUTEmisor" />
+						<xsl:value-of select="RUTEmisor"/>
 					</xsl:with-param>
 				</xsl:call-template>
 			</fo:block>
@@ -393,7 +393,7 @@
 			<fo:block font-size="14pt" font-family="monospace"
 				font-weight="bold" color="red" text-align="center">
 				N&#176;
-				<xsl:value-of select="$folio" />
+				<xsl:value-of select="$folio"/>
 			</fo:block>
 		</fo:block-container>
 		<!--fo:block-container absolute-position="absolute" top="3cm"
@@ -408,7 +408,7 @@
 
 	<!-- Datos del receptor -->
 	<xsl:template match="Receptor">
-		<xsl:param name="fecha" />
+		<xsl:param name="fecha"/>
 		<xsl:param name="medioPago"/>
 		<xsl:param name="formaPago"/>
 
@@ -419,7 +419,7 @@
 				Santiago,
 				<xsl:call-template name="FechaFormat">
 					<xsl:with-param name="fecha">
-						<xsl:value-of select="$fecha" />
+						<xsl:value-of select="$fecha"/>
 					</xsl:with-param>
 				</xsl:call-template>
 
@@ -439,21 +439,21 @@
 				border-left-style="solid" border-right-width="0.5pt"
 				border-right-style="solid" margin-right="2mm"  height="0.8cm">
 				<fo:block>
-						<xsl:value-of select="QtyItem" />&#160;<xsl:value-of select="UnmdItem" />
+						<xsl:value-of select="QtyItem"/>&#160;<xsl:value-of select="UnmdItem"/>
 				</fo:block>
 			</fo:table-cell>
 			<fo:table-cell text-align="left" border-left-width="0.5pt"
 				border-left-style="solid" border-right-width="0.5pt"
 				border-right-style="solid"  margin-right="2mm" margin-left="2mm"  height="0.8cm">
 				<fo:block >
-						<xsl:value-of select="NmbItem" />
+						<xsl:value-of select="NmbItem"/>
 				</fo:block>
 			</fo:table-cell>
 			<fo:table-cell text-align="right" border-left-width="0.5pt"
 				border-left-style="solid" border-right-width="0.5pt"
 				border-right-style="solid" margin-right="2mm"  height="0.8cm">
 				<fo:block>
-						<xsl:value-of select="format-number(PrcItem, '###.###', 'european')" />
+						<xsl:value-of select="format-number(PrcItem, '###.###', 'european')"/>
 				</fo:block>
 			</fo:table-cell>
 			<fo:table-cell text-align="right" border-left-width="0.5pt"
@@ -484,7 +484,7 @@
 
 	<!-- Timbre electrónico -->
 	<xsl:template match="TED">
-		<xsl:variable name="myted" select="." />
+		<xsl:variable name="myted" select="."/>
 		<xsl:variable name="barcode-cfg">
 			<barcode>
 				<!--  Segun SII, 3cm x 9cm max -->
@@ -505,7 +505,7 @@
 				<fo:instream-foreign-object>
 			
 					<xsl:copy-of
-						select="tedbarcode:generate($barcode-cfg, $myted)" />
+						select="tedbarcode:generate($barcode-cfg, $myted)"/>
 			
 				</fo:instream-foreign-object>
 			</fo:block>
@@ -521,8 +521,8 @@
 	</xsl:template>
 
 	<xsl:template name="PagoFormat">
-		<xsl:param name="medioPago" />
-		<xsl:param name="formaPago" />
+		<xsl:param name="medioPago"/>
+		<xsl:param name="formaPago"/>
 
 		<xsl:choose>
 			<xsl:when test="$medioPago='CH'">Cheque</xsl:when>
@@ -543,10 +543,10 @@
 	</xsl:template>
 
 	<xsl:template name="FechaFormat">
-		<xsl:param name="fecha" />
+		<xsl:param name="fecha"/>
 
 		<xsl:value-of
-			select="substring($fecha,string-length($fecha)-1,2)" />
+			select="substring($fecha,string-length($fecha)-1,2)"/>
 		de
 		<xsl:choose>
 			<xsl:when
@@ -600,17 +600,17 @@
 		</xsl:choose>
 		de
 		<xsl:value-of
-			select="substring($fecha,string-length($fecha)-9,4)" />
+			select="substring($fecha,string-length($fecha)-9,4)"/>
 	</xsl:template>
 
 	<xsl:template name="RutFormat">
-		<xsl:param name="rut" />
-		<xsl:variable name="num" select="substring-before($rut,'-')" />
-		<xsl:variable name="dv" select="substring-after($rut,'-')" />
+		<xsl:param name="rut"/>
+		<xsl:variable name="num" select="substring-before($rut,'-')"/>
+		<xsl:variable name="dv" select="substring-after($rut,'-')"/>
 
-		<xsl:value-of select="substring($num,string-length($num)-8,3)" />.<xsl:value-of
-		 select="substring($num,string-length($num)-5,3)" />.<xsl:value-of 
-		 select="substring($num,string-length($num)-2,3)" />-<xsl:value-of select="$dv" />
+		<xsl:value-of select="substring($num,string-length($num)-8,3)"/>.<xsl:value-of
+		 select="substring($num,string-length($num)-5,3)"/>.<xsl:value-of
+		 select="substring($num,string-length($num)-2,3)"/>-<xsl:value-of select="$dv"/>
 
 	</xsl:template>
 
