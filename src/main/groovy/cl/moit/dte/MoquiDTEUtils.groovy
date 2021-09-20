@@ -133,9 +133,9 @@ class MoquiDTEUtils {
                 det[i].setPrcItem(BigDecimal.valueOf(priceItem))
             det[i].setMontoItem(Math.round(totalItem))
             if(detailType == "ShipmentItem" || itemAfecto.equals("true")) {
-                totalNeto = totalNeto?:0 + totalItem
+                totalNeto = (totalNeto ?: 0) + totalItem
             } else {
-                totalExento = totalExento?:0 + totalItem
+                totalExento = (totalExento ?: 0) + totalItem
                 det[i].setIndExe(1)
             }
             if (detailType == "ReturnItem" && codRef == 2) {
