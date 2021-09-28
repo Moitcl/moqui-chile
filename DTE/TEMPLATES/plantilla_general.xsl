@@ -90,9 +90,6 @@
                                                 </xsl:choose></fo:block></fo:table-cell>
                                             </fo:table-row>
                                         </xsl:if>
-                                        <xsl:if test="not ($commentAfterDetalle = '')">
-                                            <xsl:call-template name="AddCommentAfterDetalle"/>
-                                        </xsl:if>
                                     </xsl:when>
                                     <xsl:otherwise>
                                         <fo:table-row>
@@ -108,6 +105,9 @@
                         </fo:table>
                     </fo:block-container>
                 </fo:block>
+                <xsl:if test="not ($commentAfterDetalle = '')">
+                    <xsl:call-template name="AddCommentAfterDetalle"/>
+                </xsl:if>
 
                 <fo:table table-layout="fixed">
                     <fo:table-column column-width="14.2cm"/>
@@ -480,16 +480,7 @@
 
     <xsl:template name="AddCommentAfterDetalle">
         <xsl:for-each select="str:tokenize($commentAfterDetalle , '&#xA;' )">
-            <fo:table-row>
-                <xsl:if test="$showItemNumber = 'Y'">
-                    <fo:table-cell><fo:block></fo:block></fo:table-cell>
-                </xsl:if>
-                <fo:table-cell><fo:block margin="2pt"><xsl:value-of select="."/></fo:block></fo:table-cell>
-                <fo:table-cell><fo:block></fo:block></fo:table-cell>
-                <fo:table-cell><fo:block></fo:block></fo:table-cell>
-                <fo:table-cell><fo:block></fo:block></fo:table-cell>
-                <fo:table-cell><fo:block></fo:block></fo:table-cell>
-            </fo:table-row>
+            <fo:block margin="2pt" font-size="8.4pt" font-family="Helvetica, Arial, sans-serif"><xsl:value-of select="."/></fo:block>
         </xsl:for-each>
     </xsl:template>
 
