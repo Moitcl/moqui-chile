@@ -29,6 +29,17 @@ import org.moqui.context.ExecutionContext
 
 ExecutionContext ec = context.ec
 
+dteConstituyeVentaTypeList = ['Ftdt-101', 'Ftdt-102', 'Ftdt-109', 'Ftdt-110', 'Ftdt-30', 'Ftdt-32', 'Ftdt-33', 'Ftdt-34', 'Ftdt-35', 'Ftdt-38', 'Ftdt-39']
+if (invoiceId != null && fiscalTaxDocumentTypeEnumId in dteConstituyeVentaTypeList) {
+    existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("invoiceId", invoiceId).condition("fiscalTaxDocumentTypeEnumId", "in", dteConstituyeVentaTypeList).list()
+    if (existingDteList) {
+        fiscalTaxDocumentTypeEnumId = existingDteList.first.fiscalTaxDocumentTypeEnumId
+        dteEnum = ec.entity.find("moqui.basic.Enumeration").condition("enumId", fiscalTaxDocumentTypeEnumId).one()
+        ec.message.addError("Ya existe un DTE para la orden de cobro ${invoiceId}, de tipo ${dteEnum.description} (${dteEnum.enumId})")
+    }
+}
+
+
 rutEmisor = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").parameters([partyId:issuerPartyId, failIfNotFound:true]).call().rut
 
 // Validación rut
