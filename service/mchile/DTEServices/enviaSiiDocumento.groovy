@@ -31,8 +31,11 @@ String enviadorS = Utilities.getRutFromCertificate(x509)
 
 ec.logger.warn("Archivo enviado: " + documentoS)
 
-// Cambiar en produccion
-RECEPCIONDTEDocument recp = con.uploadEnvioCertificacion(enviadorS, compaS, new File(documentoS), token)
+RECEPCIONDTEDocument recp
+if (dteSystemIsProduction)
+    recp = con.uploadEnvioProduccion(enviadorS, compaS, new File(documentoS), token)
+else
+    recp = con.uploadEnvioCertificacion(enviadorS, compaS, new File(documentoS), token)
 ec.logger.warn("-----------------")
 ec.logger.warn(recp.xmlText())
 
