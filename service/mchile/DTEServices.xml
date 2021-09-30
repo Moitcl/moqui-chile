@@ -379,15 +379,17 @@ along with this software (see the LICENSE.md file). If not, see
                 ByteArrayOutputStream pdf = new ByteArrayOutputStream()
 
                 String glosaPagosString = glosaPagos.toString()
-                ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(new ByteArrayInputStream(template.bytes)), pdf, "application/pdf", transformParameters + [cedible:'false', glosaPagos:glosaPagosString])
+                pages = ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(new ByteArrayInputStream(template.bytes)), pdf, "application/pdf", transformParameters + [cedible:'false', glosaPagos:glosaPagosString])
                 pdf.close()
+                if (pages == null || pages == 0) ec.message.addError("Error generando PDF: páginas generadas: ${pages}")
                 pdfBytes = pdf.toByteArray()
             </script>
             <if condition="!boleta">
                 <script>
                     pdf = new ByteArrayOutputStream()
-                    ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(new ByteArrayInputStream(template.bytes)), pdf, "application/pdf", transformParameters + [cedible:'true', glosaPagos:glosaPagosString])
+                    pages = ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(new ByteArrayInputStream(template.bytes)), pdf, "application/pdf", transformParameters + [cedible:'true', glosaPagos:glosaPagosString])
                     pdf.close()
+                    if (pages == null || pages == 0) ec.message.addError("Error generando PDF: páginas generadas: ${pages}")
                     pdfCedibleBytes = pdf.toByteArray()
                 </script>
             </if>
@@ -3203,16 +3205,17 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="passCert" required="true"/>
         </in-parameters>
         <actions>
-            <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams" for-update="true">
+            <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams">
                 <field-map field-name="partyId" from="organizationPartyId"/>
             </entity-find-one>
             <if condition="!dteParams">
                 <return error="true" message="Primero complete parametros de organizacion"/>
             </if>
-            <set field="dteParams.passCert" from="passCert"/>
-            <set field="dteParams.certData" from="certificateFile.get().encodeBase64()"/>
+            <set field="partyId" from="organizationPartyId"/>
+            <set field="certData" from="certificateFile.get().encodeBase64()"/>
+            <service-call name="update#mchile.dte.PartyDteParams" in-map="context"/>
+            <log message="setting certData to ${certData}"/>
 
-            <entity-update value-field="dteParams"/>
         </actions>
     </service>
 
