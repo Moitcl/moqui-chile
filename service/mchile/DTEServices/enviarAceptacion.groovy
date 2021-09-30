@@ -122,7 +122,7 @@ if (envioFirmaOK && envioEsquemaOK && envioRutOK ) {
         rutEmisor = dte.getDocumento().getEncabezado().getEmisor().getRUTEmisor()
         folio = dte.getDocumento().getEncabezado().getIdDoc().getFolio()
         tipoDte = dte.getDocumento().getEncabezado().getIdDoc().getTipoDTE()
-        ResourceReference xmlContentResource = ec.resource.getLocationReference("dbcontent://moit/erp/dte/${rutEmisor}/ACEPTACION-${tipoDte}-${folio}.xml")
+        ResourceReference xmlContentResource = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/ACEPTACION-${tipoDte}-${folio}.xml")
         xmlContentResource.putBytes(dte.getBytes())
         ec.logger.warn("Grabado DTE recibido en ${xmlContentResource.location}")
 
