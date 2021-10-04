@@ -129,7 +129,14 @@ ks.load(new ByteArrayInputStream(certData.decodeBase64()), passCert.toCharArray(
 String alias = ks.aliases().nextElement()
 cert = (X509Certificate) ks.getCertificate(alias)
 String rutCertificado = Utilities.getRutFromCertificate(cert)
-ec.logger.warn("Usando certificado ${alias} con Rut ${rutCertificado}")
+if (rutCertificado == null)
+    if (dteSystemIsProduction) {
+        ec.message.addError("No se encuentra rut en el certificado '${alias}'")
+        return
+    } else
+        ec.logger.warn("Continuando sin RUT")
+else
+    ec.logger.warn("Usando certificado '${alias}' con Rut ${rutCertificado}")
 
 key = (PrivateKey) ks.getKey(alias, passCert.toCharArray())
 
@@ -418,10 +425,10 @@ doc2 = XMLUtil.parseDocument(facturaXml)
 if (Signer.verify(doc2, "Documento")) {
     ec.logger.warn("DTE folio ${folio} generada OK")
 } else {
-    ec.logger.warn("Error al generar DTE folio ${folio}")
+    ec.message.addError("Error al generar DTE folio ${folio}")
 }
 
-// Registro de DTE en base de datos y generación de PDF -->
+// Registry de DTE en base de datos y generación de PDF -->
 fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoFactura}"
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([dte:facturaXml, issuerPartyId:issuerPartyId, glosaPagos:glosaPagos]).call())
 
