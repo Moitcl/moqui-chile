@@ -75,7 +75,7 @@
                 </xsl:apply-templates>
                 <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
                           fox:border-radius="4pt" border-width="0.8pt" border-style="solid" border-color="#1a86c8">
-                    <fo:block-container height="12cm">
+                    <fo:block-container height="11cm">
                         <fo:table table-layout="fixed" width="100%" border-collapse="collapse">
                             <xsl:call-template name="ItemColumnsAndHeader"/>
                             <fo:table-body>
@@ -106,7 +106,14 @@
                     </fo:block-container>
                 </fo:block>
                 <xsl:if test="not ($commentAfterDetalle = '')">
-                    <xsl:call-template name="AddCommentAfterDetalle"/>
+                    <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
+                              fox:border-radius="4pt" border-width="0.8pt" border-style="solid" border-color="#1a86c8">
+                        <fo:table table-layout="fixed" margin="2pt" border-collapse="collapse"><fo:table-body><fo:table-cell>
+                            <xsl:for-each select="str:tokenize($commentAfterDetalle , '&#xA;' )">
+                                <fo:block margin="2pt" font-size="8.4pt" font-family="Helvetica, Arial, sans-serif"><xsl:value-of select="."/></fo:block>
+                            </xsl:for-each>
+                        </fo:table-cell></fo:table-body></fo:table>
+                    </fo:block>
                 </xsl:if>
 
                 <fo:table table-layout="fixed">
@@ -476,12 +483,6 @@
                 $&#160;<xsl:value-of select="format-number(MontoItem, '###.###', 'european')"/>
             </fo:block></fo:table-cell>
         </fo:table-row>
-    </xsl:template>
-
-    <xsl:template name="AddCommentAfterDetalle">
-        <xsl:for-each select="str:tokenize($commentAfterDetalle , '&#xA;' )">
-            <fo:block margin="2pt" font-size="8.4pt" font-family="Helvetica, Arial, sans-serif"><xsl:value-of select="."/></fo:block>
-        </xsl:for-each>
     </xsl:template>
 
 <!-- Referencias -->
