@@ -230,7 +230,7 @@ if (invoiceId) {
         reference = ec.entity.makeValue("mchile.dte.ReferenciaDte")
         reference.folio = invoice.otherPartyOrderId
         reference.razonReferencia = "Orden de Compra"
-        reference.referenceTypeEnumId = "RefDteTypeInvoice"
+        reference.referenciaTypeEnumId = "RefDteTypeInvoice"
         reference.fecha = fecha
         reference.fiscalTaxDocumentTypeEnumId = "Ftdt-801"
         referenciaList.add(reference)
