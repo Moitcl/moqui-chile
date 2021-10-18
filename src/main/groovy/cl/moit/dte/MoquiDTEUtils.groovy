@@ -15,6 +15,7 @@ class MoquiDTEUtils {
     public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType) throws BaseArtifactException {
         return prepareDetails(ec, detailList, detailType, null)
     }
+
     public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType, BigInteger codRef) throws BaseArtifactException {
         int i = 0
         int listSize = detailList.size()
@@ -61,7 +62,13 @@ class MoquiDTEUtils {
                         } else if (sis.orderId) {
                             item = ec.entity.find("mantle.account.order.OrderItem").condition([orderId: sis.orderId, orderItemSeqId: sis.orderItemSeqId]).one()
                         }
-                        totalItem = totalItem + sis.quantity * item.amount
+                        if (item) {
+                            totalItem = totalItem + sis.quantity * item.amount
+                        } else {
+                            EntityValue shipment = ec.entity.find("mantle.shipment.Shipment").condition([shipmentId:sis.shipmentId]).one()
+                            item = ec.entity.find("mantle.product.ProductPrice").condition([productId: detailEntry.productId, productStoreId:shipment.productStoreId]).one()
+                            totalItem = totalItem + sis.quantity * item.price
+                        }
                         quantityHandled = quantityHandled + sis.quantity
                         if (item.quantityUomId.equals('TF_hr'))
                             uom = "Hora"
