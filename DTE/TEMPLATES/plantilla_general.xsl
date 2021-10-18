@@ -23,6 +23,11 @@
     <xsl:param name="maxItems" select="20"/>
     <xsl:param name="showExcessRefsInOtherPage" select="'Y'"/>
     <xsl:param name="showExcessItemsInOtherPage" select="'Y'"/>
+    <xsl:param name="detailHeaderBgColor" select="'&#35;eaeaea'"/>
+    <xsl:param name="detailHeaderFgColor" select="'&#35;ffffff'"/>
+    <xsl:param name="detailHeaderSepColor" select="'&#35;ffffff'"/>
+    <xsl:param name="tableBorderColor" select="'&#35;eaeaea'"/>
+    <xsl:param name="vendorNameColor" select="'black'"/>
 
     <xsl:output method="xml" version="1.0" omit-xml-declaration="no" indent="yes" encoding="UTF-8"/>
 
@@ -74,7 +79,8 @@
                     <xsl:with-param name="formaPago"><xsl:value-of select="Encabezado/IdDoc/FmaPago"/></xsl:with-param>
                 </xsl:apply-templates>
                 <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                          fox:border-radius="4pt" border-width="0.8pt" border-style="solid" border-color="#1a86c8">
+                          fox:border-radius="4pt" border-width="0.8pt" border-style="solid">
+                    <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
                     <fo:block-container height="11cm">
                         <fo:table table-layout="fixed" width="100%" border-collapse="collapse">
                             <xsl:call-template name="ItemColumnsAndHeader"/>
@@ -107,7 +113,8 @@
                 </fo:block>
                 <xsl:if test="not ($commentAfterDetalle = '')">
                     <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                              fox:border-radius="4pt" border-width="0.8pt" border-style="solid" border-color="#1a86c8">
+                              fox:border-radius="4pt" border-width="0.8pt" border-style="solid">
+                        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
                         <fo:table table-layout="fixed" margin="2pt" border-collapse="collapse"><fo:table-body><fo:table-cell>
                             <xsl:for-each select="str:tokenize($commentAfterDetalle , '&#xA;' )">
                                 <fo:block margin="2pt" font-size="8.4pt" font-family="Helvetica, Arial, sans-serif"><xsl:value-of select="."/></fo:block>
@@ -123,7 +130,8 @@
                         <fo:table-cell><xsl:choose>
                             <xsl:when test="Referencia">
                                 <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                                          fox:border-radius="4pt" border-width="0.8pt" border-style="solid" border-color="#1a86c8" margin-right="2pt">
+                                          fox:border-radius="4pt" border-width="0.8pt" border-style="solid" margin-right="2pt">
+                                    <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
                                     <fo:table table-layout="fixed" margin="2pt">
                                         <xsl:call-template name="ReferencesColumnsAndHeader"/>
 
@@ -147,7 +155,8 @@
                             <xsl:choose>
                                 <xsl:when test="$cedible = 'true'">
                                     <fo:block font-size="9.01pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                                              fox:border-radius="4pt" border-width="0.8pt"  border-style="solid" border-color="#1a86c8" margin-right="2pt">
+                                              fox:border-radius="4pt" border-width="0.8pt"  border-style="solid" margin-right="2pt">
+                                        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
                                         <fo:table table-layout="fixed" width="100%">
                                             <fo:table-column column-width="50%"/>
                                             <fo:table-column column-width="50%"/>
@@ -174,7 +183,8 @@
 
                     <xsl:if test="$cuentaBancariaText">
                         <fo:block margin-top="1cm" font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                                      fox:border-radius="4pt" border-width="0.8pt"  border-style="solid" border-color="#1a86c8" margin-right="2pt">
+                                      fox:border-radius="4pt" border-width="0.8pt"  border-style="solid" margin-right="2pt">
+                            <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
                                 <fo:table table-layout="fixed">
                                     <fo:table-column column-width="100%"/>
                                     <fo:table-header background-color="#eaeaea"><fo:table-row>
@@ -184,7 +194,7 @@
                                             <fo:table-row>
                                                 <fo:table-cell>
                                                     <fo:block font-weight="bold" margin-left="4pt" margin-top="4pt">Transferencia bancaria</fo:block>
-                                                    <fo:block margin-left="4pt"><xsl:value-of select="$cuentaBancariaText"/>
+                                                    <fo:block margin-left="4pt" hyphenate="false"><xsl:value-of select="$cuentaBancariaText"/>
                                                     <xsl:if test="$cuentaBancariaMail">
                                                         <xsl:value-of select="' '"/>
                                                         <fo:basic-link><xsl:attribute name="external-destination">mailto:<xsl:value-of select="$cuentaBancariaMail"/></xsl:attribute><xsl:value-of select="$cuentaBancariaMail"/></fo:basic-link>
@@ -200,7 +210,8 @@
                         </fo:table-cell>
                         <fo:table-cell>
                             <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                                      fox:border-radius="4pt" border-width="0.8pt"  border-style="solid" border-color="#1a86c8" margin-left="2pt">
+                                      fox:border-radius="4pt" border-width="0.8pt"  border-style="solid" margin-left="2pt">
+                                <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
                                 <fo:table table-layout="fixed">
                                     <fo:table-column column-width="3cm"/>
                                     <fo:table-column column-width="2.4cm"/>
@@ -286,7 +297,8 @@
                 <fo:table-cell>
                     <fo:block-container absolute-position="auto" left="3.1cm" top="0cm" width="9.75cm">
 
-                        <fo:block font-size="10.81pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" text-align="left" color="#274c7b">
+                        <fo:block font-size="10.81pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" text-align="left">
+                            <xsl:attribute name="color"><xsl:value-of select="$vendorNameColor"/></xsl:attribute>
                             <xsl:value-of select="RznSoc"/>
                         </fo:block>
 
@@ -326,7 +338,7 @@
                     <fo:block-container absolute-position="auto" text-align="center" top="0cm" border-color="red" border-style="solid" border-width="0.8mm">
                         <fo:table table-layout="fixed"><fo:table-body>
                             <fo:table-row><fo:table-cell display-align="center">
-                                <fo:block font-size="10.21pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" color="red" text-align="center" hyphenate="false">R.U.T.:<xsl:call-template name="RutFormat">
+                                <fo:block font-size="10.21pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" color="red" text-align="center" hyphenate="false">R.U.T.: <xsl:call-template name="RutFormat">
                                     <xsl:with-param name="rut"><xsl:value-of select="RUTEmisor"/></xsl:with-param></xsl:call-template>
                                 </fo:block>
                                 <fo:block font-size="10.21pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" color="red" text-align="center">
@@ -362,7 +374,8 @@
 
         <fo:block-container absolute-position="auto">
             <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                      fox:border-radius="4pt" border-width="0.8pt"  border-style="solid" border-color="#1a86c8">
+                      fox:border-radius="4pt" border-width="0.8pt"  border-style="solid">
+                <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
                 <fo:table table-layout="fixed" margin="2pt">
                     <fo:table-column column-width="3.2cm"/>
                     <fo:table-column column-width="8cm"/>
@@ -427,17 +440,33 @@
         <fo:table-column column-width="1.5cm"/>
         -->
         <fo:table-column column-width="2.5cm"/>
-        <fo:table-header color="#ffffff" background-color="#1a86c8" font-weight="bold">
+        <fo:table-header font-weight="bold">
+            <xsl:attribute name="background-color"><xsl:value-of select="$detailHeaderBgColor"/></xsl:attribute>
+            <xsl:attribute name="color"><xsl:value-of select="$detailHeaderFgColor"/></xsl:attribute>
             <xsl:if test="$showItemNumber = 'Y'">
-                <fo:table-cell border-right-width=".8pt" border-right-color="#ffffff" border-right-style="solid" text-align="center"><fo:block margin="2pt">#</fo:block></fo:table-cell>
+                <fo:table-cell border-right-width=".8pt" border-right-style="solid" text-align="center">
+                    <xsl:attribute name="border-right-color"><xsl:value-of select="$detailHeaderSepColor"/></xsl:attribute>
+                    <fo:block margin="2pt">#</fo:block></fo:table-cell>
             </xsl:if>
-            <fo:table-cell border-right-width=".8pt" border-right-color="#ffffff" border-right-style="solid" text-align="center"><fo:block margin="2pt">Glosa</fo:block></fo:table-cell>
-            <fo:table-cell border-right-width=".8pt" border-right-color="#ffffff" border-right-style="solid" text-align="center"><fo:block margin="2pt">Cantidad</fo:block></fo:table-cell>
-            <fo:table-cell border-right-width=".8pt" border-right-color="#ffffff" border-right-style="solid" text-align="center"><fo:block margin="2pt">Precio Unit.</fo:block></fo:table-cell>
-            <fo:table-cell border-right-width=".8pt" border-right-color="#ffffff" border-right-style="solid" text-align="center"><fo:block margin="2pt">Dcto/Rcrg</fo:block></fo:table-cell>
-            <fo:table-cell border-right-width=".8pt" border-right-color="#ffffff" border-right-style="solid" text-align="center"><fo:block margin="2pt">Afecto IVA</fo:block></fo:table-cell>
+            <fo:table-cell border-right-width=".8pt" border-right-style="solid" text-align="center">
+                <xsl:attribute name="border-right-color"><xsl:value-of select="$detailHeaderSepColor"/></xsl:attribute>
+                <fo:block margin="2pt">Glosa</fo:block></fo:table-cell>
+            <fo:table-cell border-right-width=".8pt" border-right-style="solid" text-align="center">
+                <xsl:attribute name="border-right-color"><xsl:value-of select="$detailHeaderSepColor"/></xsl:attribute>
+                <fo:block margin="2pt">Cantidad</fo:block></fo:table-cell>
+            <fo:table-cell border-right-width=".8pt" border-right-style="solid" text-align="center">
+                <xsl:attribute name="border-right-color"><xsl:value-of select="$detailHeaderSepColor"/></xsl:attribute>
+                <fo:block margin="2pt">Precio Unit.</fo:block></fo:table-cell>
+            <fo:table-cell border-right-width=".8pt" border-right-style="solid" text-align="center">
+                <xsl:attribute name="border-right-color"><xsl:value-of select="$detailHeaderSepColor"/></xsl:attribute>
+                <fo:block margin="2pt">Dcto/Rcrg</fo:block></fo:table-cell>
+            <fo:table-cell border-right-width=".8pt" border-right-style="solid" text-align="center">
+                <xsl:attribute name="border-right-color"><xsl:value-of select="$detailHeaderSepColor"/></xsl:attribute>
+                <fo:block margin="2pt">Afecto IVA</fo:block></fo:table-cell>
             <!--
-            <fo:table-cell border-right-width=".8pt" border-right-color="#ffffff" border-right-style="solid" text-align="center"><fo:block margin="2pt">Imp. Esp.</fo:block></fo:table-cell>
+            <fo:table-cell border-right-width=".8pt" border-right-style="solid" text-align="center">
+                <xsl:attribute name="border-right-color"><xsl:value-of select="$detailHeaderSepColor"/></xsl:attribute>
+                <fo:block margin="2pt">Imp. Esp.</fo:block></fo:table-cell>
             -->
             <fo:table-cell text-align="center"><fo:block margin="2pt">Monto</fo:block></fo:table-cell>
         </fo:table-header>
@@ -633,7 +662,8 @@
                         Ítemes <xsl:value-of select="$maxItems + 1"/> a <xsl:value-of select="count(/DTE/Documento/Detalle)"/>
                     </fo:block>
                     <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="8pt" language="es" hyphenate="true" color="black" text-align="left"
-                              fox:border-radius="4pt" border-width="0.8pt"  border-style="solid" border-color="#1a86c8">
+                              fox:border-radius="4pt" border-width="0.8pt"  border-style="solid">
+                        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
                         <fo:block-container>
                             <fo:table table-layout="fixed" width="100%" border-collapse="collapse">
                                 <xsl:call-template name="ItemColumnsAndHeader"/>
@@ -649,7 +679,8 @@
                         Referencias <xsl:value-of select="$maxRefs + 1"/> a <xsl:value-of select="count(/DTE/Documento/Referencia)"/>
                     </fo:block>
                     <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                              fox:border-radius="4pt" border-width="0.8pt" border-style="solid" border-color="#1a86c8" margin-right="2pt">
+                              fox:border-radius="4pt" border-width="0.8pt" border-style="solid" margin-right="2pt">
+                        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
                         <fo:table table-layout="fixed" margin="2pt">
                             <xsl:call-template name="ReferencesColumnsAndHeader"/>
                             <fo:table-body>

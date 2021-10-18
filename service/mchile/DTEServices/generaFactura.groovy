@@ -35,7 +35,7 @@ if (invoiceId != null && fiscalTaxDocumentTypeEnumId in dteConstituyeVentaTypeLi
     if (existingDteList) {
         fiscalTaxDocumentTypeEnumId = existingDteList.first.fiscalTaxDocumentTypeEnumId
         dteEnum = ec.entity.find("moqui.basic.Enumeration").condition("enumId", fiscalTaxDocumentTypeEnumId).one()
-        ec.message.addError("Ya existe un DTE para la orden de cobro ${invoiceId}, de tipo ${dteEnum.description} (${dteEnum.enumId})")
+        //ec.message.addError("Ya existe un DTE para la orden de cobro ${invoiceId}, de tipo ${dteEnum.description} (${dteEnum.enumId})")
     }
 }
 
