@@ -52,13 +52,12 @@ along with this software (see the LICENSE.md file). If not, see
         <description>Generación de envio documento a partir de facturas ya generadas.</description>
         <in-parameters>
             <parameter name="rutReceptor" default-value="60803000-K"><description>El receptor del envio es el SII</description></parameter>
-            <parameter name="rutEnviador" required="true"/>
             <parameter name="organizationPartyId" required="true"/>
             <parameter name="documentIdList" required="true" type="List"/>
             <parameter name="saveSinFirma" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="archivoEnvio"/>
+            <parameter name="xmlContentLocation"/>
         </out-parameters>
     </service>
 
@@ -81,14 +80,13 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="enviaSII" noun="Documento"  type="script" location="component://MoquiChile/service/mchile/DTEServices/enviaSiiDocumento.groovy">
         <description>
             Envio documento a partir de documento envio ya generado
-            compaS: rut de compañía que envía
-            enviadorS: rut de persona que envía
+            rutOrganizacion: rut de compañía que envía
+            rutEnviador: rut de persona que envía
             documentoS: nombre de documento a enviar (que puede contener varios)
         </description>
         <in-parameters>
-            <parameter name="compaS" required="true"/>
-            <parameter name="enviadorS" required="true"/>
-            <parameter name="documentoS" required="true"/>
+            <parameter name="rutOrganizacion" required="true"/>
+            <parameter name="documentLocation" required="true"/>
             <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
         <out-parameters>
@@ -129,12 +127,8 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-            <set field="enviadorS" value="${rutEnvia}"/>
 
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-            <set field="enviadorS" value="${rutEnvia}"/>
-
-            <service-call name="mchile.DTEServices.enviaSII#Boleta" in-map="[compaS:rutEmisor, enviadorS:enviadorS, documentoS:contentLocation, organizationPartyId:organizationPartyId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.enviaSII#Boleta" in-map="[compaS:rutEmisor, enviadorS:rutEnvia, documentoS:contentLocation, organizationPartyId:organizationPartyId]" out-map="context"/>
             <!-- TODO: Eliminar archivo temporal -->
             <!-- Marcar boleta como enviada -->
             <!-- Se marca DTE como enviada -->
@@ -267,6 +261,8 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="rutEnvia"/>
             <parameter name="transformParameters"/>
             <parameter name="dteSystemIsProduction" type="Boolean"/>
+            <parameter name="certificate" type="java.security.cert.X509Certificate"/>
+            <parameter name="pkey" type="java.security.PrivateKey"/>
         </out-parameters>
         <actions>
             <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams">
@@ -287,16 +283,18 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="passCert" from="dteParams.passCert"/>
             <script><![CDATA[
                 import java.security.KeyStore
+                import java.security.PrivateKey
                 import java.security.cert.X509Certificate
                 import cl.nic.dte.util.Utilities
 
-                String rutEnvia
                 if (certData && passCert) {
                     KeyStore ks = KeyStore.getInstance("PKCS12")
                     ks.load(new ByteArrayInputStream(certData.decodeBase64()), passCert.toCharArray())
                     String alias = ks.aliases().nextElement()
-                    X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
-                    rutEnvia = Utilities.getRutFromCertificate(x509)
+                    certificate = (X509Certificate) ks.getCertificate(alias)
+                    rutEnvia = Utilities.getRutFromCertificate(certificate)
+                    ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEnvia).call()
+                    pkey = (PrivateKey) ks.getKey(alias, ((String)passCert).toCharArray())
                 }
             ]]></script>
 
@@ -1130,41 +1128,39 @@ along with this software (see the LICENSE.md file). If not, see
             Obtiene datos para llamar a servicio enviar#Documento
         </description>
         <in-parameters>
-            <parameter name="documentIds" required="true"/>
-            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="documentIds" type="List" required="true"/>
             <parameter name="libro"/>
             <parameter name="boleta"/>
         </in-parameters>
         <actions>
-            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                <econdition field-name="partyId" from="organizationPartyId"/>
-                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+            <if condition="documentIds.size() &lt; 1"><return error="true" message="Debe seleccionar al menos 1 DTE para enviar"/></if>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
+                <econdition field-name="fiscalTaxDocumentId" operator="in" from="documentIds"/>
             </entity-find>
 
-            <if condition="!partyIdentificationList.idValue[0]">
-                <return error="true" message="Organización $organizationPartyId no tiene RUT definido"/>
-            </if>
-            <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
+            <iterate list="dteList" entry="dte">
+                <if condition="issuerPartyId == null"><then>
+                    <set field="issuerPartyId" from="dte.issuerPartyId"/>
+                </then><else-if condition="dte.issuerPartyId != issuerPartyId">
+                    <return error="true" message="No se pueden enviar simultáneamente DTEs de distintos emisores"/>
+                </else-if></if>
+            </iterate>
+            <service-call name="moit.erp.GeneralServices.setup#UserInfo" out-map="context"/>
+            <if condition="!(issuerPartyId in userOrgIds)"><return error="true" message="Usuario no tiene autorización para enviar DTEs a nombre de partyId ${issuerPartyId}"/></if>
 
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-            <set field="rutEmisor" value="${rutEnvia}"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:issuerPartyId]" out-map="context"/>
 
-            <set field="documentIdList" from="documentIds instanceof List ? documentIds : documentIds.split(',') as List"/>
-
-            <if condition="!libro &amp;&amp; !boleta">
-                <then>
-                    <service-call name="mchile.DTEServices.generaEnvio#Documentos" in-map="[recepS:recepS, organizationPartyId:organizationPartyId, enviadorS:rutEmisor, documentIdList:documentIdList ]" out-map="context"/>
-                    <set field="documentoS" from="archivoEnvio"/>
-                    <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:rutEmisor, enviadorS:rutEmisor , documentoS:documentoS, organizationPartyId:organizationPartyId]" out-map="context"/>
-                    <service-call name="mchile.DTEServices.marcarEnviados#Documentos" in-map="[trackId:trackId, documentIdList:documentIdList]"/>
-                </then>
-                <else-if condition="boleta">
-                    <service-call name="mchile.DTEServices.generaEnvio#Boletas" in-map="[recepS:recepS, organizationPartyId:organizationPartyId, enviadorS:rutEmisor, documentIdList:documentIdList ]" out-map="context"/>
-                    <set field="documentoS" from="archivoEnvio"/>
-                    <service-call name="mchile.DTEServices.enviaSII#Boleta" in-map="[compaS:rutEmisor, enviadorS:rutEmisor , documentoS:documentoS, organizationPartyId:organizationPartyId]" out-map="context"/>
-                    <service-call name="mchile.DTEServices.marcarEnviados#Boletas" in-map="[trackId:trackId, documentIdList:documentIdList]"/>
-                </else-if>
-            </if>
+            <if condition="!libro &amp;&amp; !boleta"><then>
+                <service-call name="mchile.DTEServices.generaEnvio#Documentos" in-map="[organizationPartyId:issuerPartyId, documentIdList:documentIds]" out-map="context"/>
+                <log message="generaEnvio OK, now enviaSII#Documento"/>
+                <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[rutOrganizacion:rutEmisor, documentLocation:xmlContentLocation, organizationPartyId:issuerPartyId]" out-map="context"/>
+                <service-call name="mchile.DTEServices.marcarEnviados#Documentos" in-map="[trackId:trackId, documentIdList:documentIds]"/>
+            </then><else-if condition="boleta">
+                <service-call name="mchile.DTEServices.generaEnvio#Boletas" in-map="[recepS:recepS, organizationPartyId:issuerPartyId, enviadorS:rutEnvia, documentIdList:documentIdList ]" out-map="context"/>
+                <set field="documentoS" from="archivoEnvio"/>
+                <service-call name="mchile.DTEServices.enviaSII#Boleta" in-map="[rutOrganizacion:rutEnvia, rutEnviador:rutEnvia , documentoS:documentoS, organizationPartyId:issuerPartyId]" out-map="context"/>
+                <service-call name="mchile.DTEServices.marcarEnviados#Boletas" in-map="[trackId:trackId, documentIdList:documentIdList]"/>
+            </else-if></if>
 
             <if condition="libro">
                 <iterate list="documentList" entry="libroEntry">
@@ -1176,10 +1172,10 @@ along with this software (see the LICENSE.md file). If not, see
                     </entity-find-one>
                     <set field="xml" from="libroField.xml"/>
 
-                    <service-call name="mchile.DTEServices.generaEnvio#Libro" in-map="[enviadorS:rutEmisor, organizationPartyId:organizationPartyId, idS:'ID178', xml:xml ]" out-map="context"/>
+                    <service-call name="mchile.DTEServices.generaEnvio#Libro" in-map="[enviadorS:rutEnvia, organizationPartyId:issuerPartyId, idS:'ID178', xml:xml ]" out-map="context"/>
                     <set field="documentoS" from="archivoEnvio"/>
 
-                    <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:rutEmisor, enviadorS:rutEmisor , documentoS:xml, organizationPartyId:organizationPartyId]" out-map="context"/>
+                    <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[documentoS:xml, organizationPartyId:issuerPartyId]" out-map="context"/>
                 </iterate>
             </if>
         </actions>
@@ -1204,8 +1200,6 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="statusSii" value=""/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-            <set field="certData" from="certData"/>
-            <set field="passS" from="passCert"/>
 
             <service-call name="mchile.DTEServices.get#DteContent"
                           in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
@@ -1241,26 +1235,15 @@ along with this software (see the LICENSE.md file). If not, see
                 DTEDocument doc = DTEDocument.Factory.parse(contentRef.openStream(), opts)
                 ConexionSii con = new ConexionSii()
 
-                // leo certificado y llave privada del archivo pkcs12
-                KeyStore ks = KeyStore.getInstance("PKCS12")
-                //ks.load(new FileInputStream(certS), passS.toCharArray())
-                ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
-                String alias = ks.aliases().nextElement()
-                System.out.println("Usando certificado " + alias + " del archivo PKCS12 ");// + certS)
+                String token = con.getToken(pkey, certificate)
 
-                X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
-                PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray())
-
-                String token = con.getToken(pKey, x509)
-                String enviadorS = Utilities.getRutFromCertificate(x509)
-
-                System.out.println("Enviador: " + enviadorS + ", token: " + token)
+                System.out.println("Enviador: " + rutEnvia + ", token: " + token)
 
                 RESPUESTADocument resp
                 if (dteSystemIsProduction)
-                    resp = con.getEstadoDTEProduccion(enviadorS, doc.getDTE().getDocumento(), token)
+                    resp = con.getEstadoDTEProduccion(rutEnvia, doc.getDTE().getDocumento(), token)
                 else
-                    resp = con.getEstadoDTECertificacion(enviadorS, doc.getDTE().getDocumento(), token)
+                    resp = con.getEstadoDTECertificacion(rutEnvia, doc.getDTE().getDocumento(), token)
                 opts.setSavePrettyPrintIndent(2)
                 opts.setSavePrettyPrint()
                 resp.save(System.out, opts)
@@ -1398,17 +1381,7 @@ along with this software (see the LICENSE.md file). If not, see
 
                 ConexionSiiBoleta con = new ConexionSiiBoleta()
 
-                // leo certificado y llave privada del archivo pkcs12
-                KeyStore ks = KeyStore.getInstance("PKCS12")
-                ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
-                String alias = ks.aliases().nextElement()
-                System.out.println("Usando certificado " + alias + " del archivo PKCS12 ")
-
-                X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
-                PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray())
-
-                String token = con.getToken(pKey, x509)
-                String enviadorS = Utilities.getRutFromCertificate(x509)
+                String token = con.getToken(pkey, certificate)
 
                 System.out.println("Folio: " + folio + ", token: " + token)
 
@@ -1473,19 +1446,10 @@ along with this software (see the LICENSE.md file). If not, see
 
                 ConexionSiiBoleta con = new ConexionSiiBoleta()
 
-                // leo certificado y llave privada del archivo pkcs12
-                KeyStore ks = KeyStore.getInstance("PKCS12")
-                ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
-                String alias = ks.aliases().nextElement()
-                System.out.println("Usando certificado " + alias + " del archivo PKCS12 ")
+                String token = con.getToken(pkey, certificate)
+                String enviadorS = Utilities.getRutFromCertificate(certificate)
 
-                X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
-                PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray())
-
-                String token = con.getToken(pKey, x509)
-                String enviadorS = Utilities.getRutFromCertificate(x509)
-
-                System.out.println("Enviador: " + enviadorS + ", token: " + token)
+                System.out.println("Enviador: " + rutEnvia + ", token: " + token)
 
                 // Ejecutar GET https://apicert.sii.cl/boleta.electronica.envio/{rut}-{dv}-{trackid}
                 // Se obtiene objeto JSON

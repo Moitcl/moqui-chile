@@ -35,21 +35,19 @@ if (invoiceId != null && fiscalTaxDocumentTypeEnumId in dteConstituyeVentaTypeLi
     if (existingDteList) {
         fiscalTaxDocumentTypeEnumId = existingDteList.first.fiscalTaxDocumentTypeEnumId
         dteEnum = ec.entity.find("moqui.basic.Enumeration").condition("enumId", fiscalTaxDocumentTypeEnumId).one()
-        //ec.message.addError("Ya existe un DTE para la orden de cobro ${invoiceId}, de tipo ${dteEnum.description} (${dteEnum.enumId})")
+        ec.message.addError("Ya existe un DTE para la orden de cobro ${invoiceId}, de tipo ${dteEnum.description} (${dteEnum.enumId})")
     }
 }
-
-
-rutEmisor = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").parameters([partyId:issuerPartyId, failIfNotFound:true]).call().rut
-
-// Validación rut
-ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutReceptor).call()
 
 // Recuperacion de parametros de la organizacion -->
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", issuerPartyId).call())
 
 // Giro Emisor
 giroOutMap = ec.service.sync().name("mchile.DTEServices.get#GiroPrimario").parameter("partyId", issuerPartyId).call()
+if (giroOutMap == null) {
+    ec.message.addError("No se encuentra giro primario para partyId ${issuerPartyId}")
+    return
+}
 giro = giroOutMap.description
 
 // Recuperación del código SII de DTE -->
@@ -82,8 +80,6 @@ codRef = 0 as Integer
 
 DTEDocument doc
 AutorizacionType caf
-X509Certificate cert
-PrivateKey key
 int frmPago = 1
 int listSize = 0
 
@@ -122,23 +118,6 @@ ${actecoTag}        <DirOrigen>${dirOrigen}</DirOrigen>
 </DTE>
 """
 doc = DTEDocument.Factory.parse(new ByteArrayInputStream(templateFactura.bytes), opts)
-
-// leo certificado y llave privada del archivo pkcs12
-KeyStore ks = KeyStore.getInstance("PKCS12")
-ks.load(new ByteArrayInputStream(certData.decodeBase64()), passCert.toCharArray())
-String alias = ks.aliases().nextElement()
-cert = (X509Certificate) ks.getCertificate(alias)
-String rutCertificado = Utilities.getRutFromCertificate(cert)
-if (rutCertificado == null)
-    if (dteSystemIsProduction) {
-        ec.message.addError("No se encuentra rut en el certificado '${alias}'")
-        return
-    } else
-        ec.logger.warn("Continuando sin RUT")
-else
-    ec.logger.warn("Usando certificado '${alias}' con Rut ${rutCertificado}")
-
-key = (PrivateKey) ks.getKey(alias, passCert.toCharArray())
 
 // Se recorre lista de productos para armar documento (detailList)
 
@@ -419,7 +398,7 @@ uri = "#" + uri
 ByteArrayOutputStream out = new ByteArrayOutputStream()
 doc.save(out, opts)
 Document doc2 = XMLUtil.parseDocument(out.toByteArray())
-byte[] facturaXml = Signer.sign(doc2, uri, key, cert, uri, "Documento")
+byte[] facturaXml = Signer.sign(doc2, uri, pkey, certificate, uri, "Documento")
 doc2 = XMLUtil.parseDocument(facturaXml)
 
 if (Signer.verify(doc2, "Documento")) {

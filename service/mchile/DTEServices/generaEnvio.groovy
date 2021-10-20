@@ -3,10 +3,6 @@ import org.moqui.context.ExecutionContext
 import java.text.SimpleDateFormat
 import org.moqui.resource.ResourceReference
 
-import java.security.KeyStore
-import java.security.PrivateKey
-import java.security.cert.X509Certificate
-
 import javax.xml.namespace.QName
 
 import org.apache.xmlbeans.XmlCursor
@@ -36,8 +32,7 @@ idS = idS + datetime
 ResourceReference[] DTEList = new ResourceReference[documentIdList.size()]
 int j = 0
 
-documentIdList.each { documentId ->
-    fiscalTaxDocument = documentId
+documentIdList.each { fiscalTaxDocumentId ->
     dteEv = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).selectField("contentLocation").one()
     xml = dteEv.contentLocation
     DTEList[j] = ec.resource.getLocationReference((String)xml)
@@ -48,11 +43,9 @@ documentIdList.each { documentId ->
 if (rutReceptor) {
     ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rutReceptor]).call()
 }
-ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rutenviador]).call()
 
 // Construyo Envio
-plantillaEnvio = """
-<?xml version="1.0" encoding="ISO-8859-1"?>
+plantillaEnvio = """<?xml version="1.0" encoding="UTF-8"?>
 <EnvioDTE version="1.0" xmlns="http://www.sii.cl/SiiDte">
 	<SetDTE>
 		<Caratula version="1.0">
@@ -61,8 +54,7 @@ plantillaEnvio = """
 			<NroResol>${nroResol}</NroResol>
 		</Caratula>
 	</SetDTE>
-</EnvioDTE>
-"""
+</EnvioDTE>"""
 EnvioDTEDocument envio = EnvioDTEDocument.Factory.parse(new ByteArrayInputStream(plantillaEnvio.bytes))
 
 // Debo agregar el schema location (Sino SII rechaza)
@@ -70,16 +62,6 @@ XmlCursor cursor = envio.newCursor()
 if (cursor.toFirstChild()) {
     cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioDTE_v10.xsd")
 }
-// leo certificado y llave privada del archivo pkcs12
-KeyStore ks = KeyStore.getInstance("PKCS12")
-ks.load(new ByteArrayInputStream(certData.decodeBase64()), passCert.toCharArray())
-String alias = ks.aliases().nextElement()
-
-X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
-String rutEnviador = Utilities.getRutFromCertificate(x509)
-PrivateKey pKey = (PrivateKey) ks.getKey(alias, passCert.toCharArray())
-
-ec.logger.warn("RUT envia: " + rutEnviador)
 
 // Asigno un ID
 envio.getEnvioDTE().getSetDTE().setID(idS)
@@ -87,7 +69,7 @@ envio.getEnvioDTE().getSetDTE().setID(idS)
 cl.sii.siiDte.EnvioDTEDocument.EnvioDTE.SetDTE.Caratula car = envio.getEnvioDTE().getSetDTE().getCaratula()
 
 car.setRutReceptor('60803000-K') // El receptor del envío es el SII
-car.setRutEnvia(rutEnviador)
+car.setRutEnvia(rutEnvia)
 
 // documentos a enviar
 HashMap<String, String> namespaces = new HashMap<String, String>()
@@ -131,9 +113,6 @@ envio.getEnvioDTE().getSetDTE().setDTEArray(dtes)
 FechaHoraType now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()))
 envio.getEnvioDTE().getSetDTE().getCaratula().xsetTmstFirmaEnv(now)
 
-// firmo
-//envio.sign(pKey, x509)
-
 opts = new XmlOptions()
 opts.setCharacterEncoding("ISO-8859-1")
 
@@ -145,7 +124,7 @@ ByteArrayOutputStream out = new ByteArrayOutputStream()
 envio.save(out, opts)
 Document doc2 = XMLUtil.parseDocument(out.toByteArray())
 
-byte[] salida = Signer.sign(doc2, "#" + idS, pKey, x509, "#" + idS,"SetDTE")
+byte[] salida = Signer.sign(doc2, "#" + idS, pkey, certificate, "#" + idS,"SetDTE")
 doc2 = XMLUtil.parseDocument(salida)
 
 if (Signer.verify(doc2, "SetDTE")) {
@@ -160,7 +139,7 @@ if (Signer.verify(doc2, "SetDTE")) {
 
 // Se guarda referencia a XML de envío en BD -->
 documentIdList.each { documentId ->
-    createMap = [fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Misc', contentLocation:archivoEnvio, contentDate:ts]
+    createMap = [fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Misc', contentLocation:xmlContentLocation, contentDate:ts]
     ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
 
     // Se marca DTE como enviada -->
