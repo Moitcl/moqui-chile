@@ -12,15 +12,24 @@ ConexionSii con = new ConexionSii()
 
 ec.logger.warn("Archivo enviado: " + documentLocation)
 
+locationDataSource = ec.resource.getLocationDataSource(documentLocation)
+locationReference = ec.resource.getLocationReference(documentLocation)
+
+java.io.File tempFile = File.createTempFile("envioSii", ".xml");
+org.moqui.resource.ResourceReference tmpRr = ec.resource.getLocationReference(tempFile.getAbsolutePath())
+tmpRr.putStream(locationReference.openStream())
+
 RECEPCIONDTEDocument recp
 ec.logger.warn("Enviando con rutEnvia ${rutEnvia}, rutEmisor ${rutEmisor}")
 if (dteSystemIsProduction) {
     String token = con.getToken(pkey, certificate)
-    recp = con.uploadDataSourceEnvioProduccion(rutEnvia, rutEmisor, ec.resource.getLocationDataSource(documentLocation), token)
+    recp = con.uploadDataSourceEnvioProduccion(rutEnvia, rutEmisor, tempFile, token)
 } else {
     String token = con.getTokenCert(pkey, certificate)
-    recp = con.uploadDataSourceEnvioCertificacion(rutEnvia, rutEmisor, ec.resource.getLocationDataSource(documentLocation), token)
+    ec.logger.warn("token: ${token}")
+    recp = con.uploadEnvioCertificacion(rutEnvia, rutEmisor, tempFile, token)
 }
+tempFile.delete()
 ec.logger.warn("-----------------")
 ec.logger.warn(recp.xmlText())
 
@@ -42,5 +51,5 @@ if(statusXML.equals("0")) {
     trackId = trackId.replaceAll("siid:TRACKID>","")
     ec.logger.warn("DTE Enviada correctamente con trackId " + trackId)
 } else {
-    ec.logger.warn("Error "+ statusXML + " al enviar DTE")
+    ec.message.addMessage("Error "+ statusXML + " al enviar DTE", "danger")
 }

@@ -141,10 +141,4 @@ if (Signer.verify(doc2, "SetDTE")) {
 documentIdList.each { documentId ->
     createMap = [fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Misc', contentLocation:xmlContentLocation, contentDate:ts]
     ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
-
-    // Se marca DTE como enviada -->
-    idDte = documentId
-    dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("fiscalTaxDocumentId", idDte).forUpdate(true).one()
-    dteEv.fiscalTaxDocumentSentStatusEnumId = "Ftdt-Sent"
-    dteEv.update()
 }
