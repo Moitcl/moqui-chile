@@ -76,8 +76,7 @@ class BancoCentralWSConsumer {
         return resultMap
     }
 
-    public static List<Map<String, Object>> seriesResultsToListOfMaps(groovy.util.slurpersupport.NodeChildren
-                                                                         seriesResults) {
+    public static List<Map<String, Object>> seriesResultsToListOfMaps(groovy.util.slurpersupport.NodeChildren seriesResults) {
 
         List<Map<String,Object>> resultsList = []
         DateFormat dateFormat = new SimpleDateFormat("d-M-y")
