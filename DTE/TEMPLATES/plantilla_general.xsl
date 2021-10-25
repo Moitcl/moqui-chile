@@ -11,10 +11,8 @@
     <xsl:param name="oficinaSII" select="'Santiago Oriente'"/>
     <xsl:param name="logo"/>
     <xsl:param name="cedible"/>
-    <xsl:param name="glosaPagos"/>
     <xsl:param name="nroResol" select="'80'"/>
     <xsl:param name="fchResol" select="'2014'"/>
-    <xsl:param name="tipoDocumento" select="Encabezado/IdDoc/TipoDTE"/>
     <xsl:param name="showItemNumber" select="'Y'"/>
     <xsl:param name="commentAfterDetalle" select="''"/>
     <xsl:param name="cuentaBancariaText" select="''"/>
@@ -166,7 +164,7 @@
                                             </fo:table-body>
                                         </fo:table>
                                     </fo:block>
-                                    <fo:block text-align="right" font-size="9.01pt"><xsl:choose><xsl:when test="$tipoDocumento=52">CEDIBLE CON SU FACTURA&#160;&#160;</xsl:when><xsl:otherwise>CEDIBLE&#160;&#160;</xsl:otherwise></xsl:choose></fo:block>
+                                    <fo:block text-align="right" font-size="9.01pt"><xsl:choose><xsl:when test="/DTE/Documento/Encabezado/IdDoc/TipoDTE=52">CEDIBLE CON SU FACTURA&#160;&#160;</xsl:when><xsl:otherwise>CEDIBLE&#160;&#160;</xsl:otherwise></xsl:choose></fo:block>
                                 </xsl:when>
                                 <xsl:otherwise>
                                     <fo:block/>
@@ -596,7 +594,7 @@
 
         <xsl:choose>
             <xsl:when test="$formaPago=1"> (Contado)</xsl:when>
-            <xsl:when test="$formaPago=2"> (<xsl:if test="$glosaPagos"><xsl:value-of select="$glosaPagos"/></xsl:if>)</xsl:when>
+            <xsl:when test="$formaPago=2"> <xsl:if test="/DTE/Documento/Encabezado/IdDoc/TermPagoGlosa"> (<xsl:value-of select="/DTE/Documento/Encabezado/IdDoc/TermPagoGlosa"/>)</xsl:if></xsl:when>
             <xsl:when test="$formaPago=3"> (Sin Valor)</xsl:when>
         </xsl:choose>
 

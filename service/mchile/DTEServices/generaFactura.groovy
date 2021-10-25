@@ -36,6 +36,7 @@ if (invoiceId != null && fiscalTaxDocumentTypeEnumId in dteConstituyeVentaTypeLi
         fiscalTaxDocumentTypeEnumId = existingDteList.first.fiscalTaxDocumentTypeEnumId
         dteEnum = ec.entity.find("moqui.basic.Enumeration").condition("enumId", fiscalTaxDocumentTypeEnumId).one()
         ec.message.addError("Ya existe un DTE para la orden de cobro ${invoiceId}, de tipo ${dteEnum.description} (${dteEnum.enumId})")
+        return
     }
 }
 
@@ -153,6 +154,12 @@ doc.getDTE().getDocumento().setID("N" + System.nanoTime())
 iddoc.setTipoDTE(tipoFactura as BigInteger)
 iddoc.xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
 
+if (glosaPagos)
+    iddoc.setTermPagoGlosa(glosaPagos)
+
+if (fechaVencimiento)
+    iddoc.xsetFchVenc(FechaType.Factory.newValue(ec.l10n.format(fechaVencimiento, "yyyy-MM-dd")))
+
 SimpleDateFormat formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd")
 Date dateFechaEmision = new Date()
 fechaEmision = formatterFechaEmision.format(dateFechaEmision)
@@ -177,10 +184,11 @@ iddoc.setFmaPago(BigInteger.valueOf(frmPago))
 // Si es guía de despacho se configura indicador de traslado
 if(tipoFactura == 52) {
     iddoc.setIndTraslado(indTraslado)
-    if(tipoDespacho != null) {
-        iddoc.setTipoDespacho(Long.valueOf(tipoDespacho))
-    }
 }
+if(tipoDespacho != null) {
+    iddoc.setTipoDespacho(Long.valueOf(tipoDespacho))
+}
+
 // Receptor
 Receptor recp = doc.getDTE().getDocumento().getEncabezado().addNewReceptor()
 recp.setRUTRecep(rutReceptor.trim())
@@ -430,7 +438,7 @@ if (Signer.verify(doc2, "Documento")) {
 
 // Registry de DTE en base de datos y generación de PDF -->
 fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoFactura}"
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([dte:facturaXml, issuerPartyId:issuerPartyId, glosaPagos:glosaPagos, invoiceMessage:invoiceMessage]).call())
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([dte:facturaXml, issuerPartyId:issuerPartyId, invoiceMessage:invoiceMessage]).call())
 
 // Creación de registro en FiscalTaxDocument -->
 dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:issuerPartyId]).one()
