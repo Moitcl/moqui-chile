@@ -165,7 +165,7 @@ fechaEmision = formatterFechaEmision.format(dateFechaEmision)
 
 Calendar cal = Calendar.getInstance()
 cal.add(Calendar.DAY_OF_MONTH, 45)
-iddoc.xsetFchCancel(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
+//iddoc.xsetFchCancel(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
 // Medio y forma de pago
 if (medioPago != null ) {
     iddoc.setMedioPago(MedioPagoType.Enum.forString(medioPago))
