@@ -42,6 +42,9 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="tipoDespacho" type="Integer"/>
             <parameter name="settlementTermId"/>
             <parameter name="invoiceMessage"/>
+            <parameter name="fechaVencimiento" type="Date"/>
+            <parameter name="tipoDespacho"/>
+            <parameter name="codigosActividadEconomica"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
@@ -346,7 +349,6 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="issuerPartyId" required="true"/>
             <parameter name="boleta"/>
             <parameter name="continua"/>
-            <parameter name="glosaPagos" default-value=""/>
             <parameter name="invoiceMessage"/>
         </in-parameters>
         <out-parameters>
@@ -402,8 +404,7 @@ along with this software (see the LICENSE.md file). If not, see
 
                 ByteArrayOutputStream pdf = new ByteArrayOutputStream()
 
-                String glosaPagosString = glosaPagos.toString()
-                pages = ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(new ByteArrayInputStream(template.bytes)), pdf, "application/pdf", transformParameters + [cedible:'false', glosaPagos:glosaPagosString])
+                pages = ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(new ByteArrayInputStream(template.bytes)), pdf, "application/pdf", transformParameters + [cedible:'false'])
                 pdf.close()
                 if (pages == null || pages == 0) ec.message.addError("Error generando PDF: páginas generadas: ${pages}")
                 pdfBytes = pdf.toByteArray()
@@ -411,7 +412,7 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="!boleta">
                 <script>
                     pdf = new ByteArrayOutputStream()
-                    pages = ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(new ByteArrayInputStream(template.bytes)), pdf, "application/pdf", transformParameters + [cedible:'true', glosaPagos:glosaPagosString])
+                    pages = ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(new ByteArrayInputStream(template.bytes)), pdf, "application/pdf", transformParameters + [cedible:'true'])
                     pdf.close()
                     if (pages == null || pages == 0) ec.message.addError("Error generando PDF: páginas generadas: ${pages}")
                     pdfCedibleBytes = pdf.toByteArray()
@@ -619,7 +620,6 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="invoiceId" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
-            <parameter name="settlementTermId"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
@@ -632,6 +632,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="issuerPartyId" from="invoiceEv.fromPartyId"/>
             <set field="globalDiscount" from="invoiceEv.globalDiscount"/>
             <set field="glosaDr" from="invoiceEv.glosaDr"/>
+            <set field="fechaVencimiento" from="invoiceEv.dueDate"/>
 
             <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
 
@@ -681,13 +682,12 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
 
             <!-- Glosa para pago a credito -->
-            <set field="glosaPagos"/>
-            <if condition="settlementTermId">
+            <if condition="invoice.settlementTermId">
                 <entity-find-one entity-name="mantle.account.invoice.SettlementTerm" value-field="settlementField">
-                    <field-map field-name="settlementTermId" from="settlementTermId"/>
+                    <field-map field-name="settlementTermId" from="invoice.settlementTermId"/>
                     <select-field field-name="description"/>
                 </entity-find-one>
-                <if condition="!settlementTermId">
+                <if condition="!settlementField">
                     <return error="true" message="Términos de crédito no existente"/>
                 </if>
                 <set field="glosaPagos" from="settlementField.description"/>
@@ -827,15 +827,20 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="(fiscalTaxDocumentTypeEnumId == 'Ftdt-39') || (fiscalTaxDocumentTypeEnumId == 'Ftdt-41')">
                 <then>
                     <!-- Generacion de boletas -->
-                    <service-call name="mchile.DTEServices.genera#Boleta" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
-                           contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
-                           invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId]" out-map="context"/>
+                    <service-call name="mchile.DTEServices.genera#Boleta" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId,
+                                        rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor, contactoReceptor:contactoReceptor,
+                                        dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
+                                        invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId]"
+                                  out-map="context"/>
                 </then>
                 <else>
                     <!-- Generacion de factura -->
-                    <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
-                      contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList, invoiceMessage:invoice.invoiceMessage,
-                          invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId, globalDiscount:globalDiscount, glosaDr:glosaDr, glosaPagos:glosaPagos, settlementTermId:settlementTermId]" out-map="context"/>
+                    <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId,
+                                        rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor, contactoReceptor:contactoReceptor,
+                                        dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
+                                        invoiceMessage:invoice.invoiceMessage, invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList,
+                                        receiverPartyId:toPartyId, globalDiscount:globalDiscount, glosaDr:glosaDr, glosaPagos:glosaPagos, settlementTermId:settlementTermId,
+                                        fechaVencimiento:fechaVencimiento]" out-map="context"/>
                 </else>
             </if>
         </actions>
@@ -2434,6 +2439,7 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="get" noun="SIICode">
         <in-parameters>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="enumTypeId" default-value="FiscalTaxDocumentType"/>
         </in-parameters>
         <out-parameters>
             <parameter name="siiCode" type="Integer"/>
@@ -2442,9 +2448,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="siiCode" from="null"/>
             <entity-find-one entity-name="moqui.basic.Enumeration" value-field="enumField">
                 <field-map field-name="enumId" from="fiscalTaxDocumentTypeEnumId"/>
-                <field-map field-name="enumTypeId" value="FiscalTaxDocumentType"/>
+                <field-map field-name="enumTypeId"/>
             </entity-find-one>
-            <set field="siiCode" from="enumField.sequenceNum"/>
+            <set field="siiCode" from="enumField.enumCode" type="Integer"/>
         </actions>
     </service>
 
@@ -2729,12 +2735,11 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="contactoReceptor" from="rznSocReceptor"/>
             </if>
 
-            <service-call name="mchile.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:indTrasladoEnumId]" out-map="codeOut"/>
+            <service-call name="mchile.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:indTrasladoEnumId, enumTypeId:'IndTraslado']" out-map="codeOut"/>
             <set field="indTraslado" from="codeOut.siiCode"/>
-            <set field="tipoDespacho"/>
 
             <if condition="tipoDespachoEnumId">
-                <service-call name="mchile.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:tipoDespachoEnumId]" out-map="codeOut"/>
+                <service-call name="mchile.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:tipoDespachoEnumId, enumTypeId:'TipoDespacho']" out-map="codeOut"/>
                 <set field="tipoDespacho" from="codeOut.siiCode"/>
             </if>
 

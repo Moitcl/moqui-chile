@@ -11,10 +11,8 @@
     <xsl:param name="oficinaSII" select="'Santiago Oriente'"/>
     <xsl:param name="logo"/>
     <xsl:param name="cedible"/>
-    <xsl:param name="glosaPagos"/>
     <xsl:param name="nroResol" select="'80'"/>
     <xsl:param name="fchResol" select="'2014'"/>
-    <xsl:param name="tipoDocumento" select="Encabezado/IdDoc/TipoDTE"/>
     <xsl:param name="showItemNumber" select="'Y'"/>
     <xsl:param name="commentAfterDetalle" select="''"/>
     <xsl:param name="cuentaBancariaText" select="''"/>
@@ -175,7 +173,7 @@
                                             </fo:table-body>
                                         </fo:table>
                                     </fo:block>
-                                    <fo:block text-align="right" font-size="9.01pt"><xsl:choose><xsl:when test="$tipoDocumento=52">CEDIBLE CON SU FACTURA&#160;&#160;</xsl:when><xsl:otherwise>CEDIBLE&#160;&#160;</xsl:otherwise></xsl:choose></fo:block>
+                                    <fo:block text-align="right" font-size="9.01pt"><xsl:choose><xsl:when test="/DTE/Documento/Encabezado/IdDoc/TipoDTE=52">CEDIBLE CON SU FACTURA&#160;&#160;</xsl:when><xsl:otherwise>CEDIBLE&#160;&#160;</xsl:otherwise></xsl:choose></fo:block>
                                 </xsl:when>
                                 <xsl:otherwise>
                                     <fo:block/>
@@ -402,8 +400,26 @@
                             <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="CmnaRecep"/></fo:block></fo:table-cell>
                         </fo:table-row>
                         <fo:table-row>
-                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Contacto</fo:inline></fo:block></fo:table-cell>
-                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline></fo:inline></fo:block></fo:table-cell>
+                            <xsl:choose><xsl:when test="/DTE/Documento/Encabezado/IdDoc/TipoDTE=52">
+                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Tipo de Traslado</fo:inline></fo:block></fo:table-cell>
+                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline>
+                                    <xsl:choose>
+                                        <xsl:when test="/DTE/Documento/Encabezado/IdDoc/IndTraslado=1">Operación constituye venta</xsl:when>
+                                        <xsl:when test="/DTE/Documento/Encabezado/IdDoc/IndTraslado=2">Ventas por efectuar</xsl:when>
+                                        <xsl:when test="/DTE/Documento/Encabezado/IdDoc/IndTraslado=3">Consignaciones</xsl:when>
+                                        <xsl:when test="/DTE/Documento/Encabezado/IdDoc/IndTraslado=4">Entrega gratuita</xsl:when>
+                                        <xsl:when test="/DTE/Documento/Encabezado/IdDoc/IndTraslado=5">Traslados internos</xsl:when>
+                                        <xsl:when test="/DTE/Documento/Encabezado/IdDoc/IndTraslado=6">Otros traslados no venta</xsl:when>
+                                        <xsl:when test="/DTE/Documento/Encabezado/IdDoc/IndTraslado=7">Guía de devolución</xsl:when>
+                                        <xsl:when test="/DTE/Documento/Encabezado/IdDoc/IndTraslado=8">Traslado para exportación (no venta)</xsl:when>
+                                        <xsl:when test="/DTE/Documento/Encabezado/IdDoc/IndTraslado=9">Venta para exportación</xsl:when>
+                                        <xsl:otherwise>Desconocido</xsl:otherwise>
+                                    </xsl:choose>
+                                </fo:inline></fo:block></fo:table-cell>
+                            </xsl:when><xsl:otherwise>
+                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Contacto</fo:inline></fo:block></fo:table-cell>
+                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:value-of select="/DTE/Documento/Encabezado/Receptor/Contacto"/></fo:inline></fo:block></fo:table-cell>
+                            </xsl:otherwise></xsl:choose>
                             <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Ciudad</fo:inline></fo:block></fo:table-cell>
                             <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="CiudadRecep"/></fo:block></fo:table-cell>
                         </fo:table-row>
@@ -413,8 +429,13 @@
                                 <xsl:with-param name="medioPago"><xsl:value-of select="$medioPago"/></xsl:with-param>
                                 <xsl:with-param name="formaPago"><xsl:value-of select="$formaPago"/></xsl:with-param>
                             </xsl:call-template></fo:block></fo:table-cell>
-                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Vencimiento</fo:inline></fo:block></fo:table-cell>
-                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline></fo:inline></fo:block></fo:table-cell>
+                            <xsl:choose><xsl:when test="/DTE/Documento/Encabezado/IdDoc/TipoDTE=52">
+                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Contacto</fo:inline></fo:block></fo:table-cell>
+                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:value-of select="/DTE/Documento/Encabezado/Receptor/Contacto"/></fo:inline></fo:block></fo:table-cell>
+                            </xsl:when><xsl:otherwise>
+                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Vencimiento</fo:inline></fo:block></fo:table-cell>
+                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="/DTE/Documento/Encabezado/IdDoc/FchVenc"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
+                            </xsl:otherwise></xsl:choose>
                         </fo:table-row>
                     </fo:table-body>
                 </fo:table>
@@ -602,7 +623,7 @@
 
         <xsl:choose>
             <xsl:when test="$formaPago=1"> (Contado)</xsl:when>
-            <xsl:when test="$formaPago=2"> (<xsl:if test="$glosaPagos"><xsl:value-of select="$glosaPagos"/></xsl:if>)</xsl:when>
+            <xsl:when test="$formaPago=2"> <xsl:if test="/DTE/Documento/Encabezado/IdDoc/TermPagoGlosa"> (<xsl:value-of select="/DTE/Documento/Encabezado/IdDoc/TermPagoGlosa"/>)</xsl:if></xsl:when>
             <xsl:when test="$formaPago=3"> (Sin Valor)</xsl:when>
         </xsl:choose>
 
