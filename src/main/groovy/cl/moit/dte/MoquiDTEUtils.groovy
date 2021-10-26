@@ -86,9 +86,6 @@ class MoquiDTEUtils {
                 priceItem = totalItem / qtyItem as BigDecimal
                 totalItem = totalItem.setScale(0, BigDecimal.ROUND_HALF_UP) as Long
             } else if (detailType == "DebitoItem") {
-                if (dteExenta) {
-                    itemAfecto = "true"
-                }
                 if(BigDecimal.valueOf(codRef) == 2 || BigDecimal.valueOf(codRef) == 1) {
                     qtyItem = null
                     priceItem = null
