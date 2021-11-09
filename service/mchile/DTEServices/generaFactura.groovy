@@ -55,8 +55,9 @@ tipoFactura = codeOut.siiCode
 fechaEmision = null
 
 // Formas de pago
-if (settlementTermId.equals('FpaImmediate'))
+if (settlementTermId.equals('Immediate'))
     formaPago = "1" // Contado
+/*
 else if (settlementTermId.equals('Net10'))
     formaPago = "2" // Credito (usar GlosaPagos)
 else if (settlementTermId.equals('Net15'))
@@ -67,10 +68,11 @@ else if (settlementTermId.equals('Net60'))
     formaPago = "2" // Credito (usar GlosaPagos)
 else if (settlementTermId.equals('Net90'))
     formaPago = "2" // Credito (usar GlosaPagos)
+*/
 else if (settlementTermId == "3")
     formaPago = "3" // Sin costo
 else
-    formaPago = "2"
+    formaPago = "2" // Credito (usar GlosaPagos)
 
 //Obtención de folio y path de CAF -->
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call())
