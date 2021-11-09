@@ -361,12 +361,8 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="passS" from="passCert"/>
             <set field="template" from="pdfTemplate"/>
             <set field="giro" from="giroEmisor"/>
-            <set field="pdfTemplate" from="pdfTemplate"/>
             <set field="pdfTemplateBoleta" from="pdfTemplateBoleta"/>
             <set field="pdfTemplateBoletaContinua" from="pdfTemplateBoletaContinua"/>
-            <set field="logo" from="logo"/>
-            <set field="fchResol" from="fchResol"/>
-            <set field="nroResol" from="nroResol"/>
 
             <if condition="boleta">
                 <set field="template" from="pdfTemplateBoleta"/>
@@ -703,18 +699,32 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="toPartyId" from="invoice.toPartyId"/>
 
             <!-- Items de invoice -->
-            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemList">
+            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemEVList">
                 <econdition field-name="invoiceId"/>
-                <econdition field-name="itemTypeEnumId" operator="not-in" from="['ItemSalesTax','ItemVatTax']"/>
+                <econdition field-name="itemTypeEnumId" operator="not-in" from="['ItemSalesTax','ItemVatTax', 'ItemDetailedDescription']"/>
+                <econdition field-name="parentItemSeqId" operator="is-null"/>
                 <order-by field-name="invoiceItemSeqId"/>
             </entity-find>
+            <set field="invoiceItemList" from="[]"/>
+            <iterate list="invoiceItemEVList" entry="invoiceItemEV">
+                <set field="invoiceItem" from="invoiceItemEV.getMap()"/>
+                <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="descriptionList">
+                    <econdition field-name="invoiceId"/>
+                    <econdition field-name="itemTypeEnumId" value="ItemDetailedDescription"/>
+                    <econdition field-name="parentItemSeqId" from="invoiceItemEV.invoiceItemSeqId"/>
+                </entity-find>
+                <if condition="descriptionList">
+                    <script>invoiceItem.put('detailedDescription', descriptionList.description.join('; '))</script>
+                </if>
+                <script>invoiceItemList.add(invoiceItem)</script>
+            </iterate>
 
             <!-- email receptor -->
             <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:toPartyId]" out-map="context"/>
 
             <if condition="!emailAddress">
                 <if condition="fiscalTaxDocumentTypeEnumId != 'Ftdt-39' &amp;&amp; fiscalTaxDocumentTypeEnumId != 'Ftdt-41'">
-                    <return error="true" message="Receptor no tiene dirección de correo, sólo se puede emitir boleta"/>
+                    <return error="true" message="Receptor ${toPartyId} no tiene dirección de correo, sólo se puede emitir boleta"/>
                 </if>
             </if>
             <set field="username" from="emailAddress"/>
@@ -953,7 +963,7 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:toPartyId]" out-map="context"/>
 
             <if condition="!emailAddress">
-                <log level="warn" message="Receptor no tiene dirección de correo"/>
+                <log level="warn" message="Receptor ${toPartyId} no tiene dirección de correo"/>
             </if>
             <set field="username" from="emailAddress"/>
             <!-- rut receptor -->
@@ -2319,7 +2329,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="rutOtroContribuyente" required="true"/>
             <parameter name="idAdicional"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
-            <parameter name="fecha" required="true"/>
+            <parameter name="fecha" type="Date" required="true"/>
             <parameter name="codigoReferenciaEnumId" required="true"/>
             <parameter name="razonReferencia"/>
         </in-parameters>

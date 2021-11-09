@@ -120,6 +120,8 @@ class MoquiDTEUtils {
                 codigo.setVlrCodigo(codigoInterno)
             }
             det[i].setNmbItem(nombreItem)
+            if (detailEntry.detailedDescription)
+                det[i].setDscItem(detailEntry.detailedDescription)
             //det[i].setDscItem(""); // Descripción Item
             if (qtyItem != null)
                 det[i].setQtyItem(BigDecimal.valueOf(qtyItem))

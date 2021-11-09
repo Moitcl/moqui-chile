@@ -1,8 +1,5 @@
 import org.moqui.BaseArtifactException
 
-import java.security.KeyStore
-import java.security.PrivateKey
-import java.security.cert.X509Certificate
 import java.text.SimpleDateFormat
 
 import org.apache.xmlbeans.XmlOptions
@@ -279,6 +276,8 @@ if (tipoFactura == 33) {
     }
 } else if (tipoFactura == 56) {
     // Nota de Débito Electrónica
+    ec.logger.warn("Creando DTE tipo 56")
+
     //iddoc.setMntBruto(BigInteger.valueOf(1))
     int i = 0
     if(detailList != null) {
