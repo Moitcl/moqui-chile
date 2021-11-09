@@ -25,7 +25,8 @@ class MoquiDTEUtils {
         int numberAfectos = 0
         int numberExentos = 0
 
-        detailList.each { detailEntry ->
+        detailList.each { detailEntryObj ->
+            HashMap detailEntry = (detailEntryObj instanceof EntityValue) ? detailEntryObj.getMap() : detailEntryObj
             String nombreItem = detailEntry.description
             if (nombreItem == null) {
                 EntityValue productEv = ec.entity.find("mantle.product.Product").condition("productId", detailEntry.productId).one()
