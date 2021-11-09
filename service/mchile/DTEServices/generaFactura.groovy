@@ -276,6 +276,8 @@ if (tipoFactura == 33) {
     }
 } else if (tipoFactura == 56) {
     // Nota de Débito Electrónica
+    ec.logger.warn("Creando DTE tipo 56")
+
     //iddoc.setMntBruto(BigInteger.valueOf(1))
     int i = 0
     if(detailList != null) {
