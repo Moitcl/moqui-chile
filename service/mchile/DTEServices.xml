@@ -708,14 +708,20 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="invoiceItemList" from="[]"/>
             <iterate list="invoiceItemEVList" entry="invoiceItemEV">
                 <set field="invoiceItem" from="invoiceItemEV.getMap()"/>
-                <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="descriptionList">
+                <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="subitemList">
                     <econdition field-name="invoiceId"/>
-                    <econdition field-name="itemTypeEnumId" value="ItemDetailedDescription"/>
                     <econdition field-name="parentItemSeqId" from="invoiceItemEV.invoiceItemSeqId"/>
                 </entity-find>
-                <if condition="descriptionList">
-                    <script>invoiceItem.put('detailedDescription', descriptionList.description.join('; '))</script>
-                </if>
+                <iterate list="subitemList" entry="subitem">
+                    <if condition="subitem.itemTypeEnumId == 'ItemDetailedDescription'"><then>
+                        <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}${subitem.description}"/>
+                    </then><else-if condition="subitem.itemTypeEnumId == 'ItemDiscount'">
+                        <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}Incluye ${subitem.description} por ${ec.l10n.formatCurrency(-1*subitem.amount*subitem.quantity, invoice.currencyUomId)}"/>
+                        <set field="invoiceItem.amount" from="invoiceItem.amount + (subitem.amount*subitem.quantity/invoiceItem.quantity as BigDecimal).setScale(0,java.math.RoundingMode.HALF_UP)"/>
+                    </else-if><else>
+                        <return error="true" message="Unknown itemTypeEnumId for subitem ${invoiceId}:${subitem.itemSeqId}: ${subitem.itemTypeEnumId}"/>
+                    </else></if>
+                </iterate>
                 <script>invoiceItemList.add(invoiceItem)</script>
             </iterate>
 
