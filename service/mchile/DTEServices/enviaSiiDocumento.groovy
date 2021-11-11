@@ -23,7 +23,7 @@ RECEPCIONDTEDocument recp
 ec.logger.warn("Enviando con rutEnvia ${rutEnvia}, rutEmisor ${rutEmisor}")
 if (dteSystemIsProduction) {
     String token = con.getToken(pkey, certificate)
-    recp = con.uploadDataSourceEnvioProduccion(rutEnvia, rutEmisor, tempFile, token)
+    recp = con.uploadEnvioProduccion(rutEnvia, rutEmisor, tempFile, token)
 } else {
     String token = con.getTokenCert(pkey, certificate)
     ec.logger.warn("token: ${token}")
