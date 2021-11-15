@@ -1,3 +1,4 @@
+import cl.sii.siiDte.DTEDefType
 import org.moqui.BaseArtifactException
 
 import java.text.SimpleDateFormat
@@ -97,31 +98,23 @@ opts.setLoadSubstituteNamespaces(namespaces)
 // Recuperación de archivo CAF desde BD
 caf = AUTORIZACIONDocument.Factory.parse(new ByteArrayInputStream(cafData.getBytes()), opts).getAUTORIZACION()
 
-// Construyo base a partir de String XML
-actecoTag = codigosActividadEconomica.split(',').collect { "        <Acteco>${it}</Acteco>\n"}.join()
-templateFactura = """
-<DTE version="1.0">
-  <Documento ID="N150">
-    <Encabezado>
-      <Emisor>
-        <RUTEmisor>${rutEmisor}</RUTEmisor>
-        <RznSoc>${rznSocEmisor}</RznSoc>
-        <GiroEmis>${giro}</GiroEmis>
-        <Telefono>${fonoContacto}</Telefono>
-        <CorreoEmisor>${mailContacto}</CorreoEmisor>
-${actecoTag}        <DirOrigen>${dirOrigen}</DirOrigen>
-        <CmnaOrigen>${cmnaOrigen}</CmnaOrigen>
-        <CiudadOrigen>${ciudadOrigen}</CiudadOrigen>
-      </Emisor>
-    </Encabezado>
-  </Documento>
-</DTE>
-"""
-doc = DTEDocument.Factory.parse(new ByteArrayInputStream(templateFactura.bytes), opts)
+doc = DTEDocument.Factory.newInstance()
+doc.addNewDTE().addNewDocumento()
 
-// Se recorre lista de productos para armar documento (detailList)
+cl.sii.siiDte.DTEDefType.Documento.Encabezado encabezado = doc.getDTE().getDocumento().addNewEncabezado();
 
-IdDoc iddoc = doc.getDTE().getDocumento().getEncabezado().addNewIdDoc()
+cl.sii.siiDte.DTEDefType.Documento.Encabezado.Emisor emisor = encabezado.addNewEmisor()
+emisor.setRUTEmisor(rutEmisor)
+emisor.setRznSoc(rznSocEmisor)
+emisor.setGiroEmis(giro)
+emisor.addNewTelefono().setStringValue(fonoContacto)
+emisor.setCorreoEmisor(mailContacto)
+codigosActividadEconomica.split(',').each { emisor.addNewActeco().setStringValue(it) }
+emisor.setDirOrigen(dirOrigen)
+emisor.setCmnaOrigen(cmnaOrigen)
+emisor.setCiudadOrigen(ciudadOrigen)
+
+IdDoc iddoc = encabezado.addNewIdDoc()
 iddoc.setFolio(folio)
 // Obtención de ID distinto
 //logger.warn("id: " + System.nanoTime())
@@ -168,7 +161,7 @@ if(tipoDespacho != null) {
 }
 
 // Receptor
-Receptor recp = doc.getDTE().getDocumento().getEncabezado().addNewReceptor()
+Receptor recp = encabezado.addNewReceptor()
 recp.setRUTRecep(rutReceptor.trim())
 recp.setRznSocRecep(rznSocReceptor)
 if(giroReceptor.length() > 39)
@@ -349,7 +342,7 @@ if(globalDiscount != null && Integer.valueOf(globalDiscount) > 0) {
     doc.getDTE().getDocumento().setDscRcgGlobalArray(dscGB)
 }
 // Totales
-Totales tot = doc.getDTE().getDocumento().getEncabezado().addNewTotales()
+Totales tot = encabezado.addNewTotales()
 if (totalNeto != null) {
     tot.setMntNeto(Math.round(totalNeto))
     tot.setTasaIVA(BigDecimal.valueOf(19))
@@ -386,7 +379,7 @@ doc = DTEDocument.Factory.parse(doc.newInputStream(opts), opts)
 
 // Guardo
 opts = new XmlOptions()
-opts.setCharacterEncoding("ISO-8859-1")
+//opts.setCharacterEncoding("ISO-8859-1")
 opts.setSaveImplicitNamespaces(namespaces)
 
 String uri = ""
