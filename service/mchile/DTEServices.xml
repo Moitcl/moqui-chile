@@ -3450,5 +3450,57 @@ along with this software (see the LICENSE.md file). If not, see
             ]]></script>
         </actions>
     </service>
+    
+    <service verb="revert" noun="FiscalTaxDocumentGeneration">
+        <in-parameters>
+            <parameter name="issuerPartyId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" required="true" type="Integer"/>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" for-update="true">
+                <econdition field-name="issuerPartyId"/>
+                <econdition field-name="fiscalTaxDocumentNumber"/>
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
+            </entity-find>
+            <set field="ftd" from="ftdList.first"/>
+            <if condition="ftd == null"><return error="true" message="No se encuentra FiscalTaxDocument ${fiscalTaxDocumentId}"/></if>
+            <if condition="ftd.fiscalTaxDocumentStatusEnumId != 'Ftdt-Issued'"><return error="true" message="Estado de FiscalTaxDocument ${fiscalTaxDocumentId} es ${ftd.fiscalTaxDocumentStatusEnumId}, debe ser Ftdt-Issued"/></if>
+            <if condition="ftd.fiscalTaxDocumentSentStatusEnumId != 'Ftdt-NotSent'"><return error="true" message="Estado de envío de FiscalTaxDocument ${fiscalTaxDocumentId} es ${ftd.fiscalTaxDocumentSentStatusEnumId}, debe ser Ftdt-NotSent"/></if>
+            <entity-delete-by-condition entity-name="mchile.dte.FiscalTaxDocumentContent">
+                <econdition field-name="fiscalTaxDocumentId"/>
+            </entity-delete-by-condition>
+            <entity-delete-by-condition entity-name="mchile.dte.FiscalTaxDocumentAttributes">
+                <econdition field-name="fiscalTaxDocumentId"/>
+            </entity-delete-by-condition>
+            <set field="ftd.fiscalTaxDocumentStatusEnumId" value="Ftdt-NotIssued"/>
+            <set field="ftd.invoiceId" from="null"/>
+            <entity-update value-field="ftd"/>
+        </actions>
+    </service>
+
+    <service verb="reissue" noun="FiscalTaxDocument">
+        <in-parameters>
+            <parameter name="invoiceId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
+            <if condition="!invoice"><return error="true" message="Could not find invoice ${invoiceId}"/></if>
+            <set field="issuerPartyId" from="invoice.fromPartyId"/>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList">
+                <econdition field-name="issuerPartyId"/>
+                <econdition field-name="invoiceId"/>
+                <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
+            </entity-find>
+            <set field="ftd" from="ftdList.first"/>
+            <if condition="!ftd"><return error="true" message="Could not find FiscalTaxDocument for invoice ${invoiceId}"/></if>
+            <service-call name="mchile.DTEServices.revert#FiscalTaxDocumentGeneration" in-map="[issuerPartyId:issuerPartyId, fiscalTaxDocumentNumber:ftd.fiscalTaxDocumentNumber,
+                                fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"/>
+            <service-call name="mchile.DTEServices.facturar#Invoice" in-map="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"/>
+        </actions>
+    </service>
 
 </services>
