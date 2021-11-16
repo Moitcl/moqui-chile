@@ -1,4 +1,3 @@
-import cl.sii.siiDte.DTEDefType
 import org.moqui.BaseArtifactException
 
 import java.text.SimpleDateFormat
@@ -99,7 +98,9 @@ opts.setLoadSubstituteNamespaces(namespaces)
 caf = AUTORIZACIONDocument.Factory.parse(new ByteArrayInputStream(cafData.getBytes()), opts).getAUTORIZACION()
 
 doc = DTEDocument.Factory.newInstance()
-doc.addNewDTE().addNewDocumento()
+rootTag = doc.addNewDTE()
+rootTag.setVersion(new BigDecimal(1.0).setScale(1, java.math.RoundingMode.HALF_UP))
+rootTag.addNewDocumento()
 
 cl.sii.siiDte.DTEDefType.Documento.Encabezado encabezado = doc.getDTE().getDocumento().addNewEncabezado();
 
