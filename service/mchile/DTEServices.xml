@@ -1907,6 +1907,15 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="! (invoice.invoiceTypeEnumId in ['InvoiceReturn', 'InvoiceCreditMemo'])">
                 <return error="true" message="Invalid invoice type for Nota Credito ${invoice.invoiceTypeEnumId}, invoice ${invoiceId}"/>
             </if>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="existingFtdList">
+                <econdition field-name="issuerPartyId" from="invoice.toPartyId"/>
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" value="Ftdt-61,Ftdt-60"/>
+                <econdition field-name="invoiceId"/>
+            </entity-find>
+            <if condition="existingFtdList"><return error="true" message="Ya existe una Nota de Crédito para invoice ${invoiceId}"/></if>
+            <if condition="!(invoice.statusId in ['InvoiceIncoming','InvoiceApproved','InvoicePmtSent','InvoiceReceived','InvoiceBilledThrough'])">
+                <return error="true" message="Invalid statusId for credit invoice: ${invoice.statusId}"/></if>
+            <service-call name="mchile.TaxServices.calculate#SalesTaxForInvoice" in-map="[invoiceId:invoiceId]"/>
 
             <!-- En la nota de credito se invierten fromPartyId y toPartyId (cliente le cobra al vendedor) -->
             <set field="issuerPartyId" from="invoice.toPartyId"/>
@@ -1914,6 +1923,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="items">
                 <econdition field-name="invoiceId"/>
+                <econdition field-name="itemTypeEnumId" operator="not-in" value="ItemSalesTax,ItemVatTax"/>
                 <order-by field-name="invoiceItemSeqId"/>
             </entity-find>
             <if condition="!items">
@@ -3465,6 +3475,95 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.DTEServices.revert#FiscalTaxDocumentGeneration" in-map="[issuerPartyId:issuerPartyId, fiscalTaxDocumentNumber:ftd.fiscalTaxDocumentNumber,
                                 fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"/>
             <service-call name="mchile.DTEServices.facturar#Invoice" in-map="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"/>
+        </actions>
+    </service>
+
+    <service verb="create" noun="PrefilledCreditMemo">
+        <description>
+            Crea un invoice que se usa para generar Nota de Crédito, y lo pre-rellena con los contenidos de DTE especificado.
+            No considera manejar la logística inversa (devolver productos a Bodega u otro lado), para eso
+            se debiera usar un Return, ver moit.erp.ReturnServices.create#Return.
+        </description>
+        <in-parameters>
+            <parameter name="issuerPartyId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" required="true" type="Integer"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="razonReferencia" default-value="Error de Facturación"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="returnInvoiceId"/>
+        </out-parameters>
+        <actions>
+            <service-call name="mchile.DTEServices.create#EmptyCreditMemo" in-map="context" out-map="context"/>
+            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="itemList">
+                <econdition field-name="invoiceId" from="originalInvoiceId"/>
+            </entity-find>
+            <iterate list="itemList" entry="item">
+                <service-call name="create#mantle.account.invoice.InvoiceItem" in-map="item.getMap()+[invoiceId:invoiceId]"/>
+            </iterate>
+        </actions>
+    </service>
+    
+    <service verb="create" noun="EmptyCreditMemo">
+        <description>
+            Crea un invoice que se usa para generar Nota de Crédito. No considera manejar la logística inversa (devolver productos a Bodega u otro lado), para eso
+            se debiera usar un Return, ver moit.erp.ReturnServices.create#Return.
+        </description>
+        <in-parameters>
+            <parameter name="issuerPartyId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" required="true" type="Integer"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="razonReferencia" default-value="Error de Facturación"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="originalInvoiceId"/>
+            <parameter name="invoiceId"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte">
+                <field-map field-name="issuerPartyId"/>
+                <field-map field-name="fiscalTaxDocumentNumber"/>
+                <field-map field-name="fiscalTaxDocumentTypeEnumId"/>
+                <field-map field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
+                <field-map field-name="fiscalTaxDocumentSentStatusEnumId" value="Ftdt-Sent"/>
+            </entity-find-one>
+            <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument"/></if>
+            <if condition="dte.invoiceId == null"><return error="true" message="FiscalTaxDocument has no invoice associated"/></if>
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="originalInvoice">
+                <field-map field-name="invoiceId" from="dte.invoiceId"/></entity-find-one>
+            <if condition="!originalInvoice"><return error="true" message="Could not find invoice ${dte.invoiceId}"/></if>
+            <set field="originalInvoiceId" from="originalInvoice.invoiceId"/>
+            <service-call name="mantle.account.InvoiceServices.create#Invoice" out-map="context"
+                          in-map="[originalInvoiceId:originalInvoice.invoiceId, invoiceTypeEnumId:'InvoiceCreditMemo', fromPartyId:originalInvoice.toPartyId,
+                           toPartyId:originalInvoice.fromPartyId, invoiceDate:ec.user.nowTimestamp, currencyUomId:originalInvoice.currencyUomId, otherPartyOrderId:originalInvoice.otherPartyOrderId,
+                        productStoreId:originalInvoice.productStoreId, systemMessageRemoteId:originalInvoice.systemMessageRemoteId, referenceNumber:originalInvoiceId]"/>
+            <script><![CDATA[
+                java.text.SimpleDateFormat formatDate = new java.text.SimpleDateFormat("yyyy-MM-dd")
+                fecha = formatDate.format(dte.date)
+                ]]></script>
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:dte.receiverPartyId]" out-map="receiverRut"/>
+            <set field="referenceMap" from="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId, folio:dte.fiscalTaxDocumentNumber, fecha:fecha,
+                 rutOtroContribuyente:receiverRut.rutSinFormato, codigoReferenciaEnumId:1, razonReferencia:razonReferencia, referenceTypeEnumId:'RefDteTypeInvoice']"/>
+            <service-call name="mchile.DTEServices.agregar#Referencia" in-map="referenceMap"/>
+        </actions>
+    </service>
+
+    <service verb="create" noun="CreditNoteFromCreditMemo">
+        <in-parameters>
+            <parameter name="invoiceId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="fiscalTaxDocumentId"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="creditMemo" for-update="true"/>
+            <if condition="creditMemo.invoiceTypeEnumId != 'InvoiceCreditMemo'"><return error="true" message="Cannot find Credit Memo with ID ${invoiceId}"/></if>
+            <if condition="!(creditMemo.statusId in ['InvoiceIncoming','InvoiceApproved','InvoicePmtSent','InvoiceReceived','InvoiceBilledThrough'])"><return error="true" message="Invalid statusId for creditMemo: ${creditMemo.statusId}"/></if>
+
+            <set field="creditMemo.statusId" value="InvoiceApproved"/>
+            <entity-update value-field="creditMemo"/>
+            <service-call name="mchile.DTEServices.generar#NotaCredito" in-map="context" out-map="context"/>
+
         </actions>
     </service>
 

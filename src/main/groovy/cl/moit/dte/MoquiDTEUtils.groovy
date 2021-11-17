@@ -30,7 +30,7 @@ class MoquiDTEUtils {
             String nombreItem = detailEntry.description
             if (nombreItem == null) {
                 EntityValue productEv = ec.entity.find("mantle.product.Product").condition("productId", detailEntry.productId).one()
-                nombreItem = productEv.productName
+                nombreItem = productEv? productEv.productName : ''
             }
             Integer qtyItem = detailEntry.quantity
             String uom = null
