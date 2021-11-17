@@ -32,10 +32,10 @@ class MoquiDTEUtils {
                 EntityValue productEv = ec.entity.find("mantle.product.Product").condition("productId", detailEntry.productId).one()
                 nombreItem = productEv.productName
             }
-            Integer qtyItem = detailType == "ReturnItem" ? detailEntry.returnQuantity : detailEntry.quantity
+            Integer qtyItem = detailEntry.quantity
             String uom = null
             BigDecimal pctDiscount
-            if (!detailType in ["ShipmentItem", "ReturnItem"]) {
+            if (!detailType in ["ShipmentItem"]) {
                 if (detailEntry.quantityUomId.equals('TF_hr'))
                     uom = "Hora"
                 else if (detailEntry.quantityUomId.equals('TF_mon'))
