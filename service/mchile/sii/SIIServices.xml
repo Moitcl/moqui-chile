@@ -83,6 +83,62 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="consulta" noun="ContribuyentesAutorizados">
+        <in-parameters>
+            <parameter name="rut"/>
+            <parameter name="dv"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="razonSocial"/>
+            <parameter name="numeroResolucion"/>
+            <parameter name="fechaResolucion"/>
+            <parameter name="direccionRegional"/>
+        </out-parameters>
+        <actions>
+            <!--
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:partyId]" out-map="context"/>
+            -->
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:'KOMBUCHACHA']" out-map="context"/>
+            <script><![CDATA[
+                import org.moqui.util.RestClient
+                import cl.moit.net.ClientAuthRequestFactory
+
+                ClientAuthRequestFactory requestFactory = new ClientAuthRequestFactory(certData, passCert)
+                RestClient restClient = new RestClient().uri("https://palena.sii.cl/cvc_cgi/dte/ee_empresa_rut").method("POST").acceptContentType("text/html").contentType("application/x-www-form-urlencoded")
+                        .withRequestFactory(requestFactory).encoding("iso-8859-1").addHeader("Referer", "https://palena.sii.cl/cvc/dte/ee_empresas_dte.html")
+                        .text("RUT_EMP=${rut}&DV_EMP=${dv}&ACEPTAR=Consultar")
+                response = restClient.call()
+                responseText = new String(response.bytes(), "iso-8859-1")
+                int pos = responseText.indexOf("Los antecedentes de la empresa son :")
+                if (pos < 0) {
+                    ec.message.addError("No se recibió respuesta con antecedentes, resultado: ${responseText}")
+                }
+                fieldDesc = [
+                        [name: 'razonSocial', preString: 'Raz&oacute;n Social/Nombres\n   </font></td>\n   <td width="400" align="left"><font class="texto">\n   &nbsp;  ', postString: '\n'],
+                        [name: 'numeroResolucion', preString: 'N° Resoluci&oacute;n\n   </font></td>\n   <td width="400" align="left"><font class="texto">\n   &nbsp;  ', postString: '\n'],
+                        [name: 'fechaResolucion', preString: 'Fecha Resoluci&oacute;n\n   </font></td>\n   <td width="400" align="left"><font class="texto">\n   &nbsp;  ', postString: '\n'],
+                        [name: 'direccionRegional', preString: 'Direcci&oacute;n Regional\n   </font></td>\n   <td width="400" align="left"><font class="texto">\n   &nbsp;  ', postString: '\n']
+                ]
+                fieldDesc.each { field ->
+                    pos = responseText.indexOf(field.preString)
+                    if (pos < 0) {
+                        ec.message.addError("No se encontró Razón Social")
+                    } else {
+                        pos = pos + field.preString.size()
+                        end = responseText.indexOf(field.postString, pos)
+                        if (pos > 0) {
+                            ec.context[field.name] = responseText.substring(pos, end)
+                            pos = end
+                        }
+                    }
+                }
+                if (ec.message.hasError()) {
+                    ec.message.addError("Resultado recibido: ${responseText}")
+                }
+                ]]></script>
+        </actions>
+    </service>
+
     <service verb="get" noun="Captcha">
         <!-- curl -X POST - -header 'Accept: application/json' -d "oper=0" https://zeus.sii.cl/cvc_cgi/stc/CViewCaptcha.cgi -->
         <in-parameters>
