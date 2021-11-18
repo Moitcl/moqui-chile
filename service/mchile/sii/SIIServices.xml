@@ -44,40 +44,7 @@ along with this software (see the LICENSE.md file). If not, see
                     [name:'actividadesEconomicas', preselectPattern:'<strong>Actividades Econ&oacute;micas vigentes:</strong>.*?<table border="1".*?>(.*?)</table>', pattern:'<TR>\\s*<TD [^>]*>\\s*<font class[^>]*>([^<>]*)</font></TD>\\s*<TD [^>]*>\\s*<font class[^>]*>([^<>]*)</font></TD>\\s*<TD [^>]*>\\s*<font class[^>]*>([^<>]*)</font></TD>\\s*<TD [^>]*>\\s*<font class[^>]*>([^<>]*)</font></TD>\\s*<TD [^>]*>\\s*<font class[^>]*>([^<>]*)</font></TD>\\s*</TR>', fieldNames:['descripcion', 'codigo', 'categoria', 'afecta', 'fecha']]
             ]
 
-            campos = [:]
-            patternList.each {
-                //println("attempting pattern ${it.pattern} of type ${it.pattern.class}")
-                if (it.preselectPattern) {
-                    //ec.logger.warn("preselectPattern: ${it.preselectPattern}")
-                    pattern = java.util.regex.Pattern.compile(it.preselectPattern, java.util.regex.Pattern.DOTALL)
-                    matcher = situacionTributariaHtml =~ pattern
-                    if (matcher.find()) {
-                        baseText = matcher.findAll().first()[1]
-                        //ec.logger.warn("baseText: ${baseText}")
-                        //ec.logger.warn("pattern: ${it.pattern}")
-                    }
-                    else baseText = situacionTributariaHtml
-                } else
-                    baseText = situacionTributariaHtml
-
-                pattern = java.util.regex.Pattern.compile(it.pattern, java.util.regex.Pattern.DOTALL)
-                matcher = baseText =~ pattern
-                campoList = []
-                matcher.findAll().each { match ->
-                    if (it.fieldNames) {
-                        fieldMap = [:]
-                        i = 1
-                        it.fieldNames.each { fieldName ->
-                            fieldMap.put(fieldName, match[i].trim())
-                            i++
-                        }
-                        campoList.add(fieldMap)
-                    } else
-                        campoList.add(match[1].trim())
-                }
-                campos.put(it['name'], campoList.size() == 1? campoList.get(0): campoList)
-            }
-            ec.context.putAll(campos)
+            ec.context.putAll(cl.moit.scraping.FieldExtractor.extractFromPatternList(situacionTributariaHtml, patternList))
 
             ]]></script>
         </actions>
@@ -93,6 +60,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="numeroResolucion"/>
             <parameter name="fechaResolucion"/>
             <parameter name="direccionRegional"/>
+            <parameter name="autorizaciones" type="List"/>
         </out-parameters>
         <actions>
             <!--
@@ -109,33 +77,24 @@ along with this software (see the LICENSE.md file). If not, see
                         .text("RUT_EMP=${rut}&DV_EMP=${dv}&ACEPTAR=Consultar")
                 response = restClient.call()
                 responseText = new String(response.bytes(), "iso-8859-1")
-                int pos = responseText.indexOf("Los antecedentes de la empresa son :")
-                if (pos < 0) {
-                    ec.message.addError("No se recibió respuesta con antecedentes, resultado: ${responseText}")
-                }
-                fieldDesc = [
-                        [name: 'razonSocial', preString: 'Raz&oacute;n Social/Nombres\n   </font></td>\n   <td width="400" align="left"><font class="texto">\n   &nbsp;  ', postString: '\n'],
-                        [name: 'numeroResolucion', preString: 'N° Resoluci&oacute;n\n   </font></td>\n   <td width="400" align="left"><font class="texto">\n   &nbsp;  ', postString: '\n'],
-                        [name: 'fechaResolucion', preString: 'Fecha Resoluci&oacute;n\n   </font></td>\n   <td width="400" align="left"><font class="texto">\n   &nbsp;  ', postString: '\n'],
-                        [name: 'direccionRegional', preString: 'Direcci&oacute;n Regional\n   </font></td>\n   <td width="400" align="left"><font class="texto">\n   &nbsp;  ', postString: '\n']
+                patternList = [
+                        [name:'tieneAntecedentes', pattern:'<td[^>]*><font class="texto">\nLos antecedentes de la empresa son :<br></font></td>'],
+                        [name:'razonSocial', pattern:'<td[^>]*><font class="texto">\\s*&nbsp;\\s*Raz&oacute;n Social/Nombres\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'fechaResolucion', pattern:'<td[^>]*><font class="texto">\\s*&nbsp;\\s*Fecha Resoluci&oacute;n\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'numeroResolucion', pattern:'<td[^>]*><font class="texto">\\s*&nbsp;\\s*N° Resoluci&oacute;n\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'direccionRegional', pattern:'<td width="200" align="left"><font class="texto">\\s*&nbsp; Direcci&oacute;n Regional\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'autorizaciones', preselectPattern:'El contribuyente tiene autorizada la emisi&oacute;n de los siguientes documentos tributarios electr&oacute;nicos:.*?</table><br>\n<table[^>]*>.*?<tr>.*?</tr>(.*?)</table>',
+                         pattern:'<tr>\\s*<td[^>]*>.*?(\\d+).*?</td>\\s*<td[^>]*><font[^>]*>\\s*(.*?)\\s*</font></td>\\s*<td[^>]*>.*?(\\d+-\\d+-\\d+).*?</td>\\s*<td[^>]*>.*?((?:&nbsp;)|(?:\\d+-\\d+-\\d+)).*?</td>.*?</tr>',
+                         fieldNames:['codigo', 'descripcion', 'autorizado', 'desautorizado']]
                 ]
-                fieldDesc.each { field ->
-                    pos = responseText.indexOf(field.preString)
-                    if (pos < 0) {
-                        ec.message.addError("No se encontró campo ${field.name}")
-                    } else {
-                        pos = pos + field.preString.size()
-                        end = responseText.indexOf(field.postString, pos)
-                        if (pos > 0) {
-                            ec.context[field.name] = responseText.substring(pos, end)
-                            pos = end
-                        }
-                    }
-                }
-                if (ec.message.hasError()) {
+                fields = cl.moit.scraping.FieldExtractor.extractFromPatternList(responseText, patternList)
+                fields.autorizaciones.each { autorizacion -> if (autorizacion.desautorizado == '&nbsp;') autorizacion.desautorizado = null}
+                ec.context.putAll(fields)
+                if (!tieneAntecedentes)
+                    ec.message.addError("No se recibió respuesta con antecedentes")
+                if (ec.message.hasError())
                     ec.message.addError("Resultado recibido: ${responseText}")
-                }
-                ]]></script>
+            ]]></script>
         </actions>
     </service>
 
@@ -149,6 +108,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="numeroResolucion"/>
             <parameter name="fechaResolucion"/>
             <parameter name="mailContacto"/>
+            <parameter name="autorizaciones" type="List"/>
         </out-parameters>
         <actions>
             <!--
@@ -164,39 +124,30 @@ along with this software (see the LICENSE.md file). If not, see
                         .withRequestFactory(requestFactory).encoding("iso-8859-1")
                 response = restClient.call()
                 responseText = new String(response.bytes(), "iso-8859-1")
-                ec.logger.info("first call, got: ${responseText}")
                 restClient.uri("https://palena.sii.cl/cvc_cgi/dte/ce_consulta_e").method("POST").acceptContentType("text/html").contentType("application/x-www-form-urlencoded")
                         .addHeader("Referer", "https://palena.sii.cl/cvc/dte/ee_empresas_dte.html")
                         .text("RUT_EMP=${rut}&DV_EMP=${dv}&ACEPTAR=Consultar")
                 response = restClient.call()
                 responseText = new String(response.bytes(), "iso-8859-1")
-                int pos = responseText.indexOf("Los antecedentes del Contribuyente son :")
-                if (pos < 0) {
-                    ec.message.addError("No se recibió respuesta con antecedentes, resultado: ${responseText}")
-                }
-                fieldDesc = [
-                        [name: 'razonSocial', preString: 'Raz&oacute;n Social/Nombres\n   </font></td>\n   <td width="400" align="left"><font class="texto">\n   &nbsp;  ', postString: '\n'],
-                        [name: 'numeroResolucion', preString: 'N° Resoluci&oacute;n\n   </font></td>\n   <td width="400" align="left"><font class="texto">\n   &nbsp;  ', postString: '\n'],
-                        [name: 'fechaResolucion', preString: 'Fecha Resoluci&oacute;n\n   </font></td>\n   <td width="400" align="left"><font class="texto">\n   &nbsp;  ', postString: '\n'],
-                        [name: 'mailContacto', preString: 'Mail de contacto\n   </font></td>\n   <td width="400" align="left"><font class="texto">\n   &nbsp;  ', postString: '\n']
+
+                patternList = [
+                        [name:'tieneAntecedentes', pattern:'<td[^>]*><font class="texto">\nLos antecedentes del Contribuyente son :<br></font></td>'],
+                        [name:'razonSocial', pattern:'<td[^>]*><font class="texto">\\s*&nbsp;\\s*Raz&oacute;n Social/Nombres\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'fechaResolucion', pattern:'<td[^>]*><font class="texto">\\s*&nbsp;\\s*Fecha Resoluci&oacute;n\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'numeroResolucion', pattern:'<td[^>]*><font class="texto">\\s*&nbsp;\\s*N° Resoluci&oacute;n\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'mailContacto', pattern:'<td[^>]*><font class="texto">\\s*&nbsp;\\s*Mail de contacto\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'autorizaciones', preselectPattern:'El contribuyente tiene autorizado la emisi&oacute;n de los siguientes documentos tributarios electr&oacute;nicos:.*?</table><br>\n<table[^>]*>.*?<tr>.*?</tr>(.*?)</table>',
+                         pattern:'<tr>\\s*<td[^>]*>.*?(\\d+).*?</td>\\s*<td[^>]*><font[^>]*>\\s*(.*?)\\s*</font></td>\\s*<td[^>]*>.*?(\\d+-\\d+-\\d+).*?</td>\\s*<td[^>]*>.*?((?:&nbsp;)|(?:\\d+-\\d+-\\d+)).*?</td>.*?</tr>',
+                         fieldNames:['codigo', 'descripcion', 'autorizado', 'desautorizado']]
                 ]
-                fieldDesc.each { field ->
-                    pos = responseText.indexOf(field.preString)
-                    if (pos < 0) {
-                        ec.message.addError("No se encontró campo ${field.name}")
-                    } else {
-                        pos = pos + field.preString.size()
-                        end = responseText.indexOf(field.postString, pos)
-                        if (pos > 0) {
-                            ec.context[field.name] = responseText.substring(pos, end)
-                            pos = end
-                        }
-                    }
-                }
-                if (ec.message.hasError()) {
+                fields = cl.moit.scraping.FieldExtractor.extractFromPatternList(responseText, patternList)
+                fields.autorizaciones.each { autorizacion -> if (autorizacion.desautorizado == '&nbsp;') autorizacion.desautorizado = null}
+                ec.context.putAll(fields)
+                if (!tieneAntecedentes)
+                    ec.message.addError("No se recibió respuesta con antecedentes")
+                if (ec.message.hasError())
                     ec.message.addError("Resultado recibido: ${responseText}")
-                }
-                ]]></script>
+            ]]></script>
         </actions>
     </service>
 
