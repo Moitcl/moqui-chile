@@ -422,12 +422,12 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="load" noun="Caf">
         <in-parameters>
             <parameter name="cafFile" type="org.apache.commons.fileupload.FileItem"/>
-            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="partyId" required="true"/>
         </in-parameters>
         <actions>
             <set field="archivo" from="cafFile.getName()"/>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-            <set field="contentLocation" value="dbresource://moit/erp/dte/caf/${organizationPartyId}/${archivo}"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:partyId]" out-map="context"/>
+            <set field="contentLocation" value="dbresource://moit/erp/dte/caf/${partyId}/${archivo}"/>
 
             <set field="docRr" from="ec.resource.getLocationReference(contentLocation)"/>
             <script>
@@ -435,7 +435,7 @@ along with this software (see the LICENSE.md file). If not, see
                 try { docRr.putStream(fileStream) } finally { fileStream.close() }
             </script>
 
-            <service-call name="mchile.DTEServices.load#CafInternal" in-map="context+[organizationPartyId:organizationPartyId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.load#CafInternal" in-map="context" out-map="context"/>
         </actions>
     </service>
 
@@ -445,7 +445,7 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="contentLocation" required="true"/>
-            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="partyId" required="true"/>
             <parameter name="activateCaf" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
@@ -454,12 +454,12 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <!-- Carga de RUT de empresa -->
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                <econdition field-name="partyId" from="organizationPartyId"/>
+                <econdition field-name="partyId"/>
                 <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
             </entity-find>
 
             <if condition="!partyIdentificationList.idValue[0]">
-                <return error="true" message="Organización $organizationPartyId no tiene RUT definido"/>
+                <return error="true" message="Organización $partyId no tiene RUT definido"/>
             </if>
             <set field="rut" from="partyIdentificationList.idValue[0]"/>
 
@@ -532,7 +532,7 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
 
             <set field="updateMap"
-                 from="[filename:docRr.fileName,desde:desde, hasta:hasta, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, ultimoFolio:desde, issuerPartyId:organizationPartyId, cafData:docRr.getText()]"/>
+                 from="[filename:docRr.fileName,desde:desde, hasta:hasta, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, ultimoFolio:desde, issuerPartyId:partyId, cafData:docRr.getText()]"/>
             <service-call name="create#mchile.dte.Caf" out-map="context" in-map="updateMap"/>
 
             <!-- Creación de registros para reservar folios -->
@@ -541,7 +541,7 @@ along with this software (see the LICENSE.md file). If not, see
                 int fin = Integer.parseInt(hasta)
                 for (int folio = inicio; folio <= fin; folio++) {
                     fiscalTaxDocumentId = "$fiscalTaxDocumentTypeEnumId$folio$rutNoDv"
-                    createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:organizationPartyId,
+                    createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:partyId,
                         issuerPartyIdTypeEnumId:'PtidNationalTaxId', fiscalTaxDocumentStatusEnumId:'Ftdt-NotIssued', fiscalTaxDocumentSentStatusEnumId:'Ftdt-NotSent']
                     context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call())
                 }
