@@ -420,8 +420,10 @@ dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocum
 
 dteEv.receiverPartyId = receiverPartyId
 dteEv.receiverPartyIdTypeEnumId = "PtidNationalTaxId"
-dteEv.fiscalTaxDocumentStatusEnumId = "Ftdt-Issued"
-dteEv.fiscalTaxDocumentSentStatusEnumId = "Ftdt-NotSent"
+dteEv.receiverPartyIdValue = rutReceptor.trim()
+dteEv.statusId = "Ftd-Issued"
+dteEv.sentAuthStatusId = "Ftd-NotSentAuth"
+dteEv.sentRecStatusId = "Ftd-NotSentRec"
 dteEv.invoiceId = invoiceId
 dteEv.shipmentId = shipmentId
 Date date = new Date()

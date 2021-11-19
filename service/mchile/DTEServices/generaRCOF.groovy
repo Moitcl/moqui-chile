@@ -338,9 +338,11 @@ dteEv.issuerPartyId = organizationPartyId
 if (rutReceptor != '66666666-6') {
     dteEv.receiverPartyId = receiverPartyId
     dteEv.receiverPartyIdTypeEnumId = PtidNationalTaxId
+    dteEv.receiverPartyIdValue = rutReceptor
 }
-dteEv.fiscalTaxDocumentStatusEnumId = "Ftdt-Issued"
-dteEv.fiscalTaxDocumentSentStatusEnumId = "Ftdt-NotSent"
+dteEv.statusId = "Ftd-Issued"
+dteEv.sentAuthStatusId = "Ftd-NotSentAuth"
+dteEv.sentRecStatusId = "Ftd-NotSentRec"
 dteEv.invoiceId = invoiceId
 
 Date date = new Date()
