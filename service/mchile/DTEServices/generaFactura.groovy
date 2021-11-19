@@ -251,7 +251,7 @@ if (tipoFactura == 33) {
     anulaBoleta = refMap.anulaBoleta
     folioAnulaBoleta = refMap.folioAnulaBoleta
     BigInteger codRef = ref[ref.length-1].getCodRef()
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "ReturnItem", codRef)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", codRef)
     Detalle[] det = detMap.detailArray
     totalNeto = detMap.totalNeto
     totalInvoice = detMap.totalInvoice
