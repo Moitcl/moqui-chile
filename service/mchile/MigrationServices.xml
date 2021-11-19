@@ -47,4 +47,93 @@ along with this software (see the LICENSE.md file). If not, see
             </iterate>
         </actions>
     </service>
+
+    <service verb="migrate" noun="FiscalTaxDocumentEnumToStatus">
+        <actions>
+            <set field="statusMap" from="['Ftdt-Issued':'Ftd-Issued', 'Ftdt-NotIssued':'Ftd-NotIssued']"/>
+            <service-call name="moit.erp.GeneralServices.setup#UserInfo" out-map="context"/>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" for-update="true">
+                <econditions combine="or">
+                    <econdition field-name="fiscalTaxDocumentStatusEnumId" operator="is-not-null"/>
+                    <econdition field-name="fiscalTaxDocumentSentStatusEnumId" operator="is-not-null"/>
+                    <econditions>
+                        <econdition field-name="statusId" operator="is-null"/>
+                        <econdition field-name="sentAuthStatusId" operator="is-null"/>
+                        <econdition field-name="sentRecStatusId" operator="is-null"/>
+                    </econditions>
+                    <econdition field-name="receiverPartyIdValue" operator="is-null"/>
+                    <econdition field-name="issuerPartyIdValue" operator="is-null"/>
+                </econditions>
+            </entity-find>
+            <iterate list="ftdList" entry="ftd">
+                <if condition="ftd.statusId == null"><then>
+                    <if condition="ftd.fiscalTaxDocumentStatusEnumId == null"><then>
+                        <if condition="ftd.receiverPartyId in userOrgIds"><then>
+                            <set field="ftd.statusId" value="Ftd-Issued"/>
+                        </then><else>
+                            <message error="true">Ftd ${ftd.fiscalTaxDocumentId} has null statusEnumId and is internal</message>
+                            <set field="ftd.statusId" value="Ftd-Issued"/>
+                        </else></if>
+                    </then><else>
+                        <if condition="statusMap[ftd.fiscalTaxDocumentStatusEnumId] == null">
+                            <message error="true">StatusMap is null for ${ftd.fiscalTaxDocumentStatusEnumId}</message>
+                        </if>
+                        <set field="ftd.statusId" from="statusMap[ftd.fiscalTaxDocumentStatusEnumId]"/>
+                        <set field="ftd.fiscalTaxDocumentStatusEnumId" from="null"/>
+                    </else></if>
+                </then><else>
+                    <message error="true">Ftd ${ftd.fiscalTaxDocumentId} has statusEnumId and non-null statusId</message>
+                </else></if>
+
+                <if condition="ftd.sentAuthStatusId == null"><then>
+                    <if condition="ftd.fiscalTaxDocumentSentStatusEnumId == null"><then>
+                        <if condition="ftd.receiverPartyId in userOrgIds"><then>
+                            <set field="ftd.statusId" value="Ftd-SentAuth"/>
+                        </then><else>
+                            <message error="true">Ftd ${ftd.fiscalTaxDocumentId} has null sentStatusEnumId and is internal</message>
+                            <set field="ftd.statusId" value="Ftd-SentAuthUnverified"/>
+                        </else></if>
+                    </then><else>
+                        <if condition="ftd.fiscalTaxDocumentSentStatusEnumId == 'Ftdt-NotSent'"><then>
+                            <set field="ftd.sentAuthStatusId" value="Ftd-NotSentAuth"/>
+                            <set field="ftd.fiscalTaxDocumentSentStatusEnumId" from="null"/>
+                        </then><else-if condition="ftd.fiscalTaxDocumentSentStatusEnumId == 'Ftdt-Sent'">
+                            <set field="ftd.sentAuthStatusId" value="Ftd-SentAuthUnverified"/>
+                            <set field="ftd.fiscalTaxDocumentSentStatusEnumId" from="null"/>
+                        </else-if><else>
+                            <message error="true">Ftd ${ftd.fiscalTaxDocumentId} has unknown fiscalTaxDocumentSentStatusEnumId ${ftd.fiscalTaxDocumentSentStatusEnumId}</message>
+                        </else></if>
+                    </else></if>
+                </then><else>
+                    <message error="true">Ftd ${ftd.fiscalTaxDocumentId} has sentStatusEnumId and non-null sentAuthStatusId</message>
+                </else></if>
+
+                <if condition="ftd.sentRecStatusId == null"><then>
+                    <set field="ftd.sentRecStatusId" value="Ftd-NotSentRec"/>
+                </then><else>
+                    <message error="true">Ftd ${ftd.fiscalTaxDocumentId} has non-null sentRecStatusId</message>
+                </else></if>
+
+                <if condition="ftd.issuerPartyIdValue == null">
+                    <if condition="ftd.issuerPartyId == null"><then>
+                        <message error="true">Ftd ${ftd.fiscalTaxDocumentId} has null issuerPartyId</message>
+                    </then><else>
+                        <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:ftd.issuerPartyId]" out-map="rut" out-map-add-to-existing="false"/>
+                        <set field="ftd.issuerPartyIdValue" from="rut.rutSinFormato"/>
+                    </else></if>
+                </if>
+
+                <if condition="ftd.receiverPartyIdValue == null &amp;&amp; ftd.statusId != 'Ftd-NotIssued'">
+                    <if condition="ftd.receiverPartyId == null"><then>
+                        <message error="true">Ftd ${ftd.fiscalTaxDocumentId} has null receiverPartyId, statusId: ${statusId}</message>
+                    </then><else>
+                        <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:ftd.receiverPartyId]" out-map="rut" out-map-add-to-existing="false"/>
+                        <set field="ftd.receiverPartyIdValue" from="rut.rutSinFormato"/>
+                    </else></if>
+                </if>
+
+                <entity-update value-field="ftd"/>
+            </iterate>
+        </actions>
+    </service>
 </services>
