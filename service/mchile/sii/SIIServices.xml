@@ -177,6 +177,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="partyId" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="folioAmount" default-value="10"/>
+            <parameter name="activateCaf" type="Boolean" default="false"/>
         </in-parameters>
         <actions>
             <service-call name="mchile.DTEServices.check#ProductionEnvironment" out-map="context"/>
@@ -324,10 +325,23 @@ along with this software (see the LICENSE.md file). If not, see
                 response = restClient.call()
                 caf = new String(response.bytes(), "iso-8859-1")
 
-                ec.logger.info("got reponse status code ${response?.statusCode}: ${responseText}")
+                if (!caf.startsWith('<?xml version="1.0"?>\n<AUTORIZACION>\n<CAF')) {
+                    ec.message.addError("Did not get CAF as expected, responseCode ${response?.statusCode}, text: ${caf}")
+                    return
+                }
+                contentDisposition = response.headers().get("Content-Disposition")[0]
+                matcher = contentDisposition =~ /filename=([^;]+)/
+                if (matcher) {
+                    fileName = matcher[0][1]
+                } else {
+                    ec.message.addError("Could not determine fileName from contentType: ${contentType}")
+                }
+                contentLocation = "dbresource://moit/erp/dte/caf/${partyId}/${fileName}"
+                docRr = ec.resource.getLocationReference(contentLocation)
+                docRr.putBytes(response.bytes())
+            ]]></script>
 
-
-                ]]></script>
+            <service-call name="mchile.DTEServices.load#CafInternal" in-map="[organizationPartyId:partyId, contentLocation:contentLocation, activateCaf:activateCaf]" out-map="context"/>
         </actions>
     </service>
 
