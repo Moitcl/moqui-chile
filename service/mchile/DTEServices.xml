@@ -14,6 +14,34 @@ along with this software (see the LICENSE.md file). If not, see
 -->
 <services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
 
+    <service verb="get" noun="DteInfo">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="issuerRut"/>
+            <parameter name="issuerName"/>
+            <parameter name="receiverRut"/>
+            <parameter name="receiverName"/>
+            <parameter name="doctypeName"/>
+            <parameter name="folio"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte"/>
+            <service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:dte.issuerPartyIdValue]" out-map="issuerRutMap"/>
+            <set field="issuerRut" from="issuerRutMap.rut"/>
+            <service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:dte.receiverPartyIdValue]" out-map="receiverRutMap"/>
+            <set field="receiverRut" from="receiverRutMap.rut"/>
+            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="issuer" auto-field-map="[partyId:dte.issuerPartyId]"/>
+            <set field="issuerName" from="issuer.taxOrganizationName?:ec.resource.expand('PartyNameOnlyTemplate', null, issuer)"/>
+            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="receiver" auto-field-map="[partyId:dte.receiverPartyId]"/>
+            <set field="receiverName" from="receiver.taxOrganizationName?:ec.resource.expand('PartyNameOnlyTemplate', null, receiver)"/>
+            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="docTypeEnum" auto-field-map="[enumId:dte.fiscalTaxDocumentTypeEnumId]"/>
+            <set field="doctypeName" from="docTypeEnum.description"/>
+            <set field="folio" from="dte.fiscalTaxDocumentNumber"/>
+        </actions>
+    </service>
+
     <service verb="genera" noun="Factura" type="script" location="component://MoquiChile/service/mchile/DTEServices/generaFactura.groovy">
         <description>
             Generación de DTE de acuerdo a plantilla
@@ -3478,6 +3506,53 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-update value-field="creditMemo"/>
             <service-call name="mchile.DTEServices.generar#NotaCredito" in-map="context" out-map="context"/>
 
+        </actions>
+    </service>
+
+    <service verb="send" noun="EmittedDtesToReceivers" authenticate="anonymous-all">
+        <actions>
+            <entity-find entity-name="mantle.party.PartyRole" list="internalPartyList">
+                <econdition field-name="roleTypeId" value="OrgInternal"/>
+            </entity-find>
+            <set field="internalPartyIdList" from="internalPartyList.partyId"/>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList">
+                <econdition field-name="issuerPartyId" operator="in" from="internalPartyIdList"/>
+                <econdition field-name="statusId" value="Ftd-Issued"/>
+                <econdition field-name="sentAuthStatusId" value="Ftd-SentAuth"/>
+                <econdition field-name="sentRecStatusId" value="Ftd-NotSentRec"/>
+            </entity-find>
+            <iterate list="ftdList" entry="dte">
+                <service-call name="mchile.DTEServices.send#DteXmlToReceiver" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId]" out-map="context" transaction="force-new"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="send" noun="DteXmlToReceiver">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+        </in-parameters>
+        <actions>
+            <log message="Sending email for fiscalTaxDocumentId: ${fiscalTaxDocumentId}"/>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" for-update="true"/>
+            <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument with id ${fiscalTaxDocumentId}"/></if>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="contentList">
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
+            </entity-find>
+            <if condition="contentList.size() != 1"><return error="true" message="Found ${contentList.size()} XML content for fiscalTaxDocumentId ${fiscalTaxDocumentId}, expected 1"/></if>
+            <set field="content" from="ec.resource.getLocationReference(contentList.first.contentLocation)"/>
+            <set field="xmlAttachment" from="[attachmentLocation:content.location, fileName:content.fileName, contentType:content.contentType]"/>
+            <service-call name="mchile.sii.SiiServices.get#XmlReceptionEmail" in-map="[partyId:dte.receiverPartyId, partyIdValue:dte.receiverPartyIdValue, dtePartyId:dte.issuerPartyId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.get#DteInfo" in-map="context" out-map="bodyParameters"/>
+            <entity-find-one entity-name="moqui.basic.email.EmailTemplate" value-field="emailTemplate" auto-field-map="[emailTemplateId:'MchDteSendXmlReceiver']"/>
+            <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" in-map="[toAddresses:xmlReceptionEmailAddress, bccAddresses:'jhp@moit.cl', emailTemplateId:'MchDteSendXmlReceiver',
+                    attachments:[xmlAttachment], bodyParameters:bodyParameters+[fiscalTaxDocumentId:fiscalTaxDocumentId, subject:emailTemplate.subject]]" out-map="context"/>
+            <if condition="emailMessageId">
+                <set field="dte.sentRecStatusId" value="Ftd-SentRec"/>
+                <service-call name="create#mchile.dte.FiscalTaxDocumentEmailMessage"
+                              in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, emailMessageId:emailMessageId, messageTypeEnumId:'Ftdemt-SendXmlReceiverMandatory']"/>
+            </if>
+            <entity-update value-field="dte"/>
         </actions>
     </service>
 

@@ -100,8 +100,9 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="consulta" noun="ContribuyentesAutorizadosContacto">
         <in-parameters>
-            <parameter name="rut"/>
-            <parameter name="dv"/>
+            <parameter name="rut" required="true"/>
+            <parameter name="dv" required="true"/>
+            <parameter name="dtePartyId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="razonSocial"/>
@@ -114,7 +115,7 @@ along with this software (see the LICENSE.md file). If not, see
             <!--
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:partyId]" out-map="context"/>
             -->
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:'KOMBUCHACHA']" out-map="dteconfig"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:dtePartyId]" out-map="dteconfig"/>
             <script><![CDATA[
                 import org.moqui.util.RestClient
                 import cl.moit.net.ClientAuthRequestFactory
@@ -342,6 +343,53 @@ along with this software (see the LICENSE.md file). If not, see
             ]]></script>
 
             <service-call name="mchile.DTEServices.load#CafInternal" in-map="[partyId:partyId, contentLocation:contentLocation, activateCaf:activateCaf]" out-map="context"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="XmlReceptionEmail">
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+            <parameter name="partyIdValue" required="true"/>
+            <parameter name="dtePartyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="xmlReceptionEmailAddress"/>
+        </out-parameters>
+        <actions>
+            <set field="maxDaysWithoutChecking" from="3"/>
+            <entity-find entity-name="mantle.party.contact.PartyContactMech" list="pcmList">
+                <econdition field-name="partyId"/>
+                <econdition field-name="contactMechPurposeId" value="EmailDteXmlRec"/>
+                <date-filter/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <set field="pcm" from="pcmList.first"/>
+            <set field="cm" from="pcm?.contactMech"/>
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:partyId]" out-map="rut"/>
+            <if condition="rut.rutSinFormato == null || rut.rutSinFormato != partyIdValue"><return error="true" message="Rut mismatch, received ${partyIdValue}, found in DB ${rut.rutSinFormato}"/></if>
+            <if condition="pcm == null || pcm.verifyCodeDate == null || (ec.user.nowTimestamp.time - pcm.verifyCodeDate.time) > 3*24*60*60*1000"><then>
+                <service-call name="mchile.sii.SiiServices.consulta#ContribuyentesAutorizadosContacto" in-map="[rut:rut.rutSinDv, dv:rut.dv, dtePartyId:dtePartyId]" out-map="cac"/>
+                <if condition="cac.mailContacto == null || cac.mailContacto.length() &lt; 5">
+                    <return error="true" message="Error obteniendo mailContacto del SII, recibido: ${cac.mailContaco}"/>
+                </if>
+                <set field="xmlReceptionEmailAddress" from="cac.mailContacto"/>
+                <if condition="pcm == null"><then>
+                    <service-call name="mantle.party.ContactServices.create#EmailAddress" in-map="[emailAddress:cac.mailContacto, partyId:partyId, contactMechPurposeId:'EmailDteXmlRec',
+                            fromDate:ec.user.nowTimestamp, verifyCodeDate:ec.user.nowTimestamp]" out-map="context"/>
+                </then><else>
+                    <if condition="cm.infoString != cac.mailContacto"><then>
+                        <service-call name="update#mantle.party.contact.PartyContactMech" in-map="[partyId:pcm.partyId, contactMechId:pcm.contactMechId, contactMechPurposeId:pcm.contactMechPurposeId,
+                                fromDate:pcm.fromDate, thruDate:ec.user.nowTimestamp]"/>
+                        <service-call name="mantle.party.ContactServices.create#EmailAddress" in-map="[emailAddress:cac.mailContacto, partyId:partyId, contactMechPurposeId:'EmailDteXmlRec',
+                            fromDate:ec.user.nowTimestamp, verifyCodeDate:ec.user.nowTimestamp]" out-map="context"/>
+                    </then><else>
+                        <service-call name="update#mantle.party.contact.PartyContactMech" in-map="[partyId:pcm.partyId, contactMechId:pcm.contactMechId, contactMechPurposeId:pcm.contactMechPurposeId,
+                                fromDate:pcm.fromDate, verifyCodeDate:ec.user.nowTimestamp]"/>
+                    </else></if>
+                </else></if>
+            </then><else>
+                <set field="xmlReceptionEmailAddress" from="cm.infoString"/>
+            </else></if>
         </actions>
     </service>
 
