@@ -1239,6 +1239,7 @@ along with this software (see the LICENSE.md file). If not, see
         <out-parameters>
             <parameter name="statusSii" required="true"/>
             <parameter name="salida" required="true"/>
+            <parameter name="errCode" required="true"/>
         </out-parameters>
         <actions>
 
@@ -1257,7 +1258,8 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="salida" value=""/>
             <set field="statusXML" value=""/>
 
-            <script>
+
+            <script><![CDATA[
                 import java.io.FileInputStream
                 import java.security.KeyStore
                 import java.security.PrivateKey
@@ -1271,7 +1273,7 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.sii.siiDte.DTEDocument
                 import cl.sii.xmlSchema.RESPUESTADocument
 
-                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;()
+                HashMap<String, String> namespaces = new HashMap<String, String>()
                 namespaces.put("", "http://www.sii.cl/SiiDte")
                 XmlOptions opts = new XmlOptions()
                 opts.setLoadSubstituteNamespaces(namespaces)
@@ -1296,23 +1298,30 @@ along with this software (see the LICENSE.md file). If not, see
 
                 logger.warn("------" + resp.toString())
 
-                salida = resp.toString()
-                statusXML = salida
-                String status = "0"
+                statusXML = resp.toString()
 
-                int inicio = statusXML.indexOf("&lt;SII:ESTADO&gt;")
-                int fin = statusXML.indexOf("&lt;/SII:ESTADO&gt;")
+                int inicio = statusXML.indexOf("<SII:ESTADO>")
+                int fin = statusXML.indexOf("</SII:ESTADO>")
 
-                statusXML = statusXML.substring(inicio + 12, fin)
-                logger.warn("STATUS: " + statusXML)
-                statusSii = statusXML
+                statusSii = statusXML.substring(inicio + 12, fin)
+                logger.warn("STATUS: " + statusSii)
 
-                inicio = salida.indexOf("&lt;SII:GLOSA_ERR&gt;")
-                fin = salida.indexOf("&lt;/SII:GLOSA_ERR&gt;")
-                salida = salida.substring(inicio + 15, fin)
+                inicio = statusXML.indexOf("<SII:GLOSA_ERR>")
+                fin = statusXML.indexOf("</SII:GLOSA_ERR>")
+                salida = statusXML.substring(inicio + 15, fin)
 
-            </script>
-            <set field="statusSii" from="statusXML"/>
+                inicio = statusXML.indexOf("<SII:ERR_CODE>")
+                fin = statusXML.indexOf("</SII:ERR_CODE>")
+                errCode = statusXML.substring(inicio + 14, fin)
+
+                ]]></script>
+            <if condition="errCode == '0'">
+                <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" for-update="true"/>
+                <if condition="dte.sentAuthStatusId == Ftd-SentAuthUnverified">
+                    <set field="dte.sentAuthStatusId" value="Ftd-SentAuth"/>
+                    <entity-update value-field="dte"/>
+                </if>
+            </if>
         </actions>
     </service>
 
