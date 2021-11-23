@@ -331,7 +331,7 @@ if (tipoFactura == 41) {
     referenciaList.each { referenciaEntry ->
         ec.logger.warn("Agregando referencia $referenciaEntry")
         folioRef = referenciaEntry.folio
-        codRef = referenciaEntry.codigoReferenciaEnumId as Integer
+        codRef = referenciaEntry.codigoReferencia.enumCode as Integer
         fechaRef = referenciaEntry.fecha
         // Agrego referencias
         ref[i] = Referencia.Factory.newInstance()

@@ -745,14 +745,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <script>invoiceItemList.add(invoiceItem)</script>
             </iterate>
 
-            <!-- email receptor -->
-            <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:toPartyId]" out-map="context"/>
-
-            <if condition="!emailAddress">
-                <if condition="fiscalTaxDocumentTypeEnumId != 'Ftdt-39' &amp;&amp; fiscalTaxDocumentTypeEnumId != 'Ftdt-41'">
-                    <return error="true" message="Receptor ${toPartyId} no tiene dirección de correo, sólo se puede emitir boleta"/>
-                </if>
-            </if>
             <set field="username" from="emailAddress"/>
             <!-- rut receptor -->
             <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
@@ -1936,6 +1928,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fiscalTaxDocumentId"/>
         </out-parameters>
         <actions>
+            <service-call name="mchile.TaxServices.calculate#SalesTaxForInvoice" in-map="[invoiceId:invoiceId]"/>
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
             <if condition="!invoice"><return error="true" message="Could not find invoice ${invoiceId]"/></if>
             <if condition="! (invoice.invoiceTypeEnumId in ['InvoiceReturn', 'InvoiceCreditMemo'])">
@@ -1949,7 +1942,6 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="existingFtdList"><return error="true" message="Ya existe una Nota de Crédito para invoice ${invoiceId}"/></if>
             <if condition="!(invoice.statusId in ['InvoiceIncoming','InvoiceApproved','InvoicePmtSent','InvoiceReceived','InvoiceBilledThrough'])">
                 <return error="true" message="Invalid statusId for credit invoice: ${invoice.statusId}"/></if>
-            <service-call name="mchile.TaxServices.calculate#SalesTaxForInvoice" in-map="[invoiceId:invoiceId]"/>
 
             <!-- En la nota de credito se invierten fromPartyId y toPartyId (cliente le cobra al vendedor) -->
             <set field="issuerPartyId" from="invoice.toPartyId"/>
@@ -1975,7 +1967,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="rutEmisor" from="partyIdentificationList.first.idValue"/>
 
             <!-- Recuperación de referencias -->
-            <entity-find entity-name="mchile.dte.ReferenciaDteAndFiscalCode" list="referenciaList">
+            <entity-find entity-name="mchile.dte.ReferenciaDte" list="referenciaList">
                 <econdition field-name="invoiceId" from="invoiceId"/>
                 <econdition field-name="referenciaTypeEnumId" value="RefDteTypeInvoice"/>
                 <order-by field-name="fiscalTaxDocumentTypeEnumId"/>
@@ -1986,6 +1978,27 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="referenciaList.size() > 1">
                 <return error="true" message="Más de una referencia para Nota de Crédito invoiceId ${invoiceId}"/>
             </if>
+            <set field="referencia" from="referenciaList.first"/>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteReferenciaList" for-update="true">
+                <econdition field-name="issuerPartyId" from="invoice.toPartyId"/>
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="referencia.fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="fiscalTaxDocumentNumber" from="referencia.folio as Integer"/>
+            </entity-find>
+            <if condition="!dteReferenciaList"><return error="true" message="Could not find reference FiscalTaxDocumentId for credit note with invoiceId ${invoiceId}"/></if>
+            <if condition="!dteReferenciaList.first.invoiceId">
+                <return error="true" message="Reference has no invoiceId associated (reference ${dteReferenciaList.first.referenciaId})"/>
+            </if>
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoiceReferencia" auto-field-map="[invoiceId:dteReferenciaList.first.invoiceId]"/>
+            <if condition="invoice.invoiceTotal != null &amp;&amp; invoice.invoiceTotal != 0 &amp;&amp; invoice.invoiceTotal == invoiceReferencia.invoiceTotal"><then>
+                <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeAnula"/>
+            </then><else-if condition="invoice.invoiceTotal == 0">
+                <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeCorrigeTexto"/>
+            </else-if><else>
+                <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeCorrigeMonto"/>
+            </else></if>
+            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="codRefEnum" auto-field-map="[enumId:referencia.codigoReferenciaEnumId]"/>
+            <set field="referencia.razonReferencia" from="codRefEnum.description"/>
+            <entity-update value-field="referencia"/>
 
             <if condition="!receiverPartyId">
                 <return error="true" message="No existe receptor asociado a Nota de Crédito invoiceId ${invoiceId}"/>
@@ -3495,7 +3508,7 @@ along with this software (see the LICENSE.md file). If not, see
                 ]]></script>
             <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:dte.receiverPartyId]" out-map="receiverRut"/>
             <set field="referenceMap" from="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId, folio:dte.fiscalTaxDocumentNumber, fecha:fecha,
-                 rutOtroContribuyente:receiverRut.rutSinFormato, codigoReferenciaEnumId:1, razonReferencia:razonReferencia, referenceTypeEnumId:'RefDteTypeInvoice']"/>
+                 rutOtroContribuyente:receiverRut.rutSinFormato, codigoReferenciaEnumId:'MCHRefDteCodeAnula', razonReferencia:razonReferencia, referenceTypeEnumId:'RefDteTypeInvoice']"/>
             <service-call name="mchile.DTEServices.agregar#Referencia" in-map="referenceMap"/>
         </actions>
     </service>
