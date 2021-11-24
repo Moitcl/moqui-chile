@@ -12,8 +12,7 @@ You should have received a copy of the CC0 Public Domain Dedication
 along with this software (see the LICENSE.md file). If not, see
 <http://creativecommons.org/publicdomain/zero/1.0/>.
 -->
-<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
 
     <service verb="get" noun="SituacionTributariaTerceros">
         <in-parameters>
@@ -45,41 +44,110 @@ along with this software (see the LICENSE.md file). If not, see
                     [name:'actividadesEconomicas', preselectPattern:'<strong>Actividades Econ&oacute;micas vigentes:</strong>.*?<table border="1".*?>(.*?)</table>', pattern:'<TR>\\s*<TD [^>]*>\\s*<font class[^>]*>([^<>]*)</font></TD>\\s*<TD [^>]*>\\s*<font class[^>]*>([^<>]*)</font></TD>\\s*<TD [^>]*>\\s*<font class[^>]*>([^<>]*)</font></TD>\\s*<TD [^>]*>\\s*<font class[^>]*>([^<>]*)</font></TD>\\s*<TD [^>]*>\\s*<font class[^>]*>([^<>]*)</font></TD>\\s*</TR>', fieldNames:['descripcion', 'codigo', 'categoria', 'afecta', 'fecha']]
             ]
 
-            campos = [:]
-            patternList.each {
-                //println("attempting pattern ${it.pattern} of type ${it.pattern.class}")
-                if (it.preselectPattern) {
-                    //ec.logger.warn("preselectPattern: ${it.preselectPattern}")
-                    pattern = java.util.regex.Pattern.compile(it.preselectPattern, java.util.regex.Pattern.DOTALL)
-                    matcher = situacionTributariaHtml =~ pattern
-                    if (matcher.find()) {
-                        baseText = matcher.findAll().first()[1]
-                        //ec.logger.warn("baseText: ${baseText}")
-                        //ec.logger.warn("pattern: ${it.pattern}")
-                    }
-                    else baseText = situacionTributariaHtml
-                } else
-                    baseText = situacionTributariaHtml
+            ec.context.putAll(cl.moit.scraping.FieldExtractor.extractFromPatternList(situacionTributariaHtml, patternList))
 
-                pattern = java.util.regex.Pattern.compile(it.pattern, java.util.regex.Pattern.DOTALL)
-                matcher = baseText =~ pattern
-                campoList = []
-                matcher.findAll().each { match ->
-                    if (it.fieldNames) {
-                        fieldMap = [:]
-                        i = 1
-                        it.fieldNames.each { fieldName ->
-                            fieldMap.put(fieldName, match[i].trim())
-                            i++
-                        }
-                        campoList.add(fieldMap)
-                    } else
-                        campoList.add(match[1].trim())
-                }
-                campos.put(it['name'], campoList.size() == 1? campoList.get(0): campoList)
-            }
-            ec.context.putAll(campos)
+            ]]></script>
+        </actions>
+    </service>
 
+    <service verb="consulta" noun="ContribuyentesAutorizadosDireccionRegional">
+        <in-parameters>
+            <parameter name="rut"/>
+            <parameter name="dv"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="razonSocial"/>
+            <parameter name="numeroResolucion"/>
+            <parameter name="fechaResolucion"/>
+            <parameter name="direccionRegional"/>
+            <parameter name="autorizaciones" type="List"/>
+        </out-parameters>
+        <actions>
+            <!--
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:partyId]" out-map="context"/>
+            -->
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:'KOMBUCHACHA']" out-map="dteconfig"/>
+            <script><![CDATA[
+                import org.moqui.util.RestClient
+                import cl.moit.net.ClientAuthRequestFactory
+
+                ClientAuthRequestFactory requestFactory = new ClientAuthRequestFactory(dteconfig.certData, dteconfig.passCert)
+                RestClient restClient = new RestClient().uri("https://palena.sii.cl/cvc_cgi/dte/ee_empresa_rut").method("POST").acceptContentType("text/html").contentType("application/x-www-form-urlencoded")
+                        .withRequestFactory(requestFactory).encoding("iso-8859-1").addHeader("Referer", "https://palena.sii.cl/cvc/dte/ee_empresas_dte.html")
+                        .text("RUT_EMP=${rut}&DV_EMP=${dv.toUpperCase()}&ACEPTAR=Consultar")
+                response = restClient.call()
+                responseText = new String(response.bytes(), "iso-8859-1")
+                patternList = [
+                        [name:'tieneAntecedentes', pattern:'<td[^>]*><font class="texto">\nLos antecedentes de la empresa son :<br></font></td>'],
+                        [name:'razonSocial', pattern:'<td[^>]*><font class="texto">\\s*&nbsp;\\s*Raz&oacute;n Social/Nombres\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'fechaResolucion', pattern:'<td[^>]*><font class="texto">\\s*&nbsp;\\s*Fecha Resoluci&oacute;n\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'numeroResolucion', pattern:'<td[^>]*><font class="texto">\\s*&nbsp;\\s*N° Resoluci&oacute;n\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'direccionRegional', pattern:'<td width="200" align="left"><font class="texto">\\s*&nbsp; Direcci&oacute;n Regional\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'autorizaciones', preselectPattern:'El contribuyente tiene autorizada la emisi&oacute;n de los siguientes documentos tributarios electr&oacute;nicos:.*?</table><br>\n<table[^>]*>.*?<tr>.*?</tr>(.*?)</table>',
+                         pattern:'<tr>\\s*<td[^>]*>.*?(\\d+).*?</td>\\s*<td[^>]*><font[^>]*>\\s*(.*?)\\s*</font></td>\\s*<td[^>]*>.*?(\\d+-\\d+-\\d+).*?</td>\\s*<td[^>]*>.*?((?:&nbsp;)|(?:\\d+-\\d+-\\d+)).*?</td>.*?</tr>',
+                         fieldNames:['codigo', 'descripcion', 'autorizado', 'desautorizado']]
+                ]
+                fields = cl.moit.scraping.FieldExtractor.extractFromPatternList(responseText, patternList)
+                fields.autorizaciones.each { autorizacion -> if (autorizacion.desautorizado == '&nbsp;') autorizacion.desautorizado = null}
+                ec.context.putAll(fields)
+                if (!tieneAntecedentes)
+                    ec.message.addError("No se recibió respuesta con antecedentes")
+                if (ec.message.hasError())
+                    ec.message.addError("Resultado recibido: ${responseText}")
+            ]]></script>
+        </actions>
+    </service>
+
+    <service verb="consulta" noun="ContribuyentesAutorizadosContacto">
+        <in-parameters>
+            <parameter name="rut" required="true"/>
+            <parameter name="dv" required="true"/>
+            <parameter name="dtePartyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="razonSocial"/>
+            <parameter name="numeroResolucion"/>
+            <parameter name="fechaResolucion"/>
+            <parameter name="mailContacto"/>
+            <parameter name="autorizaciones" type="List"/>
+        </out-parameters>
+        <actions>
+            <!--
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:partyId]" out-map="context"/>
+            -->
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:dtePartyId]" out-map="dteconfig"/>
+            <script><![CDATA[
+                import org.moqui.util.RestClient
+                import cl.moit.net.ClientAuthRequestFactory
+
+                ClientAuthRequestFactory requestFactory = new ClientAuthRequestFactory(dteconfig.certData, dteconfig.passCert)
+                RestClient restClient = new RestClient().uri("https://palena.sii.cl/cvc_cgi/dte/ce_consulta_rut").method("GET").acceptContentType("text/html").contentType("application/x-www-form-urlencoded")
+                        .withRequestFactory(requestFactory).encoding("iso-8859-1")
+                response = restClient.call()
+                responseText = new String(response.bytes(), "iso-8859-1")
+                restClient.uri("https://palena.sii.cl/cvc_cgi/dte/ce_consulta_e").method("POST").acceptContentType("text/html").contentType("application/x-www-form-urlencoded")
+                        .addHeader("Referer", "https://palena.sii.cl/cvc/dte/ee_empresas_dte.html")
+                        .text("RUT_EMP=${rut}&DV_EMP=${dv.toUpperCase()}&ACEPTAR=Consultar")
+                response = restClient.call()
+                responseText = new String(response.bytes(), "iso-8859-1")
+
+                patternList = [
+                        [name:'tieneAntecedentes', pattern:'<td[^>]*><font class="texto">\nLos antecedentes del Contribuyente son :<br></font></td>'],
+                        [name:'razonSocial', pattern:'<td[^>]*><font class="texto">\\s*&nbsp;\\s*Raz&oacute;n Social/Nombres\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'fechaResolucion', pattern:'<td[^>]*><font class="texto">\\s*&nbsp;\\s*Fecha Resoluci&oacute;n\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'numeroResolucion', pattern:'<td[^>]*><font class="texto">\\s*&nbsp;\\s*N° Resoluci&oacute;n\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'mailContacto', pattern:'<td[^>]*><font class="texto">\\s*&nbsp;\\s*Mail de contacto\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'autorizaciones', preselectPattern:'El contribuyente tiene autorizado la emisi&oacute;n de los siguientes documentos tributarios electr&oacute;nicos:.*?</table><br>\n<table[^>]*>.*?<tr>.*?</tr>(.*?)</table>',
+                         pattern:'<tr>\\s*<td[^>]*>.*?(\\d+).*?</td>\\s*<td[^>]*><font[^>]*>\\s*(.*?)\\s*</font></td>\\s*<td[^>]*>.*?(\\d+-\\d+-\\d+).*?</td>\\s*<td[^>]*>.*?((?:&nbsp;)|(?:\\d+-\\d+-\\d+)).*?</td>.*?</tr>',
+                         fieldNames:['codigo', 'descripcion', 'autorizado', 'desautorizado']]
+                ]
+                fields = cl.moit.scraping.FieldExtractor.extractFromPatternList(responseText, patternList)
+                fields.autorizaciones.each { autorizacion -> if (autorizacion.desautorizado == '&nbsp;') autorizacion.desautorizado = null}
+                ec.context.putAll(fields)
+                if (!tieneAntecedentes)
+                    ec.message.addError("No se recibió respuesta con antecedentes")
+                if (ec.message.hasError())
+                    ec.message.addError("Resultado recibido: ${responseText}")
             ]]></script>
         </actions>
     </service>
@@ -102,6 +170,235 @@ along with this software (see the LICENSE.md file). If not, see
                 txtCaptcha = jsonResponse?.txtCaptcha
                 code = new String(Base64.decoder.decode(txtCaptcha)).substring(36,40)
             ]]></script>
+        </actions>
+    </service>
+
+    <service verb="obtain" noun="NewCAF">
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="folioAmount" default-value="10"/>
+            <parameter name="activateCaf" type="Boolean" default="false"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mchile.DTEServices.check#ProductionEnvironment" out-map="context"/>
+            <set field="hostName" from="isProduction ? 'palena.sii.cl' : 'maullin.sii.cl'"/>
+            <set field="requestPath" value="/cvc_cgi/dte/of_solicita_folios_dcto"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:partyId]" out-map="context"/>
+            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="fiscalTaxDocumentType" auto-field-map="[enumId:fiscalTaxDocumentTypeEnumId]"/>
+            <if condition="fiscalTaxDocumentType == null"><message error="true">No se encuentra fiscalTaxDocumentType con Id ${fiscalTaxDocumentTypeEnumId}</message></if>
+            <set field="rutEmp" from="rutEmisor.substring(0,rutEmisor.length()-2)"/>
+            <set field="dvEmp" from="rutEmisor.substring(rutEmisor.length()-1, rutEmisor.length()).toUpperCase()"/>
+            <set field="codDocto" from="fiscalTaxDocumentType.enumCode"/>
+            <set field="ACEPTAR" value="Solicitar Numeración"/>
+            <script><![CDATA[
+                import org.moqui.util.RestClient
+                import cl.moit.net.ClientAuthRequestFactory
+                import org.eclipse.jetty.client.HttpClient
+
+                ClientAuthRequestFactory requestFactory = new ClientAuthRequestFactory(certData, passCert)
+
+                RestClient restClient = new RestClient().uri("https://${hostName}/cvc_cgi/dte/of_solicita_folios").method("GET").acceptContentType("text/html")
+                        .contentType("application/x-www-form-urlencoded").withRequestFactory(requestFactory).encoding("iso-8859-1")
+                java.net.CookieStore cookieStore = requestFactory.getHttpClient().cookieStore
+                response = restClient.call() // Primer llamado lleva a selección de Continuar o representar.
+                // Servidor del SII no especifica encoding pero sabemos que es iso-8859-1 y el default de RestClient es UTF-8
+                responseText = new String(response.bytes(), "iso-8859-1")
+                if (responseText =~ /Debido a que usted ha sido autorizado por otros contribuyentes\s+para que los represente electrónicamente en el sitio web del SII, esta página le permitirá decidir\s+si en esta oportunidad desea realizar trámites propios o representar electrónicamente a otro\s+contribuyente/) {
+                    response = restClient.call() // Segundo llamado lleva a formulario
+                    responseText = new String(response.bytes(), "iso-8859-1")
+                }
+                if (! responseText =~ /Para continuar debe digitar el Rut del Contribuyente que solicita timbrar\s+documentos electrónicos:/) {
+                    ec.message.addError("Se esperaba recibir texto solicitando Rut del Contribuyente para solicitar timrar documentos electrónicos")
+                    ec.logger.error("Texto recibido: ${responseText}")
+                }
+                restClient.method("POST").text("RUT_EMP=${rutEmp}&DV_EMP=${dvEmp}&ACEPTAR=Continuar").uri("https://${hostName}/cvc_cgi/dte/of_solicita_folios_dcto")
+                response = restClient.call()
+                responseText = new String(response.bytes(), "iso-8859-1")
+                paso1 = responseText
+
+                // FOLIO_INICIAL
+                // FACTOR: si es < 1 y > 0, tiene situaciones pendientes.
+                // AFECTO_IVA: si el contribuyente tiene giros afectos
+                // MAX_AUTOR: cantidad máxima de folios a solicitar
+                // CANT_TIMBRAJES: cantidad de CAF activos, si es > 6 no autoriza a solicitar más
+                // CON_AJUSTE: "ajuste asignado", no se puede pedir más que esa cantidad
+                fieldValues = [:]
+                ['FOLIO_INICIAL', 'AFECTO_IVA', 'CON_CREDITO', 'CON_AJUSTE', 'FACTOR', 'MAX_AUTOR', 'CANT_TIMBRAJES', 'FOLIOS_DISP', 'ULT_TIMBRAJE'].each { fieldName ->
+                    matcher = responseText =~ /(?i)<input\s+name="${fieldName}"[^>]*?type="?hidden"?[^>]*?value="([^"]*)"/
+                    fields = matcher.findAll()
+                    if (fields) {
+                        value = fields[0][1]
+                        fieldValues[fieldName] = value
+                    }
+                }
+                if (fieldValues.MAX_AUTOR != null && fieldValues.MAX_AUTOR < folioAmount) {
+                    ec.message.addMessage("Solicitados ${folioAmount} folios, pero SII permite un máximo de ${fieldValues.MAX_AUTOR}")
+                    folioAmount = fieldValues.MAX_AUTOR
+                }
+                if (fieldValues.CANT_TIMBRAJES > 6) {
+                    ec.message.addMessage("Se tienen documentos disponibles no utilizados")
+                }
+                fieldValues.COD_DOCTO = codDocto
+                fieldValues.RUT_EMP = rutEmp
+                fieldValues.DV_EMP = dvEmp
+                fieldValues.CANT_DOCTOS = ""
+                params = fieldValues.collect { key, value -> "${key}=${value}"}.join("&")
+                ec.logger.info("params: ${params}")
+
+                response = restClient.text(params).call()
+                responseText = new String(response.bytes(), "iso-8859-1")
+                paso2 = responseText
+
+                fieldValues = [:]
+                ['FOLIO_INICIAL', 'AFECTO_IVA', 'CON_CREDITO', 'CON_AJUSTE', 'FACTOR', 'MAX_AUTOR', 'CANT_TIMBRAJES', 'FOLIOS_DISP', 'ULT_TIMBRAJE', 'CON_HISTORIA', 'FOLIO_INICRE', 'FOLIO_FINCRE', 'FECHA_ANT', 'ESTADO_TIMBRAJE', 'CONTROL', 'CANT_TIMBRAJES'].each { fieldName ->
+                    ec.logger.info("processing fieldName ${fieldName}")
+                    matcher = responseText =~ /(?i)<input\s+name="${fieldName}"[^>]*?value\s*=\s*"([^"]*)"/
+                    fields = matcher.findAll()
+                    if (fields) {
+                        value = fields[0][1]
+                        fieldValues[fieldName] = value
+
+                    }
+                }
+                /*
+                if (fieldValues.MAX_AUTOR == null || (Integer.parseInt(fieldValues.MAX_AUTOR) < 1)) {
+                    ec.message.addError("Número máximo de folios autorizados es ${fieldValues.MAX_AUTOR}")
+                }
+                 */
+
+                if (fieldValues.MAX_AUTOR != null && fieldValues.MAX_AUTOR < folioAmount) {
+                    ec.message.addMessage("Solicitados ${folioAmount} folios, pero SII permite un máximo de ${fieldValues.MAX_AUTOR}, ajustando cantidad")
+                    folioAmount = fieldValues.MAX_AUTOR
+                }
+                if (fieldValues.CANT_TIMBRAJES && fieldValues.CANT_TIMBRAJES > 6) {
+                    ec.message.addMessage("Se tienen documentos disponibles no utilizados")
+                }
+                fieldValues.COD_DOCTO = codDocto
+                fieldValues.RUT_EMP = rutEmp
+                fieldValues.DV_EMP = dvEmp
+                fieldValues.DV_EMP = dvEmp
+                fieldValues.CANT_DOCTOS = folioAmount
+                fieldValues.ACEPTAR = "Solicitar+Numeraci%F3n"
+                params = fieldValues.collect { key, value -> "${key}=${value}"}.join("&")
+
+                ec.logger.info("params2: ${params}")
+
+                restClient.text(params).uri("https://${hostName}/cvc_cgi/dte/of_confirma_folio")
+                response = restClient.call()
+                responseText = new String(response.bytes(), "iso-8859-1")
+                paso3 = responseText
+
+                fieldValues = [:]
+                fieldKeys = ['NOMUSU', 'CON_CREDITO', 'CON_AJUSTE', 'FOLIOS_DISP', 'MAX_AUTOR', 'ULT_TIMBRAJE', 'CON_HISTORIA', 'CANT_TIMBRAJES', 'CON_AJUSTE', 'FOLIO_INICRE', 'FOLIO_FINCRE',
+                             'FECHA_ANT', 'ESTADO_TIMBRAJE', 'CONTROL', 'FOLIO_INI', 'FOLIO_FIN', 'DIA', 'MES', 'ANO', 'HORA', 'MINUTO', 'RUT_EMP', 'DV_EMP', 'COD_DOCTO', 'CANT_DOCTOS']
+                fieldKeys.each { fieldName ->
+                    matcher = responseText =~ /(?i)<input\s+name="${fieldName}"[^>]*?value\s*=\s*"([^"]*)"/
+                    fields = matcher.findAll()
+                    if (fields) {
+                        String value = fields[0][1]
+                        fieldValues[fieldName] = value.replaceAll(" ", "+")
+                    }
+                }
+                if (fieldValues.FOLIO_INI == null || fieldValues.FOLIO_FIN == null) {
+                    ec.message.addError("No se recibió datos de confirmación")
+                    ec.logger.info("received paso 2: ${paso2}")
+                    ec.logger.info("received paso 3: ${paso3}")
+                    return
+                }
+                fieldValues.ACEPTAR = "Obtener+Folios"
+                params = fieldValues.collect { key, value -> "${key}=${value}"}.join("&")
+                ec.logger.info("params3: ${params}")
+                restClient.text(params).uri("https://${hostName}/cvc_cgi/dte/of_genera_folio")
+                response = restClient.call()
+                responseText = new String(response.bytes(), "iso-8859-1")
+
+                if (! responseText.contains("Para bajar a su PC el archivo con la numeraci&oacute;n autorizada, haga click")) {
+                    ec.message.addError("No se recibió solicitud de timbraje electrónico")
+                    ec.logger.info("Recibido paso 2: ${paso2}")
+                    ec.logger.info("Recibido paso 3: ${paso3}")
+                    return
+                }
+                fieldValues = [:]
+                ['FOLIO_INI', 'FOLIO_FIN', 'FECHA', 'RUT_EMP', 'DV_EMP', 'COD_DOCTO'].each { fieldName ->
+                    matcher = responseText =~ /(?i)<input\s+name="${fieldName}"[^>]*?value\s*=\s*"([^"]*)"/
+                    fields = matcher.findAll()
+                    if (fields) {
+                        value = fields[0][1]
+                        fieldValues[fieldName] = value
+                    }
+                }
+                fieldValues.ACEPTAR = 'AQUI'
+                params = fieldValues.collect { key, value -> "${key}=${value}"}.join("&")
+                ec.logger.info("params4: ${params}")
+                restClient.text(params).uri("https://${hostName}/cvc_cgi/dte/of_genera_archivo")
+                response = restClient.call()
+                caf = new String(response.bytes(), "iso-8859-1")
+
+                if (!caf.startsWith('<?xml version="1.0"?>\n<AUTORIZACION>\n<CAF')) {
+                    ec.message.addError("Did not get CAF as expected, responseCode ${response?.statusCode}, text: ${caf}")
+                    return
+                }
+                contentDisposition = response.headers().get("Content-Disposition")[0]
+                matcher = contentDisposition =~ /filename=([^;]+)/
+                if (matcher) {
+                    fileName = matcher[0][1]
+                } else {
+                    ec.message.addError("Could not determine fileName from contentType: ${contentType}")
+                }
+                contentLocation = "dbresource://moit/erp/dte/caf/${partyId}/${fileName}"
+                docRr = ec.resource.getLocationReference(contentLocation)
+                docRr.putBytes(response.bytes())
+            ]]></script>
+
+            <service-call name="mchile.DTEServices.load#CafInternal" in-map="[partyId:partyId, contentLocation:contentLocation, activateCaf:activateCaf]" out-map="context"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="XmlReceptionEmail">
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+            <parameter name="partyIdValue" required="true"/>
+            <parameter name="dtePartyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="xmlReceptionEmailAddress"/>
+        </out-parameters>
+        <actions>
+            <set field="maxDaysWithoutChecking" from="3"/>
+            <entity-find entity-name="mantle.party.contact.PartyContactMech" list="pcmList">
+                <econdition field-name="partyId"/>
+                <econdition field-name="contactMechPurposeId" value="EmailDteXmlRec"/>
+                <date-filter/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <set field="pcm" from="pcmList.first"/>
+            <set field="cm" from="pcm?.contactMech"/>
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:partyId]" out-map="rut"/>
+            <if condition="rut.rutSinFormato == null || rut.rutSinFormato != partyIdValue"><return error="true" message="Rut mismatch, received ${partyIdValue}, found in DB ${rut.rutSinFormato}"/></if>
+            <if condition="pcm == null || pcm.verifyCodeDate == null || (ec.user.nowTimestamp.time - pcm.verifyCodeDate.time) > 3*24*60*60*1000"><then>
+                <service-call name="mchile.sii.SiiServices.consulta#ContribuyentesAutorizadosContacto" in-map="[rut:rut.rutSinDv, dv:rut.dv, dtePartyId:dtePartyId]" out-map="cac"/>
+                <if condition="cac.mailContacto == null || cac.mailContacto.length() &lt; 5">
+                    <return error="true" message="Error obteniendo mailContacto del SII, recibido: ${cac.mailContaco}"/>
+                </if>
+                <set field="xmlReceptionEmailAddress" from="cac.mailContacto"/>
+                <if condition="pcm == null"><then>
+                    <service-call name="mantle.party.ContactServices.create#EmailAddress" in-map="[emailAddress:cac.mailContacto, partyId:partyId, contactMechPurposeId:'EmailDteXmlRec',
+                            fromDate:ec.user.nowTimestamp, verifyCodeDate:ec.user.nowTimestamp]" out-map="context"/>
+                </then><else>
+                    <if condition="cm.infoString != cac.mailContacto"><then>
+                        <service-call name="update#mantle.party.contact.PartyContactMech" in-map="[partyId:pcm.partyId, contactMechId:pcm.contactMechId, contactMechPurposeId:pcm.contactMechPurposeId,
+                                fromDate:pcm.fromDate, thruDate:ec.user.nowTimestamp]"/>
+                        <service-call name="mantle.party.ContactServices.create#EmailAddress" in-map="[emailAddress:cac.mailContacto, partyId:partyId, contactMechPurposeId:'EmailDteXmlRec',
+                            fromDate:ec.user.nowTimestamp, verifyCodeDate:ec.user.nowTimestamp]" out-map="context"/>
+                    </then><else>
+                        <service-call name="update#mantle.party.contact.PartyContactMech" in-map="[partyId:pcm.partyId, contactMechId:pcm.contactMechId, contactMechPurposeId:pcm.contactMechPurposeId,
+                                fromDate:pcm.fromDate, verifyCodeDate:ec.user.nowTimestamp]"/>
+                    </else></if>
+                </else></if>
+            </then><else>
+                <set field="xmlReceptionEmailAddress" from="cm.infoString"/>
+            </else></if>
         </actions>
     </service>
 

@@ -10,7 +10,15 @@
         <parameter name="activeOrgId" from="activeOrgId"/>
         <actions>
             <script><![CDATA[
-                    items = new StringBuilder()
+                    items = []
+                    keys = ['invoiceItemSeqId', 'quantity', 'amount', 'description']
+                    for (int i = 0; context.containsKey("returnItemSeqId_${i}"); i++) {
+                        if ((context.get("_useRowSubmit") == "true" || context.get("_useRowSubmit_" + i) == "true")
+                                && context.get("_rowSubmit_" + i) != "true") continue
+                        item = [returnId:returnId]
+                        keys.each { item[it] = context.get(it + "_" + i) }
+                        items.add(item)
+                    }
                     for (int i = 0; ; i++) {
                         if ((context.get("_useRowSubmit") == "true" || context.get("_useRowSubmit_" + i) == "true")
                                 && context.get("_rowSubmit_" + i) != "true") continue
@@ -19,8 +27,7 @@
                         String amount = "amount_" + i
                         String description = "description_" + i
                         if (context.containsKey(curKey))  {
-                            if (items.length() > 0) items.append(",")
-                            items.append(context.get(curKey)+"-"+context.get(quantity)+"-"+context.get(amount)+"-"+context.get(description) )
+                            items.add([quantity:context.get(quantity), amount:context.get(amount), description:context.get(description)])
                         } else { break }
                     }
             ]]></script>
@@ -29,101 +36,104 @@
         <default-response url="../../FindDTE"/>
     </transition>
 
-    <actions>
-        <!-- Se busca invoiceId asociado a fiscalTaxDocumentId -->
-
-        <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="facturaField"/>
-        <if condition="!facturaField">
-            <return error="true" message="No existe factura especificada"/>
-        </if>
-        <set field="invoiceId" from="facturaField.invoiceId"/>
-
-        <!-- Se busca detalle de invoice -->
-
-        <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
-        <if condition="invoice == null"><return error="true" message="Invoice ${invoiceId} not found"/></if>
-        <!-- set statusId for StatusChangeSection -->
-        <set field="statusId" from="invoice?.statusId"/>
-
-        <entity-find entity-name="mantle.party.PartyRole" list="fromOrgInternalList">
-            <econdition field-name="partyId" from="invoice.fromPartyId"/><econdition field-name="roleTypeId" value="OrgInternal"/></entity-find>
-        <set field="isFromPartyOrgInternal" from="fromOrgInternalList as boolean"/>
-        <set field="organizationPartyId" from="isFromPartyOrgInternal ? invoice.fromPartyId : invoice.toPartyId"/>
-
-
-        <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
-        <if condition="invoice == null"><return error="true" message="Invoice ${invoiceId} not found"/></if>
-        <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemList">
-            <econdition field-name="invoiceId"/><order-by field-name="invoiceItemSeqId"/></entity-find>
-        <set field="topItemList" from="invoiceItemList.findAll({ it.parentItemSeqId == null })"/>
-
-        <!-- put items with parentItemSeqId in the list after their parent -->
-        <script><![CDATA[
-            itemWithChildrenSet = new HashSet()
-            List reverseList = invoiceItemList.cloneList().orderByFields(["-invoiceItemSeqId"])
-            for (invoiceItem in reverseList) {
-                if (invoiceItem.parentItemSeqId) {
-                    itemWithChildrenSet.add(invoiceItem.parentItemSeqId)
-                    invoiceItemList.move(invoiceItemList.indexMatching([invoiceItemSeqId:invoiceItem.invoiceItemSeqId]),
-                            invoiceItemList.indexMatching([invoiceItemSeqId:invoiceItem.parentItemSeqId])+1)
-                }
-            }
-        ]]></script>
-
-        <set field="editableStatusIds" from="new HashSet(['InvoiceInProcess', 'InvoiceIncoming', 'InvoiceReceived'])"/>
-        <set field="invoiceEditable" from="invoice.statusId in editableStatusIds"/>
-
-        <entity-find entity-name="mantle.party.PartyRole" list="fromOrgInternalList">
-            <econdition field-name="partyId" from="invoice.fromPartyId"/><econdition field-name="roleTypeId" value="OrgInternal"/></entity-find>
-        <set field="isFromPartyOrgInternal" from="fromOrgInternalList as boolean"/>
-        <set field="organizationPartyId" from="isFromPartyOrgInternal ? invoice.fromPartyId : invoice.toPartyId"/>
-
-        <if condition="invoice.invoiceTypeEnumId == 'InvoiceSales' || invoice.invoiceTypeEnumId == 'InvoiceReturn'"><then>
-            <entity-find entity-name="moqui.basic.EnumAndGroup" list="itemTypeEnumList">
-                <econdition field-name="enumGroupEnumId" from="isFromPartyOrgInternal ? 'EngItemsSales' : 'EngItemsPurchase'"/><order-by field-name="description"/></entity-find>
-        </then><else-if condition="invoice.invoiceTypeEnumId == 'InvoicePayroll'">
-            <entity-find entity-name="moqui.basic.EnumAndParent" list="itemTypeEnumList">
-                <econdition field-name="parentEnumId" operator="in" value="ItemPayrollIncome,ItemPayrollDeduct,ItemPayrollTaxes,ItemPayrollExpense"/>
-                <order-by field-name="description"/></entity-find>
-        </else-if><else>
-            <entity-find entity-name="moqui.basic.Enumeration" list="itemTypeEnumList">
-                <econdition field-name="enumTypeId" value="ItemType"/><order-by field-name="description"/></entity-find>
-        </else></if>
-
-    </actions>
-
     <widgets>
-        <container-row>
-            <row-col>
-                <container>
-                    <form-single name="EditInvoice" skip-start="true">
-                        <field name="invoiceId"><default-field><display/></default-field></field>
+        <section name="DebitNoteSection">
+            <actions>
+                <!-- Se busca invoiceId asociado a fiscalTaxDocumentId -->
 
-                        <field name="invoiceTotal"><default-field title="Total"><display currency-unit-field="invoice.currencyUomId"/></default-field></field>
+                <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="facturaField"/>
+                <if condition="!facturaField">
+                    <return error="true" message="No existe factura especificada"/>
+                </if>
+                <set field="invoiceId" from="facturaField.invoiceId"/>
 
-                    </form-single>
+                <!-- Se busca detalle de invoice -->
 
-                    <form-list name="InvoiceItems" list="invoiceItemList" transition="genNotaDebito" multi="true">
-                        <hidden-parameters>
-                            <parameter name="invoiceId"/>
-                            <parameter name="activeOrgId"/>
-                            <parameter name="fiscalTaxDocumentId"/>
-                        </hidden-parameters>
-                        <field name="_useRowSubmit"><default-field><hidden default-value="true"/></default-field></field>
-                        <field name="invoiceItemSeqId"><default-field title="Item"><display/></default-field></field>
-                        <field name="description"><default-field><display/></default-field></field>
-                        <field name="quantity"><default-field><text-line size="4"/></default-field></field>
-                        <field name="amount"><default-field><text-line size="8"/></default-field></field>
-                        <field name="total" from="((quantity != null ? quantity : 1.0) * (amount ?: 0.0))">
-                            <default-field><display currency-unit-field="invoice.currencyUomId"/></default-field></field>
-                        <field name="_rowSubmit"><default-field title="Corregir">
-                            <check no-current-selected-key="false"><option key="true" text=" "/></check></default-field>
-                        </field>
-                        <field name="submitButton"><default-field title="Generar Nota de Débito"><submit/>
-                        </default-field></field>
-                    </form-list>
-                </container>
-            </row-col>
-        </container-row>
+                <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
+                <if condition="invoice == null"><return error="true" message="Invoice ${invoiceId} not found"/></if>
+                <!-- set statusId for StatusChangeSection -->
+                <set field="statusId" from="invoice?.statusId"/>
+
+                <entity-find entity-name="mantle.party.PartyRole" list="fromOrgInternalList">
+                    <econdition field-name="partyId" from="invoice.fromPartyId"/><econdition field-name="roleTypeId" value="OrgInternal"/></entity-find>
+                <set field="isFromPartyOrgInternal" from="fromOrgInternalList as boolean"/>
+                <set field="organizationPartyId" from="isFromPartyOrgInternal ? invoice.fromPartyId : invoice.toPartyId"/>
+
+
+                <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
+                <if condition="invoice == null"><return error="true" message="Invoice ${invoiceId} not found"/></if>
+                <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemList">
+                    <econdition field-name="invoiceId"/><order-by field-name="invoiceItemSeqId"/></entity-find>
+                <set field="topItemList" from="invoiceItemList.findAll({ it.parentItemSeqId == null })"/>
+
+                <!-- put items with parentItemSeqId in the list after their parent -->
+                <script><![CDATA[
+                    itemWithChildrenSet = new HashSet()
+                    List reverseList = invoiceItemList.cloneList().orderByFields(["-invoiceItemSeqId"])
+                    for (invoiceItem in reverseList) {
+                        if (invoiceItem.parentItemSeqId) {
+                            itemWithChildrenSet.add(invoiceItem.parentItemSeqId)
+                            invoiceItemList.move(invoiceItemList.indexMatching([invoiceItemSeqId:invoiceItem.invoiceItemSeqId]),
+                                    invoiceItemList.indexMatching([invoiceItemSeqId:invoiceItem.parentItemSeqId])+1)
+                        }
+                    }
+                ]]></script>
+
+                <set field="editableStatusIds" from="new HashSet(['InvoiceInProcess', 'InvoiceIncoming', 'InvoiceReceived'])"/>
+                <set field="invoiceEditable" from="invoice.statusId in editableStatusIds"/>
+
+                <entity-find entity-name="mantle.party.PartyRole" list="fromOrgInternalList">
+                    <econdition field-name="partyId" from="invoice.fromPartyId"/><econdition field-name="roleTypeId" value="OrgInternal"/></entity-find>
+                <set field="isFromPartyOrgInternal" from="fromOrgInternalList as boolean"/>
+                <set field="organizationPartyId" from="isFromPartyOrgInternal ? invoice.fromPartyId : invoice.toPartyId"/>
+
+                <if condition="invoice.invoiceTypeEnumId == 'InvoiceSales' || invoice.invoiceTypeEnumId == 'InvoiceReturn'"><then>
+                    <entity-find entity-name="moqui.basic.EnumAndGroup" list="itemTypeEnumList">
+                        <econdition field-name="enumGroupEnumId" from="isFromPartyOrgInternal ? 'EngItemsSales' : 'EngItemsPurchase'"/><order-by field-name="description"/></entity-find>
+                </then><else-if condition="invoice.invoiceTypeEnumId == 'InvoicePayroll'">
+                    <entity-find entity-name="moqui.basic.EnumAndParent" list="itemTypeEnumList">
+                        <econdition field-name="parentEnumId" operator="in" value="ItemPayrollIncome,ItemPayrollDeduct,ItemPayrollTaxes,ItemPayrollExpense"/>
+                        <order-by field-name="description"/></entity-find>
+                </else-if><else>
+                    <entity-find entity-name="moqui.basic.Enumeration" list="itemTypeEnumList">
+                        <econdition field-name="enumTypeId" value="ItemType"/><order-by field-name="description"/></entity-find>
+                </else></if>
+
+            </actions>
+            <widgets>
+                <container-row>
+                    <row-col>
+                        <container>
+                            <form-single name="EditInvoice" skip-start="true">
+                                <field name="invoiceId"><default-field><display/></default-field></field>
+
+                                <field name="invoiceTotal"><default-field title="Total"><display currency-unit-field="invoice.currencyUomId"/></default-field></field>
+
+                            </form-single>
+
+                            <form-list name="InvoiceItems" list="invoiceItemList" transition="genNotaDebito" multi="true">
+                                <hidden-parameters>
+                                    <parameter name="invoiceId"/>
+                                    <parameter name="activeOrgId"/>
+                                    <parameter name="fiscalTaxDocumentId"/>
+                                </hidden-parameters>
+                                <field name="_useRowSubmit"><default-field><hidden default-value="true"/></default-field></field>
+                                <field name="invoiceItemSeqId"><default-field title="Item"><display/></default-field></field>
+                                <field name="description"><default-field><display/></default-field></field>
+                                <field name="quantity"><default-field><text-line size="4"/></default-field></field>
+                                <field name="amount"><default-field><text-line size="8"/></default-field></field>
+                                <field name="total" from="((quantity != null ? quantity : 1.0) * (amount ?: 0.0))">
+                                    <default-field><display currency-unit-field="invoice.currencyUomId"/></default-field></field>
+                                <field name="_rowSubmit"><default-field title="Corregir">
+                                    <check no-current-selected-key="false"><option key="true" text=" "/></check></default-field>
+                                </field>
+                                <field name="submitButton"><default-field title="Generar Nota de Débito"><submit/>
+                                </default-field></field>
+                            </form-list>
+                        </container>
+                    </row-col>
+                </container-row>
+            </widgets>
+        </section>
     </widgets>
 </screen>

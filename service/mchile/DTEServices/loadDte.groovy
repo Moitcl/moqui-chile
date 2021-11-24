@@ -10,35 +10,11 @@ import org.moqui.context.ExecutionContext
 
 ExecutionContext ec = context.ec
 
-// Carga de RUT de empresa -->
-partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:organizationPartyId, partyIdTypeEnumId:"PtidNationalTaxId"]).list()
-if (!partyIdentificationList) {
-    ec.message.addError("Organización $organizationPartyId no tiene RUT definido")
-    return
-}
-rut = partyIdentificationList.idValue[0]
-// Validación rut
-ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rut]).call()
+// Carga de RUT de empresa (ya validado)
+rut = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").parameters([partyId:organizationPartyId, failIfNotFound:true]).call().rut
 
 // Carga XML
-archivoXml = xml.getName()
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
-fileRoot = pathRecibidas
-contentLocationXml = "${fileRoot}/${archivoXml}"
-docRrXml = ec.resource.getLocationReference(contentLocationXml)
-
-InputStream fileStream = xml.getInputStream()
-try { docRrXml.putStream(fileStream) } finally { fileStream.close() }
-
-// Carga PDF
-archivoPdf = pdf.getName()
-if (archivoPdf) {
-    contentLocationPdf = "${fileRoot}/${archivoPdf}"
-    docRrPdf = ec.resource.getLocationReference(contentLocationPdf)
-    fileStream = pdf.getInputStream()
-    try { docRrPdf.putStream(fileStream) } finally { fileStream.close() }
-}
-totalIva = 0 as Long
 
 // Debo meter el namespace porque SII no lo genera
 HashMap<String, String> namespaces = new HashMap<String, String>()
@@ -51,6 +27,9 @@ XmlOptions opts = new XmlOptions()
 opts.setLoadSubstituteNamespaces(namespaces)
 opts.setLoadAdditionalNamespaces(namespaces)
 
+XmlOptions saveOpts = new XmlOptions()
+opts.setCharacterEncoding("ISO-8859-1")
+opts.setSaveImplicitNamespaces(namespaces)
 
 EnvioDTE envio = EnvioDTEDocument.Factory.parse(xml.getInputStream()).getEnvioDTE()
 
@@ -194,15 +173,27 @@ for (int i = 0; i < dteArray.size(); i++) {
     }
 
     // Se guarda DTE recibido en la base de datos
-    createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', fiscalTaxDocumentTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte,
-                 receiverPartyId:organizationPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]
+    createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rutEmisor, fiscalTaxDocumentTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte,
+                 receiverPartyId:organizationPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', receiverPartyIdValue:rutReceptor, date:ts, invoiceId:invoiceId, statusId:'Ftd-Issued',
+                 sendAuthStatusId:'Ftd-SentAuth', sendRecStatusId:'Ftd-SentRec']
     mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call()
 
-    // Se guarda contenido asociado a la DTE, todas las DTE que vienen en el mismo envío comparten el mismo XML
+    // Se guarda contenido asociado a la DTE, todas las DTE que vienen en el mismo envío comparten el mismo PDF
+    locationReferenceBase = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folioDte}"
+    contentLocationXml = "${locationReferenceBase}.xml"
+    docRrXml = ec.resource.getLocationReference("${locationReferenceBase}.xml")
+    dteArray[i].getDocumento().save(docRrXml.outputStream, saveOpts)
     createMap = [fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts]
     ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
-    if (contentLocationPdf) {
+    archivoPdf = pdf.getName()
+    if (archivoPdf) {
+        contentLocationPdf = "${locationReferenceBase}.pdf"
         createMap = [fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:ts]
+        docRrPdf = ec.resource.getLocationReference("${locationReferenceBase}.pdf")
+        fileStream = pdf.getInputStream()
+        try { docRrPdf.putStream(fileStream) } finally { fileStream.close() }
         ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
     }
+
+    totalIva = 0 as Long
 }

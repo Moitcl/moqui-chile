@@ -3,13 +3,6 @@ import org.moqui.context.ExecutionContext
 import java.text.SimpleDateFormat
 import org.moqui.resource.ResourceReference
 
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
-import java.security.KeyStore
-import java.security.PrivateKey
-import java.security.cert.X509Certificate
-
 import javax.xml.namespace.QName
 
 import org.apache.xmlbeans.XmlCursor
@@ -29,14 +22,6 @@ ExecutionContext ec = context.ec
 
 // Recuperacion de parametros de la organizacion
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
-passS = passCert
-plantillaEnvio = templateEnvio
-//giro = giroEmisor
-
-if (!templateEnvio) {
-    ec.message.addError("Organizacion no tiene plantilla para envio al SII")
-    return
-}
 idS = "Doc"
 
 Date dNow = new Date()
@@ -47,8 +32,7 @@ idS = idS + datetime
 ResourceReference[] DTEList = new ResourceReference[documentIdList.size()]
 int j = 0
 
-documentIdList.each { documentId ->
-    fiscalTaxDocument = documentId
+documentIdList.each { fiscalTaxDocumentId ->
     dteEv = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).selectField("contentLocation").one()
     xml = dteEv.contentLocation
     DTEList[j] = ec.resource.getLocationReference((String)xml)
@@ -59,26 +43,25 @@ documentIdList.each { documentId ->
 if (rutReceptor) {
     ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rutReceptor]).call()
 }
-ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rutenviador]).call()
 
 // Construyo Envio
-EnvioDTEDocument envio = EnvioDTEDocument.Factory.parse(ec.resource.getLocationStream((String)plantillaEnvio))
+plantillaEnvio = """<?xml version="1.0" encoding="UTF-8"?>
+<EnvioDTE version="1.0" xmlns="http://www.sii.cl/SiiDte">
+	<SetDTE>
+		<Caratula version="1.0">
+			<RutEmisor>${rutEmisor}</RutEmisor>
+			<FchResol>${fchResol}</FchResol>
+			<NroResol>${nroResol}</NroResol>
+		</Caratula>
+	</SetDTE>
+</EnvioDTE>"""
+EnvioDTEDocument envio = EnvioDTEDocument.Factory.parse(new ByteArrayInputStream(plantillaEnvio.bytes))
 
 // Debo agregar el schema location (Sino SII rechaza)
 XmlCursor cursor = envio.newCursor()
 if (cursor.toFirstChild()) {
     cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioDTE_v10.xsd")
 }
-// leo certificado y llave privada del archivo pkcs12
-KeyStore ks = KeyStore.getInstance("PKCS12")
-ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
-String alias = ks.aliases().nextElement()
-
-X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
-String rutEnviador = Utilities.getRutFromCertificate(x509)
-PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray())
-
-ec.logger.warn("RUT envia: " + rutEnviador)
 
 // Asigno un ID
 envio.getEnvioDTE().getSetDTE().setID(idS)
@@ -86,7 +69,7 @@ envio.getEnvioDTE().getSetDTE().setID(idS)
 cl.sii.siiDte.EnvioDTEDocument.EnvioDTE.SetDTE.Caratula car = envio.getEnvioDTE().getSetDTE().getCaratula()
 
 car.setRutReceptor('60803000-K') // El receptor del envío es el SII
-car.setRutEnvia(rutEnviador)
+car.setRutEnvia(rutEnvia)
 
 // documentos a enviar
 HashMap<String, String> namespaces = new HashMap<String, String>()
@@ -130,41 +113,32 @@ envio.getEnvioDTE().getSetDTE().setDTEArray(dtes)
 FechaHoraType now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()))
 envio.getEnvioDTE().getSetDTE().getCaratula().xsetTmstFirmaEnv(now)
 
-// firmo
-//envio.sign(pKey, x509)
-
 opts = new XmlOptions()
 opts.setCharacterEncoding("ISO-8859-1")
+
+if (saveSinFirma) {
+    ResourceReference xmlContentReference = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}-sinfirma.xml")
+    envioBoletaDocument.save(xmlContentReference.outputStream, opts)
+}
 ByteArrayOutputStream out = new ByteArrayOutputStream()
-
-envio.save(new File(pathResults + "ENV" + idS + "-sinfirma.xml"), opts)
 envio.save(out, opts)
-
 Document doc2 = XMLUtil.parseDocument(out.toByteArray())
 
-byte[] salida = Signer.sign(doc2, "#" + idS, pKey, x509, "#" + idS,"SetDTE")
+byte[] salida = Signer.sign(doc2, "#" + idS, pkey, certificate, "#" + idS,"SetDTE")
 doc2 = XMLUtil.parseDocument(salida)
 
 if (Signer.verify(doc2, "SetDTE")) {
-    archivoEnvio = pathResults + "ENV" + idS + ".xml"
-    Path path = Paths.get(pathResults + "ENV" + idS + ".xml")
-    Files.write(path, salida)
+    xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}.xml"
+    ec.resource.getLocationReference(xmlContentLocation).putBytes(salida)
     ec.logger.warn("Envio generado OK")
 } else {
-    archivoEnvio = pathResults + "ENV" + idS + "-mala.xml"
-    Path path = Paths.get(pathResults + "ENV" + idS + "-mala.xml")
-    Files.write(path, salida)
+    xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}-mala.xml"
+    ec.resource.getLocationReference(xmlContentLocation).putBytes(salida)
     ec.logger.warn("Error al generar envio")
 }
 
 // Se guarda referencia a XML de envío en BD -->
 documentIdList.each { documentId ->
-    createMap = [fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Misc', contentLocation:archivoEnvio, contentDate:ts]
+    createMap = [fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Misc', contentLocation:xmlContentLocation, contentDate:ts]
     ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
-
-    // Se marca DTE como enviada -->
-    idDte = documentId
-    dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("fiscalTaxDocumentId", idDte).forUpdate(true).one()
-    dteEv.fiscalTaxDocumentSentStatusEnumId = "Ftdt-Sent"
-    dteEv.update()
 }

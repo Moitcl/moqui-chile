@@ -1,3 +1,4 @@
+package DTE
 /*
  * This software is in the public domain under CC0 1.0 Universal plus a
  * Grant of Patent License.
@@ -38,16 +39,16 @@ class FacturacionAfectaTests extends Specification {
       // init the framework, get the ec
       ec = Moqui.getExecutionContext()
       ec.user.loginUser("jhp", "jhp")
+      logger.info("[DTE] Prueba facturación iniciada")
+
       // set an effective date so data check works, etc
       ec.user.setEffectiveTime(new Timestamp(effectiveTime))
-
    }
 
    def cleanupSpec() {
-
       ec.destroy()
 
-      logger.info("Prueba facturación completa, ${totalFieldsChecked} registros chequeados")
+      logger.info("[DTE] Prueba facturación completa, ${totalFieldsChecked} registros chequeados")
    }
 
    def setup() {
@@ -59,17 +60,22 @@ class FacturacionAfectaTests extends Specification {
    }
 
 
-   def "facturar"() {
+   def "Factura Afecta"() {
       when:
       // Creación de invoice
+      logger.info("[DTE] Creación del Invoice a Factura")
       Map invoiceOut = ec.service.sync().name("mantle.account.InvoiceServices.create#Invoice")
               .parameters([invoiceTypeEnumId:'InvoiceSales', fromPartyId:partyId, toPartyId:'100204'])
               .call()
       String invoiceId = invoiceOut.invoiceId
+
       // Adición de productos
+      logger.info("[DTE] Creación de un Item para el Invoice a Facturar")
       Map productOut = ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem")
               .parameters([invoiceId:invoiceId, productId:productId, quantity:5, amount:500000, description:'Item Afecto'])
               .call()
+
+      logger.info("[DTE] Generación de la Factura a partir del Invoice Creado")
       Map factOut = ec.service.sync().name("mchile.DTEServices.facturar#Invoice")
               .parameters([invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dteType, activeOrgId:partyId])
               .call()

@@ -25,16 +25,10 @@ if ((fiscalTaxDocumentTypeEnumId == 'Ftdt-39') || (fiscalTaxDocumentTypeEnumId =
     ec.message.addMessage("Boletas no requieren envío de aceptación", "warning")
     return
 }
-partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:organizationPartyId, partyIdTypeEnumId:"PtidNationalTaxId"]).list()
-if (!partyIdentificationList) {
-    ec.message.addError("Organización no tiene RUT definido")
-    return
-}
-rutResponde = partyIdentificationList.idValue[0]
+rutResponde = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").parameters([partyId:organizationPartyId, failIfNotFound:true]).call().rut
 // Recuperacion de parametros de la organizacion -->
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
 
-resultS = pathAceptaciones
 rutEnviador = rutEnvia
 
 // Se guarda aceptacion para obtener el aceptacionDteId
@@ -260,13 +254,9 @@ if (!resl.isOk()) {
 
 ec.logger.warn("XML: " + erd)
 
-ec.logger.warn("Escribiendo " + resultS + "RESP-" + idS + ".xml")
-erd.save(new File(resultS + "RECIBO-MERC-" + idS + ".xml"), opts)
-//erd.save(out2, opts)
-//logger.warn("Escribiendo archivo temporal para attachment" + resultS + "RECIBO-MERC.xml")
-//erd.save(new File(resultS + "RECIBO-MERC.xml"), opts)
-ByteArrayOutputStream outTemp = new ByteArrayOutputStream()
-erd.save(outTemp, opts)
+ResourceReference xmlContentResource = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/RECIBO-MERC-${idS}.xml")
+ec.logger.warn("Escribiendo ${xmlContentResource.location}")
+erd.save(xmlContentResource.outputStream, opts)
 
 return
 
@@ -300,7 +290,7 @@ aceptacionEv.rutEmisor = rutEmisor
 aceptacionEv.rutReceptor = rutResponde
 aceptacionEv.estadoRecepEnvEnumId = estadoRecepEnvEnumId
 aceptacionEv.nroDetalles = 1
-aceptacionEv.xml = "${resultS}RESP-${idS}.xml"
+aceptacionEv.xml = "xmlContentResource.location"
 aceptacionEv.update()
 
 bodyParameters = [fiscalTaxDocumentId:folioAceptacion, nmbContacto:nmbContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]

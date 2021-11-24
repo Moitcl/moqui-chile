@@ -1,4 +1,6 @@
 import org.moqui.context.ExecutionContext
+import org.moqui.impl.context.reference.BaseResourceReference
+
 import java.text.SimpleDateFormat
 import cl.sii.siiDte.FechaHoraType
 import cl.sii.siiDte.FechaType
@@ -31,20 +33,13 @@ import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula.Sub
 
 ExecutionContext ec = context.ec
 
-partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:issuerPartyId, partyIdTypeEnumId:"PtidNationalTaxId"]).list()
-if (!partyIdentificationList) {
-    ec.message.addError("Organización no tiene RUT definido")
-    return
-}
-rutEmisor = partyIdentificationList.idValue[0]
+rutEmisor = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").parameters([partyId:issuerPartyId, failIfNotFound:true]).call().rut
 
 // Validación rut
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutReceptor).call()
 
 // Recuperacion de parametros de la organizacion -->
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", issuerPartyId).call())
-passS = passCert
-resultS = pathResults
 // REVISAR
 if (cdgSIISucur == "LOCAL")
     cdgSIISucur = "0"
@@ -117,11 +112,11 @@ boleta.getDocumento().addNewDetalle()
 
 // leo certificado y llave privada del archivo pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
-ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
+ks.load(new ByteArrayInputStream(certData.decodeBase64()), passCert.toCharArray())
 String alias = ks.aliases().nextElement()
 
 cert = (X509Certificate) ks.getCertificate(alias)
-key = (PrivateKey) ks.getKey(alias, passS.toCharArray())
+key = (PrivateKey) ks.getKey(alias, passCert.toCharArray())
 String rutCertificado = Utilities.getRutFromCertificate(cert)
 ec.logger.warn("Usando certificado ${alias} con Rut ${rutCertificado}")
 
@@ -336,7 +331,7 @@ if (tipoFactura == 41) {
     referenciaList.each { referenciaEntry ->
         ec.logger.warn("Agregando referencia $referenciaEntry")
         folioRef = referenciaEntry.folio
-        codRef = referenciaEntry.codigoReferenciaEnumId as Integer
+        codRef = referenciaEntry.codigoReferencia.enumCode as Integer
         fechaRef = referenciaEntry.fecha
         // Agrego referencias
         ref[i] = Referencia.Factory.newInstance()
@@ -401,7 +396,20 @@ boleta.getDocumento().xsetTmstFirma(now)
 //boleta.sign(key, cert)
 //boleta.verifySignature(BOLETADefType.Factory.parse(boleta.newInputStream(opts)))
 
-cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument = EnvioBOLETADocument.Factory.parse(ec.resource.getLocationStream(templateEnvioBoleta))
+// Construyo base a partir de String XML
+templateEnvioBoleta = """
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<EnvioBOLETA version="1.0" xmlns="http://www.sii.cl/SiiDte" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sii.cl/SiiDte EnvioBOLETA_v11.xsd">
+    <SetDTE>
+        <Caratula version="1.0">
+            <RutEmisor>${rutEmisor}</RutEmisor>
+            <FchResol>${fchResol}</FchResol>
+            <NroResol>${nroResol}</NroResol>
+        </Caratula>
+    </SetDTE>
+</EnvioBOLETA>
+"""
+cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument = EnvioBOLETADocument.Factory.parse(new ByteArrayInputStream(templateEnvioBoleta.bytes))
 EnvioBOLETA eb = EnvioBOLETA.Factory.newInstance()
 SetDTE sdte = SetDTE.Factory.newInstance()
 
@@ -517,29 +525,14 @@ ec.logger.warn("URI: " + uri)
 
 opts = new XmlOptions()
 opts.setCharacterEncoding("ISO-8859-1")
+
+if (saveSinFirma) {
+    BaseResourceReference xmlContentRr = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoFactura}-${folio}-sinfirma.xml")
+    envioBoletaDocument.save(xmlContentRr.outputStream, opts)
+}
+
 ByteArrayOutputStream out = new ByteArrayOutputStream()
-
-envioBoletaDocument.save(new File(resultS + "BOL" + tipoFactura + "-" + folio + "-sinfirma.xml"),opts)
-
-archivoEnvio = pathResults + "BOL" + tipoFactura + "-"+folio+ ".xml"
-
-//byte[] salida = Files.readAllBytes(Paths.get(archivoEnvio))
-
-
-//cursor1 = envioBoletaDocument.newCursor()
-cl.sii.siiDte.boletas.BOLETADefType pp = envioBoletaDocument.envioBOLETA.getSetDTE().getDTEArray(0)
-cursor1 = pp.newCursor()
-//cursor1.toFirstChild()
-//cursor1.toChild(3)
-//cursor1.toNextToken()
-//while(cursor1.hasNextToken()) {
-//System.out.println("********************** Token type: " + cursor1.currentTokenType() + " / " + cursor1.xmlText())
-//cursor1.setAttributeText(new QName("", "xmlns"), "http://www.sii.cl/SiiDte")
-//cursor1.toNextToken()
-//}
-//cursor1.dispose()
 envioBoletaDocument.save(out, opts)
-System.out.println("BOLETA7:"+out)
 
 Document doc2 = XMLUtil.parseDocument(out.toByteArray())
 
@@ -558,7 +551,6 @@ byte[] salidaBoleta = BoletaSigner.signBoleta(doc2, key, cert)
 byte[] facturaXml = Signer.sign(doc2, uri, key, cert, uri, "SetDTE")
 doc2 = XMLUtil.parseDocument(facturaXml)
 
-
 if (Signer.verify(doc2, "SetDTE")) {
     ec.logger.warn("Factura "+path+" folio "+folio+" generada OK")
 } else {
@@ -568,8 +560,6 @@ if (Signer.verify(doc2, "SetDTE")) {
 // Registro de DTE en base de datos y generación de PDF -->
 
 fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoFactura}"
-xml = "${resultS}BOL${tipoFactura}-${folio}.xml"
-pdf = "${pathPdf}BOL${tipoFactura}-${folio}.pdf"
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([dte:facturaXml, issuerPartyId:issuerPartyId, boleta:true, continua:continua]).call())
 
 // Creación de registro en FiscalTaxDocument
@@ -579,9 +569,11 @@ dteEv.issuerPartyId = issuerPartyId
 if (rutReceptor != "66666666-6") {
     dteEv.receiverPartyid = receiverPartyId
     dteEv.receiverPartyIdTypeEnumId = "PtidNationalTaxId"
+    dteEv.receiverPartyIdValue = rutReceptor
 }
-dteEv.fiscalTaxDocumentStatusEnumId = "Ftdt-Issued"
-dteEv.fiscalTaxDocumentSentStatusEnumId = "Ftdt-NotSent"
+dteEv.statusId = "Ftd-Issued"
+dteEv.sentAuthStatusId = "Ftd-NotSentAuth"
+dteEv.sentRecStatusId = "Ftd-NotSentRec"
 dteEv.invoiceId = invoiceId
 dteEv.date = ec.user.nowTimestamp
 dteFeild.update()
@@ -596,12 +588,12 @@ updateMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, emailEmisor:emailEmi
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(updateMap).call())
 
 // Creacion de registros en FiscalTaxDocumentContent
-xmlName = "dbresource://moit/erp/dte/${rutEmisor}/DTE${tipoFactura}-${folio}.xml"
-pdfName = "dbresource://moit/erp/dte/${rutEmisor}/DTE${tipoFactura}-${folio}.pdf"
+xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoFactura}-${folio}.xml"
+pdfContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoFactura}-${folio}.pdf"
 createMapBase = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, contentDte:ts]
-ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlName]).call())
-ec.resource.getLocationReference(xmlName).putBytes(facturaXml)
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlContentLocation]).call())
+ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
 
-ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfName]).call())
-ec.resource.getLocationReference(pdfName).putBytes(pdfBytes)
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfContentLocation]).call())
+ec.resource.getLocationReference(pdfContentLocation).putBytes(pdfBytes)
 fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId

@@ -1,9 +1,4 @@
-import java.security.KeyStore
-import java.security.PrivateKey
-import java.security.cert.X509Certificate
-
 import cl.nic.dte.net.ConexionSii
-import cl.nic.dte.util.Utilities
 import cl.sii.siiDte.RECEPCIONDTEDocument
 
 import org.moqui.context.ExecutionContext
@@ -11,48 +6,52 @@ import org.moqui.context.ExecutionContext
 ExecutionContext ec = context.ec
 
 // Validación rut -->
-ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", enviadorS).call()
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", organizationPartyId).call())
 
 ConexionSii con = new ConexionSii()
-// leo certificado y llave privada del archivo pkcs12
-KeyStore ks = KeyStore.getInstance("PKCS12")
-ks.load(new ByteArrayInputStream(certData.decodeBase64()), ((String)passCert).toCharArray())
-String alias = ks.aliases().nextElement()
-String rutCertificado = Utilities.getRutFromCertificate(x509)
-ec.logger.warn("Usando certificado ${alias}, Rut ${rutCertificado}")
 
-X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
-PrivateKey pKey = (PrivateKey) ks.getKey(alias, ((String)paCert).toCharArray())
+ec.logger.warn("Archivo enviado: " + documentLocation)
 
-String token = con.getToken(pKey, x509)
+locationDataSource = ec.resource.getLocationDataSource(documentLocation)
+locationReference = ec.resource.getLocationReference(documentLocation)
 
-String enviadorS = Utilities.getRutFromCertificate(x509)
+java.io.File tempFile = File.createTempFile("envioSii", ".xml");
+org.moqui.resource.ResourceReference tmpRr = ec.resource.getLocationReference(tempFile.getAbsolutePath())
+tmpRr.putStream(locationReference.openStream())
 
-ec.logger.warn("Archivo enviado: " + documentoS)
-
-// Cambiar en produccion
-RECEPCIONDTEDocument recp = con.uploadEnvioCertificacion(enviadorS, compaS, new File(documentoS), token)
+RECEPCIONDTEDocument recp
+ec.logger.warn("Enviando con rutEnvia ${rutEnvia}, rutEmisor ${rutEmisor}")
+if (dteSystemIsProduction) {
+    String token = con.getToken(pkey, certificate)
+    recp = con.uploadEnvioProduccion(rutEnvia, rutEmisor, tempFile, token)
+} else {
+    String token = con.getTokenCert(pkey, certificate)
+    ec.logger.warn("token: ${token}")
+    recp = con.uploadEnvioCertificacion(rutEnvia, rutEmisor, tempFile, token)
+}
+tempFile.delete()
 ec.logger.warn("-----------------")
 ec.logger.warn(recp.xmlText())
 
 // Se verifica si el status es 0
 
 String statusXML = recp.xmlText()
-int inicio = statusXML.indexOf("&lt;siid:STATUS&gt;")
-int fin = statusXML.indexOf("&lt;/siid:STATUS&gt;")
+int inicio = statusXML.indexOf("<siid:STATUS>")
+int fin = statusXML.indexOf("</siid:STATUS>")
 
 statusXML = statusXML.substring(inicio+1,fin)
-statusXML = statusXML.replaceAll("siid:STATUS&gt;","")
+statusXML = statusXML.replaceAll("siid:STATUS>","")
 ec.logger.warn("STATUS: " + statusXML)
 
 if(statusXML.equals("0")) {
     trackId = recp.xmlText()
-    inicio = trackId.indexOf("&lt;siid:TRACKID&gt;")
-    fin = trackId.indexOf("&lt;/siid:TRACKID&gt;")
+    inicio = trackId.indexOf("<siid:TRACKID>")
+    fin = trackId.indexOf("</siid:TRACKID>")
     trackId = trackId.substring(inicio+1,fin)
-    trackId = trackId.replaceAll("siid:TRACKID&gt;","")
+    trackId = trackId.replaceAll("siid:TRACKID>","")
     ec.logger.warn("DTE Enviada correctamente con trackId " + trackId)
 } else {
-    ec.logger.warn("Error "+ statusXML + " al enviar DTE")
+    errorDescriptionMap = ['0':'Upload OK', '1':'El Sender no tiene permiso para enviar', '2':'Error en tamaño del archivo (muy grande o muy chico)', '3':'Archivo cortado (tamaño != al parámetro size)',
+                           '5':'No está auten†icado', '6':'Empresa no autorizada a enviar archivos', '7':'Esquema Inválido', '8':'Firma del Documento', '9':'Sistema Bloqueado', '0':'Error Interno']
+    ec.message.addMessage("Error "+ statusXML + " al enviar DTE (${errorDescriptionMap[statusXML]})", "danger")
 }

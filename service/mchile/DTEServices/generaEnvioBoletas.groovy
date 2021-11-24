@@ -1,9 +1,6 @@
 import java.text.SimpleDateFormat
 import org.moqui.context.ExecutionContext
 
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
 import java.security.KeyStore
 import java.security.PrivateKey
 import java.security.cert.X509Certificate
@@ -29,10 +26,6 @@ ExecutionContext ec = context.ec
 
 // Recuperacion de parametros de la organizacion -->
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
-if (!templateEnvio) {
-    ec.message.addError("Organizacion no tiene plantilla para envio al SII")
-    return
-}
 idS = "Doc"
 
 Date dNow = new Date()
@@ -57,13 +50,20 @@ if (recepS)
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:enviadorS]).call()
 
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
-pathResultS = pathResults
-plantillaEnvio = templateEnvioBoleta
-// Variable para guardar nombre de archivo del envio -->
 
 // Construyo Envio
-cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument = EnvioBOLETADocument.Factory.parse(ec.resource.getLocationStream(templateEnvioBoleta))
-System.out.println("Plantilla leida: "+templateEnvioBoleta)
+templateEnvioBoleta = """
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<EnvioBOLETA version="1.0" xmlns="http://www.sii.cl/SiiDte" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sii.cl/SiiDte EnvioBOLETA_v11.xsd">
+    <SetDTE>
+        <Caratula version="1.0">
+            <RutEmisor>${rutEmisor}</RutEmisor>
+            <FchResol>${fchResol}</FchResol>
+            <NroResol>${nroResol}</NroResol>
+        </Caratula>
+    </SetDTE>
+</EnvioBOLETA>"""
+cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument = EnvioBOLETADocument.Factory.parse(new ByteArrayInputStream(templateEnvioBoleta.bytes))
 System.out.println("XML: "+envioBoletaDocument.toString())
 
 // Debo agregar el schema location (Sino SII rechaza)
@@ -182,38 +182,28 @@ opts2.setSavePrettyPrintIndent(0)
 String uri = envioBoletaDocument.getEnvioBOLETA().getSetDTE().getID()
 ec.logger.warn("URI: " + uri)
 
-ByteArrayOutputStream out = new ByteArrayOutputStream()
-envioBoletaDocument.save(new File(pathResults + "ENVBOL" + idS + "-sinfirma.xml"), opts2)
+if (saveSinFirma) {
+    xmlContentReference = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/ENVBOL-${idS}-sinfirma.xml")
+    envioBoletaDocument.save(xmlContentReference.outputStream, opts2)
+}
 
 envioBoletaDocument.sign(pKey, x509)
+ByteArrayOutputStream out = new ByteArrayOutputStream()
 envioBoletaDocument.save(out, opts2)
 
-envioBoletaDocument.save(new File(pathResults + "ENVBOL" + idS + ".xml"), opts2)
+xmlContentReference = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/ENVBOL-${idS}.xml")
+envioBoletaDocument.save(xmlContentLocation.outputStream, opts2)
 
 Document doc2 = XMLUtil.parseDocument(out.toByteArray())
 
-archivoEnvio = pathResults + "ENVBOL" + idS + ".xml"
-
-//byte[] salida = Signer.sign(doc2, uri, pKey, x509, uri, "Documento")
-//doc2 = XMLUtil.parseDocument(salida)
-
-/*if (Signer.verify(doc2, "Documento")) {
-    archivoEnvio = pathResults + "ENVBOL" + idS + ".xml"
-    Path path = Paths.get(pathResults + "ENVBOL" + idS + ".xml")
-    Files.write(path, salida)
-    ec.logger.warn("Envio generado OK")
-} else {
-    archivoEnvio = pathResults + "ENVBOL" + idS + "-mala.xml"
-    Path path = Paths.get(pathResults + "ENVBOL" + idS + "-mala.xml")
-    Files.write(path, salida)
-    ec.logger.warn("Error al generar envio")
-}*/
-
 opts = new XmlOptions()
 opts.setCharacterEncoding("ISO-8859-1")
-out = new ByteArrayOutputStream()
 
-envio.save(new File(pathResults + "ENV" + idS + "-sinfirma.xml"), opts)
+if (saveSinFirma) {
+    ResourceReference xmlContentResource = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}-sinfirma.xml")
+    envioBoletaDocument.save(xmlContentReference.outputStream, opts)
+}
+out = new ByteArrayOutputStream()
 envio.save(out, opts)
 
 doc2 = XMLUtil.parseDocument(out.toByteArray())
@@ -222,14 +212,12 @@ byte[] salida = Signer.sign(doc2, "#" + idS, pKey, x509, "#" + idS,"SetDTE")
 doc2 = XMLUtil.parseDocument(salida)
 
 if (Signer.verify(doc2, "SetDTE")) {
-    archivoEnvio = pathResults + "ENV" + idS + ".xml"
-    Path path = Paths.get(pathResults + "ENV" + idS + ".xml")
-    Files.write(path, salida)
+    xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}.xml"
+    ec.resource.getLocationReference(xmlContentLocation).putBytes(salida)
     ec.logger.warn("Envio generado OK")
 } else {
-    archivoEnvio = pathResults + "ENV" + idS + "-mala.xml"
-    Path path = Paths.get(pathResults + "ENV" + idS + "-mala.xml")
-    Files.write(path, salida)
+    xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}-mala.xml"
+    ec.resource.getLocationReference(xmlContentLocation).putBytes(salida)
     ec.logger.warn("Error al generar envio")
 }
 
@@ -241,6 +229,6 @@ documentIdList.each { documentId ->
 // Se marca DTE como enviada
     idDte = documentId
     dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").forUpdate(true).condition("fiscalTaxDocumentId", idDte).one()
-    dteEv.fiscalTaxDocumentSentStatusEnumId = "Ftdt-Sent"
+    dteEv.sentAuthStatusId = "Ftd-SentAuthUnverified"
     dteEv.update()
 }

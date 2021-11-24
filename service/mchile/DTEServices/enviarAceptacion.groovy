@@ -30,18 +30,11 @@ if ((fiscalTaxDocumentTypeEnumId == 'Ftdt-39') || (fiscalTaxDocumentTypeEnumId =
     return
 }
 
-partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:organizationPartyId, partyIdTypeEnumId:"PtidNationalTaxId"]).list()
-if (!partyIdentificationList) {
-    ec.message.addError("Organización no tiene RUT definido")
-    return
-}
-rutResponde = partyIdentificationList.first.idValue
+rutResponde = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").parameters([partyId:organizationPartyId, failIfNotFound:true]).call().rut
 
 // Recuperacion de parametros de la organizacion
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", organizationPartyId).call())
 passS = passCert
-resultS = pathAceptaciones
-dirS = pathRecibidas
 
 // Se guarda aceptacion para obtener el aceptacionDteId
 createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nmbContacto:nmbContacto, fonoContacto:fonoContacto, mailContacto:mailContacto, issuerPartyId:organizationPartyId]
@@ -126,22 +119,12 @@ if (envioFirmaOK && envioEsquemaOK && envioRutOK ) {
 
         x509 = XMLUtil.getCertificate(dte.getSignature())
         ec.logger.warn("DTE ID ${dte.getDocumento().getID()} Firmado por: ${x509.getSubjectX500Principal().getName()}, Rut ${Utilities.getRutFromCertificate(x509)}")
-        ec.logger.warn("Por almacenar en " + dirS)
-        String nombreDTE = dirS + "dte-"+dte.getDocumento().getEncabezado().getEmisor().getRUTEmisor()+"-"+dte.getDocumento().getEncabezado().getIdDoc().getFolio()+".xml"
         rutEmisor = dte.getDocumento().getEncabezado().getEmisor().getRUTEmisor()
-        try {
-            FileOutputStream fout = new FileOutputStream(nombreDTE)
-            fout.write(dte.getBytes())
-            fout.flush()
-            fout.close()
-        } catch (FileNotFoundException e) {
-            ec.logger.warn("Error al guardar DTE en path " + nombreDTE, e)
-            return
-        } catch (IOException e) {
-            ec.logger.warn("Error al escribir DTE en path " + nombreDTE, e)
-            return
-        }
-        ec.logger.warn("Grabado DTE recibido en PATH: " + nombreDTE)
+        folio = dte.getDocumento().getEncabezado().getIdDoc().getFolio()
+        tipoDte = dte.getDocumento().getEncabezado().getIdDoc().getTipoDTE()
+        ResourceReference xmlContentResource = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/ACEPTACION-${tipoDte}-${folio}.xml")
+        xmlContentResource.putBytes(dte.getBytes())
+        ec.logger.warn("Grabado DTE recibido en ${xmlContentResource.location}")
 
         boolean firmaOKDTE = true
         if(!resl.isOk()) {
@@ -312,13 +295,10 @@ opts.setSaveImplicitNamespaces(namespaces)
 opts = new XmlOptions()
 opts.setCharacterEncoding("ISO-8859-1")
 ByteArrayOutputStream out2 = new ByteArrayOutputStream()
-ec.logger.warn("Escribiendo " + resultS + "RESP-" + idS + ".xml")
-respuesta.save(new File(resultS + "RESP-" + idS + ".xml"), opts)
+ResourceReference xmlContentResource = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/RESP-${idS}.xml")
+ec.logger.warn("Escribiendo ${xmlContentResource.location}")
+respuesta.save(xmlContentResource.outputStream, opts)
 respuesta.save(out2, opts)
-ec.logger.warn("Escribiendo archivo temporal para attachment" + resultS + "RESP.xml")
-respuesta.save(new File(resultS + "RESP.xml"), opts)
-ByteArrayOutputStream outTemp = new ByteArrayOutputStream()
-respuesta.save(outTemp, opts)
 
 // Recuperación del email de destinatario de aceptación
 partyAceptacionEv = ec.entity.find("mantle.party.PartyIdentification").condition([idValue:rutEmisor, partyIdTypeEnumId:"PtidNationalTaxId"]).one()
@@ -339,7 +319,7 @@ fiscalTaxDocumentEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("
 folioAceptacion = fiscalTaxDocumentEv.fiscalTaxDocumentNumber
 createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nmbContacto:nmbContacto, fonoContacto:fonoContacto, mailContacto:mailContacto,
              fchRecep:fchRecep, codEnvio:idS, rutEmisor:rutEmisor, envioDteId:"RESP-${idS}", rutReceptor:rutReceptor, estadoRecepEnvEnumId:estadoRecepEnvEnumId, nroDetalles:1,
-             xml:"${resultS}RESP-${idS}.xml"]
+             xml:xmlContentResource.location]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.AceptacionDte").parameters(createMap).call())
 
 /*

@@ -20,6 +20,7 @@ import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument.ConsumoFolios.Documento
 import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument.ConsumoFolios.DocumentoConsumoFolios.Resumen
 import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument.ConsumoFolios.DocumentoConsumoFolios.Resumen.RangoUtilizados
 import cl.sii.siiDte.consumofolios.ConsumoFoliosDocument.ConsumoFolios.DocumentoConsumoFolios.Resumen.RangoAnulados
+import org.moqui.resource.ResourceReference
 
 ExecutionContext ec = context.ec
 
@@ -28,19 +29,13 @@ if (fechaInicio > fechaFin) {
     return
 }
 
-partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:organizationPartyId, partyIdTypeEnumId:"PtidNationalTaxId"]).one()
-if (!partyIdentificationList) {
-    ec.message.addError("Organización no tiene RUT definido")
-    return
-}
-rutEmisor = partyIdentificationList.first.idValue
+rutEmisor = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").parameters([partyId:organizationPartyId, failIfNotFound:true]).call().rut
 
 // Validación rut
 // ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rutReceptor]).call()
 
 // Recuperacion de parametros de la organizacion
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
-plantillaS = templateRcof
 resultadoFirmado = pathResults
 
 // Buscar lista de DTE 39 que se hayan emitido/anulado
@@ -77,7 +72,11 @@ opts.setLoadSubstituteNamespaces(namespaces)
 
 ec.logger.warn("Generando RCOF\n")
 cl.sii.siiDte.consumofolios.ConsumoFoliosDocument consumoFoliosDocument = ConsumoFoliosDocument.Factory.newInstance()
-consumoFoliosDocument = ConsumoFoliosDocument.Factory.parse(new FileInputStream(plantillaS))
+
+plantillaRcof = """<?xml version="1.0" encoding="ISO-8859-1"?>
+<ConsumoFolios xmlns="http://www.sii.cl/SiiDte" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sii.cl/SiiDte ConsumoFolio_v10.xsd" version="1.0">
+</ConsumoFolios>"""
+consumoFoliosDocument = ConsumoFoliosDocument.Factory.parse(new ByteArrayInputStream(plantillaRcof.bytes))
 ConsumoFolios cf = consumoFoliosDocument.getConsumoFolios()
 // Datos de carátula
 DocumentoConsumoFolios dcf = cf.addNewDocumentoConsumoFolios()
@@ -302,11 +301,12 @@ uri = cf.getDocumentoConsumoFolios().getID()
 
 ec.logger.warn("URI: " + uri)
 
+if (saveSinFirma) {
+    ResourceReference xmlContentResource = "dbresource://moit/erp/dte/${rutEmisor}/RCOF-${uri}-sinfirma.xml"
+    consumoFoliosDocument.save(xmlContentReference.outputStream, opts)
+}
 ByteArrayOutputStream out = new ByteArrayOutputStream()
-consumoFoliosDocument.save(new File(pathResults + "RCOF-" + uri + "-sinfirma.xml"), opts)
 consumoFoliosDocument.save(out, opts)
-
-ec.logger.warn("XML2:" + consumoFoliosDocument)
 
 FirmaRcof firmaLibro = new FirmaRcof()
 
@@ -314,10 +314,15 @@ SimpleDateFormat formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd")
 Date dateFechaEmision = new Date()
 fechaEmision = formatterFechaEmision.format(dateFechaEmision)
 
-outPDF=lectorFichero.crearFicheroMMDDFlex(resultadoFirmado, fchResol)
-outPDF+="/RCOF-firmado-"+uri+".xml"
+ResourceReference xmlContentResource
+int i = 0
+do {
+    i++
+    xmlContentResource = "dbresource://moit/erp/dte/${rutEmisor}/RCOF-${uri}-firmado-${i}.xml"
+} while (xmlContentReference.exists)
+consumoFoliosDocument.save(xmlContentReference.outputStream, opts)
 
-String mensaje=firmaLibro.firmarRcof(certS, passCert, pathResults + "RCOF-" + uri + "-sinfirma.xml",outPDF,10,"ENVIADO","qq","pp","xmlasdas","ESPECIAL")
+//String mensaje=firmaLibro.firmarRcof(certS, passCert, pathResults + "RCOF-" + uri + "-sinfirma.xml",outPDF,10,"ENVIADO","qq","pp","xmlasdas","ESPECIAL")
 
 return
 
@@ -333,9 +338,11 @@ dteEv.issuerPartyId = organizationPartyId
 if (rutReceptor != '66666666-6') {
     dteEv.receiverPartyId = receiverPartyId
     dteEv.receiverPartyIdTypeEnumId = PtidNationalTaxId
+    dteEv.receiverPartyIdValue = rutReceptor
 }
-dteEv.fiscalTaxDocumentStatusEnumId = "Ftdt-Issued"
-dteEv.fiscalTaxDocumentSentStatusEnumId = "Ftdt-NotSent"
+dteEv.statusId = "Ftd-Issued"
+dteEv.sentAuthStatusId = "Ftd-NotSentAuth"
+dteEv.sentRecStatusId = "Ftd-NotSentRec"
 dteEv.invoiceId = invoiceId
 
 Date date = new Date()

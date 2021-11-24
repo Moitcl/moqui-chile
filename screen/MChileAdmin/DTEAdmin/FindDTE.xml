@@ -8,18 +8,21 @@
 
     <transition name="cesionElectronica"><default-response url="../Facturacion/CesionElectronica"/></transition>
 
+    <transition name="enviarAReceptor">
+        <service-call name="mchile.DTEServices.send#DteXmlToReceiver"/>
+        <default-response url="."/>
+    </transition>
+
     <transition name="envioSII">
-        <parameter name="activeOrgId" from="activeOrgId"/>
         <actions>
             <script><![CDATA[
-                    documentIds = new StringBuilder()
+                    documentIds = []
                     for (int i = 0; ; i++) {
                         if ((context.get("_useRowSubmit") == "true" || context.get("_useRowSubmit_" + i) == "true")
                                 && context.get("_rowSubmit_" + i) != "true") continue
                         String curKey = "fiscalTaxDocumentId_" + i
                         if (context.containsKey(curKey))  {
-                                if (documentIds.length() > 0) documentIds.append(",")
-                                    documentIds.append(context.get(curKey))
+                            documentIds.add(context.get(curKey))
                         } else { break }
                     }
             ]]></script>
@@ -38,17 +41,14 @@
     <transition name="verificarEnSII">
         <parameter name="fiscalTaxDocumentId"/>
         <parameter name="fiscalTaxDocumentTypeEnumId"/>
-        <parameter name="activeOrgId" from="activeOrgId"/>
         <actions>
             <service-call name="mchile.DTEServices.verificaEnSII#Documento" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId,
                                          organizationPartyId:activeOrgId]" out-map="verifyOut"/>
-            <log message="-> ${verifyOut.statusSii}" level="warn"/>
-            <if condition="verifyOut.statusSii == '0'">
-                <return error="false" message="${verifyOut.salida}"/>
-            </if>
-            <if condition="verifyOut.statusSii != '0'">
+            <if condition="verifyOut.errCode == '0'"><then>
+                <return message="${verifyOut.salida}"/>
+            </then><else>
                 <return error="true" message="ERROR: ${verifyOut.salida}"/>
-            </if>
+            </else></if>
         </actions>
         <default-response url="."/>
     </transition>
@@ -62,63 +62,17 @@
         <default-response url="."/>
     </transition>
 
-    <transition name="pdf" read-only="true">
-        <parameter name="fiscalTaxDocumentId"/>
-        <actions>
-
-            <set field="extraPathNameList" from="sri.screenUrlInfo.extraPathNameList"/>
-
-            <if condition="extraPathNameList &amp;&amp; !fiscalTaxDocumentId">
-                <set field="fiscalTaxDocumentId" from="extraPathNameList[0]"/></if>
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="document" cache="false">
-                <field-map field-name="fiscalTaxDocumentId"/>
-                <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Pdf"/>
-            </entity-find-one>
-            <if condition="document == null"><then>
-                <!-- NOTE: consider returning a default image instead of 404 -->
-                <script>ec.web.sendError(404, null, null)</script>
-            </then><else>
-                <script>ec.web.sendResourceResponse(document.contentLocation, true)</script>
-            </else></if>
-        </actions>
-        <default-response type="none"/>
-    </transition>
-
-    <transition name="xml" read-only="true">
-        <parameter name="fiscalTaxDocumentId"/>
-        <actions>
-            <set field="extraPathNameList" from="sri.screenUrlInfo.extraPathNameList"/>
-
-
-            <if condition="extraPathNameList &amp;&amp; !fiscalTaxDocumentId">
-                <set field="fiscalTaxDocumentId" from="extraPathNameList[0]"/></if>
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="document" cache="false">
-                <field-map field-name="fiscalTaxDocumentId"/>
-                <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
-            </entity-find-one>
-            <if condition="document == null"><then>
-                <!-- NOTE: consider returning a default image instead of 404 -->
-                <script>ec.web.sendError(404, null, null)</script>
-            </then><else>
-                <script>ec.web.sendResourceResponse(document.contentLocation, true)</script>
-            </else></if>
-        </actions>
-        <default-response type="none"/>
-    </transition>
-
     <transition-include name="downloadDocumentInternal" location="component://MoquiChile/template/dte/DteTransitions.xml"/>
 
     <transition-include name="searchPartyList" location="component://SimpleScreens/template/party/PartyForms.xml"/>
 
     <actions>
         <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
-            <!--search-form-inputs/-->
+            <search-form-inputs/>
             <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in"
                         from="['Ftdt-33','Ftdt-34','Ftdt-61','Ftdt-56','Ftdt-52','Ftdt-110','Ftdt-112']"/>
-            <econdition field-name="issuerPartyId" operator="equals" value="${activeOrgId}"/>
-            <econdition field-name="fiscalTaxDocumentStatusEnumId" operator="equals" value="Ftdt-Issued"/>
-            <econdition field-name="fiscalTaxDocumentSentStatusEnumId" operator="equals" value="Ftdt-NotSent"/>
-            <econdition field-name="issuerPartyId" from="activeOrgId"/>
+            <econdition field-name="statusId" value="Ftd-Issued"/>
+            <econdition field-name="sentAuthStatusId" value="Ftd-NotSentAuth"/>
             <order-by field-name="-date"/>
         </entity-find>
 

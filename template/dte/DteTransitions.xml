@@ -44,27 +44,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <field-map field-name="fiscalTaxDocumentId"/>
                 <field-map field-name="fiscalTaxDocumentContentTypeEnumId" from="fileType"/>
             </entity-find-one>
-
             <script>
-                if(!ec.resource.getLocationReference(document?.contentLocation).isFile())
-                    ec.message.addError(ec.resource.expand('No se encontró archivo en [${fiscalTaxDocumentId}]',''))
-                ec.web.sendResourceResponse(document.contentLocation)
-            </script>
-        </actions>
-        <default-response type="none"/>
-        <error-response url="."/>
-    </transition>
-
-    <transition name="downloadDocumentInternal" read-only="true">
-        <parameter name="fiscalTaxDocumentTypeEnumId"/>
-        <parameter name="fileType"/>
-        <actions>
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="document" cache="false">
-                <field-map field-name="fiscalTaxDocumentId"/>
-                <field-map field-name="fiscalTaxDocumentContentTypeEnumId" from="fileType"/>
-            </entity-find-one>
-            <script>
-                import org.apache.commons.io.IOUtils
                 if(!ec.resource.getLocationReference(document?.contentLocation).isFile())
                     ec.web.sendError(404, 'No se encontró archivo en [${fiscalTaxDocumentId}]', null)
                 ec.web.sendResourceResponse(document.contentLocation)
@@ -81,28 +61,9 @@ along with this software (see the LICENSE.md file). If not, see
                 <field-map field-name="cafId"/>
             </entity-find-one>
             <script>
-                import org.apache.commons.io.IOUtils
                 if(!document.cafData)
                     ec.message.addError(ec.resource.expand('No se encontró archivo en [${cafId}]',''))
-                int largo = document.cafData.length()
-                long inicio = 1
-                byte[] bytes = document.cafData.getBytes(inicio, largo)
-
-                if (bytes.length > 0) {
-                    fileExtension = null
-                    ec.web.response.setContentType("xml")
-                    fileExtension = "xml"
-                    if (fileExtension) {
-                        fileName = document.filename
-                        contentDisposition = "attachment; filename=\"${fileName}\"; filename*=utf-8''${encodeAsciiFilename(fileName)}"
-                    } else {
-                        contentDisposition = "attachment"
-                    }
-                    ec.web.response.addHeader("Content-Disposition", contentDisposition)
-                    IOUtils.write(bytes, ec.web.response.outputStream)
-                } else {
-                    ec.message.addError(ec.resource.expand('No se encontró archivo en [${cafId}]',''))
-                }
+                ec.web.sendTextResponse(document.cafData, "xml", document.filename?:"caf.xml")
             </script>
         </actions>
         <default-response type="none"/>
@@ -112,104 +73,28 @@ along with this software (see the LICENSE.md file). If not, see
     <transition name="downloadPdfTemplate" read-only="true">
         <parameter name="partyId"/>
         <actions>
-            <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="document" cache="false">
-                <field-map field-name="partyId"/>
-            </entity-find-one>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="context" out-map="context"/>
             <script>
-                import org.apache.commons.io.IOUtils
-                if(!document.pdfTemplate)
-                ec.message.addError(ec.resource.expand('No se encontró archivo en [${partyId}]',''))
-                int largo = document.pdfTemplate.length()
-                long inicio = 1
-                byte[] bytes = document.pdfTemplate.getBytes(inicio, largo)
-
-                if (bytes.length > 0) {
-                fileExtension = null
-                ec.web.response.setContentType("xml")
-                fileExtension = "xml"
-                if (fileExtension) {
-                fileName = document.pdfTemplateFilename
-                contentDisposition = "attachment; filename=\"${fileName}\"; filename*=utf-8''${encodeAsciiFilename(fileName)}"
-                } else {
-                contentDisposition = "attachment"
-                }
-                ec.web.response.addHeader("Content-Disposition", contentDisposition)
-                IOUtils.write(bytes, ec.web.response.outputStream)
-                } else {
-                ec.message.addError(ec.resource.expand('No se encontró archivo en [${partyId}]',''))
-                }
+                if(!pdfTemplate)
+                    ec.message.addError(ec.resource.expand('No se encontró plantilla para [${partyId}]',''))
+                else
+                    ec.web.sendTextResponse(pdfTemplate, "text/xml", "PdfTemplate.xml")
             </script>
         </actions>
         <default-response type="none"/>
         <error-response url="."/>
     </transition>
-
-    <transition name="downloadPdfTemplateCedible" read-only="true">
-        <parameter name="partyId"/>
-        <actions>
-            <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="document" cache="false">
-                <field-map field-name="partyId"/>
-            </entity-find-one>
-            <script>
-                import org.apache.commons.io.IOUtils
-                if(!document.pdfTemplate)
-                ec.message.addError(ec.resource.expand('No se encontró archivo en [${partyId}]',''))
-                int largo = document.pdfTemplateCedible.length()
-                long inicio = 1
-                byte[] bytes = document.pdfTemplateCedible.getBytes(inicio, largo)
-
-                if (bytes.length > 0) {
-                fileExtension = null
-                ec.web.response.setContentType("xml")
-                fileExtension = "xml"
-                if (fileExtension) {
-                fileName = document.pdfTemplateCedibleFilename
-                contentDisposition = "attachment; filename=\"${fileName}\"; filename*=utf-8''${encodeAsciiFilename(fileName)}"
-                } else {
-                contentDisposition = "attachment"
-                }
-                ec.web.response.addHeader("Content-Disposition", contentDisposition)
-                IOUtils.write(bytes, ec.web.response.outputStream)
-                } else {
-                ec.message.addError(ec.resource.expand('No se encontró archivo en [${partyId}]',''))
-                }
-            </script>
-        </actions>
-        <default-response type="none"/>
-        <error-response url="."/>
-    </transition>
-
 
     <!-- Download boletas -->
     <transition name="downloadPdfBoletaTemplate" read-only="true">
         <parameter name="partyId"/>
         <actions>
-            <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="document" cache="false">
-                <field-map field-name="partyId"/>
-            </entity-find-one>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="context" out-map="context"/>
             <script>
-                import org.apache.commons.io.IOUtils
-                if(!document.pdfTemplateBoleta)
-                ec.message.addError(ec.resource.expand('No se encontró archivo en [${partyId}]',''))
-                int largo = document.pdfTemplateBoleta.length()
-                long inicio = 1
-                byte[] bytes = document.pdfTemplateBoleta.getBytes(inicio, largo)
-
-                if (bytes.length > 0) {
-                fileExtension = null
-                ec.web.response.setContentType("xml")
-                fileExtension = "xml"
-                if (fileExtension) {
-                fileName = document.pdfTemplateBoletaFilename
-                contentDisposition = "attachment; filename=\"${fileName}\"; filename*=utf-8''${encodeAsciiFilename(fileName)}"
-                } else {
-                contentDisposition = "attachment"
-                }
-                ec.web.response.addHeader("Content-Disposition", contentDisposition)
-                IOUtils.write(bytes, ec.web.response.outputStream)
-                } else {
-                ec.message.addError(ec.resource.expand('No se encontró archivo en [${partyId}]',''))
-                }
+                if(!pdfTemplateBoleta)
+                    ec.message.addError(ec.resource.expand('No se encontró plantilla para [${partyId}]',''))
+                else
+                    ec.web.sendTextResponse(pdfTemplateBoleta, "text/xml", "PdfTemplateBoleta.xml")
             </script>
         </actions>
         <default-response type="none"/>
@@ -220,38 +105,17 @@ along with this software (see the LICENSE.md file). If not, see
     <transition name="downloadPdfBoletaContinuaTemplate" read-only="true">
         <parameter name="partyId"/>
         <actions>
-            <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="document" cache="false">
-                <field-map field-name="partyId"/>
-            </entity-find-one>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="context" out-map="context"/>
             <script>
-                import org.apache.commons.io.IOUtils
-                if(!document.pdfTemplateBoletaContinua)
-                ec.message.addError(ec.resource.expand('No se encontró archivo en [${partyId}]',''))
-                int largo = document.pdfTemplateBoletaContinua.length()
-                long inicio = 1
-                byte[] bytes = document.pdfTemplateBoletaContinua.getBytes(inicio, largo)
-
-                if (bytes.length > 0) {
-                fileExtension = null
-                ec.web.response.setContentType("xml")
-                fileExtension = "xml"
-                if (fileExtension) {
-                fileName = document.pdfTemplateBoletaContinuaFilename
-                contentDisposition = "attachment; filename=\"${fileName}\"; filename*=utf-8''${encodeAsciiFilename(fileName)}"
-                } else {
-                contentDisposition = "attachment"
-                }
-                ec.web.response.addHeader("Content-Disposition", contentDisposition)
-                IOUtils.write(bytes, ec.web.response.outputStream)
-                } else {
-                ec.message.addError(ec.resource.expand('No se encontró archivo en [${partyId}]',''))
-                }
+                if(!pdfTemplateBoletaContinua)
+                    ec.message.addError(ec.resource.expand('No se encontró plantilla para [${partyId}]',''))
+                else
+                    ec.web.sendTextResponse(pdfTemplateBoleta, "text/xml", "PdfTemplateBoletaContinua.xml")
             </script>
         </actions>
         <default-response type="none"/>
         <error-response url="."/>
     </transition>
-
 
     <widgets></widgets>
 </screen>

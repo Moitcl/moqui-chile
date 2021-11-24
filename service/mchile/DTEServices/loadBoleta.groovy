@@ -9,20 +9,12 @@ import org.moqui.context.ExecutionContext
 
 ExecutionContext ec = context.ec
 
-// Carga de RUT de empresa
-partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([partyId:organizationPartyId, partyIdTypeEnumId:"PtidNationalTaxId"])
-if (!partyIdentificationList) {
-    ec.message.addError("Organización $organizationPartyId no tiene RUT definido")
-    return
-}
-rut = partyIdentificationList.idValue[0]
-// Validación rut
-ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rut]).call()
+// Carga de RUT de empresa (ya validado)
+rut = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").parameters([partyId:organizationPartyId, failIfNotFound:true]).call().rut
 // Carga XML
 archivoXml = xml.getName()
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
-fileRoot = pathRecibidas
-contentLocationXml = "${fileRoot}/${archivoXml}"
+contentLocationXml = "dbresource://moit/erp/dte/${rut}/DTERECIBIDA-39-${invoiceId}.xml"
 docRrXml = ec.resource.getLocationReference(contentLocationXml)
 
 // Se guardan ambos archivos
@@ -32,7 +24,7 @@ try { docRrXml.putStream(fileStream) } finally { fileStream.close() }
 // Carga PDF
 archivoPdf = pdf.getName()
 if (archivoPdf) {
-    contentLocationPdf = "${fileRoot}/${archivoPdf}"
+    contentLocationPdf = "dbresource://moit/erp/dte/${rut}/DTERECIBIDA-39-${invoiceId}.pdf"
     docRrPdf = ec.resource.getLocationReference(contentLocationPdf)
     // Se guardan ambos archivos
     fileStream = pdf.getInputStream()
@@ -205,8 +197,9 @@ for (int i = 0; i < boletaArray.size(); i++) {
         invoiceId = invoiceOutMap.invoiceId
     }
     // Se guarda DTE recibido en la base de datos -->
-    createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', fiscalTaxDocumentTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte,
-                receiverPartyId:organizationPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]
+    createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rutEmisor, fiscalTaxDocumentTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte,
+                receiverPartyId:organizationPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', receiverPartyIdValue:rutReceptor, date:ts, invoiceId:invoiceId, statusId:'Ftd-Issued',
+                sentAuthStatusId:'Ftd-SentAuth', sentRecStatusId:'Ftd-SentRec']
     mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call()
     // Se guarda contenido asociado a la DTE, todas las DTE que vienen en el mismo envío comparten el mismo XML
     createMap = [fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts]

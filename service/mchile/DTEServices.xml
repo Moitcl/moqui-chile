@@ -12,8 +12,35 @@ You should have received a copy of the CC0 Public Domain Dedication
 along with this software (see the LICENSE.md file). If not, see
 <http://creativecommons.org/publicdomain/zero/1.0/>.
 -->
-<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-          xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+    <service verb="get" noun="DteInfo">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="issuerRut"/>
+            <parameter name="issuerName"/>
+            <parameter name="receiverRut"/>
+            <parameter name="receiverName"/>
+            <parameter name="doctypeName"/>
+            <parameter name="folio"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte"/>
+            <service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:dte.issuerPartyIdValue]" out-map="issuerRutMap"/>
+            <set field="issuerRut" from="issuerRutMap.rut"/>
+            <service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:dte.receiverPartyIdValue]" out-map="receiverRutMap"/>
+            <set field="receiverRut" from="receiverRutMap.rut"/>
+            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="issuer" auto-field-map="[partyId:dte.issuerPartyId]"/>
+            <set field="issuerName" from="issuer.taxOrganizationName?:ec.resource.expand('PartyNameOnlyTemplate', null, issuer)"/>
+            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="receiver" auto-field-map="[partyId:dte.receiverPartyId]"/>
+            <set field="receiverName" from="receiver.taxOrganizationName?:ec.resource.expand('PartyNameOnlyTemplate', null, receiver)"/>
+            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="docTypeEnum" auto-field-map="[enumId:dte.fiscalTaxDocumentTypeEnumId]"/>
+            <set field="doctypeName" from="docTypeEnum.description"/>
+            <set field="folio" from="dte.fiscalTaxDocumentNumber"/>
+        </actions>
+    </service>
 
     <service verb="genera" noun="Factura" type="script" location="component://MoquiChile/service/mchile/DTEServices/generaFactura.groovy">
         <description>
@@ -42,6 +69,10 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="indTraslado" type="Integer"/>
             <parameter name="tipoDespacho" type="Integer"/>
             <parameter name="settlementTermId"/>
+            <parameter name="invoiceMessage"/>
+            <parameter name="fechaVencimiento" type="Date"/>
+            <parameter name="tipoDespacho"/>
+            <parameter name="codigosActividadEconomica"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
@@ -52,12 +83,12 @@ along with this software (see the LICENSE.md file). If not, see
         <description>Generación de envio documento a partir de facturas ya generadas.</description>
         <in-parameters>
             <parameter name="rutReceptor" default-value="60803000-K"><description>El receptor del envio es el SII</description></parameter>
-            <parameter name="rutEnviador" required="true"/>
             <parameter name="organizationPartyId" required="true"/>
             <parameter name="documentIdList" required="true" type="List"/>
+            <parameter name="saveSinFirma" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="archivoEnvio"/>
+            <parameter name="xmlContentLocation"/>
         </out-parameters>
     </service>
 
@@ -70,6 +101,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="enviadorS" required="true"/>
             <parameter name="organizationPartyId" required="true"/>
             <parameter name="documentIdList" required="true" type="List"/>
+            <parameter name="saveSinFirma" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
             <parameter name="archivoEnvio"/>
@@ -79,14 +111,13 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="enviaSII" noun="Documento"  type="script" location="component://MoquiChile/service/mchile/DTEServices/enviaSiiDocumento.groovy">
         <description>
             Envio documento a partir de documento envio ya generado
-            compaS: rut de compañía que envía
-            enviadorS: rut de persona que envía
+            rutOrganizacion: rut de compañía que envía
+            rutEnviador: rut de persona que envía
             documentoS: nombre de documento a enviar (que puede contener varios)
         </description>
         <in-parameters>
-            <parameter name="compaS" required="true"/>
-            <parameter name="enviadorS" required="true"/>
-            <parameter name="documentoS" required="true"/>
+            <parameter name="rutOrganizacion" required="true"/>
+            <parameter name="documentLocation" required="true"/>
             <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
         <out-parameters>
@@ -127,19 +158,15 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-            <set field="enviadorS" value="${rutEnvia}"/>
 
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-            <set field="enviadorS" value="${rutEnvia}"/>
-
-            <service-call name="mchile.DTEServices.enviaSII#Boleta" in-map="[compaS:rutEmisor, enviadorS:enviadorS, documentoS:contentLocation, organizationPartyId:organizationPartyId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.enviaSII#Boleta" in-map="[compaS:rutEmisor, enviadorS:rutEnvia, documentoS:contentLocation, organizationPartyId:organizationPartyId]" out-map="context"/>
             <!-- TODO: Eliminar archivo temporal -->
             <!-- Marcar boleta como enviada -->
             <!-- Se marca DTE como enviada -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteEv" for-update="true">
                 <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
             </entity-find-one>
-            <set field="dteEv.fiscalTaxDocumentSentStatusEnumId" value="Ftdt-Sent"/>
+            <set field="dteEv.sentAuthStatusId" value="Ftd-SentAuthUnverified"/>
             <set field="dteEv.trackId" from="trackId"/>
             <entity-update value-field="dteEv"/>
         </actions>
@@ -191,12 +218,18 @@ along with this software (see the LICENSE.md file). If not, see
                 X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
                 PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray())
 
-                String token = con.getToken(pKey, x509)
 
                 String enviadorS = Utilities.getRutFromCertificate(x509)
 
                 ResourceReference documentoRr = ec.resource.getLocationReference(documentContentLocation)
-                JSONObject recp = con.uploadEnvioCertificacion(enviadorS, compaS, documentoRr.openStream(), token)
+                JSONObject recp
+                if (dteSystemIsProduction) {
+                    String token = con.getToken(pKey, x509)
+                    recp = con.uploadEnvioProduccion(enviadorS, compaS, documentoRr.openStream(), token)
+                } else {
+                    String token = con.getTokenCert(pKey, x509)
+                    recp = con.uploadEnvioCertificacion(enviadorS, compaS, documentoRr.openStream(), token)
+                }
 
                 String estado = (String) recp.get("estado")
                 trackId = String.valueOf(recp.get("trackid"))
@@ -241,7 +274,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteEv" for-update="true">
                     <field-map field-name="fiscalTaxDocumentId" from="idDte"/>
                 </entity-find-one>
-                <set field="dteEv.fiscalTaxDocumentSentStatusEnumId" value="Ftdt-Sent"/>
+                <set field="dteEv.sentAuthStatusId" value="Ftd-SentAuthUnverified"/>
                 <set field="dteEv.trackId" from="trackId"/>
                 <entity-update value-field="dteEv"/>
             </iterate>
@@ -257,7 +290,12 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <out-parameters>
             <auto-parameters entity-name="mchile.dte.PartyDteParams"/>
+            <parameter name="rutEmisor"/>
+            <parameter name="rutEnvia"/>
             <parameter name="transformParameters"/>
+            <parameter name="dteSystemIsProduction" type="Boolean"/>
+            <parameter name="certificate" type="java.security.cert.X509Certificate"/>
+            <parameter name="pkey" type="java.security.PrivateKey"/>
         </out-parameters>
         <actions>
             <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams">
@@ -265,34 +303,48 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find-one>
 
             <if condition="!dteParams">
-                <return error="true" message="Organización no tiene datos para generar DTE"/>
+                <message error="true">Organización no tiene datos para generar DTE</message>
             </if>
 
-            <set field="templateFactura" from="dteParams.templateFactura"/>
-            <set field="templateBoleta" from="dteParams.templateBoleta"/>
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="context" out-map="context"/>
+            <set field="rutEmisor" from="rutSinFormato"/>
+            <if condition="rut == null"><message error="true">No se encuentra RUT para emisor (partyId ${partyId})</message></if>
+
+            <check-errors/>
+
+            <set field="certData" from="dteParams.certData"/>
+            <set field="passCert" from="dteParams.passCert"/>
+            <script><![CDATA[
+                import java.security.KeyStore
+                import java.security.PrivateKey
+                import java.security.cert.X509Certificate
+                import cl.nic.dte.util.Utilities
+
+                if (certData && passCert) {
+                    KeyStore ks = KeyStore.getInstance("PKCS12")
+                    ks.load(new ByteArrayInputStream(certData.decodeBase64()), passCert.toCharArray())
+                    String alias = ks.aliases().nextElement()
+                    certificate = (X509Certificate) ks.getCertificate(alias)
+                    rutEnvia = Utilities.getRutFromCertificate(certificate)
+                    ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEnvia).call()
+                    pkey = (PrivateKey) ks.getKey(alias, ((String)passCert).toCharArray())
+                }
+            ]]></script>
+
             <set field="pdfTemplate" from="dteParams.pdfTemplate"/>
-            <set field="pdfTemplateCedible" from="dteParams.pdfTemplateCedible"/>
+            <if condition="!pdfTemplate">
+                <set field="pdfTemplate" from="ec.resource.getLocationReference('component://MoquiChile/DTE/TEMPLATES/plantilla_general.xsl').text"/>
+            </if>
             <set field="pdfTemplateBoleta" from="dteParams.pdfTemplateBoleta"/>
             <set field="pdfTemplateBoletaContinua" from="dteParams.pdfTemplateBoletaContinua"/>
-            <set field="templateEnvio" from="dteParams.templateEnvio"/>
-            <set field="templateEnvioBoleta" from="dteParams.templateEnvioBoleta"/>
-            <set field="templateAceptaciones" from="dteParams.templateAceptaciones"/>
-            <set field="templateLibro" from="dteParams.templateLibro"/>
-            <set field="templateLibroGuia" from="dteParams.templateLibroGuia"/>
-            <set field="templateLibroBoletas" from="dteParams.templateLibroBoletas"/>
-            <set field="templateRcof" from="dteParams.templateRcof"/>
             <set field="logo" from="dteParams.logo ?: ''"/>
             <set field="fchResol" from="dteParams.fchResol ?: ''"/>
             <set field="nroResol" from="dteParams.nroResol ?: ''"/>
-            <set field="rutEmisor" from="dteParams.rutEmisor"/>
-            <set field="rutEnvia" from="dteParams.rutEnvia"/>
             <set field="rznSocEmisor" from="dteParams.rznSocEmisor"/>
             <set field="cdgSIISucur" from="dteParams.cdgSIISucur"/>
             <set field="dirOrigen" from="dteParams.dirOrigen"/>
             <set field="cmnaOrigen" from="dteParams.cmnaOrigen"/>
             <set field="ciudadOrigen" from="dteParams.ciudadOrigen"/>
-            <set field="certData" from="dteParams.certData"/>
-            <set field="passCert" from="dteParams.passCert"/>
             <set field="nmbContacto" from="dteParams.nmbContacto"/>
             <set field="mailContacto" from="dteParams.mailContacto ?: ''"/>
             <set field="fonoContacto" from="dteParams.fonoContacto ?: ''"/>
@@ -301,8 +353,20 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="commentAfterDetalle" from="dteParams.commentAfterDetalle ?: ''"/>
             <set field="cuentaBancariaMail" from="dteParams.cuentaBancariaMail ?: ''"/>
             <set field="cuentaBancariaText" from="dteParams.cuentaBancariaText ?: ''"/>
+            <set field="codigosActividadEconomica" from="dteParams.codigosActividadEconomica ?: ''"/>
+            <set field="detailHeaderBgColor" from="dteParams.detailHeaderBgColor ?: '&#35;eaeaea'"/>
+            <set field="detailHeaderFgColor" from="dteParams.detailHeaderFgColor ?: 'black'"/>
+            <set field="detailHeaderSepColor" from="dteParams.detailHeaderSepColor ?: 'white'"/>
+            <set field="tableBorderColor" from="dteParams.tableBorderColor ?: '&#35;eaeaea'"/>
+            <set field="vendorNameColor" from="dteParams.vendorNameColor ?: 'black'"/>
+
             <set field="transformParameters" from="[fonoContacto:fonoContacto, mailContacto:mailContacto, oficinaSII:oficinaSII, logo:logo, nroResol:nroResol, fchResol:fchResol, maxItems:'14',
-                                                    showItemNumber:'N', commentAfterDetalle:'Certificado por CERES || CL-BIO-005', cuentaBancariaMail:cuentaBancariaMail, cuentaBancariaText:cuentaBancariaText]"/>
+                                                    showItemNumber:'N', commentAfterDetalle:commentAfterDetalle, cuentaBancariaMail:cuentaBancariaMail, cuentaBancariaText:cuentaBancariaText,
+                                                    detailHeaderBgColor:detailHeaderBgColor, detailHeaderFgColor:detailHeaderFgColor, detailHeaderSepColor:detailHeaderSepColor, tableBorderColor:tableBorderColor,
+                                                    vendorNameColor:vendorNameColor]"/>
+
+            <service-call name="mchile.DTEServices.check#ProductionEnvironment" out-map="context"/>
+            <set field="dteSystemIsProduction" from="isProduction"/>
         </actions>
     </service>
 
@@ -315,7 +379,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="issuerPartyId" required="true"/>
             <parameter name="boleta"/>
             <parameter name="continua"/>
-            <parameter name="glosaPagos"/>
+            <parameter name="invoiceMessage"/>
         </in-parameters>
         <out-parameters>
             <parameter name="pdfBytes" type="byte[]"/>
@@ -325,20 +389,10 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Recuperacion de parametros de la organizacion -->
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:issuerPartyId]" out-map="context"/>
             <set field="passS" from="passCert"/>
-            <set field="pathResults" from="pathResults"/>
             <set field="template" from="pdfTemplate"/>
             <set field="giro" from="giroEmisor"/>
-            <set field="templateFactura" from="templateFactura"/>
-            <set field="pdfTemplate" from="pdfTemplate"/>
             <set field="pdfTemplateBoleta" from="pdfTemplateBoleta"/>
             <set field="pdfTemplateBoletaContinua" from="pdfTemplateBoletaContinua"/>
-            <set field="templateEnvio" from="templateEnvio"/>
-            <set field="templateAceptaciones" from="templateAceptaciones"/>
-            <set field="templateLibro" from="templateLibro"/>
-            <set field="logo" from="logo"/>
-            <set field="fchResol" from="fchResol"/>
-            <set field="nroResol" from="nroResol"/>
-
 
             <if condition="boleta">
                 <set field="template" from="pdfTemplateBoleta"/>
@@ -350,6 +404,7 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="!pdfTemplate">
                 <return error="true" message="Organización emisora no tiene definida plantilla para generar PDF"/>
             </if>
+
             <script>
                 import java.io.File
                 import java.io.FileInputStream
@@ -363,17 +418,29 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.sii.siiDte.RECEPCIONDTEDocument
                 import javax.xml.transform.stream.StreamSource
 
+                if (invoiceMessage != null) {
+                    if (commentAfterDetalle == null) {
+                        commentAfterDetalle = invoiceMessage
+                        transformParameters.commentAfterDetalle = invoiceMessage
+                    } else {
+                        commentAfterDetalle = "${commentAfterDetalle}\n${invoiceMessage}"
+                        transformParameters.commentAfterDetalle = commentAfterDetalle
+                    }
+                }
+
                 ByteArrayOutputStream pdf = new ByteArrayOutputStream()
 
-                ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(template.getBinaryStream()), pdf, "application/pdf", transformParameters + [cedible:'false'])// + [glosaPagos:glosaPagos]
+                pages = ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(new ByteArrayInputStream(template.getBytes("UTF-8"))), pdf, "application/pdf", transformParameters + [cedible:'false'])
                 pdf.close()
+                if (pages == null || pages == 0) ec.message.addError("Error generando PDF: páginas generadas: ${pages}")
                 pdfBytes = pdf.toByteArray()
             </script>
             <if condition="!boleta">
                 <script>
                     pdf = new ByteArrayOutputStream()
-                    ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(template.getBinaryStream()), pdf, "application/pdf", transformParameters + [cedible:'true'])// + [glosaPagos:glosaPagos]
+                    pages = ec.resource.xslFoTransform(new StreamSource(new ByteArrayInputStream(dte)), new StreamSource(new ByteArrayInputStream(template.getBytes("UTF-8"))), pdf, "application/pdf", transformParameters + [cedible:'true'])
                     pdf.close()
+                    if (pages == null || pages == 0) ec.message.addError("Error generando PDF: páginas generadas: ${pages}")
                     pdfCedibleBytes = pdf.toByteArray()
                 </script>
             </if>
@@ -382,21 +449,21 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="load" noun="Caf">
         <in-parameters>
-            <parameter name="filename" type="org.apache.commons.fileupload.FileItem"/>
-            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="cafFile" type="org.apache.commons.fileupload.FileItem"/>
+            <parameter name="partyId" required="true"/>
         </in-parameters>
         <actions>
-            <set field="archivo" from="filename.getName()"/>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-            <set field="contentLocation" value="dbresource://moit/erp/dte/caf/${organizationPartyId}/${archivo}"/>
+            <set field="archivo" from="cafFile.getName()"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:partyId]" out-map="context"/>
+            <set field="contentLocation" value="dbresource://moit/erp/dte/caf/${partyId}/${archivo}"/>
 
             <set field="docRr" from="ec.resource.getLocationReference(contentLocation)"/>
             <script>
-                fileStream = filename.getInputStream()
+                fileStream = cafFile.getInputStream()
                 try { docRr.putStream(fileStream) } finally { fileStream.close() }
             </script>
 
-            <service-call name="mchile.DTEServices.load#CafInternal" in-map="context+[organizationPartyId:organizationPartyId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.load#CafInternal" in-map="context" out-map="context"/>
         </actions>
     </service>
 
@@ -406,7 +473,7 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="contentLocation" required="true"/>
-            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="partyId" required="true"/>
             <parameter name="activateCaf" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
@@ -414,20 +481,9 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
             <!-- Carga de RUT de empresa -->
-            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                <econdition field-name="partyId" from="organizationPartyId"/>
-                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
-            </entity-find>
-
-            <if condition="!partyIdentificationList.idValue[0]">
-                <return error="true" message="Organización $organizationPartyId no tiene RUT definido"/>
-            </if>
-            <set field="rut" from="partyIdentificationList.idValue[0]"/>
-
-
-            <!-- Validación rut -->
-            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rut]" out-map="salidaRut"/>
-            <set field="rutNoDv" from="salidaRut.rut"/>
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:partyId]" out-map="salidaRut"/>
+            <set field="rut" from="salidaRut.rutSinFormato"/>
+            <set field="rutNoDv" from="salidaRut.rutSinDv"/>
 
             <set field="desde" value=""/>
             <set field="hasta" value=""/>
@@ -493,7 +549,7 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
 
             <set field="updateMap"
-                 from="[filename:docRr.fileName,desde:desde, hasta:hasta, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, ultimoFolio:desde, issuerPartyId:organizationPartyId, cafData:docRr.getText()]"/>
+                 from="[filename:docRr.fileName,desde:desde, hasta:hasta, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, ultimoFolio:desde, issuerPartyId:partyId, cafData:docRr.getText()]"/>
             <service-call name="create#mchile.dte.Caf" out-map="context" in-map="updateMap"/>
 
             <!-- Creación de registros para reservar folios -->
@@ -502,8 +558,8 @@ along with this software (see the LICENSE.md file). If not, see
                 int fin = Integer.parseInt(hasta)
                 for (int folio = inicio; folio <= fin; folio++) {
                     fiscalTaxDocumentId = "$fiscalTaxDocumentTypeEnumId$folio$rutNoDv"
-                    createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:organizationPartyId,
-                        issuerPartyIdTypeEnumId:'PtidNationalTaxId', fiscalTaxDocumentStatusEnumId:'Ftdt-NotIssued', fiscalTaxDocumentSentStatusEnumId:'Ftdt-NotSent']
+                    createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:partyId,
+                        issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rut, statusId:'Ftd-NotIssued', sentAuthStatusId:'Ftd-NotSentAuth']
                     context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call())
                 }
             ]]></script>
@@ -528,7 +584,6 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
 
-
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
                 <econdition field-name="partyId"/>
                 <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
@@ -541,12 +596,14 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Se filtra por CAF activo (PK) para el tipo de DTE -->
             <set field="activo" value="true"/>
-            <entity-find-one entity-name="mchile.dte.Caf" value-field="cafEntry" for-update="true">
-                <field-map field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
-                <field-map field-name="issuerPartyId" from="partyId"/>
-                <field-map field-name="activo" value="true"/>
-            </entity-find-one>
+            <entity-find entity-name="mchile.dte.Caf" list="cafEntryList" for-update="true">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="issuerPartyId" from="partyId"/>
+                <econdition field-name="activo" value="true"/>
+                <order-by field-name="desde"/>
+            </entity-find>
 
+            <set field="cafEntry" from="cafEntryList.first"/>
             <if condition="!cafEntry">
                 <return error="true" message="No existe CAF activo para DTE tipo ${fiscalTaxDocumentTypeEnumId}"/>
             </if>
@@ -556,7 +613,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="issuerPartyId" from="partyId"/>
                 <econdition field-name="fiscalTaxDocumentNumber" operator="greater-equals" from="cafEntry.desde"/>
                 <econdition field-name="fiscalTaxDocumentNumber" operator="less-equals" from="cafEntry.hasta"/>
-                <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-NotIssued"/>
+                <econdition field-name="statusId" value="Ftd-NotIssued"/>
                 <select-field field-name="fiscalTaxDocumentNumber"/>
                 <order-by field-name="fiscalTaxDocumentNumber"/>
             </entity-find>
@@ -579,7 +636,6 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="invoiceId" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
-            <parameter name="settlementTermId"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
@@ -592,6 +648,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="issuerPartyId" from="invoiceEv.fromPartyId"/>
             <set field="globalDiscount" from="invoiceEv.globalDiscount"/>
             <set field="glosaDr" from="invoiceEv.glosaDr"/>
+            <set field="fechaVencimiento" from="invoiceEv.dueDate"/>
 
             <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
 
@@ -641,17 +698,17 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
 
             <!-- Glosa para pago a credito -->
-            <set field="glosaPagos"/>
-            <if condition="settlementTermId">
+            <if condition="invoice.settlementTermId">
                 <entity-find-one entity-name="mantle.account.invoice.SettlementTerm" value-field="settlementField">
-                    <field-map field-name="settlementTermId" from="settlementTermId"/>
+                    <field-map field-name="settlementTermId" from="invoice.settlementTermId"/>
                     <select-field field-name="description"/>
                 </entity-find-one>
-                <if condition="!settlementTermId">
+                <if condition="!settlementField">
                     <return error="true" message="Términos de crédito no existente"/>
                 </if>
                 <set field="glosaPagos" from="settlementField.description"/>
             </if>
+            <if condition="!glosaPagos"><set field="glosaPagos" value=""/></if>
 
             <!-- Datos principales de invoice -->
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
@@ -662,20 +719,32 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="toPartyId" from="invoice.toPartyId"/>
 
             <!-- Items de invoice -->
-            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemList">
+            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemEVList">
                 <econdition field-name="invoiceId"/>
-                <econdition field-name="itemTypeEnumId" operator="not-in" from="['ItemSalesTax','ItemVatTax']"/>
+                <econdition field-name="itemTypeEnumId" operator="not-in" from="['ItemSalesTax','ItemVatTax', 'ItemDetailedDescription']"/>
+                <econdition field-name="parentItemSeqId" operator="is-null"/>
                 <order-by field-name="invoiceItemSeqId"/>
             </entity-find>
+            <set field="invoiceItemList" from="[]"/>
+            <iterate list="invoiceItemEVList" entry="invoiceItemEV">
+                <set field="invoiceItem" from="invoiceItemEV.getMap()"/>
+                <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="subitemList">
+                    <econdition field-name="invoiceId"/>
+                    <econdition field-name="parentItemSeqId" from="invoiceItemEV.invoiceItemSeqId"/>
+                </entity-find>
+                <iterate list="subitemList" entry="subitem">
+                    <if condition="subitem.itemTypeEnumId == 'ItemDetailedDescription'"><then>
+                        <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}${subitem.description}"/>
+                    </then><else-if condition="subitem.itemTypeEnumId == 'ItemDiscount'">
+                        <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}Incluye ${subitem.description} por ${ec.l10n.formatCurrency((-1*subitem.amount*subitem.quantity/invoiceItem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), invoice.currencyUomId)}${invoiceItem.quantity > 1? ' (unitario)': ''}"/>
+                        <set field="invoiceItem.amount" from="invoiceItem.amount + (subitem.amount*subitem.quantity/invoiceItem.quantity as BigDecimal).setScale(0,java.math.RoundingMode.HALF_UP)"/>
+                    </else-if><else>
+                        <return error="true" message="Unknown itemTypeEnumId for subitem ${invoiceId}:${subitem.itemSeqId}: ${subitem.itemTypeEnumId}"/>
+                    </else></if>
+                </iterate>
+                <script>invoiceItemList.add(invoiceItem)</script>
+            </iterate>
 
-            <!-- email receptor -->
-            <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:toPartyId]" out-map="context"/>
-
-            <if condition="!emailAddress">
-                <if condition="fiscalTaxDocumentTypeEnumId != 'Ftdt-39' &amp;&amp; fiscalTaxDocumentTypeEnumId != 'Ftdt-41'">
-                    <return error="true" message="Receptor no tiene dirección de correo, sólo se puede emitir boleta"/>
-                </if>
-            </if>
             <set field="username" from="emailAddress"/>
             <!-- rut receptor -->
             <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
@@ -696,7 +765,7 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
 
             <if condition="!postalPcmList">
-                <return error="true" message="Receptor ${partyId} no tiene dirección postal para impuestos"/>
+                <return error="true" message="Receptor ${partyId} no tiene dirección postal tributaria"/>
             </if>
             <set field="contactMechId" from="postalPcmList[0].contactMechId"/>
 
@@ -779,22 +848,27 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
 
             <!-- Recuperación de referencias -->
-            <entity-find entity-name="mchile.dte.ReferenciaInvoiceAndFiscalCode" list="referenciaList">
+            <entity-find entity-name="mchile.dte.ReferenciaDteAndFiscalCode" list="referenciaList">
                 <econdition field-name="invoiceId" from="invoiceId"/>
                 <order-by field-name="fiscalTaxDocumentTypeEnumId"/>
             </entity-find>
             <if condition="(fiscalTaxDocumentTypeEnumId == 'Ftdt-39') || (fiscalTaxDocumentTypeEnumId == 'Ftdt-41')">
                 <then>
                     <!-- Generacion de boletas -->
-                    <service-call name="mchile.DTEServices.genera#Boleta" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
-                           contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
-                           invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId]" out-map="context"/>
+                    <service-call name="mchile.DTEServices.genera#Boleta" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId,
+                                        rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor, contactoReceptor:contactoReceptor,
+                                        dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
+                                        invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId]"
+                                  out-map="context"/>
                 </then>
                 <else>
                     <!-- Generacion de factura -->
-                    <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
-                      contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
-                          invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId, globalDiscount:globalDiscount, glosaDr:glosaDr, glosaPagos:glosaPagos]" out-map="context"/>
+                    <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId,
+                                        rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor, contactoReceptor:contactoReceptor,
+                                        dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
+                                        invoiceMessage:invoice.invoiceMessage, invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList,
+                                        receiverPartyId:toPartyId, globalDiscount:globalDiscount, glosaDr:glosaDr, glosaPagos:glosaPagos, settlementTermId:settlementTermId,
+                                        fechaVencimiento:fechaVencimiento]" out-map="context"/>
                 </else>
             </if>
         </actions>
@@ -907,7 +981,7 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:toPartyId]" out-map="context"/>
 
             <if condition="!emailAddress">
-                <log level="warn" message="Receptor no tiene dirección de correo"/>
+                <log level="warn" message="Receptor ${toPartyId} no tiene dirección de correo"/>
             </if>
             <set field="username" from="emailAddress"/>
             <!-- rut receptor -->
@@ -1030,7 +1104,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="contactoReceptor" from="rznSocReceptor"/>
             </if>
             <!-- Recuperación de referencias -->
-            <entity-find entity-name="mchile.dte.ReferenciaInvoiceAndFiscalCode" list="referenciaList">
+            <entity-find entity-name="mchile.dte.ReferenciaDteAndFiscalCode" list="referenciaList">
                 <econdition field-name="invoiceId" from="invoiceId"/>
                 <order-by field-name="fiscalTaxDocumentTypeEnumId"/>
             </entity-find>
@@ -1087,41 +1161,43 @@ along with this software (see the LICENSE.md file). If not, see
             Obtiene datos para llamar a servicio enviar#Documento
         </description>
         <in-parameters>
-            <parameter name="documentIds" required="true"/>
-            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="documentIds" type="List" required="true"/>
             <parameter name="libro"/>
             <parameter name="boleta"/>
         </in-parameters>
         <actions>
-            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                <econdition field-name="partyId" from="organizationPartyId"/>
-                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+            <if condition="documentIds.size() &lt; 1"><return error="true" message="Debe seleccionar al menos 1 DTE para enviar"/></if>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
+                <econdition field-name="fiscalTaxDocumentId" operator="in" from="documentIds"/>
             </entity-find>
 
-            <if condition="!partyIdentificationList.idValue[0]">
-                <return error="true" message="Organización $organizationPartyId no tiene RUT definido"/>
-            </if>
-            <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
+            <iterate list="dteList" entry="dte">
+                <if condition="issuerPartyId == null"><then>
+                    <set field="issuerPartyId" from="dte.issuerPartyId"/>
+                </then><else-if condition="dte.issuerPartyId != issuerPartyId">
+                    <return error="true" message="No se pueden enviar simultáneamente DTEs de distintos emisores"/>
+                </else-if></if>
+            </iterate>
+            <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="context"/>
+            <if condition="!(issuerPartyId in userOrgIds)"><return error="true" message="Usuario no tiene autorización para enviar DTEs a nombre de partyId ${issuerPartyId}"/></if>
 
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-            <set field="rutEmisor" value="${rutEnvia}"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:issuerPartyId]" out-map="context"/>
 
-            <set field="documentIdList" from="documentIds instanceof List ? documentIds : documentIds.split(',') as List"/>
-
-            <if condition="!libro &amp;&amp; !boleta">
-                <then>
-                    <service-call name="mchile.DTEServices.generaEnvio#Documentos" in-map="[recepS:recepS, organizationPartyId:organizationPartyId, enviadorS:rutEmisor, documentIdList:documentIdList ]" out-map="context"/>
-                    <set field="documentoS" from="archivoEnvio"/>
-                    <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:rutEmisor, enviadorS:rutEmisor , documentoS:documentoS, organizationPartyId:organizationPartyId]" out-map="context"/>
-                    <service-call name="mchile.DTEServices.marcarEnviados#Documentos" in-map="[trackId:trackId, documentIdList:documentIdList]"/>
-                </then>
-                <else-if condition="boleta">
-                    <service-call name="mchile.DTEServices.generaEnvio#Boletas" in-map="[recepS:recepS, organizationPartyId:organizationPartyId, enviadorS:rutEmisor, documentIdList:documentIdList ]" out-map="context"/>
-                    <set field="documentoS" from="archivoEnvio"/>
-                    <service-call name="mchile.DTEServices.enviaSII#Boleta" in-map="[compaS:rutEmisor, enviadorS:rutEmisor , documentoS:documentoS, organizationPartyId:organizationPartyId]" out-map="context"/>
+            <if condition="!libro &amp;&amp; !boleta"><then>
+                <service-call name="mchile.DTEServices.generaEnvio#Documentos" in-map="[organizationPartyId:issuerPartyId, documentIdList:documentIds]" out-map="context"/>
+                <log message="generaEnvio OK, now enviaSII#Documento"/>
+                <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[rutOrganizacion:rutEmisor, documentLocation:xmlContentLocation, organizationPartyId:issuerPartyId]" out-map="context"/>
+                <if condition="trackId">
+                    <service-call name="mchile.DTEServices.marcarEnviados#Documentos" in-map="[trackId:trackId, documentIdList:documentIds]"/>
+                </if>
+            </then><else-if condition="boleta">
+                <service-call name="mchile.DTEServices.generaEnvio#Boletas" in-map="[recepS:recepS, organizationPartyId:issuerPartyId, enviadorS:rutEnvia, documentIdList:documentIdList ]" out-map="context"/>
+                <set field="documentoS" from="archivoEnvio"/>
+                <service-call name="mchile.DTEServices.enviaSII#Boleta" in-map="[rutOrganizacion:rutEnvia, rutEnviador:rutEnvia , documentoS:documentoS, organizationPartyId:issuerPartyId]" out-map="context"/>
+                <if condition="trackId">
                     <service-call name="mchile.DTEServices.marcarEnviados#Boletas" in-map="[trackId:trackId, documentIdList:documentIdList]"/>
-                </else-if>
-            </if>
+                </if>
+            </else-if></if>
 
             <if condition="libro">
                 <iterate list="documentList" entry="libroEntry">
@@ -1133,10 +1209,10 @@ along with this software (see the LICENSE.md file). If not, see
                     </entity-find-one>
                     <set field="xml" from="libroField.xml"/>
 
-                    <service-call name="mchile.DTEServices.generaEnvio#Libro" in-map="[enviadorS:rutEmisor, organizationPartyId:organizationPartyId, idS:'ID178', xml:xml ]" out-map="context"/>
+                    <service-call name="mchile.DTEServices.generaEnvio#Libro" in-map="[enviadorS:rutEnvia, organizationPartyId:issuerPartyId, idS:'ID178', xml:xml ]" out-map="context"/>
                     <set field="documentoS" from="archivoEnvio"/>
 
-                    <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[compaS:rutEmisor, enviadorS:rutEmisor , documentoS:xml, organizationPartyId:organizationPartyId]" out-map="context"/>
+                    <service-call name="mchile.DTEServices.enviaSII#Documento" in-map="[documentoS:xml, organizationPartyId:issuerPartyId]" out-map="context"/>
                 </iterate>
             </if>
         </actions>
@@ -1155,14 +1231,13 @@ along with this software (see the LICENSE.md file). If not, see
         <out-parameters>
             <parameter name="statusSii" required="true"/>
             <parameter name="salida" required="true"/>
+            <parameter name="errCode" required="true"/>
         </out-parameters>
         <actions>
 
             <set field="statusSii" value=""/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-            <set field="certData" from="certData"/>
-            <set field="passS" from="passCert"/>
 
             <service-call name="mchile.DTEServices.get#DteContent"
                           in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
@@ -1175,7 +1250,8 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="salida" value=""/>
             <set field="statusXML" value=""/>
 
-            <script>
+
+            <script><![CDATA[
                 import java.io.FileInputStream
                 import java.security.KeyStore
                 import java.security.PrivateKey
@@ -1189,7 +1265,7 @@ along with this software (see the LICENSE.md file). If not, see
                 import cl.sii.siiDte.DTEDocument
                 import cl.sii.xmlSchema.RESPUESTADocument
 
-                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;()
+                HashMap<String, String> namespaces = new HashMap<String, String>()
                 namespaces.put("", "http://www.sii.cl/SiiDte")
                 XmlOptions opts = new XmlOptions()
                 opts.setLoadSubstituteNamespaces(namespaces)
@@ -1198,45 +1274,47 @@ along with this software (see the LICENSE.md file). If not, see
                 DTEDocument doc = DTEDocument.Factory.parse(contentRef.openStream(), opts)
                 ConexionSii con = new ConexionSii()
 
-                // leo certificado y llave privada del archivo pkcs12
-                KeyStore ks = KeyStore.getInstance("PKCS12")
-                //ks.load(new FileInputStream(certS), passS.toCharArray())
-                ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
-                String alias = ks.aliases().nextElement()
-                System.out.println("Usando certificado " + alias + " del archivo PKCS12 ");// + certS)
 
-                X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
-                PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray())
 
-                String token = con.getToken(pKey, x509)
-                String enviadorS = Utilities.getRutFromCertificate(x509)
-
-                System.out.println("Enviador: " + enviadorS + ", token: " + token)
-
-                RESPUESTADocument resp = con.getEstadoDTECertificacion(enviadorS, doc.getDTE().getDocumento(), token)
-                opts.setSavePrettyPrintIndent(2)
-                opts.setSavePrettyPrint()
-                resp.save(System.out, opts)
+                RESPUESTADocument resp
+                if (dteSystemIsProduction) {
+                    String token = con.getToken(pkey, certificate)
+                    resp = con.getEstadoDTEProduccion(rutEnvia, doc.getDTE().getDocumento(), token)
+                } else {
+                    String token = con.getTokenCert(pkey, certificate)
+                    resp = con.getEstadoDTECertificacion(rutEnvia, doc.getDTE().getDocumento(), token)
+                }
+                //opts.setSavePrettyPrintIndent(2)
+                //opts.setSavePrettyPrint()
+                //resp.save(System.out, opts)
 
                 logger.warn("------" + resp.toString())
 
-                salida = resp.toString()
-                statusXML = salida
-                String status = "0"
+                statusXML = resp.toString()
 
-                int inicio = statusXML.indexOf("&lt;SII:ESTADO&gt;")
-                int fin = statusXML.indexOf("&lt;/SII:ESTADO&gt;")
+                int inicio = statusXML.indexOf("<SII:ESTADO>")
+                int fin = statusXML.indexOf("</SII:ESTADO>")
 
-                statusXML = statusXML.substring(inicio+12,fin)
-                logger.warn("STATUS: " + statusXML)
-                statusSii = statusXML
+                statusSii = statusXML.substring(inicio + 12, fin)
+                ec.logger.warn("STATUS: " + statusSii)
 
-                inicio = salida.indexOf("&lt;SII:GLOSA_ERR&gt;")
-                fin = salida.indexOf("&lt;/SII:GLOSA_ERR&gt;")
-                salida = salida.substring(inicio+15, fin)
+                inicio = statusXML.indexOf("<SII:GLOSA_ERR>")
+                fin = statusXML.indexOf("</SII:GLOSA_ERR>")
+                salida = statusXML.substring(inicio + 15, fin)
 
-            </script>
-            <set field="statusSii" from="statusXML"/>
+                inicio = statusXML.indexOf("<SII:ERR_CODE>")
+                fin = statusXML.indexOf("</SII:ERR_CODE>")
+                errCode = statusXML.substring(inicio + 14, fin)
+                ec.logger.warn("errCode: ${errCode}")
+
+                ]]></script>
+            <if condition="errCode == '0'">
+                <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" for-update="true"/>
+                <if condition="dte.sentAuthStatusId == 'Ftd-SentAuthUnverified'">
+                    <set field="dte.sentAuthStatusId" value="Ftd-SentAuth"/>
+                    <entity-update value-field="dte"/>
+                </if>
+            </if>
         </actions>
     </service>
 
@@ -1278,22 +1356,17 @@ along with this software (see the LICENSE.md file). If not, see
                 <select-field field-name="fiscalTaxDocumentNumber"/>
                 <select-field field-name="receiverPartyId"/>
                 <select-field field-name="receiverPartyIdTypeEnumId"/>
+                <select-field field-name="receiverPartyIdValue"/>
             </entity-find-one>
             <set field="folio" from="boletaField.fiscalTaxDocumentNumber"/>
             <set field="receiverPartyId" from="boletaField.receiverPartyId"/>
             <set field="receiverPartyIdTypeEnumId" from="boletaField.receiverPartyIdTypeEnumId"/>
+            <set field="rutReceptor" from="boletaField.receiverPartyIdValue"/>
             <set field="invoiceId" from="boletaField.invoiceId"/>
 
-
-            <!-- Recuperacion de rut receptor -->
-            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                <econdition field-name="partyId" from="receiverPartyId"/>
-                <econdition field-name="partyIdTypeEnumId" from="receiverPartyIdTypeEnumId"/>
-            </entity-find>
-            <if condition="!partyIdentificationList.idValue[0]">
-                <return error="true" message="No existe organización receptora definida en el sistema"/>
+            <if condition="!rutReceptor">
+                <return error="true" message="No está definido el rut de receptor en el DTE"/>
             </if>
-            <set field="rutReceptor" from="partyIdentificationList.idValue[0]"/>
 
             <!-- Obtencion de monto desde invoiceId -->
             <set field="monto" value="0"/>
@@ -1351,23 +1424,19 @@ along with this software (see the LICENSE.md file). If not, see
 
                 ConexionSiiBoleta con = new ConexionSiiBoleta()
 
-                // leo certificado y llave privada del archivo pkcs12
-                KeyStore ks = KeyStore.getInstance("PKCS12")
-                ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
-                String alias = ks.aliases().nextElement()
-                System.out.println("Usando certificado " + alias + " del archivo PKCS12 ")
-
-                X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
-                PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray())
-
-                String token = con.getToken(pKey, x509)
-                String enviadorS = Utilities.getRutFromCertificate(x509)
 
                 System.out.println("Folio: " + folio + ", token: " + token)
 
                 // Ejecutar GET https://apicert.sii.cl/boleta.electronica.envio/{rut}-{dv}-{trackid}
                 // Se obtiene objeto JSON
-                JSONObject resp = con.getEstadoBOLETACertificacion(rutEmisor, rutReceptor, monto, fechaEmision, folio, tipo, token)
+                JSONObject resp
+                if (dteSystemIsProduction) {
+                    String token = con.getToken(pkey, certificate)
+                    resp = con.getEstadoBOLETAProduccion(rutEmisor, rutReceptor, monto, fechaEmision, folio, tipo, token)
+                } else {
+                    String token = con.getTokenCert(pkey, certificate)
+                    resp = con.getEstadoBOLETACertificacion(rutEmisor, rutReceptor, monto, fechaEmision, folio, tipo, token)
+                }
 
                 //String estado = (String) recp.get("estado")
 
@@ -1422,23 +1491,20 @@ along with this software (see the LICENSE.md file). If not, see
 
                 ConexionSiiBoleta con = new ConexionSiiBoleta()
 
-                // leo certificado y llave privada del archivo pkcs12
-                KeyStore ks = KeyStore.getInstance("PKCS12")
-                ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
-                String alias = ks.aliases().nextElement()
-                System.out.println("Usando certificado " + alias + " del archivo PKCS12 ")
+                String enviadorS = Utilities.getRutFromCertificate(certificate)
 
-                X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
-                PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray())
-
-                String token = con.getToken(pKey, x509)
-                String enviadorS = Utilities.getRutFromCertificate(x509)
-
-                System.out.println("Enviador: " + enviadorS + ", token: " + token)
+                System.out.println("Enviador: " + rutEnvia + ", token: " + token)
 
                 // Ejecutar GET https://apicert.sii.cl/boleta.electronica.envio/{rut}-{dv}-{trackid}
                 // Se obtiene objeto JSON
-                JSONObject resp = con.getEstadoEnvioBOLETACertificacion(rutEmisor, trackId, token)
+                JSONObject resp
+                if (dteSystemIsProduction) {
+                    String token = con.getToken(pkey, certificate)
+                    resp = con.getEstadoEnvioBOLETAProduccion(rutEmisor, trackId, token)
+                } else {
+                    String token = con.getTokenCert(pkey, certificate)
+                    resp = con.getEstadoEnvioBOLETACertificacion(rutEmisor, trackId, token)
+                }
 
                 //String estado = (String) recp.get("estado")
                 //trackId = String.valueOf(recp.get("trackid"))
@@ -1518,7 +1584,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="No existe DTE especificada"/>
             </if>
 
-            <set field="dteEv.fiscalTaxDocumentSentStatusEnumId" value="Ftdt-NotSent"/>
+            <set field="dteEv.sentAuthStatusId" value="Ftd-NotSentAuth"/>
             <entity-update value-field="dteEv"/>
         </actions>
     </service>
@@ -1539,7 +1605,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="No existe DTE especificada"/>
             </if>
 
-            <set field="dteEv.fiscalTaxDocumentSentStatusEnumId" value="Ftdt-Sent"/>
+            <set field="dteEv.sentAuthStatusId" value="Ftd-SentAuth"/>
             <entity-update value-field="dteEv"/>
         </actions>
     </service>
@@ -1553,26 +1619,25 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="issuerPartyId"/>
             <parameter name="receiverPartyId"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" required="true"/>
             <parameter name="fiscalTaxDocumentContentTypeEnumId" default="Ftdct-Pdf"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
         </out-parameters>
         <actions>
-            <log message="[create#DteFromFile] Reading tax document from ${contentLocation}" />
+            <log message="[create#DteFromFile] Reading tax document from ${contentLocation}"/>
             <script><![CDATA[
-                        URL url = new URL(contentLocation)
-                        URLConnection hc = url.openConnection()
-                        hc.setRequestProperty("User-Agent", "Mozilla/5.0")
-                        byte[] contentFile
-                        if (hc.getResponseCode().equals(200)) {
-                            contentFile = hc.getInputStream().getBytes()
-                        }
-                    ]]></script>
+                URL url = new URL(contentLocation)
+                URLConnection hc = url.openConnection()
+                hc.setRequestProperty("User-Agent", "Mozilla/5.0")
+                byte[] contentFile
+                if (hc.getResponseCode().equals(200)) {
+                    contentFile = hc.getInputStream().getBytes()
+                }
+            ]]></script>
 
-            <log message="[create#DteFromFile] orderId: ${orderId}" />
-
-            <set field="fiscalTaxDocumentNumber" from="orderId"/>
+            <log message="[create#DteFromFile] orderId: ${orderId}"/>
 
             <entity-find entity-name="mantle.order.OrderHeaderAndPart" list="orderList" distinct="true">
                 <econdition field-name="orderId" from="orderId"/>
@@ -1582,13 +1647,23 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="issuerPartyId" from="issuerPartyId ? issuerPartyId : order.vendorPartyId"/>
             <set field="receiverPartyId" from="receiverPartyId ? receiverPartyId : order.customerPartyId"/>
 
-            <set field="createMap" from="[issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber,
-                                          fiscalTaxDocumentStatusEnumId:'Ftdt-Issued', receiverPartyId:receiverPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:contentDate, invoiceId:invoiceId]"/>
-            <service-call name="create#mchile.dte.FiscalTaxDocument" out-map="context" in-map="createMap"/>
+            <if condition="fiscalTaxDocumentContentTypeEnumId == 'Ftdct-Pdf'"><then>
+                <set field="sentRecStatusId" value="Ftd-NotSentRec"/>
+            </then><else-if condition="fiscalTaxDocumentContentTypeEnumId == 'Ftdct-Xml'">
+                <set field="sentRecStatusId" value="Ftd-SentRec"/>
+            </else-if><else>
+                <set field="sentRecStatusId" from="null"/>
+            </else></if>
             <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:issuerPartyId]" out-map="issuerRut"/>
-            <set field="pdfName" value="dbresource://moit/erp/dte/${issuerRut?.rutSinFormato?:issuerPartyId}/DTE${fiscalTaxDocumentTypeEnumId}-${fiscalTaxDocumentNumber}.pdf"/>
-            <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfName, contentDate:contentDate]"/>
-            <script>ec.resource.getLocationReference(pdfName).putBytes(contentFile)</script>
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:receiverPartyId]" out-map="receiverRut"/>
+            <set field="createMap" from="[issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:issuerRut.rutSinFormato,
+                                          receiverPartyId:receiverPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', receiverPartyIdValue:receiverRut.rutSinFormato,
+                                          fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber,
+                                          statusId:'Ftd-Issued', sentAuthStatusId:'Ftd-SentAuth', sentRecStatusId:sentRecStatusId, date:contentDate, invoiceId:invoiceId]"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocument" out-map="context" in-map="createMap"/>
+            <set field="pdfContentLocation" value="dbresource://moit/erp/dte/${issuerRut?.rutSinFormato?:('partyId-'+issuerPartyId)}/DTE-${fiscalTaxDocumentTypeEnumId}-${fiscalTaxDocumentNumber}.pdf"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfContentLocation, contentDate:contentDate]"/>
+            <script>ec.resource.getLocationReference(pdfContentLocation).putBytes(contentFile)</script>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
 
             <set field="updateMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, emailEmisor:emailEmisor, amount:amount,
@@ -1643,11 +1718,6 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="archivoPdf" from="pdf.getName()"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:receiverPartyId]" out-map="context"/>
 
-            <!-- Unused file location -->
-            <set field="fileRoot" from="pathRecibidas"/>
-            <set field="contentLocationPdf" value="${fileRoot}/${archivoPdf}"/>
-            <set field="docRrPdf" from="ec.resource.getLocationReference(contentLocationPdf)"/>
-
             <script>
                 import java.io.ByteArrayOutputStream
                 import java.io.File
@@ -1668,17 +1738,6 @@ along with this software (see the LICENSE.md file). If not, see
                 import java.text.SimpleDateFormat
                 import java.util.Date
 
-                fileStream = pdf.getInputStream()
-                // try { docRrPdf.putStream(fileStream) } finally { fileStream.close() }
-                byte[] bArrayDTE = new byte[(int) fileStream.getChannel().size()]
-                try {
-                    fileStream.read(bArrayDTE)
-                    fileStream.close()
-                }
-                catch (IOException ioExp) {
-                    ioExp.printStackTrace()
-                }
-
                 DateFormat formatter = new SimpleDateFormat("yyyy-MM-dd")
                 Date date = formatter.parse(fechaEmision)
                 Timestamp ts = new Timestamp(date.getTime())
@@ -1695,15 +1754,19 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
 
             <!-- Creación de FiscalTaxDocument -->
-            <set field="createMap" from="[issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber,
-                        receiverPartyId:receiverPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]"/>
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:issuerPartyId]" out-map="issuerRut"/>
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:receiverPartyId]" out-map="receiverRut"/>
+            <set field="createMap" from="[issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:issuerRut.rutSinFormato, statusId:'Ftd-Issued',
+                                          fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber,
+                                          receiverPartyId:receiverPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', receiverPartyIdValue:receiverRut.rutSinFormato,
+                                          date:ts, invoiceId:invoiceId]"/>
             <service-call name="create#mchile.dte.FiscalTaxDocument" out-map="context" in-map="createMap"/>
 
             <!-- Creación de contenido (Solo PDF) -->
-            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:issuerPartyId]" out-map="issuerRut"/>
-            <set field="pdfName" value="dbresource://moit/erp/dte/${issuerRut?.rutSinFormato?:issuerPartyId}/DTE${fiscalTaxDocumentTypeEnumId}-${fiscalTaxDocumentNumber}.pdf"/>
-            <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, contentDate:ts, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:pdfName]"/>
-            <script>ec.resource.getLocationReference(xmlName).putBytes(bArrayDTE)</script>
+            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="dteType" auto-field-map="[enumId:fiscalTaxDocumentTypeEnumId]"/>
+            <set field="pdfContentLocation" value="dbresource://moit/erp/dte/${issuerRut?.rutSinFormato?:('partyId-'+issuerPartyId)}/DT-${dteType.enumCode}-${fiscalTaxDocumentNumber}.pdf"/>
+            <set field="createMap" from="[fiscalTaxDocumentId:fiscalTaxDocumentId, contentDate:ts, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:pdfContentLocation]"/>
+            <script>ec.resource.getLocationReference(pdfContentLocation).putStream(pdf.inputStream)</script>
             <service-call name="create#mchile.dte.FiscalTaxDocumentContent" out-map="context" in-map="createMap"/>
 
             <!-- Entrada en atributos -->
@@ -1775,7 +1838,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="issuerId" from="dteEv.issuerPartyId"/>
             <if condition="issuerId == organizationPartyId">
                 <then>
-                    <set field="dteEv.fiscalTaxDocumentStatusEnumId" value="Ftdt-NotIssued"/>
+                    <set field="dteEv.statusId" value="Ftd-NotIssued"/>
                     <!-- TODO: Revisar que dejar receiverPartyID tal cual no afecte -->
                     <!--set field="dteEv.receiverPartyId" value=""/-->
                     <entity-update value-field="dteEv"/>
@@ -1816,7 +1879,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="Boleta a anular no existe"/>
             </if>
 
-            <set field="dteEv.fiscalTaxDocumentStatusEnumId" value="Ftdt-Cancelled"/>
+            <set field="dteEv.statusId" value="Ftd-Cancelled"/>
             <entity-update value-field="dteEv"/>
         </actions>
     </service>
@@ -1859,31 +1922,39 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="generar" noun="NotaCredito">
         <description>Obtiene datos para llamar a método generar#Factura para Nota de Crédito</description>
         <in-parameters>
-            <parameter name="returnId" required="true"/>
             <parameter name="invoiceId" required="true"/>
-            <parameter name="issuerPartyId" required="true"/>
-            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
-            <parameter name="items" type="List"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
         </out-parameters>
         <actions>
+            <service-call name="mchile.TaxServices.calculate#SalesTaxForInvoice" in-map="[invoiceId:invoiceId]"/>
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
+            <if condition="!invoice"><return error="true" message="Could not find invoice ${invoiceId]"/></if>
+            <if condition="! (invoice.invoiceTypeEnumId in ['InvoiceReturn', 'InvoiceCreditMemo'])">
+                <return error="true" message="Invalid invoice type for Nota Credito ${invoice.invoiceTypeEnumId}, invoice ${invoiceId}"/>
+            </if>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="existingFtdList">
+                <econdition field-name="issuerPartyId" from="invoice.toPartyId"/>
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" value="Ftdt-61,Ftdt-60"/>
+                <econdition field-name="invoiceId"/>
+            </entity-find>
+            <if condition="existingFtdList"><return error="true" message="Ya existe una Nota de Crédito para invoice ${invoiceId}"/></if>
+            <if condition="!(invoice.statusId in ['InvoiceIncoming','InvoiceApproved','InvoicePmtSent','InvoiceReceived','InvoiceBilledThrough'])">
+                <return error="true" message="Invalid statusId for credit invoice: ${invoice.statusId}"/></if>
+
+            <!-- En la nota de credito se invierten fromPartyId y toPartyId (cliente le cobra al vendedor) -->
+            <set field="issuerPartyId" from="invoice.toPartyId"/>
+            <set field="receiverPartyId" from="invoice.fromPartyId"/>
+
+            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="items">
+                <econdition field-name="invoiceId"/>
+                <econdition field-name="itemTypeEnumId" operator="not-in" value="ItemSalesTax,ItemVatTax"/>
+                <order-by field-name="invoiceItemSeqId"/>
+            </entity-find>
             <if condition="!items">
                 <return error="true" message="Deben existir items a corregir en Nota de Crédito"/>
             </if>
-
-            <set field="returnedItemList" type="NewMap" from="[]"/>
-
-            <iterate list="items" entry="detailItem">
-                <entity-find-one entity-name="mantle.order.return.ReturnItem" value-field="returnItemField">
-                    <field-map field-name="returnId" from="returnId"/>
-                    <field-map field-name="returnItemSeqId" from="detailItem.returnItemSeqId"/>
-                </entity-find-one>
-                <set field="returnItemField.pctDiscount" from="detailItem.pctDiscount"/>
-                <entity-update value-field="returnItemField"/>
-                <script>returnedItemList.add(detailItem.returnItemSeqId)</script>
-            </iterate>
 
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
                 <econdition field-name="partyId" from="issuerPartyId"/>
@@ -1895,60 +1966,63 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <set field="rutEmisor" from="partyIdentificationList.first.idValue"/>
 
-            <!-- Datos de devolución, para armar nota de crédito -->
-            <service-call name="mantle.order.ReturnServices.get#ReturnDisplayInfo" in-map="[returnId:returnId]" out-map="context"/>
-
             <!-- Recuperación de referencias -->
-            <entity-find entity-name="mchile.dte.ReferenciaReturnAndFiscalCode" list="referenciaList">
-                <econdition field-name="returnId" from="returnId"/>
+            <entity-find entity-name="mchile.dte.ReferenciaDte" list="referenciaList">
+                <econdition field-name="invoiceId" from="invoiceId"/>
+                <econdition field-name="referenciaTypeEnumId" value="RefDteTypeInvoice"/>
                 <order-by field-name="fiscalTaxDocumentTypeEnumId"/>
             </entity-find>
-
-            <!-- Items de la devolución -->
-            <entity-find entity-name="mantle.order.return.ReturnItem" list="returnItemList">
-                <econdition field-name="returnId"/>
-                <econdition field-name="returnItemSeqId" operator="in" from="returnedItemList"/>
-                <order-by field-name="returnItemSeqId"/>
+            <if condition="referenciaList.size() == 0">
+                <return error="true" message="No hay referencia para Nota de Crédito invoiceId ${invoiceId}"/>
+            </if>
+            <if condition="referenciaList.size() > 1">
+                <return error="true" message="Más de una referencia para Nota de Crédito invoiceId ${invoiceId}"/>
+            </if>
+            <set field="referencia" from="referenciaList.first"/>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteReferenciaList" for-update="true">
+                <econdition field-name="issuerPartyId" from="invoice.toPartyId"/>
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="referencia.fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="fiscalTaxDocumentNumber" from="referencia.folio as Integer"/>
             </entity-find>
-
-            <!-- email receptor -->
-            <entity-find-one entity-name="mantle.order.return.ReturnHeader" value-field="returnField"/>
-
-            <if condition="!returnField">
-                <return error="true" message="No existe devolución"/>
+            <if condition="!dteReferenciaList"><return error="true" message="Could not find reference FiscalTaxDocumentId for credit note with invoiceId ${invoiceId}"/></if>
+            <if condition="!dteReferenciaList.first.invoiceId">
+                <return error="true" message="Reference has no invoiceId associated (reference ${dteReferenciaList.first.referenciaId})"/>
             </if>
-            <if condition="!returnField.customerPartyId">
-                <return error="true" message="No existe tercero asociado a devolución"/>
-            </if>
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoiceReferencia" auto-field-map="[invoiceId:dteReferenciaList.first.invoiceId]"/>
+            <if condition="invoice.invoiceTotal != null &amp;&amp; invoice.invoiceTotal != 0 &amp;&amp; invoice.invoiceTotal == invoiceReferencia.invoiceTotal"><then>
+                <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeAnula"/>
+            </then><else-if condition="invoice.invoiceTotal == 0">
+                <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeCorrigeTexto"/>
+            </else-if><else>
+                <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeCorrigeMonto"/>
+            </else></if>
+            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="codRefEnum" auto-field-map="[enumId:referencia.codigoReferenciaEnumId]"/>
+            <set field="referencia.razonReferencia" from="codRefEnum.description"/>
+            <entity-update value-field="referencia"/>
 
-            <set field="partyId" from="returnField.customerPartyId"/>
+            <if condition="!receiverPartyId">
+                <return error="true" message="No existe receptor asociado a Nota de Crédito invoiceId ${invoiceId}"/>
+            </if>
 
             <set field="username"/>
-            <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:returnField.customerPartyId]" out-map="context"/>
-            <if condition="!emailAddress">
-                <then>
-                    <!--return error="true" message="Receptor no tiene dirección de correo"/-->
-                    <log level="warn" message="Receptor no tiene dirección de correo"/>
-                </then>
-                <else>
-                    <set field="username" from="emailAddress"/>
-                </else>
-            </if>
+            <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:receiverPartyId]" out-map="context"/>
+            <if condition="!emailAddress"><then>
+                <!--return error="true" message="Receptor no tiene dirección de correo"/-->
+                <log level="warn" message="Receptor no tiene dirección de correo"/>
+            </then><else>
+                <set field="username" from="emailAddress"/>
+            </else></if>
 
             <!-- rut receptor -->
             <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
-            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyIdentificationEv"/>
+            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyIdentificationEv" auto-field-map="[partyId:receiverPartyId, partyIdTypeEnumId:'PtidNationalTaxId']"/>
             <set field="rutReceptor"/>
-            <if condition="!partyIdentificationEv">
-                <then>
-                    <log message="Receptor no tiene RUT" level="warn"/>
-                    <set field="rutReceptor" from="'66666666-6'"/>
-                </then>
-                <else>
-                    <set field="rutReceptor" from="partyIdentificationEv.idValue"/>
-                </else>
-            </if>
-
+            <if condition="!partyIdentificationEv"><then>
+                <log message="Receptor no tiene RUT" level="warn"/>
+                <set field="rutReceptor" from="'66666666-6'"/>
+            </then><else>
+                <set field="rutReceptor" from="partyIdentificationEv.idValue"/>
+            </else></if>
 
             <!-- Datos para encontrar contacto -->
 
@@ -1958,13 +2032,12 @@ along with this software (see the LICENSE.md file). If not, see
             <!--entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
                 <field-map field-name="partyId" from="partyId"/>
                 <field-map field-name="contactMechPurposeId" value="PostalTax"/>
-            </ientity-find-one-->
+            </entity-find-one-->
 
             <entity-find entity-name="mantle.party.contact.PartyContactMech" list="contactMechList">
-                <econdition field-name="partyId" from="partyId"/>
+                <econdition field-name="partyId" from="receiverPartyId"/>
                 <econdition field-name="contactMechPurposeId" value="PostalTax"/>
-                <econdition field-name="fromDate" operator="less-equals" from="ec.user.nowTimestamp"/>
-                <econdition field-name="thruDate" from="null"/>
+                <date-filter/>
             </entity-find>
 
             <if condition="!contactMechList">
@@ -1977,9 +2050,7 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Datos de contacto -->
             <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressField"/>
             <set field="dirReceptor" from="contactPostalAddressField.address1"/>
-            <script>
-                dirReceptor = dirReceptor + (contactPostalAddressField.unitNumber? (" " + contactPostalAddressField.unitNumber) : '')
-            </script>
+            <script>dirReceptor = dirReceptor + (contactPostalAddressField.unitNumber? (" " + contactPostalAddressField.unitNumber) : '')</script>
 
             <service-call name="mchile.GeoServices.get#ComunaFromGeoId" in-map="[stateProvinceGeoId:contactPostalAddressField.stateProvinceGeoId]" out-map="comunaOut"/>
 
@@ -1991,32 +2062,29 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- ID Contacto receptor -->
             <set field="receptorContactId" from="contactPostalAddressField.telecomContactMechId"/>
 
-
-            <entity-find-one entity-name="mantle.party.Party" value-field="partyEv"/>
+            <entity-find-one entity-name="mantle.party.Party" value-field="partyEv" auto-field-map="[partyId:receiverPartyId]"/>
             <if condition="!partyEv">
                 <return error="true" message="Receptor no existe"/>
             </if>
 
             <set field="partyTypeEnumId" from="partyEv.partyTypeEnumId"/>
 
-
             <set field="rznSocReceptor" value=""/>
             <set field="contactoReceptor" value=""/>
             <set field="giroReceptor" value="Sin Giro"/>
 
-
             <if condition="partyTypeEnumId == 'PtyOrganization'">
                 <!-- Organizacion -->
-                <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField"/>
+                <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField" auto-field-map="[partyId:receiverPartyId]"/>
                 <set field="rznSocReceptor" from="organizationField.organizationName"/>
 
-                <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:partyId]" out-map="giroOutMap"/>
+                <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:receiverPartyId]" out-map="giroOutMap"/>
                 <set field="giroReceptor" from="giroOutMap.description"/>
                 <!--set field="giroReceptor" from="organizationField.giro"/-->
 
                 <!-- Obtención de contacto para impuestos en organización -->
                 <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
-                              in-map="[partyId:partyId, postalContactMechPurposeId:'PostalTax']"/>
+                              in-map="[partyId:receiverPartyId, postalContactMechPurposeId:'PostalTax']"/>
                 <if condition="!contactOut.postalContactMechId">
                     <return error="true" message="Receptor no tiene contacto tributario asignado"/>
                 </if>
@@ -2032,24 +2100,21 @@ along with this software (see the LICENSE.md file). If not, see
 
             </if>
             <if condition="partyTypeEnumId == 'PtyPerson'">
-                <!-- Persona Natural -->
                 <entity-find-one entity-name="mantle.party.Person" value-field="personField"/>
                 <if condition="!personField">
                     <return error="true" message="No existe persona para facturar"/>
                 </if>
 
                 <set field="rznSocReceptor" from="personField.firstName"/>
-                <script>
-                    rznSocReceptor = rznSocReceptor + " " + personField.lastName
-                </script>
+                <script>rznSocReceptor = rznSocReceptor + " " + personField.lastName</script>
                 <set field="contactoReceptor" from="rznSocReceptor"/>
             </if>
 
 
             <!-- Generacion de nota de crédito -->
-            <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, rutEmisor:rutEmisor, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
-                          contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:returnItemList,
-                          invoiceId:invoiceId, returnId:returnId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId, receiverPartyId:partyId]" out-map="factMapOut"/>
+            <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-61', rutEmisor:rutEmisor, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
+                          contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:items,
+                          invoiceId:invoiceId, returnId:returnId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId, receiverPartyId:receiverPartyId]" out-map="factMapOut"/>
             <set field="fiscalTaxDocumentId" from="factMapOut.fiscalTaxDocumentId"/>
         </actions>
     </service>
@@ -2062,7 +2127,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fiscalTaxDocumentId" required="true"/>
             <parameter name="invoiceId" required="true"/>
             <parameter name="issuerPartyId" required="true"/>
-            <parameter name="items"/>
+            <parameter name="items" type="List"/>
             <parameter name="fiscalTaxDocumentTypeEnumId"/>
             <parameter name="codRef"/>
         </in-parameters>
@@ -2090,9 +2155,10 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="folioFact" from="factField.fiscalTaxDocumentNumber"/>
 
             <!-- TODO: Items a modificar a partir de lista de parámetros en referenciaList -->
-            <if condition="items.length() != 0">
+            <!--<if condition="items.length() != 0">
                 <set field="itemList" from="items instanceof List ? items : items.split(',') as List" default-value="null"/>
-            </if>
+            </if>-->
+            <set field="itemList" from="items"/>
 
             <!-- email receptor -->
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoiceEv"/>
@@ -2215,8 +2281,9 @@ along with this software (see the LICENSE.md file). If not, see
                 <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
             </entity-find-one>
 
-            <entity-find entity-name="mchile.dte.ReferenciaNotaDebito" list="referenciaListOld">
+            <entity-find entity-name="mchile.dte.ReferenciaDte" list="referenciaListOld">
                 <econdition field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+                <econdition field-name="referenciaTypeEnumId" value="RefDteTypeNotaDebito"/>
                 <order-by field-name="fiscalTaxDocumentTypeEnumId"/>
             </entity-find>
 
@@ -2263,7 +2330,6 @@ along with this software (see the LICENSE.md file). If not, see
             Agrega una referencia para DTE (excepto Nota de Débito)
         </description>
         <in-parameters>
-            <parameter name="returnId"/>
             <parameter name="invoiceId"/>
             <parameter name="shipmentId"/>
             <parameter name="folio" required="true"/>
@@ -2273,37 +2339,25 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fecha" required="true"/>
             <parameter name="codigoReferenciaEnumId" required="true"/>
             <parameter name="razonReferencia"/>
-            <parameter name="esFactura" default-value="false"/>
         </in-parameters>
         <actions>
             <!-- Verificación de RUT -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutOtroContribuyente]"/>
-
-            <!-- Inserción en tabla referenceReturn -->
-            <if condition="esFactura == 'false'">
-                <set field="createMap" from="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, codigoReferenciaEnumId:codigoReferenciaEnumId, fecha:fecha, rut:rutOtroContribuyente, idAdicional:idAdicional,
-                                          folio:folio, returnId:returnId, razonReferencia:razonReferencia]"/>
-                <service-call name="create#mchile.dte.ReferenciaReturn" out-map="context" in-map="createMap"/>
-            </if>
-            <if condition="esFactura == 'true'">
-                <set field="createMap" from="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, codigoReferenciaEnumId:codigoReferenciaEnumId, fecha:fecha, rut:rutOtroContribuyente, idAdicional:idAdicional,
-                                          folio:folio, invoiceId:invoiceId, razonReferencia:razonReferencia]"/>
-                <service-call name="create#mchile.dte.ReferenciaInvoice" out-map="context" in-map="createMap"/>
-            </if>
+            <set field="createMap" from="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, codigoReferenciaEnumId:codigoReferenciaEnumId, fecha:fecha, rut:rutOtroContribuyente, idAdicional:idAdicional,
+                                          folio:folio, invoiceId:invoiceId, razonReferencia:razonReferencia, referenciaTypeEnumId:'RefDteTypeInvoice']"/>
+            <service-call name="create#mchile.dte.ReferenciaDte" out-map="context" in-map="createMap"/>
         </actions>
     </service>
 
     <service verb="agregar" noun="RefNotaDebito">
-        <description>
-            Agrega una referencia para asociar DTE con nota de débito
-        </description>
+        <description>Agrega una referencia para asociar DTE con nota de débito</description>
         <in-parameters>
             <parameter name="fiscalTaxDocumentId"/>
             <parameter name="folio" required="true"/>
             <parameter name="rutOtroContribuyente" required="true"/>
             <parameter name="idAdicional"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
-            <parameter name="fecha" required="true"/>
+            <parameter name="fecha" type="Date" required="true"/>
             <parameter name="codigoReferenciaEnumId" required="true"/>
             <parameter name="razonReferencia"/>
         </in-parameters>
@@ -2313,8 +2367,9 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Inserción en tabla referenciaFactura -->
             <set field="createMap" from="[codigoReferenciaEnumId:codigoReferenciaEnumId, fecha:fecha, rut:rutOtroContribuyente, idAdicional:idAdicional,
-                                          folio:folio, fiscalTaxDocumentId:fiscalTaxDocumentId, razonReferencia:razonReferencia, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"/>
-            <service-call name="create#mchile.dte.ReferenciaNotaDebito" out-map="context" in-map="createMap"/>
+                                          folio:folio, fiscalTaxDocumentId:fiscalTaxDocumentId, razonReferencia:razonReferencia, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId,
+                                          referenciaTypeEnumId:'RefDteTypeNotaDebito']"/>
+            <service-call name="create#mchile.dte.ReferenciaDte" out-map="context" in-map="createMap"/>
         </actions>
     </service>
 
@@ -2339,43 +2394,20 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Inserción en tabla referenciaShipment -->
             <set field="createMap" from="[shipmentId:shipmentId, codigoReferenciaEnumId:codigoReferenciaEnumId, fecha:fecha, rut:rutOtroContribuyente, idAdicional:idAdicional,
-                                          folio:folio, fiscalTaxDocumentId:fiscalTaxDocumentId, razonReferencia:razonReferencia, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"/>
-            <service-call name="create#mchile.dte.ReferenciaShipment" out-map="context" in-map="createMap"/>
+                                          folio:folio, fiscalTaxDocumentId:fiscalTaxDocumentId, razonReferencia:razonReferencia, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId,
+                                          referenciaTypeEnumId:'RefDteTypeShipment']"/>
+            <service-call name="create#mchile.dte.ReferenciaDte" out-map="context" in-map="createMap"/>
         </actions>
     </service>
 
     <service verb="eliminar" noun="Referencia">
-        <description>
-            Eliminar referencia de una DTE
-        </description>
+        <description>Eliminar referencia de una DTE</description>
         <in-parameters>
-            <parameter name="referenciaReturnId"/>
-            <parameter name="referenciaInvoiceId"/>
-            <parameter name="referenciaFacturaId"/>
-            <parameter name="referenciaNotaDebitoId"/>
-            <parameter name="referenciaShipmentId"/>
+            <parameter name="referenciaId"/>
         </in-parameters>
         <actions>
-            <if condition="referenciaReturnId">
-                <entity-find-one entity-name="mchile.dte.ReferenciaReturn" value-field="referenciaField" for-update="true"/>
-                <entity-delete value-field="referenciaField"/>
-            </if>
-            <if condition="referenciaInvoiceId">
-                <entity-find-one entity-name="mchile.dte.ReferenciaInvoice" value-field="referenciaField" for-update="true"/>
-                <entity-delete value-field="referenciaField"/>
-            </if>
-            <if condition="referenciaFacturaId">
-                <entity-find-one entity-name="mchile.dte.ReferenciaFactura" value-field="referenciaField" for-update="true"/>
-                <entity-delete value-field="referenciaField"/>
-            </if>
-            <if condition="referenciaNotaDebitoId">
-                <entity-find-one entity-name="mchile.dte.ReferenciaNotaDebito" value-field="referenciaField" for-update="true"/>
-                <entity-delete value-field="referenciaField"/>
-            </if>
-            <if condition="referenciaShipmentId">
-                <entity-find-one entity-name="mchile.dte.ReferenciaShipment" value-field="referenciaField" for-update="true"/>
-                <entity-delete value-field="referenciaField"/>
-            </if>
+            <entity-find-one entity-name="mchile.dte.ReferenciaDte" value-field="referenciaField" for-update="true"/>
+            <entity-delete value-field="referenciaField"/>
         </actions>
     </service>
 
@@ -2448,6 +2480,7 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="get" noun="SIICode">
         <in-parameters>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="enumTypeId" default-value="FiscalTaxDocumentType"/>
         </in-parameters>
         <out-parameters>
             <parameter name="siiCode" type="Integer"/>
@@ -2456,9 +2489,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="siiCode" from="null"/>
             <entity-find-one entity-name="moqui.basic.Enumeration" value-field="enumField">
                 <field-map field-name="enumId" from="fiscalTaxDocumentTypeEnumId"/>
-                <field-map field-name="enumTypeId" value="FiscalTaxDocumentType"/>
+                <field-map field-name="enumTypeId"/>
             </entity-find-one>
-            <set field="siiCode" from="enumField.sequenceNum"/>
+            <set field="siiCode" from="enumField.enumCode" type="Integer"/>
         </actions>
     </service>
 
@@ -2488,23 +2521,12 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
             <set field="afecto" value="true"/>
-
             <entity-find entity-name="mantle.product.category.ProductCategoryMember" list="categoryMemberList">
                 <econdition field-name="productId" from="productId"/>
                 <econdition field-name="productCategoryId" value="ClVatTaxExento"/>
-                <econdition field-name="thruDate" operator="greater-equals" from="ec.user.nowTimestamp" or-null="true"/>
+                <date-filter/>
             </entity-find>
-
-            <log level="warn" message="Verificando si item $productId es AFECTO o EXENTO"/>
-            <if condition="categoryMemberList">
-                <then>
-                    <log message="Item EXENTO encontrado $productId" level="warn"/>
-                    <set field="afecto" value="true"/>
-                </then>
-                <else>
-                    <log level="warn" message="Item AFECTO $productId"/>
-                </else>
-            </if>
+            <if condition="categoryMemberList"><set field="afecto" value="false"/></if>
         </actions>
     </service>
 
@@ -2529,6 +2551,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="formaPago"/>
             <parameter name="referenciaList" type="List"/>
             <parameter name="continua"/>
+            <parameter name="saveSinFirma" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
@@ -2541,6 +2564,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="organizationPartyId" required="true"/>
             <parameter name="fechaInicio"/>
             <parameter name="fechaFin"/>
+            <parameter name="saveSinFirma" type="Boolean" default="false"/>
         </in-parameters>
     </service>
 
@@ -2588,11 +2612,25 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="shipmentId" required="true"/>
             <parameter name="indTrasladoEnumId" required="true"/>
             <parameter name="tipoDespachoEnumId"/>
+            <parameter name="settlementTermId"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
         </out-parameters>
         <actions>
+            <set field="glosaPagos"/>
+            <if condition="settlementTermId">
+                <entity-find-one entity-name="mantle.account.invoice.SettlementTerm" value-field="settlementField">
+                    <field-map field-name="settlementTermId" from="settlementTermId"/>
+                    <select-field field-name="description"/>
+                </entity-find-one>
+                <if condition="!settlementTermId">
+                    <return error="true" message="Términos de crédito no existentes"/>
+                </if>
+                <set field="glosaPagos" from="settlementField.description"/>
+            </if>
+            <if condition="!glosaPagos"><set field="glosaPagos" value=""/></if>
+
             <entity-find-one entity-name="mantle.shipment.Shipment" value-field="shipment"/>
             <entity-find entity-name="mantle.shipment.ShipmentItemDetail" list="shipmentItemDetailList">
                 <econdition field-name="shipmentId"/>
@@ -2611,8 +2649,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
 
             <!-- Recuperación de referencias -->
-            <entity-find entity-name="mchile.dte.ReferenciaShipment" list="referenciaList">
+            <entity-find entity-name="mchile.dte.ReferenciaDte" list="referenciaList">
                 <econdition field-name="shipmentId" from="shipmentId"/>
+                <econdition field-name="referenciaTypeEnumId" value="RefDteTypeShipment"/>
             </entity-find>
 
             <entity-find-one entity-name="mantle.shipment.Shipment" value-field="shipmentEv"/>
@@ -2737,20 +2776,22 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="contactoReceptor" from="rznSocReceptor"/>
             </if>
 
-            <service-call name="mchile.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:indTrasladoEnumId]" out-map="codeOut"/>
+            <service-call name="mchile.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:indTrasladoEnumId, enumTypeId:'IndTraslado']" out-map="codeOut"/>
             <set field="indTraslado" from="codeOut.siiCode"/>
-            <set field="tipoDespacho"/>
 
             <if condition="tipoDespachoEnumId">
-                <service-call name="mchile.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:tipoDespachoEnumId]" out-map="codeOut"/>
+                <service-call name="mchile.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:tipoDespachoEnumId, enumTypeId:'TipoDespacho']" out-map="codeOut"/>
                 <set field="tipoDespacho" from="codeOut.siiCode"/>
             </if>
+
+            <set field="medioPago" value="PE"/>
+            <set field="formaPago" value="2"/>
 
             <!-- Generacion de guía de despacho -->
             <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-52', rutEmisor:rutEmisor, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
                           contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:shipmentItemDetailList,
                           invoiceId:invoiceId, returnId:returnId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId, receiverPartyId:partyId,
-                          indTraslado:indTraslado, tipoDespacho:tipoDespacho, shipmentId:shipmentId]" out-map="factMapOut"/>
+                          indTraslado:indTraslado, tipoDespacho:tipoDespacho, shipmentId:shipmentId, glosaPagos:glosaPagos, settlementTermId:settlementTermId]" out-map="factMapOut"/>
             <set field="fiscalTaxDocumentId" from="factMapOut.fiscalTaxDocumentId"/>
         </actions>
     </service>
@@ -2813,7 +2854,7 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdtList">
                 <econdition field-name="fiscalTaxDocumentNumber" from="folio"/>
                 <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
-                <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
+                <econdition field-name="statusId" value="Ftd-Issued"/>
                 <econdition field-name="issuerPartyId" from="issuerPartyId"/>
             </entity-find>
             <set field="ftdtField" from="ftdtList.first"/>
@@ -2881,11 +2922,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
                 <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
-                <!--econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/-->
-                <econditions combine="or">
-                    <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
-                    <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Cancelled"/>
-                </econditions>
+                <econdition field-name="statusId" operator="in" value="Ftd-Issued,Ftd-Cancelled"/>
                 <econdition field-name="issuerPartyId" from="organizationPartyId"/>
                 <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
                 <econdition field-name="date" operator="less-equals" from="fechaFin"/>
@@ -2894,8 +2931,8 @@ along with this software (see the LICENSE.md file). If not, see
 
 
             <iterate list="dteList" entry="dteEv">
-                <!--log level="warn" message="Atributos encontrados: $dteEv.fiscalTaxDocumentId, Monto Neto: $dteEv.montoNeto, monto IVA: $dteEv.montoIVARecuperable, tipo: $dteEv.fiscalTaxDocumentStatusEnumId"/-->
-                <if condition="!dteEv.fiscalTaxDocumentStatusEnumId.equals('Ftdt-Cancelled')">
+                <!--log level="warn" message="Atributos encontrados: $dteEv.fiscalTaxDocumentId, Monto Neto: $dteEv.montoNeto, monto IVA: $dteEv.montoIVARecuperable, tipo: $dteEv.statusId"/-->
+                <if condition="!dteEv.statusId.equals('Ftd-Cancelled')">
                     <then>
                         <script>
                             if (dteEv.montoNeto != null) {
@@ -2928,7 +2965,7 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- TODO: Consulta para ver todos los folios usados -->
             <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
                 <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
-                <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
+                <econdition field-name="statusId" value="Ftd-Issued"/>
                 <econdition field-name="issuerPartyId" from="organizationPartyId"/>
                 <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
                 <econdition field-name="date" operator="less-equals" from="fechaFin"/>
@@ -2963,7 +3000,7 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- TODO: Consulta para ver todos los folios anulados -->
             <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
                 <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
-                <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Cancelled"/>
+                <econdition field-name="statusId" value="Ftd-Cancelled"/>
                 <econdition field-name="issuerPartyId" from="organizationPartyId"/>
                 <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
                 <econdition field-name="date" operator="less-equals" from="fechaFin"/>
@@ -3041,11 +3078,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
                 <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
-                <!--econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/-->
-                <econditions combine="or">
-                    <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
-                    <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Cancelled"/>
-                </econditions>
+                <econdition field-name="statusId" operator="in" value="Ftd-Issued,Ftd-Cancelled"/>
                 <econdition field-name="issuerPartyId" from="organizationPartyId"/>
                 <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
                 <econdition field-name="date" operator="less-equals" from="fechaFin"/>
@@ -3054,8 +3087,8 @@ along with this software (see the LICENSE.md file). If not, see
 
 
             <iterate list="dteList" entry="dteEv">
-                <!--log level="warn" message="Atributos encontrados: $dteEv.fiscalTaxDocumentId, Monto Neto: $dteEv.montoNeto, monto IVA: $dteEv.montoIVARecuperable, tipo: $dteEv.fiscalTaxDocumentStatusEnumId"/-->
-                <if condition="!dteEv.fiscalTaxDocumentStatusEnumId.equals('Ftdt-Cancelled')">
+                <!--log level="warn" message="Atributos encontrados: $dteEv.fiscalTaxDocumentId, Monto Neto: $dteEv.montoNeto, monto IVA: $dteEv.montoIVARecuperable, tipo: $dteEv.statusId"/-->
+                <if condition="!dteEv.statusId.equals('Ftd-Cancelled')">
                     <then>
                         <script>
                             if (dteEv.montoNeto != null) {
@@ -3088,7 +3121,7 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- TODO: Consulta para ver todos los folios usados -->
             <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
                 <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
-                <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Issued"/>
+                <econdition field-name="statusId" value="Ftd-Issued"/>
                 <econdition field-name="issuerPartyId" from="organizationPartyId"/>
                 <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
                 <econdition field-name="date" operator="less-equals" from="fechaFin"/>
@@ -3123,7 +3156,7 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- TODO: Consulta para ver todos los folios anulados -->
             <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
                 <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
-                <econdition field-name="fiscalTaxDocumentStatusEnumId" value="Ftdt-Cancelled"/>
+                <econdition field-name="statusId" value="Ftd-Cancelled"/>
                 <econdition field-name="issuerPartyId" from="organizationPartyId"/>
                 <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
                 <econdition field-name="date" operator="less-equals" from="fechaFin"/>
@@ -3179,7 +3212,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="rutEmisor" from="rut.rutSinFormato"/>
 
             <iterate list="ftdtList" entry="ftdtEntry">
-                <set field="ftdtEntry.contentLocation" value="dbresource://moit/erp/dte/${rutEmisor}/DTE${tipoFactura}-${folio}.xml"/>
+                <set field="ftdtEntry.contentLocation" value="dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoFactura}-${folio}.xml"/>
                 <script>
                     docRr = ec.resource.locationReference(ftdtEntry.contentLocation)
                     docRr.putStream(filename.getInputStream())
@@ -3191,64 +3224,31 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="update" noun="PartyDteParameters">
         <in-parameters>
+            <auto-parameters entity-name="mchile.dte.PartyDteParams"/>
             <parameter name="partyId" required="true"/>
-            <parameter name="templateFactura"/>
-            <parameter name="templateBoleta"/>
-            <parameter name="templatePdf"/>
-            <parameter name="templatePdfBoleta"/>
-            <parameter name="templatePdfBoletaContinua"/>
-            <parameter name="templateEnvio"/>
-            <parameter name="templateEnvioBoleta"/>
-            <parameter name="templateAceptaciones"/>
-            <parameter name="templateRcof"/>
-            <parameter name="logo"/>
-            <parameter name="fchResol"/>
-            <parameter name="nroResol"/>
-            <parameter name="rutEmisor"/>
-            <parameter name="rutEnvia"/>
-            <parameter name="rznSocEmisor"/>
-            <parameter name="cdgSIISucur"/>
-            <parameter name="dirOrigen"/>
-            <parameter name="cmnaOrigen"/>
-            <parameter name="ciudadOrigen"/>
-            <parameter name="pathResults"/>
-            <parameter name="pathAceptaciones"/>
-            <parameter name="pathRecibidas"/>
-            <parameter name="pathCaf"/>
-            <parameter name="passCert"/>
-            <parameter name="nmbContacto"/>
-            <parameter name="mailContacto"/>
-            <parameter name="fonoContacto"/>
         </in-parameters>
         <actions>
             <entity-find entity-name="mchile.dte.PartyDteParams" list="paramsList">
                 <econdition field-name="partyId"/>
             </entity-find>
 
-
-            <if condition="paramsList">
-                <then>
-                    <service-call name="update#mchile.dte.PartyDteParams" in-map="context"/>
-                </then>
-                <else>
-                    <service-call name="create#mchile.dte.PartyDteParams"
-                                  in-map="[partyId:partyId, templateFactura:templateFactura, templateBoleta:templateBoleta,  templatePdf:templatePdf, templatePdfBoleta:templatePdfBoleta,
-                                  templatePdfBoletaContinua:templatePdfBoletaContinua,
-                    templateEnvio:templateEnvio, templateEnvioBoleta:templateEnvioBoleta, templateAceptaciones:templateAceptaciones, templateRcof:templateRcof, logo:logo, fchResol:fechResol, nroResol:nroResol, rutEmisor:rutEmisor,
-                    rutEnvia:rutEnvia, rznSocEmisor:rznSocEmisor, cdgSIISucur:cdgSIISucur, dirOrigen:dirOrigen, cmnaOrigen:cmnaOrigen, ciudadOrigen:ciudadOrigen, pathResults:pathResults, pathAceptaciones:pathAceptaciones,
-                    pathRecibidas:pathRecibidas, pathCaf:pathCaf, passCert:passCert, nmbContacto:nmbContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]"/>
-                </else>
-            </if>
+            <if condition="paramsList"><then>
+                <service-call name="update#mchile.dte.PartyDteParams" in-map="context"/>
+            </then><else>
+                <service-call name="create#mchile.dte.PartyDteParams" in-map="[partyId:partyId, templatePdf:templatePdf, templatePdfBoleta:templatePdfBoleta,
+                                  templatePdfBoletaContinua:templatePdfBoletaContinua, logo:logo, fchResol:fechResol, nroResol:nroResol, rutEmisor:rutEmisor,
+                                  rutEnvia:rutEnvia, rznSocEmisor:rznSocEmisor, cdgSIISucur:cdgSIISucur, dirOrigen:dirOrigen, cmnaOrigen:cmnaOrigen, ciudadOrigen:ciudadOrigen,
+                                  passCert:passCert, nmbContacto:nmbContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]"/>
+            </else></if>
         </actions>
     </service>
 
     <service verb="load" noun="Certificate">
-        <description>
-            Carga Certificado Digital para firmar DTE
-        </description>
+        <description>Carga Certificado Digital para firmar DTE</description>
         <in-parameters>
-            <parameter name="filename" type="org.apache.commons.fileupload.FileItem"/>
+            <parameter name="certificateFile" type="org.apache.commons.fileupload.FileItem"/>
             <parameter name="organizationPartyId" required="true"/>
+            <parameter name="encoding" default-value="UTF-8"/>
             <parameter name="passCert" required="true"/>
         </in-parameters>
         <actions>
@@ -3258,19 +3258,15 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="!dteParams">
                 <return error="true" message="Primero complete parametros de organizacion"/>
             </if>
+            <set field="dteParams.certData" from="certificateFile.get().encodeBase64()" type="String"/>
             <set field="dteParams.passCert" from="passCert"/>
-            <set field="dteParams.certData" from="filename.get()"/>
-
-            <entity-update value-field="dteParams"/>
         </actions>
     </service>
 
     <service verb="load" noun="PDFTemplate">
-        <description>
-            Carga Plantilla para generar PDF
-        </description>
+        <description>Carga Plantilla para generar PDF</description>
         <in-parameters>
-            <parameter name="filename" type="org.apache.commons.fileupload.FileItem"/>
+            <parameter name="templateFile" type="org.apache.commons.fileupload.FileItem"/>
             <parameter name="organizationPartyId" required="true"/>
             <parameter name="type" required="true"/>
         </in-parameters>
@@ -3280,76 +3276,22 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find-one>
 
 
-            <if condition="type == 'PDF'">
-                <set field="dteParams.pdfTemplate" from="filename.get()"/>
-                <set field="dteParams.pdfTemplateFilename" from="filename.getName()"/>
-            </if>
-
-            <if condition="type == 'PDFCedible'">
-                <set field="dteParams.pdfTemplateCedible" from="filename.get()"/>
-                <set field="dteParams.pdfTemplateCedibleFilename" from="filename.getName()"/>
+            <if condition="type == 'DTE'">
+                <set field="dteParams.pdfTemplate" from="templateFile.getString(encoding)"/>
             </if>
 
             <if condition="type == 'Boleta'">
-                <set field="dteParams.pdfTemplateBoleta" from="filename.get()"/>
-                <set field="dteParams.pdfTemplateBoletaFilename" from="filename.getName()"/>
+                <set field="dteParams.pdfTemplateBoleta" from="templateFile.getString(encoding)"/>
             </if>
 
             <if condition="type == 'BoletaContinua'">
-                <set field="dteParams.pdfTemplateBoletaContinua" from="filename.get()"/>
-                <set field="dteParams.pdfTemplateBoletaContinuaFilename" from="filename.getName()"/>
+                <set field="dteParams.pdfTemplateBoletaContinua" from="templateFile.getString(encoding)"/>
             </if>
 
-            <set field="logFile"/>
-            <script>
-                logFile = filename.getName()
-            </script>
+            <set field="logFile" from="templateFile.getName()"/>
             <log level="error" message="Subiendo plantilla PDF $logFile"/>
 
             <entity-update value-field="dteParams"/>
-        </actions>
-    </service>
-
-    <service verb="set" noun="PreferredDTE">
-        <in-parameters>
-            <parameter name="partyId" required="true"/>
-            <parameter name="preferredDteTypeEnumId"/>
-        </in-parameters>
-        <actions>
-            <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams" for-update="true">
-                <field-map field-name="partyId" from="partyId"/>
-            </entity-find-one>
-            <if condition="!dteParams">
-                <then>
-                    <!-- Hay que crear entrada para partyId -->
-                    <set field="createMap" from="[partyId:partyId, preferredDteTypeEnumId:preferredDteTypeEnumId]"/>
-                    <service-call name="create#mchile.dte.PartyDteParams" out-map="context" in-map="createMap"/>
-                </then>
-                <else>
-                    <set field="dteParams.preferredDteTypeEnumId" from="preferredDteTypeEnumId"/>
-                    <entity-update value-field="dteParams"/>
-                </else>
-            </if>
-        </actions>
-    </service>
-
-    <service verb="get" noun="PreferredDTE">
-        <in-parameters>
-            <parameter name="partyId" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="preferredDteTypeEnumId"/>
-        </out-parameters>
-        <actions>
-            <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams">
-                <field-map field-name="partyId" from="partyId"/>
-            </entity-find-one>
-            <if condition="!dteParams">
-                <return error="true" message="Receptor no tiene datos tributarios"/>
-            </if>
-            <if condition="dteParams.preferredDteTypeEnumId">
-                <set field="preferredDteTypeEnumId" from="dteParams.preferredDteTypeEnumId"/>
-            </if>
         </actions>
     </service>
 
@@ -3359,19 +3301,21 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="referenceText" default-value=" - "/>
             <parameter name="folioRef"/>
             <parameter name="tipoDocRef"/>
-            <parameter name="fecha"/>
+            <parameter name="fecha" type="Date"/>
         </in-parameters>
         <actions>
-            <entity-find-one entity-name="mchile.dte.ReferenciaInvoice" value-field="refEv" for-update="true">
+            <entity-find-one entity-name="mchile.dte.ReferenciaDte" value-field="refEv" for-update="true">
                 <field-map field-name="invoiceId" from="invoiceId"/>
                 <field-map field-name="fiscalTaxDocumentTypeEnumId" from="tipoDocRef"/>
+                <field-map field-name="folio" from="folioRef"/>
+                <field-map field-name="referenciaTypeEnumId" value="RefDteTypeInvoice"/>
             </entity-find-one>
 
             <if condition="!refEv">
                 <then>
                     <!-- Hay que crear entrada para referencia de invoiceId -->
-                    <set field="createMap" from="[fiscalTaxDocumentTypeEnumId:tipoDocRef, codigoReferenciaEnumId:codigoReferenciaEnumId, fecha:fecha, folio:folioRef, invoiceId:invoiceId]"/>
-                    <service-call name="create#mchile.dte.ReferenciaInvoice" out-map="context" in-map="createMap"/>
+                    <set field="createMap" from="[fiscalTaxDocumentTypeEnumId:tipoDocRef, codigoReferenciaEnumId:codigoReferenciaEnumId, fecha:fecha, folio:folioRef, invoiceId:invoiceId, razonReferencia:referenceText, referenciaTypeEnumId:'RefDteTypeInvoice']"/>
+                    <service-call name="create#mchile.dte.ReferenciaDte" out-map="context" in-map="createMap"/>
                 </then>
                 <else>
                     <!-- Ya existe una referencia -->
@@ -3391,19 +3335,20 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="referenceText" default-value=" - "/>
             <parameter name="folioRef"/>
             <parameter name="tipoDocRef"/>
-            <parameter name="fecha"/>
+            <parameter name="fecha" type="Date"/>
         </in-parameters>
         <actions>
-            <entity-find-one entity-name="mchile.dte.ReferenciaShipment" value-field="refEv" for-update="true">
+            <entity-find-one entity-name="mchile.dte.ReferenciaDte" value-field="refEv" for-update="true">
                 <field-map field-name="shipmentId" from="shipmentId"/>
                 <field-map field-name="fiscalTaxDocumentTypeEnumId" from="tipoDocRef"/>
                 <field-map field-name="folio" from="folioRef"/>
+                <field-map field-name="referenciaTypeEnumId" value="RefDteTypeShipment"/>
             </entity-find-one>
             <if condition="!refEv">
                 <then>
                     <!-- Hay que crear entrada para referencia de invoiceId -->
-                    <set field="createMap" from="[fiscalTaxDocumentTypeEnumId:tipoDocRef, codigoReferenciaEnumId:codigoReferenciaEnumId, fecha:fecha, folio:folioRef, shipmentId:shipmentId, razonReferencia:referenceText]"/>
-                    <service-call name="create#mchile.dte.ReferenciaShipment" out-map="context" in-map="createMap"/>
+                    <set field="createMap" from="[fiscalTaxDocumentTypeEnumId:tipoDocRef, codigoReferenciaEnumId:codigoReferenciaEnumId, fecha:fecha, folio:folioRef, shipmentId:shipmentId, razonReferencia:referenceText, referenciaTypeEnumId:'RefDteTypeShipment']"/>
+                    <service-call name="create#mchile.dte.ReferenciaDte" out-map="context" in-map="createMap"/>
                 </then>
                 <else>
                     <!-- Ya existe la referencia -->
@@ -3434,6 +3379,203 @@ along with this software (see the LICENSE.md file). If not, see
                 else
                     ec.message.addError(ec.resource.expand('No se encontró archivo en [${fiscalTaxDocumentId}]',''))
             </script>
+        </actions>
+    </service>
+
+    <service verb="check" noun="ProductionEnvironment">
+        <out-parameters>
+            <parameter name="isProduction" type="Boolean"/>
+        </out-parameters>
+        <actions>
+            <script>isProduction = org.moqui.util.SystemBinding.getPropOrEnv("moquichile.dte.systemIsProduction") == 'true'</script>
+        </actions>
+    </service>
+
+    <service verb="revert" noun="FiscalTaxDocumentGeneration">
+        <in-parameters>
+            <parameter name="issuerPartyId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" required="true" type="Integer"/>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" for-update="true">
+                <econdition field-name="issuerPartyId"/>
+                <econdition field-name="fiscalTaxDocumentNumber"/>
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
+            </entity-find>
+            <set field="ftd" from="ftdList.first"/>
+            <if condition="ftd == null"><return error="true" message="No se encuentra FiscalTaxDocument ${fiscalTaxDocumentId}"/></if>
+            <if condition="ftd.statusId != 'Ftd-Issued'"><return error="true" message="Estado de FiscalTaxDocument ${fiscalTaxDocumentId} es ${ftd.statusId}, debe ser Ftd-Issued"/></if>
+            <if condition="ftd.sentAuthStatusId != 'Ftd-NotSentAuth'"><return error="true" message="Estado de envío de FiscalTaxDocument ${fiscalTaxDocumentId} es ${ftd.sentAuthStatusId}, debe ser Ftd-NotSentAuth"/></if>
+            <entity-delete-by-condition entity-name="mchile.dte.FiscalTaxDocumentContent">
+                <econdition field-name="fiscalTaxDocumentId"/>
+            </entity-delete-by-condition>
+            <entity-delete-by-condition entity-name="mchile.dte.FiscalTaxDocumentAttributes">
+                <econdition field-name="fiscalTaxDocumentId"/>
+            </entity-delete-by-condition>
+            <set field="ftd.statusId" value="Ftd-NotIssued"/>
+            <set field="ftd.invoiceId" from="null"/>
+            <entity-update value-field="ftd"/>
+        </actions>
+    </service>
+
+    <service verb="reissue" noun="FiscalTaxDocument">
+        <in-parameters>
+            <parameter name="invoiceId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
+            <if condition="!invoice"><return error="true" message="Could not find invoice ${invoiceId}"/></if>
+            <set field="issuerPartyId" from="invoice.fromPartyId"/>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList">
+                <econdition field-name="issuerPartyId"/>
+                <econdition field-name="invoiceId"/>
+                <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
+            </entity-find>
+            <set field="ftd" from="ftdList.first"/>
+            <if condition="!ftd"><return error="true" message="Could not find FiscalTaxDocument for invoice ${invoiceId}"/></if>
+            <service-call name="mchile.DTEServices.revert#FiscalTaxDocumentGeneration" in-map="[issuerPartyId:issuerPartyId, fiscalTaxDocumentNumber:ftd.fiscalTaxDocumentNumber,
+                                fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"/>
+            <service-call name="mchile.DTEServices.facturar#Invoice" in-map="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"/>
+        </actions>
+    </service>
+
+    <service verb="create" noun="PrefilledCreditMemo">
+        <description>
+            Crea un invoice que se usa para generar Nota de Crédito, y lo pre-rellena con los contenidos de DTE especificado.
+            No considera manejar la logística inversa (devolver productos a Bodega u otro lado), para eso
+            se debiera usar un Return, ver moit.erp.ReturnServices.create#Return.
+        </description>
+        <in-parameters>
+            <parameter name="issuerPartyId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" required="true" type="Integer"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="razonReferencia" default-value="Error de Facturación"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="returnInvoiceId"/>
+        </out-parameters>
+        <actions>
+            <service-call name="mchile.DTEServices.create#EmptyCreditMemo" in-map="context" out-map="context"/>
+            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="itemList">
+                <econdition field-name="invoiceId" from="originalInvoiceId"/>
+            </entity-find>
+            <iterate list="itemList" entry="item">
+                <service-call name="create#mantle.account.invoice.InvoiceItem" in-map="item.getMap()+[invoiceId:invoiceId]"/>
+            </iterate>
+        </actions>
+    </service>
+    
+    <service verb="create" noun="EmptyCreditMemo">
+        <description>
+            Crea un invoice que se usa para generar Nota de Crédito. No considera manejar la logística inversa (devolver productos a Bodega u otro lado), para eso
+            se debiera usar un Return, ver moit.erp.ReturnServices.create#Return.
+        </description>
+        <in-parameters>
+            <parameter name="issuerPartyId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" required="true" type="Integer"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="razonReferencia" default-value="Error de Facturación"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="originalInvoiceId"/>
+            <parameter name="invoiceId"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte">
+                <field-map field-name="issuerPartyId"/>
+                <field-map field-name="fiscalTaxDocumentNumber"/>
+                <field-map field-name="fiscalTaxDocumentTypeEnumId"/>
+                <field-map field-name="statusId" value="Ftd-Issued"/>
+                <field-map field-name="sentAuthStatusId" value="Ftd-SentAuth"/>
+            </entity-find-one>
+            <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument"/></if>
+            <if condition="dte.invoiceId == null"><return error="true" message="FiscalTaxDocument has no invoice associated"/></if>
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="originalInvoice">
+                <field-map field-name="invoiceId" from="dte.invoiceId"/></entity-find-one>
+            <if condition="!originalInvoice"><return error="true" message="Could not find invoice ${dte.invoiceId}"/></if>
+            <set field="originalInvoiceId" from="originalInvoice.invoiceId"/>
+            <service-call name="mantle.account.InvoiceServices.create#Invoice" out-map="context"
+                          in-map="[originalInvoiceId:originalInvoice.invoiceId, invoiceTypeEnumId:'InvoiceCreditMemo', fromPartyId:originalInvoice.toPartyId,
+                           toPartyId:originalInvoice.fromPartyId, invoiceDate:ec.user.nowTimestamp, currencyUomId:originalInvoice.currencyUomId, otherPartyOrderId:originalInvoice.otherPartyOrderId,
+                        productStoreId:originalInvoice.productStoreId, systemMessageRemoteId:originalInvoice.systemMessageRemoteId, referenceNumber:originalInvoiceId]"/>
+            <script><![CDATA[
+                java.text.SimpleDateFormat formatDate = new java.text.SimpleDateFormat("yyyy-MM-dd")
+                fecha = formatDate.format(dte.date)
+                ]]></script>
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:dte.receiverPartyId]" out-map="receiverRut"/>
+            <set field="referenceMap" from="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId, folio:dte.fiscalTaxDocumentNumber, fecha:fecha,
+                 rutOtroContribuyente:receiverRut.rutSinFormato, codigoReferenciaEnumId:'MCHRefDteCodeAnula', razonReferencia:razonReferencia, referenceTypeEnumId:'RefDteTypeInvoice']"/>
+            <service-call name="mchile.DTEServices.agregar#Referencia" in-map="referenceMap"/>
+        </actions>
+    </service>
+
+    <service verb="create" noun="CreditNoteFromCreditMemo">
+        <in-parameters>
+            <parameter name="invoiceId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="fiscalTaxDocumentId"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="creditMemo" for-update="true"/>
+            <if condition="creditMemo.invoiceTypeEnumId != 'InvoiceCreditMemo'"><return error="true" message="Cannot find Credit Memo with ID ${invoiceId}"/></if>
+            <if condition="!(creditMemo.statusId in ['InvoiceIncoming','InvoiceApproved','InvoicePmtSent','InvoiceReceived','InvoiceBilledThrough'])"><return error="true" message="Invalid statusId for creditMemo: ${creditMemo.statusId}"/></if>
+
+            <set field="creditMemo.statusId" value="InvoiceApproved"/>
+            <entity-update value-field="creditMemo"/>
+            <service-call name="mchile.DTEServices.generar#NotaCredito" in-map="context" out-map="context"/>
+
+        </actions>
+    </service>
+
+    <service verb="send" noun="EmittedDtesToReceivers" authenticate="anonymous-all">
+        <actions>
+            <entity-find entity-name="mantle.party.PartyRole" list="internalPartyList">
+                <econdition field-name="roleTypeId" value="OrgInternal"/>
+            </entity-find>
+            <set field="internalPartyIdList" from="internalPartyList.partyId"/>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList">
+                <econdition field-name="issuerPartyId" operator="in" from="internalPartyIdList"/>
+                <econdition field-name="statusId" value="Ftd-Issued"/>
+                <econdition field-name="sentAuthStatusId" value="Ftd-SentAuth"/>
+                <econdition field-name="sentRecStatusId" value="Ftd-NotSentRec"/>
+            </entity-find>
+            <iterate list="ftdList" entry="dte">
+                <service-call name="mchile.DTEServices.send#DteXmlToReceiver" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId]" out-map="context" transaction="force-new"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="send" noun="DteXmlToReceiver">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+        </in-parameters>
+        <actions>
+            <log message="Sending email for fiscalTaxDocumentId: ${fiscalTaxDocumentId}"/>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" for-update="true"/>
+            <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument with id ${fiscalTaxDocumentId}"/></if>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="contentList">
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
+            </entity-find>
+            <if condition="contentList.size() != 1"><return error="true" message="Found ${contentList.size()} XML content for fiscalTaxDocumentId ${fiscalTaxDocumentId}, expected 1"/></if>
+            <set field="content" from="ec.resource.getLocationReference(contentList.first.contentLocation)"/>
+            <set field="xmlAttachment" from="[attachmentLocation:content.location, fileName:content.fileName, contentType:content.contentType]"/>
+            <service-call name="mchile.sii.SiiServices.get#XmlReceptionEmail" in-map="[partyId:dte.receiverPartyId, partyIdValue:dte.receiverPartyIdValue, dtePartyId:dte.issuerPartyId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.get#DteInfo" in-map="context" out-map="bodyParameters"/>
+            <entity-find-one entity-name="moqui.basic.email.EmailTemplate" value-field="emailTemplate" auto-field-map="[emailTemplateId:'MchDteSendXmlReceiver']"/>
+            <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" in-map="[toAddresses:xmlReceptionEmailAddress, bccAddresses:'jhp@moit.cl', emailTemplateId:'MchDteSendXmlReceiver',
+                    attachments:[xmlAttachment], bodyParameters:bodyParameters+[fiscalTaxDocumentId:fiscalTaxDocumentId, subject:emailTemplate.subject]]" out-map="context"/>
+            <if condition="emailMessageId">
+                <set field="dte.sentRecStatusId" value="Ftd-SentRec"/>
+                <service-call name="create#mchile.dte.FiscalTaxDocumentEmailMessage"
+                              in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, emailMessageId:emailMessageId, messageTypeEnumId:'Ftdemt-SendXmlReceiverMandatory']"/>
+            </if>
+            <entity-update value-field="dte"/>
         </actions>
     </service>
 
