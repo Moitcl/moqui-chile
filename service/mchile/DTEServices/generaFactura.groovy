@@ -285,8 +285,7 @@ if (tipoFactura == 33) {
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoFactura)
     Referencia[] ref = refMap.referenceArray
     dteExenta = refMap.dteExenta
-    // codRef = refMap.codRef
-    codRef = 1
+    BigInteger codRef = ref[0].getCodRef()
 
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "DebitoItem", codRef)
     Detalle[] det = detMap.detailArray
