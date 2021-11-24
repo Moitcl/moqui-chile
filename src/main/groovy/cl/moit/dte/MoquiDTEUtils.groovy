@@ -87,13 +87,15 @@ class MoquiDTEUtils {
                 priceItem = totalItem / qtyItem as BigDecimal
                 totalItem = totalItem.setScale(0, BigDecimal.ROUND_HALF_UP) as Long
             } else if (detailType == "DebitoItem") {
-                if(BigDecimal.valueOf(codRef) == 2 || BigDecimal.valueOf(codRef) == 1) {
+                if (codRef == 2) {
                     qtyItem = null
                     priceItem = null
-                    nombreItem = "ANULA DOCUMENTO DE REFERENCIA"
+                    nombreItem = "CORRIGE TEXTO"
                     totalItem = 0
-                } else
+                } else {
                     priceItem = detailEntry.amount
+                    totalItem = qtyItem * priceItem
+                }
             } else if (detailType == "ReturnItem" && codRef == 2) {
                 qtyItem = null
                 priceItem = null
@@ -150,7 +152,7 @@ class MoquiDTEUtils {
                 singleDet[0] = det[i]
                 return [detailArray:singleDet, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
             }
-            if (detailType == "DebitoItem" && codRef == 1) {
+            if (detailType == "DebitoItem" && codRef == 2) {
                 Detalle[] singleDet = new Detalle[1];
                 singleDet[0] = det[i]
                 return [detailArray:singleDet, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
