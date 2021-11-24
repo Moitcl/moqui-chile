@@ -246,7 +246,7 @@ if (tipoFactura == 33) {
 } else if (tipoFactura == 61) {
     // Nota de Crédito Electrónica
     ec.logger.warn("Creando DTE tipo 61")
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoFactura)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, null, tipoFactura)
     Referencia[] ref = refMap.referenceArray
     anulaBoleta = refMap.anulaBoleta
     folioAnulaBoleta = refMap.folioAnulaBoleta

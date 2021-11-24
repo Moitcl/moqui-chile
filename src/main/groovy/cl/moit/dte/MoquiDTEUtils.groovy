@@ -187,7 +187,8 @@ class MoquiDTEUtils {
                 Integer tpoDocRef = codeOut.siiCode
                 //ref[i].setTpoDocRef(referenciaEntry.fiscalTaxDocumentTypeEnumId)
                 ref[i].setTpoDocRef(tpoDocRef as String)
-                ref[i].setRUTOtr(rutReceptor)
+                if (rutReceptor)
+                    ref[i].setRUTOtr(rutReceptor)
                 if(tipoFactura == 61 && (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-39") || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41")) && codRef.equals(1) ) {
                     // Nota de crédito hace referencia a Boletas Electrónicas
                     anulaBoleta = 'true'
