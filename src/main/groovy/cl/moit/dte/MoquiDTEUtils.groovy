@@ -170,7 +170,7 @@ class MoquiDTEUtils {
         int i = 0
         referenciaList.each { referenciaEntry ->
             String folioRef = referenciaEntry.folio
-            Integer codRef = referenciaEntry.codigoReferenciaEnumId
+            Integer codRef = Integer.parseInt(referenciaEntry.codigoReferenciaEnumId)
             Timestamp fechaRef = referenciaEntry.fecha instanceof java.sql.Date? new Timestamp(referenciaEntry.fecha.time) : referenciaEntry.fecha
 
             // Agrego referencias
