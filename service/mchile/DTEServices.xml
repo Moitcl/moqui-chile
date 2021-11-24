@@ -559,7 +559,7 @@ along with this software (see the LICENSE.md file). If not, see
                 for (int folio = inicio; folio <= fin; folio++) {
                     fiscalTaxDocumentId = "$fiscalTaxDocumentTypeEnumId$folio$rutNoDv"
                     createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:partyId,
-                        issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rut, statusId:'Ftd-NotIssued', sentAuthStatusId:'Ftd-NotSentAuth']
+                        issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rut, statusId:'Ftd-NotIssued', sentAuthStatusId:'Ftd-NotSentAuth', sentRecStatusId:'Ftd-NotSentRec']
                     context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call())
                 }
             ]]></script>
@@ -1791,11 +1791,11 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <actions>
 
-            <script>
-                import java.nio.file.Path
-                import java.nio.file.Paths
-                import java.nio.file.Files
-            </script>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteEv" for-update="true">
+                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+            </entity-find-one>
+            <if condition="dteEv.sentRecStatusId == 'Ftd-SentRec'"><return error="true" message="No se puede eliminar DTE enviada a receptor"/></if>
+            <if condition="dteEv.sentAuthStatusId in ['Ftd-SentAuth', 'Ftd-SentAuthUnverified']"><return error="true" message="No se puede eliminar DTE enviada al SII"/></if>
 
             <!-- Borrado de atributos -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAttributes" value-field="attributesToDelete">
@@ -1830,15 +1830,15 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <!-- Se verifica si la DTE es de un tercero -->
 
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteEv" for-update="true">
-                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
-            </entity-find-one>
-
-
             <set field="issuerId" from="dteEv.issuerPartyId"/>
             <if condition="issuerId == organizationPartyId">
                 <then>
                     <set field="dteEv.statusId" value="Ftd-NotIssued"/>
+                    <set field="dteEv.receiverPartyId" from="null"/>
+                    <set field="dteEv.receiverPartyIdTypeEnumId" from="null"/>
+                    <set field="dteEv.receiverPartyIdValue" from="null"/>
+                    <set field="dteEv.invoiceId" from="null"/>
+                    <set field="dteEv.trackId" from="null"/>
                     <!-- TODO: Revisar que dejar receiverPartyID tal cual no afecte -->
                     <!--set field="dteEv.receiverPartyId" value=""/-->
                     <entity-update value-field="dteEv"/>
