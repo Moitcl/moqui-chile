@@ -100,8 +100,9 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="consulta" noun="ContribuyentesAutorizadosContacto">
         <in-parameters>
-            <parameter name="rut"/>
-            <parameter name="dv"/>
+            <parameter name="rut" required="true"/>
+            <parameter name="dv" required="true"/>
+            <parameter name="dtePartyId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="razonSocial"/>
@@ -114,7 +115,7 @@ along with this software (see the LICENSE.md file). If not, see
             <!--
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:partyId]" out-map="context"/>
             -->
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:'KOMBUCHACHA']" out-map="dteconfig"/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:dtePartyId]" out-map="dteconfig"/>
             <script><![CDATA[
                 import org.moqui.util.RestClient
                 import cl.moit.net.ClientAuthRequestFactory
@@ -214,6 +215,7 @@ along with this software (see the LICENSE.md file). If not, see
                 restClient.method("POST").text("RUT_EMP=${rutEmp}&DV_EMP=${dvEmp}&ACEPTAR=Continuar").uri("https://${hostName}/cvc_cgi/dte/of_solicita_folios_dcto")
                 response = restClient.call()
                 responseText = new String(response.bytes(), "iso-8859-1")
+                paso1 = responseText
 
                 // FOLIO_INICIAL
                 // FACTOR: si es < 1 y > 0, tiene situaciones pendientes.
@@ -240,21 +242,23 @@ along with this software (see the LICENSE.md file). If not, see
                 fieldValues.COD_DOCTO = codDocto
                 fieldValues.RUT_EMP = rutEmp
                 fieldValues.DV_EMP = dvEmp
-                fieldValues.DV_EMP = dvEmp
                 fieldValues.CANT_DOCTOS = ""
                 params = fieldValues.collect { key, value -> "${key}=${value}"}.join("&")
                 ec.logger.info("params: ${params}")
 
                 response = restClient.text(params).call()
                 responseText = new String(response.bytes(), "iso-8859-1")
+                paso2 = responseText
 
                 fieldValues = [:]
                 ['FOLIO_INICIAL', 'AFECTO_IVA', 'CON_CREDITO', 'CON_AJUSTE', 'FACTOR', 'MAX_AUTOR', 'CANT_TIMBRAJES', 'FOLIOS_DISP', 'ULT_TIMBRAJE', 'CON_HISTORIA', 'FOLIO_INICRE', 'FOLIO_FINCRE', 'FECHA_ANT', 'ESTADO_TIMBRAJE', 'CONTROL', 'CANT_TIMBRAJES'].each { fieldName ->
+                    ec.logger.info("processing fieldName ${fieldName}")
                     matcher = responseText =~ /(?i)<input\s+name="${fieldName}"[^>]*?value\s*=\s*"([^"]*)"/
                     fields = matcher.findAll()
                     if (fields) {
                         value = fields[0][1]
                         fieldValues[fieldName] = value
+
                     }
                 }
                 /*
@@ -283,9 +287,12 @@ along with this software (see the LICENSE.md file). If not, see
                 restClient.text(params).uri("https://${hostName}/cvc_cgi/dte/of_confirma_folio")
                 response = restClient.call()
                 responseText = new String(response.bytes(), "iso-8859-1")
+                paso3 = responseText
 
                 fieldValues = [:]
-                ['NOMUSU', 'CON_CREDITO', 'CON_AJUSTE', 'FOLIO_INI', 'FOLIO_FIN', 'DIA', 'MES', 'ANO', 'HORA', 'MINUTO', 'RUT_EMP', 'DV_EMP', 'COD_DOCTO', 'CANT_DOCTOS'].each { fieldName ->
+                fieldKeys = ['NOMUSU', 'CON_CREDITO', 'CON_AJUSTE', 'FOLIOS_DISP', 'MAX_AUTOR', 'ULT_TIMBRAJE', 'CON_HISTORIA', 'CANT_TIMBRAJES', 'CON_AJUSTE', 'FOLIO_INICRE', 'FOLIO_FINCRE',
+                             'FECHA_ANT', 'ESTADO_TIMBRAJE', 'CONTROL', 'FOLIO_INI', 'FOLIO_FIN', 'DIA', 'MES', 'ANO', 'HORA', 'MINUTO', 'RUT_EMP', 'DV_EMP', 'COD_DOCTO', 'CANT_DOCTOS']
+                fieldKeys.each { fieldName ->
                     matcher = responseText =~ /(?i)<input\s+name="${fieldName}"[^>]*?value\s*=\s*"([^"]*)"/
                     fields = matcher.findAll()
                     if (fields) {
@@ -295,7 +302,9 @@ along with this software (see the LICENSE.md file). If not, see
                 }
                 if (fieldValues.FOLIO_INI == null || fieldValues.FOLIO_FIN == null) {
                     ec.message.addError("No se recibió datos de confirmación")
-                    ec.logger.info("received: ${responseText}")
+                    ec.logger.info("received paso 2: ${paso2}")
+                    ec.logger.info("received paso 3: ${paso3}")
+                    return
                 }
                 fieldValues.ACEPTAR = "Obtener+Folios"
                 params = fieldValues.collect { key, value -> "${key}=${value}"}.join("&")
@@ -306,7 +315,8 @@ along with this software (see the LICENSE.md file). If not, see
 
                 if (! responseText.contains("Para bajar a su PC el archivo con la numeraci&oacute;n autorizada, haga click")) {
                     ec.message.addError("No se recibió solicitud de timbraje electrónico")
-                    ec.logger.info("Recibido: ${responseText}")
+                    ec.logger.info("Recibido paso 2: ${paso2}")
+                    ec.logger.info("Recibido paso 3: ${paso3}")
                     return
                 }
                 fieldValues = [:]
@@ -342,6 +352,53 @@ along with this software (see the LICENSE.md file). If not, see
             ]]></script>
 
             <service-call name="mchile.DTEServices.load#CafInternal" in-map="[partyId:partyId, contentLocation:contentLocation, activateCaf:activateCaf]" out-map="context"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="XmlReceptionEmail">
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+            <parameter name="partyIdValue" required="true"/>
+            <parameter name="dtePartyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="xmlReceptionEmailAddress"/>
+        </out-parameters>
+        <actions>
+            <set field="maxDaysWithoutChecking" from="3"/>
+            <entity-find entity-name="mantle.party.contact.PartyContactMech" list="pcmList">
+                <econdition field-name="partyId"/>
+                <econdition field-name="contactMechPurposeId" value="EmailDteXmlRec"/>
+                <date-filter/>
+                <order-by field-name="-fromDate"/>
+            </entity-find>
+            <set field="pcm" from="pcmList.first"/>
+            <set field="cm" from="pcm?.contactMech"/>
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:partyId]" out-map="rut"/>
+            <if condition="rut.rutSinFormato == null || rut.rutSinFormato != partyIdValue"><return error="true" message="Rut mismatch, received ${partyIdValue}, found in DB ${rut.rutSinFormato}"/></if>
+            <if condition="pcm == null || pcm.verifyCodeDate == null || (ec.user.nowTimestamp.time - pcm.verifyCodeDate.time) > 3*24*60*60*1000"><then>
+                <service-call name="mchile.sii.SiiServices.consulta#ContribuyentesAutorizadosContacto" in-map="[rut:rut.rutSinDv, dv:rut.dv, dtePartyId:dtePartyId]" out-map="cac"/>
+                <if condition="cac.mailContacto == null || cac.mailContacto.length() &lt; 5">
+                    <return error="true" message="Error obteniendo mailContacto del SII, recibido: ${cac.mailContaco}"/>
+                </if>
+                <set field="xmlReceptionEmailAddress" from="cac.mailContacto"/>
+                <if condition="pcm == null"><then>
+                    <service-call name="mantle.party.ContactServices.create#EmailAddress" in-map="[emailAddress:cac.mailContacto, partyId:partyId, contactMechPurposeId:'EmailDteXmlRec',
+                            fromDate:ec.user.nowTimestamp, verifyCodeDate:ec.user.nowTimestamp]" out-map="context"/>
+                </then><else>
+                    <if condition="cm.infoString != cac.mailContacto"><then>
+                        <service-call name="update#mantle.party.contact.PartyContactMech" in-map="[partyId:pcm.partyId, contactMechId:pcm.contactMechId, contactMechPurposeId:pcm.contactMechPurposeId,
+                                fromDate:pcm.fromDate, thruDate:ec.user.nowTimestamp]"/>
+                        <service-call name="mantle.party.ContactServices.create#EmailAddress" in-map="[emailAddress:cac.mailContacto, partyId:partyId, contactMechPurposeId:'EmailDteXmlRec',
+                            fromDate:ec.user.nowTimestamp, verifyCodeDate:ec.user.nowTimestamp]" out-map="context"/>
+                    </then><else>
+                        <service-call name="update#mantle.party.contact.PartyContactMech" in-map="[partyId:pcm.partyId, contactMechId:pcm.contactMechId, contactMechPurposeId:pcm.contactMechPurposeId,
+                                fromDate:pcm.fromDate, verifyCodeDate:ec.user.nowTimestamp]"/>
+                    </else></if>
+                </else></if>
+            </then><else>
+                <set field="xmlReceptionEmailAddress" from="cm.infoString"/>
+            </else></if>
         </actions>
     </service>
 

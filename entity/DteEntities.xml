@@ -5,18 +5,15 @@
         <field name="fiscalTaxDocumentId" type="id" is-pk="true"/>
         <field name="issuerPartyId" type="id" not-null="true"/>
         <field name="issuerPartyIdTypeEnumId" type="id" not-null="true" default="PtidNationalTaxId"/>
-        <!--
         <field name="issuerPartyIdValue" type="text-medium" not-null="true"/>
-        -->
         <field name="fiscalTaxDocumentTypeEnumId" type="id" not-null="true"/>
         <field name="fiscalTaxDocumentNumber" type="number-integer" not-null="true"/>
-        <field name="fiscalTaxDocumentStatusEnumId" type="id"/>
-        <field name="fiscalTaxDocumentSentStatusEnumId" type="id"/>
+        <field name="statusId" type="id"/>
+        <field name="sentAuthStatusId" type="id"/>
+        <field name="sentRecStatusId" type="id"/>
         <field name="receiverPartyId" type="id"/>
         <field name="receiverPartyIdTypeEnumId" type="id" default="PtidNationalTaxId"/>
-        <!--
-        <field name="receiverPartyIdValue" type="text-medium" not-null="true"/>
-        -->
+        <field name="receiverPartyIdValue" type="text-medium"/>
         <field name="invoiceId" type="id"/>
         <field name="shipmentId" type="id"/>
         <field name="trackId" type="id"><description>TrackId devuelto por SII al enviar documentos</description></field>
@@ -35,34 +32,49 @@
         <relationship type="one" related="moqui.basic.Enumeration" title="FiscalTaxDocumentType">
             <key-map field-name="fiscalTaxDocumentTypeEnumId"/>
         </relationship>
-        <relationship type="one" related="moqui.basic.Enumeration" title="FiscalTaxDocumentStatus">
-            <key-map field-name="fiscalTaxDocumentStatusEnumId"/>
+        <relationship type="one" related="moqui.basic.StatusItem" title="FiscalTaxDocumentStatus">
+            <key-map field-name="statusId"/>
         </relationship>
-        <relationship type="one" related="moqui.basic.Enumeration" title="FiscalTaxDocumentSentStatus">
-            <key-map field-name="fiscalTaxDocumentSentStatusEnumId"/>
+        <relationship type="one" related="moqui.basic.StatusItem" title="FiscalTaxDocumentSentAuth">
+            <key-map field-name="sentAuthStatusId"/>
+        </relationship>
+        <relationship type="one" related="moqui.basic.StatusItem" title="FiscalTaxDocumentSentRec">
+            <key-map field-name="sentRecStatusId"/>
         </relationship>
         <relationship type="one" related="mantle.account.invoice.Invoice">
             <key-map field-name="invoiceId"/>
         </relationship>
+        <relationship type="one" related="mantle.shipment.Shipment">
+            <key-map field-name="shipmentId"/>
+        </relationship>
         <index name="FiscalTaxDocumentIssuerNumber" unique="true">
-            <index-field name="issuerPartyId"/>
-            <!--
-            ToDo: change issuerPartyId for issuerPartyIdValue
             <index-field name="issuerPartyIdValue"/>
-            -->
             <index-field name="fiscalTaxDocumentTypeEnumId"/>
             <index-field name="fiscalTaxDocumentNumber"/>
         </index>
 
         <seed-data>
-            <moqui.basic.EnumerationType enumTypeId="FiscalTaxDocumentSentStatus" description="Fiscal Tax Document Sent to Tax Authority"/>
-            <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentSentStatus" enumId="Ftdt-Sent" enumCode="1" description="DTE already sent"/>
-            <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentSentStatus" enumId="Ftdt-NotSent" enumCode="0" description="DTE not sent"/>
+            <moqui.basic.StatusType statusTypeId="FiscalTaxDocumentSentAuth" description="Fiscal Tax Document Sent to Tax Authority"/>
+            <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentAuth" statusId="Ftd-NotSentAuth" enumCode="0" description="DTE not sent"/>
+            <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentAuth" statusId="Ftd-SentAuthUnverified" enumCode="1" description="DTE sent waiting for verification"/>
+            <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentAuth" statusId="Ftd-SentAuth" enumCode="2" description="DTE sent"/>
+            <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentAuth" statusId="Ftd-SendAuthFailed" enumCode="3" description="DTE failed to send"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="Ftd-NotSentAuth" toStatusId="Ftd-SentAuthUnverified"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="Ftd-SentAuthUnverified" toStatusId="Ftd-SentAuth"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="Ftd-SentAuthUnverified" toStatusId="Ftd-SendAuthFailed"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="Ftd-SendAuthFailed" toStatusId="Ftd-SentAuthUnverified"/>
 
-            <moqui.basic.EnumerationType enumTypeId="FiscalTaxDocumentStatus" description="Fiscal Tax Document Status"/>
-            <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentStatus" enumId="Ftdt-Issued" enumCode="1" description="DTE already issued"/>
-            <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentStatus" enumId="Ftdt-NotIssued" enumCode="0" description="DTE not issued"/>
-            <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentStatus" enumId="Ftdt-Cancelled" enumCode="2" description="DTE Cancelled (anulada)"/>
+            <moqui.basic.StatusType statusTypeId="FiscalTaxDocumentSentRec" description="Fiscal Tax Document Sent to Receiver"/>
+            <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentRec" statusId="Ftd-NotSentRec" enumCode="0" description="DTE not sent to Receiver"/>
+            <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentRec" statusId="Ftd-SentRec" enumCode="2" description="DTE sent to Receiver"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="Ftd-NotSentRec" toStatusId="Ftd-SentRec"/>
+
+            <moqui.basic.StatusType statusTypeId="FiscalTaxDocumentStatus" description="Fiscal Tax Document Status"/>
+            <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentStatus" statusId="Ftd-NotIssued" enumCode="0" description="DTE not issued"/>
+            <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentStatus" statusId="Ftd-Issued" enumCode="1" description="DTE already issued"/>
+            <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentStatus" statusId="Ftd-Cancelled" enumCode="2" description="DTE Cancelled (anulada)"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="Ftd-NotIssued" toStatusId="Ftd-Issued"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="Ftd-NotIssued" toStatusId="Ftd-Cancelled"/>
 
             <moqui.basic.EnumerationType enumTypeId="FiscalTaxDocumentAggr" description="Fiscal Tax Documents"/>
             <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentAggr" enumId="Ftdt-Facturas" description="Facturas"/>
@@ -162,6 +174,32 @@
         </seed-data>
     </entity>
 
+    <entity entity-name="FiscalTaxDocumentEmailMessage" package="mchile.dte">
+        <field name="fiscalTaxDocumentEmailMessageId" type="id" is-pk="true"/>
+        <field name="fiscalTaxDocumentId" type="id"/>
+        <field name="emailMessageId" type="id"/>
+        <field name="messageTypeEnumId" type="id"/>
+        <relationship type="one" related="mchile.dte.FiscalTaxDocument"/>
+        <relationship type="one" related="moqui.basic.email.EmailMessage"/>
+        <relationship type="one" related="moqui.basic.Enumeration" title="FiscalTaxDocumentEmailMessageType">
+            <key-map field-name="messageTypeEnumId" related="enumId"/>
+        </relationship>
+        <seed-data>
+            <moqui.basic.EnumerationType enumTypeId="FiscalTaxDocumentEmailMessageType" description="Type of FiscalTaxDocument related email message"/>
+            <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentEmailMessageType" enumId="Ftdemt-SendXmlReceiverMandatory" description="Send mandatory XML to DTE receiver"/>
+            <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentEmailMessageType" enumId="Ftdemt-SendPdfReceiver" description="Send PDF to receiver"/>
+            <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentEmailMessageType" enumId="Ftdemt-SendPdfTransport" description="Send PDF to transport party"/>
+        </seed-data>
+    </entity>
+
+    <view-entity entity-name="FiscalTaxDocumentEmailMessageDetail" package="mchile.dte">
+        <member-entity entity-alias="FTDEM" entity-name="mchile.dte.FiscalTaxDocumentEmailMessage"/>
+        <member-entity entity-alias="EMSG" entity-name="moqui.basic.email.EmailMessage" join-from-alias="FTDEM">
+            <key-map field-name="emailMessageId"/></member-entity>
+        <alias-all entity-alias="FTDEM"/><alias-all entity-alias="EMSG"/>
+    </view-entity>
+
+
     <entity entity-name="Caf" package="mchile.dte" cache="never" >
         <field name="cafId" type="id" is-pk="true"/>
         <field name="activo" type="text-short"/>
@@ -188,7 +226,7 @@
         <field name="referenciaTypeEnumId" type="id" not-null="true"/>
         <field name="fiscalTaxDocumentId" type="id"/>
         <field name="fiscalTaxDocumentTypeEnumId" type="id"/>
-        <field name="codigoReferenciaEnumId" type="text-short"/>
+        <field name="codigoReferenciaEnumId" type="id"/>
         <field name="razonReferencia" type="text-medium"/>
         <field name="fecha" type="date"/>
         <field name="rut" type="text-medium"/>
@@ -202,7 +240,7 @@
         <relationship type="one" related="moqui.basic.Enumeration" title="FiscalTaxDocumentType">
             <key-map field-name="fiscalTaxDocumentTypeEnumId"/>
         </relationship>
-        <relationship type="one" related="moqui.basic.Enumeration" title="CodigoReferencia">
+        <relationship type="one" related="moqui.basic.Enumeration" title="FtdCodigoReferencia" short-alias="codigoReferencia">
             <key-map field-name="codigoReferenciaEnumId"/>
         </relationship>
         <relationship type="one" related="mchile.dte.FiscalTaxDocument" title="FiscalTaxDocumentId">
@@ -220,10 +258,10 @@
             <moqui.basic.Enumeration enumTypeId="ReferenciaDteType" enumId="RefDteTypeFactura" description="Referencia Factura"/>
             <moqui.basic.Enumeration enumTypeId="ReferenciaDteType" enumId="RefDteTypeShipment" description="Referencia Shipment"/>
             <moqui.basic.Enumeration enumTypeId="ReferenciaDteType" enumId="RefDteTypeNotaDebito" description="Referencia Nota Débito"/>
-            <moqui.basic.EnumerationType enumTypeId="CodigoReferencia" description="Códigos de Referencia"/>
-            <moqui.basic.Enumeration enumTypeId="CodigoReferencia" enumId="1" sequenceNum="10" description="Anula Doc. de Referencia"/>
-            <moqui.basic.Enumeration enumTypeId="CodigoReferencia" enumId="2" sequenceNum="20" description="Corrige Texto de Referencia"/>
-            <moqui.basic.Enumeration enumTypeId="CodigoReferencia" enumId="3" sequenceNum="30" description="Corrige Montos"/>
+            <moqui.basic.EnumerationType enumTypeId="FtdCodigoReferencia" description="Códigos de Referencia"/>
+            <moqui.basic.Enumeration enumTypeId="FtdCodigoReferencia" enumId="MCHRefDteCodeAnula" sequenceNum="10" description="Anula Doc. de Referencia" enumCode="1"/>
+            <moqui.basic.Enumeration enumTypeId="FtdCodigoReferencia" enumId="MCHRefDteCodeCorrigeTexto" sequenceNum="20" description="Corrige Texto de Referencia" enumCode="2"/>
+            <moqui.basic.Enumeration enumTypeId="FtdCodigoReferencia" enumId="MCHRefDteCodeCorrigeMonto" sequenceNum="30" description="Corrige Montos" enumCode="3"/>
         </seed-data>
     </entity>
 
@@ -369,6 +407,15 @@
             <exclude field="date"/>
             <exclude field="fiscalTaxDocumentId"/>
         </alias-all>
+    </view-entity>
+
+    <view-entity entity-name="FiscalTaxDocumentAndContent" package="mchile.dte">
+        <member-entity entity-alias="DTE" entity-name="mchile.dte.FiscalTaxDocument"/>
+        <member-entity entity-alias="CONT" entity-name="mchile.dte.FiscalTaxDocumentContent" join-from-alias="DTE" join-optional="true">
+            <key-map field-name="fiscalTaxDocumentId"/>
+        </member-entity>
+        <alias-all entity-alias="DTE"/>
+        <alias-all entity-alias="CONT"/>
     </view-entity>
 
 </entities>
