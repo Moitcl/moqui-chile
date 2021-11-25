@@ -198,8 +198,9 @@ uom = null
          */
 
 // Reference to buying order
+EntityValue invoice = null
 if (invoiceId) {
-    EntityValue invoice = ec.entity.find("mantle.account.invoice.Invoice").condition([invoiceId:invoiceId]).one()
+    invoice = ec.entity.find("mantle.account.invoice.Invoice").condition([invoiceId:invoiceId]).one()
     if (invoice.otherPartyOrderId) {
         itemBillingList = ec.entity.find("mantle.order.OrderItemBilling").condition([invoiceId:invoiceId]).selectField("orderId,orderItemSeqId").list()
         if (itemBillingList) {
@@ -359,6 +360,15 @@ if(totalExento != null && totalExento > 0) {
     tot.setMntExe(Math.round(totalExento))
 }
 amount = totalInvoice
+
+// Chequeo de valores entre Invoice y calculados
+if (invoice) {
+    if (invoice.invoiceTotal != totalInvoice) {
+        ec.message.addError("No coinciden valores totales, calculado: ${totalInvoice}, en invoice ${invoiceId}: ${invoice.invoiceTotal}")
+        return
+    }
+}
+
 
 // Timbro
 
