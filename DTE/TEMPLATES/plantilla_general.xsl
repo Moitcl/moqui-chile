@@ -424,14 +424,24 @@
                             <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="CiudadRecep"/></fo:block></fo:table-cell>
                         </fo:table-row>
                         <fo:table-row>
-                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Condiciones de pago</fo:inline></fo:block></fo:table-cell>
-                            <fo:table-cell><fo:block margin-top="4pt"><xsl:call-template name="PagoFormat">
-                                <xsl:with-param name="medioPago"><xsl:value-of select="$medioPago"/></xsl:with-param>
-                                <xsl:with-param name="formaPago"><xsl:value-of select="$formaPago"/></xsl:with-param>
-                            </xsl:call-template></fo:block></fo:table-cell>
+                                <xsl:choose><xsl:when test="/DTE/Documento/Encabezado/IdDoc/TipoDTE=61">
+                                    <fo:table-cell><fo:block margin-top="4pt"/></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt"/></fo:table-cell>
+                                </xsl:when><xsl:otherwise>
+                                    <fo:table-cell>
+                                        <fo:block margin-top="4pt"><fo:inline font-weight="bold">Condiciones de pago</fo:inline></fo:block>
+                                    </fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:call-template name="PagoFormat">
+                                        <xsl:with-param name="medioPago"><xsl:value-of select="$medioPago"/></xsl:with-param>
+                                        <xsl:with-param name="formaPago"><xsl:value-of select="$formaPago"/></xsl:with-param>
+                                    </xsl:call-template></fo:block></fo:table-cell>
+                                </xsl:otherwise></xsl:choose>
                             <xsl:choose><xsl:when test="/DTE/Documento/Encabezado/IdDoc/TipoDTE=52">
                                 <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Contacto</fo:inline></fo:block></fo:table-cell>
                                 <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:value-of select="/DTE/Documento/Encabezado/Receptor/Contacto"/></fo:inline></fo:block></fo:table-cell>
+                            </xsl:when><xsl:when test="/DTE/Documento/Encabezado/IdDoc/TipoDTE=61">
+                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold"></fo:inline></fo:block></fo:table-cell>
+                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline></fo:inline></fo:block></fo:table-cell>
                             </xsl:when><xsl:otherwise>
                                 <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Vencimiento</fo:inline></fo:block></fo:table-cell>
                                 <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="/DTE/Documento/Encabezado/IdDoc/FchVenc"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>

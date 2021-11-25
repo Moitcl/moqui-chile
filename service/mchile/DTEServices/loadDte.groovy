@@ -173,8 +173,9 @@ for (int i = 0; i < dteArray.size(); i++) {
     }
 
     // Se guarda DTE recibido en la base de datos
-    createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', fiscalTaxDocumentTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte,
-                 receiverPartyId:organizationPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', date:ts, invoiceId:invoiceId]
+    createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rutEmisor, fiscalTaxDocumentTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte,
+                 receiverPartyId:organizationPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', receiverPartyIdValue:rutReceptor, date:ts, invoiceId:invoiceId, statusId:'Ftd-Issued',
+                 sendAuthStatusId:'Ftd-SentAuth', sendRecStatusId:'Ftd-SentRec']
     mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call()
 
     // Se guarda contenido asociado a la DTE, todas las DTE que vienen en el mismo envío comparten el mismo PDF

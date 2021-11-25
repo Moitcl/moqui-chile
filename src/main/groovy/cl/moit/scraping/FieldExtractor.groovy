@@ -19,13 +19,13 @@ class FieldExtractor {
             Pattern pattern = null
             Matcher matcher = null
             if (it.preselectPattern) {
-                logger.warn("preselectPattern: ${it.preselectPattern}")
+                //logger.warn("preselectPattern: ${it.preselectPattern}")
                 pattern = Pattern.compile(it.preselectPattern, java.util.regex.Pattern.DOTALL)
                 matcher = text =~ pattern
                 if (matcher.find()) {
                     baseText = matcher.findAll().first()[1]
-                    logger.warn("baseText: ${baseText}")
-                    logger.warn("pattern: ${it.pattern}")
+                    //logger.warn("baseText: ${baseText}")
+                    //logger.warn("pattern: ${it.pattern}")
                 } else baseText = text
             } else baseText = text
 

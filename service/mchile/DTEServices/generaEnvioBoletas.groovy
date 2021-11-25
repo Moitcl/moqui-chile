@@ -229,6 +229,6 @@ documentIdList.each { documentId ->
 // Se marca DTE como enviada
     idDte = documentId
     dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").forUpdate(true).condition("fiscalTaxDocumentId", idDte).one()
-    dteEv.fiscalTaxDocumentSentStatusEnumId = "Ftdt-Sent"
+    dteEv.sentAuthStatusId = "Ftd-SentAuthUnverified"
     dteEv.update()
 }
