@@ -320,7 +320,7 @@ if (tipoFactura == 33) {
     totalInvoice = detMap.totalInvoice
 
     doc.getDTE().getDocumento().setReferenciaArray(ref)
-    ec.logger.info("det: ${det}")
+    //ec.logger.info("det: ${det}")
     doc.getDTE().getDocumento().setDetalleArray(det)
 }
 
