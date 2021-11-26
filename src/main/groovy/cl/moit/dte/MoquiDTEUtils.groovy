@@ -94,7 +94,7 @@ class MoquiDTEUtils {
                     totalItem = 0
                 } else {
                     priceItem = detailEntry.amount
-                    totalItem = qtyItem * priceItem
+                    totalItem = (qtyItem?:0) * (priceItem?:0)
                 }
             } else if (detailType == "ReturnItem" && codRef == 2) {
                 qtyItem = null
