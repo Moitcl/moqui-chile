@@ -103,7 +103,7 @@ class MoquiDTEUtils {
                 priceItem = detailEntry.returnPrice
             } else {
                 priceItem = detailEntry.amount
-                totalItem = qtyItem * priceItem
+                totalItem = (qtyItem?:0) * (priceItem?:0)
             }
 
             if (itemAfecto == "true")
