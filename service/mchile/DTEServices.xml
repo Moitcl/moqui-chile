@@ -1554,16 +1554,50 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="load" noun="Dte" type="script" location="component://MoquiChile/service/mchile/DTEServices/loadDte.groovy">
+        <in-parameters>
+            <parameter name="createUnknownIssuer" default="true" type="Boolean"/>
+            <parameter name="requireIssuerInternalOrg" default="false" type="Boolean"/>
+            <parameter name="createUnknownReceiver" default="false" type="Boolean"/>
+            <parameter name="requireReceiverInternalOrg" default="false" type="Boolean"/>
+            <parameter name="xml" required="true" allow-html="any"/>
+            <parameter name="pdf" type="Object" required="true"/>
+            <parameter name="pdfFileName"/>
+            <parameter name="attemptProductMatch" default-value="false"/>
+        </in-parameters>
+    </service>
+
+    <service verb="load" noun="DteFromFile">
         <description>
             Carga DTE recibida al sistema y llama a servicio que crea orden de compra + invoice correspondiente
         </description>
         <in-parameters>
-            <parameter name="invoiceId"/>
-            <parameter name="createUnknownIssuer" default="false" type="Boolean"/>
-            <parameter name="xml" type="org.apache.commons.fileupload.FileItem" required="true"/>
-            <parameter name="pdf" type="org.apache.commons.fileupload.FileItem" required="true"/>
-            <parameter name="productMatch" default-value="false"/>
+            <parameter name="createUnknownIssuer" default="true" type="Boolean"/>
+            <parameter name="requireIssuerInternalOrg" default="false" type="Boolean"/>
+            <parameter name="createUnknownReceiver" default="false" type="Boolean"/>
+            <parameter name="requireReceiverInternalOrg" default="false" type="Boolean"/>
+            <parameter name="xmlFile" type="org.apache.commons.fileupload.FileItem" required="true"/>
+            <parameter name="pdfFile" type="org.apache.commons.fileupload.FileItem" required="true"/>
+            <parameter name="attemptProductMatch" default-value="false"/>
         </in-parameters>
+        <actions>
+            <script><![CDATA[
+                if (xmlFile) {
+                    xml = new String(xmlFile.get(), "ISO8859-1")
+                    if (!xml.contains('<EnvioDTE')) {
+                        xml = xml.replace('<SetDTE', '<EnvioDTE xmlns="http://www.sii.cl/SiiDte" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.0" xsi:schemaLocation="http://www.sii.cl/SiiDte EnvioDTE_v10.xsd"><SetDTE') + "</EnvioDTE>"
+                    }
+                    /*
+                    if (xml.contains('<SetDTE>'))
+                        xml = xml.replace('<SetDTE>', '<SetDTE ID="MI_ENVIO">')
+                     */
+                }
+                if (pdfFile) {
+                    pdf = pdfFile.get()
+                    pdfFileName = pdfFile.name
+                }
+            ]]></script>
+            <service-call name="mchile.DTEServices.load#Dte" in-map="context" out-map="context"/>
+        </actions>
     </service>
 
     <service verb="marcarNoEnviado" noun="Documento">
