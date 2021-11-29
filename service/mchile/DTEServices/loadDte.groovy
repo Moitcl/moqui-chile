@@ -34,28 +34,54 @@ opts.setSaveImplicitNamespaces(namespaces)
 EnvioDTE envio = EnvioDTEDocument.Factory.parse(xml.getInputStream()).getEnvioDTE()
 
 // Caratula
-rutEmisor = envio.setDTE.getCaratula().getRutEmisor().toString()
+rutEmisor = envio.setDTE.caratula.rutEmisor
+issuerPartyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([idValue:rutEmisor, partyIdTypeEnumId:'PtidNationalTaxId']).list()
 
-// DTE
 cl.sii.siiDte.DTEDefType[] dteArray = envio.setDTE.getDTEArray()
+if (dteArray.size() < 1) {
+    ec.message.addError("Envío no contiene DTEs")
+    return
+}
+String issuerPartyId
+if (issuerPartyIdentificationList.size() < 1) {
+    if (createUnknownIssuer) {
+        cl.sii.siiDte.DTEDefType.Documento.Encabezado.Emisor emisor = dteArray[0].documento.encabezado.emisor
+        mapOut = ec.service.sync().name("mantle.party.PartyServices.create#Organization").parameters([organizationName:emisor.rznSoc, taxOrganizationName:emisor.rznSoc, roleTypeId:'Supplier']).call()
+        issuerPartyId = mapOut.partyId
+        ec.service.sync().name("create#mantle.party.PartyIdentification").parameters([partyId:issuerPartyId, partyIdTypeEnumId:'PtidNationalTaxId', idValue:rutEmisor]).call()
+    }
+} else if (issuerPartyIdentificationList.size() == 1) {
+    issuerPartyId = issuerPartyIdentificationList.first.partyId
+} else {
+    ec.message.addError("Más de un sujeto con mismo rut de emisor (${rutEmisor}: partyIds ${issuerPartyIdentificationList.partyId}")
+    return
+}
+
 for (int i = 0; i < dteArray.size(); i++) {
     // tipo de DTE
-    tipoDte = dteArray[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().toString()
-    folioDte = dteArray[i].getDocumento().getEncabezado().getIdDoc().getFolio().toString()
+    cl.sii.siiDte.DTEDefType.Documento.Encabezado encabezado = dteArray[i].getDocumento().getEncabezado()
+    tipoDte = encabezado.idDoc.tipoDTE.toString()
+    folioDte = encabezado.idDoc.folio.toString()
+
+    if (encabezado.emisor.getRUTEmisor() != rutEmisor) {
+        ec.message.addError("Rut mismatch: carátula indica Rut ${rutEmisor}, pero documento ${i} indica ${encabezado.emisor.getRUTEmisor()}")
+        return
+    }
 
     ec.logger.warn("folio: ${folioDte}")
 
-    String fechaEmision = dteArray[i].getDocumento().getEncabezado().getIdDoc().getFchEmis().toString()
-    razonSocialEmisor = dteArray[i].getDocumento().getEncabezado().getEmisor().getRznSoc().toString()
+    String fechaEmision = encabezado.idDoc.fchEmis.toString()
+    razonSocialEmisor = encabezado.emisor.rznSoc.toString()
     // Totales
-    montoNeto = dteArray[i].getDocumento().getEncabezado().getTotales().getMntNeto().toString()
-    montoTotal = dteArray[i].getDocumento().getEncabezado().getTotales().getMntTotal().toString()
-    montoExento = dteArray[i].getDocumento().getEncabezado().getTotales().getMntExe().toString()
-    tasaIva = dteArray[i].getDocumento().getEncabezado().getTotales().getTasaIVA().toString()
-    iva = dteArray[i].getDocumento().getEncabezado().getTotales().getIVA().toString()
+
+    montoNeto = encabezado.totales.mntNeto.toString()
+    montoTotal = encabezado.totales.mntTotal.toString()
+    montoExento = encabezado.totales.mntExe.toString()
+    tasaIva = encabezado.totales.tasaIVA.toString()
+    iva = encabezado.totales.IVA.toString()
 
     // Datos receptor
-    rutReceptor = dteArray[i].getDocumento().getEncabezado().getReceptor().getRUTRecep().toString()
+    rutReceptor = encabezado.receptor.getRUTRecep()
 
     ec.logger.warn("RUT Receptor: ${rutReceptor}")
 
@@ -68,7 +94,7 @@ for (int i = 0; i < dteArray.size(); i++) {
     receiverEv = ec.entity.find("mantle.party.PartyIdentification").condition([idValue:rutReceptor, partyIdTypeEnumId:'PtidNationalTaxId']).one()
 
     if (!receiverEv) {
-        ec.logger.warn("RUT receptor ${rutReceptor} de folio folioDte no corresponde a org. activa")
+        ec.logger.warn("RUT receptor ${rutReceptor} de folio ${folioDte} no se encuentra")
         receiveDte = false
     }
 
@@ -119,12 +145,12 @@ for (int i = 0; i < dteArray.size(); i++) {
             if (detalleArray[j].getIndExe() == null && (tipoDte != '34')) {
                 // Item y documento afecto
                 ec.logger.warn("Item afecto")
-                indExe = null
+                itemExento = null
             } else { // Item exento o documento exento
                 ec.logger.warn("Item exento")
-                indExe = 1
+                itemExento = 1
             }
-            if (!indExe)
+            if (!itemExento)
                 totalIva = (montoItem * 0.19) + totalIva
             if (!invoiceId) {
                 if (productMatch == 'false') {
@@ -148,7 +174,6 @@ for (int i = 0; i < dteArray.size(); i++) {
                         }
                     }
                 }
-
             }
         }
     }
