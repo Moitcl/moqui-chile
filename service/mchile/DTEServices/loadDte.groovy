@@ -217,8 +217,18 @@ for (int i = 0; i < dteArray.size(); i++) {
         ec.message.addError("Sujeto receptor de documento ${i} (${ec.resource.expand('PartyNameTemplate', null, receiver)}, rut ${rutReceptor}) no es organización interna")
     }
 
-    // Creación de orden de compra
-    invoiceCreateMap =  [fromPartyId:issuerPartyId, toPartyId:receiverPartyId, invoiceTypeEnumId:'InvoiceFiscalTaxDocumentReception', invoiceDate:issuedTimestamp, currencyUomId:'CLP']
+    // Creación de orden de cobro
+    if (tipoDteEnumId == 'Ftdt-61') {
+        // Nota de crédito, se invierten from y to
+        fromPartyId = receiverPartyId
+        toPartyId = issuerPartyId
+        invoiceTypeEnumId = 'InvoiceCreditMemo'
+    } else {
+        fromPartyId = issuerPartyId
+        toPartyId = receiverPartyId
+        invoiceTypeEnumId = 'InvoiceFiscalTaxDocumentReception'
+    }
+    invoiceCreateMap =  [fromPartyId:fromPartyId, toPartyId:toPartyId, invoiceTypeEnumId:invoiceTypeEnumId, invoiceDate:issuedTimestamp, currencyUomId:'CLP']
     if (dueTimestamp)
         invoiceCreateMap.dueDate = dueTimestamp
     invoiceMap = ec.service.sync().name("mantle.account.InvoiceServices.create#Invoice").parameters(invoiceCreateMap).disableAuthz().call()
