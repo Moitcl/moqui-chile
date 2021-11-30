@@ -1,3 +1,5 @@
+import cl.nic.dte.VerifyResult
+
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 
@@ -27,20 +29,18 @@ EnvioDTE.SetDTE setDTE = null
 EnvioDTE envio = null
 
 try {
-    envio = EnvioDTEDocument.Factory.parse(xml).getEnvioDTE()
+    ByteArrayInputStream bais = new ByteArrayInputStream(xml)
+    envio = EnvioDTEDocument.Factory.parse(bais).getEnvioDTE()
+    bais.close()
     setDTE = envio.setDTE
 } catch (Exception e) {
-    ec.logger.warn("Could not parse as EnvioDTE, attempting as SetDTE (${e.toString()}")
-    org.apache.xmlbeans.XmlObject doc = org.apache.xmlbeans.XmlBeans.getContextTypeLoader().parse( is, EnvioDTE.SetDTE.type, opts )
-    setDTE = (EnvioDTE.SetDTE) doc
-    ec.logger.warn("Successfully parsed as SetDTE")
-    ec.message.addError("Could not parse XML: ${e.toString()}")
-    return
+    ec.logger.warn("Could not parse as EnvioDTE (${e.toString()}")
 }
 
 // Caratula
 rutEmisorCaratula = setDTE.caratula?.rutEmisor
 String issuerPartyId = null
+String issuerTaxName = null
 if (rutEmisorCaratula) {
     issuerPartyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([idValue:rutEmisorCaratula, partyIdTypeEnumId:'PtidNationalTaxId']).list()
     if (issuerPartyIdentificationList.size() < 1) {
@@ -51,6 +51,8 @@ if (rutEmisorCaratula) {
             ec.service.sync().name("create#mantle.party.PartyIdentification").parameters([partyId:issuerPartyId, partyIdTypeEnumId:'PtidNationalTaxId', idValue:rutEmisorCaratula]).call()
             ec.service.sync().name("create#mchile.dte.PartyGiro").parameters([partyId:issuerPartyId, description:emisor.giroEmis, isPrimary:'Y']).call()
             emisor.dirOrigen
+        } else {
+            ec.message.addError("No existe organización con RUT ${rutReceptor} (emisor) definida en el sistema")
         }
     } else if (issuerPartyIdentificationList.size() == 1) {
         issuerPartyId = issuerPartyIdentificationList.first.partyId
@@ -59,10 +61,12 @@ if (rutEmisorCaratula) {
     }
 
     EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()
-    String issuerTaxName = issuer.taxOrganizationName
+    issuerTaxName = issuer.taxOrganizationName
     if (issuerTaxName == null || issuerTaxName.size() == 0)
         issuerTaxName = ec.resource.expand("PartyNameOnlyTemplate", null, issuer)
 }
+
+ec.logger.warn("Emisor según carátula: ${rutEmisorCaratula}, issuerTaxName ${issuerTaxName}")
 
 cl.sii.siiDte.DTEDefType[] dteArray = setDTE.getDTEArray()
 if (dteArray.size() < 1) {
@@ -73,11 +77,37 @@ if (dteArray.size() < 1) {
 for (int i = 0; i < dteArray.size(); i++) {
     totalIva = 0 as Long
     // tipo de DTE
-    cl.sii.siiDte.DTEDefType.Documento.Encabezado encabezado = dteArray[i].getDocumento().getEncabezado()
+    cl.sii.siiDte.DTEDefType.Documento.Encabezado encabezado = dteArray[i].documento.encabezado
+    /*
+    verResult = dteArray[i].verifyXML()
+    if (verResult.code != VerifyResult.XML_STRUCTURE_OK)
+        ec.message.addError("Error en XML documento ${i}: ${verResult.message}")
+     */
+    verResult = dteArray[i].verifySignature()
+    if (verResult.code != VerifyResult.XML_SIGNATURE_OK)
+        ec.logger.warn("Error en firma documento ${i}: ${verResult.message}")
+    verResult = dteArray[i].verifyTimbre()
+    if (verResult.code != VerifyResult.TED_OK)
+        ec.logger.warn("Error en timbre documento ${i}: ${verResult.message}")
     tipoDte = encabezado.idDoc.tipoDTE.toString()
-    folioDte = encabezado.idDoc.folio.toString()
+    folioDte = encabezado.idDoc.folio
 
     rutEmisor = encabezado.emisor.getRUTEmisor()
+
+    mapOut = ec.service.sync().name("mchile.DTEServices.get#MoquiSIICode").parameter("siiCode", tipoDte).call()
+    tipoDteEnumId = mapOut.fiscalTaxDocumentTypeEnumId
+    ec.logger.info("Buscando FiscalTaxDocument: ${[issuerPartyIdValue:rutEmisor, fiscalTaxDocumenTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte]}")
+    existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([issuerPartyIdValue:rutEmisor, fiscalTaxDocumenTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte]).list()
+    if (existingDteList) {
+        ec.logger.info("Ya existe registrada DTE tipo ${tipoDteEnumId} para emisor ${rutEmisor} y folio ${folioDte}")
+        dte = existingDteList.first
+        contentList = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']).list()
+        if (contentList) {
+        } else {
+            ec.message.addError("No hay contenido local")
+        }
+        continue
+    }
 
     if (rutEmisorCaratula == null) {
         // Is not EnvioDTE but SetDTE (no caratula, each issuer is independent)
@@ -117,8 +147,9 @@ for (int i = 0; i < dteArray.size(); i++) {
         ec.message.addError("Sujeto emisor de documento ${i} (${ec.resource.expand('PartyNameTemplate', null, issuer)}, rut ${rutEmisor}) no es organización interna")
     }
 
-    if (issuerTaxName.toUpperCase() != encabezado.emisor.rznSoc.toUpperCase()) {
-        ec.logger.warn("Razón Social mismatch, en BD '${issuerTaxName}', en documento ${i} '${encabezado.emisor.rznSoc}'")
+    rsResult = ec.service.sync().name("mchile.DTEServices.compare#RazonSocial").parameters([rs1:issuerTaxName, rs2:encabezado.emisor.rznSoc]).call()
+    if (!rsResult.equivalent) {
+        ec.message.addError("Razón Social mismatch, en BD '${issuerTaxName}', en documento ${i} '${encabezado.emisor.rznSoc}'")
     }
 
     ec.logger.warn("folio: ${folioDte}")
@@ -160,7 +191,7 @@ for (int i = 0; i < dteArray.size(); i++) {
             ec.service.sync().name("create#mantle.party.PartyIdentification").parameters([partyId:receiverPartyId, partyIdTypeEnumId:'PtidNationalTaxId', idValue:rutReceptor]).call()
             ec.service.sync().name("create#mchile.dte.PartyGiro").parameters([partyId:issuerPartyId, description:encabezado.receptor.giroRecep, isPrimary:'Y']).call()
         } else {
-            ec.message.addError("No existe organización con RUT ${rutReceptor} definida en el sistema")
+            ec.message.addError("No existe organización con RUT ${rutReceptor} (receptor) definida en el sistema")
             receiverPartyId = null
         }
     } else if (partyIdentificationList.size() > 1) {
@@ -184,8 +215,6 @@ for (int i = 0; i < dteArray.size(); i++) {
         ec.message.addError("Sujeto receptor de documento ${i} (${ec.resource.expand('PartyNameTemplate', null, receiver)}, rut ${rutReceptor}) no es organización interna")
     }
 
-    mapOut = ec.service.sync().name("mchile.DTEServices.get#MoquiSIICode").parameter("siiCode", tipoDte).call()
-    tipoDteEnumId = mapOut.fiscalTaxDocumentTypeEnumId
     // Creación de orden de compra
     invoiceCreateMap =  [fromPartyId:issuerPartyId, toPartyId:receiverPartyId, invoiceTypeEnumId:'InvoiceFiscalTaxDocumentReception', invoiceDate:issuedTimestamp, currencyUomId:'CLP']
     if (dueTimestamp)
@@ -193,7 +222,7 @@ for (int i = 0; i < dteArray.size(); i++) {
     invoiceMap = ec.service.sync().name("mantle.account.InvoiceServices.create#Invoice").parameters(invoiceCreateMap).call()
     invoiceId = invoiceMap.invoiceId
     montoItem = 0 as Long
-    Detalle[] detalleArray = dteArray[i].getDocumento().getDetalleArray()
+    Detalle[] detalleArray = dteArray[i].documento.detalleArray
     ec.logger.warn("Recorriendo detalles: ${detalleArray.size()}")
     for (int j = 0; j < detalleArray.size(); j++) {
         // Adición de items a orden
@@ -242,32 +271,33 @@ for (int i = 0; i < dteArray.size(); i++) {
                         break
                     }
                 } else {
-                    productPartyList = ec.entity.find("mantle.product.ProductParty").condition([partyId:issuerPartyId, otherPartyItemId: cdgItem[k].vlrCodigo, roleTypeId:'Supplier'])
+                    productPartyList = ec.entity.find("mantle.product.ProductParty").condition([partyId: issuerPartyId, otherPartyItemId: cdgItem[k].vlrCodigo, roleTypeId: 'Supplier'])
                             .conditionDate("fromDate", "thruDate", issuedTimestamp).orderBy("-fromDate").list()
                     if (productPartyList) {
                         productId = productPartyList.first.productId
                         break
                     }
                 }
-                // Check Exento category
-                if (productId) {
-                    exentoList = ec.entity.find("mantle.product.category.ProductCategoryMember").condition([productCategoryId:'', productId:productId])
-                            .conditionDate("fromDate", "thruDate", issuedTimestamp).list()
-                    exentoBd = exentoList.size() > 0
-                    if (exentoBd != itemExento)
-                        ec.message.addError("Exento mismatch, XML dice ${itemExento? '' : 'no '} exento, producto en BD dice ${exentoBd? '' : 'no '} exento")
-                    product = ec.entity.find("mantle.product.Product").condition("productId", productId).one()
-                    if (product.productName.toString().trim().toLowerCase() != itemDescription.trim().toLowerCase())
-                        ec.message.addError("Description mismatch, XML dice ${itemDescription}, producto en BD dice ${product.productName}")
-                    ec.logger.info("Agregando producto preexistente ${productId}, cantidad ${quantity} *************** orderId: ${orderId}")
-                } else {
-                    if (itemExento)
-                        productId = 'SRVCEXENTO'
-                    ec.logger.warn("Producto ${itemDescription} no existe en el sistema, se creará como genérico")
-                }
-                ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales',
-                                                                                                        productId: productId, description: itemDescription, quantity: quantity, amount: price]).call()
             }
+
+            // Check Exento category
+            if (productId) {
+                exentoList = ec.entity.find("mantle.product.category.ProductCategoryMember").condition([productCategoryId:'', productId:productId])
+                        .conditionDate("fromDate", "thruDate", issuedTimestamp).list()
+                exentoBd = exentoList.size() > 0
+                if (exentoBd != itemExento)
+                    ec.message.addError("Exento mismatch, XML dice ${itemExento? '' : 'no '} exento, producto en BD dice ${exentoBd? '' : 'no '} exento")
+                product = ec.entity.find("mantle.product.Product").condition("productId", productId).one()
+                if (product.productName.toString().trim().toLowerCase() != itemDescription.trim().toLowerCase())
+                    ec.message.addError("Description mismatch, XML dice ${itemDescription}, producto en BD dice ${product.productName}")
+                ec.logger.info("Agregando producto preexistente ${productId}, cantidad ${quantity} *************** orderId: ${orderId}")
+            } else {
+                if (itemExento)
+                    productId = 'SRVCEXENTO'
+                ec.logger.warn("Producto ${itemDescription} no existe en el sistema, se creará como genérico")
+            }
+            ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales',
+                                                                                                    productId: productId, description: itemDescription, quantity: quantity, amount: price]).call()
         }
 
     }
@@ -279,7 +309,7 @@ for (int i = 0; i < dteArray.size(); i++) {
 
     // Se guarda DTE recibido en la base de datos
     createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rutEmisor, fiscalTaxDocumentTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte,
-                 receiverPartyId:organizationPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', receiverPartyIdValue:rutReceptor, date:issuedTimestamp, invoiceId:invoiceId, statusId:'Ftd-Issued',
+                 receiverPartyId:receiverPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', receiverPartyIdValue:rutReceptor, date:issuedTimestamp, invoiceId:invoiceId, statusId:'Ftd-Issued',
                  sendAuthStatusId:'Ftd-SentAuth', sendRecStatusId:'Ftd-SentRec']
     mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call()
 
