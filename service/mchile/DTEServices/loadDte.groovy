@@ -238,8 +238,10 @@ for (int i = 0; i < dteArray.size(); i++) {
         itemDescription = detalleArray[j].nmbItem
         quantity = detalleArray[j].qtyItem
         price = detalleArray[j].prcItem
-
         montoItem = detalleArray[j].montoItem
+        if (price == null && montoItem != null) {
+            price = montoItem / quantity
+        }
         // Si el indicador es no exento hay que agregar IVA como item aparte
         // Se puede ir sumando el IVA y si es mayor que 0 crear el item
         Boolean itemExento = null
