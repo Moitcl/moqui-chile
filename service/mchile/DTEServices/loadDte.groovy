@@ -97,11 +97,13 @@ for (int i = 0; i < dteArray.size(); i++) {
     mapOut = ec.service.sync().name("mchile.DTEServices.get#MoquiSIICode").parameter("siiCode", tipoDte).call()
     tipoDteEnumId = mapOut.fiscalTaxDocumentTypeEnumId
     ec.logger.info("Buscando FiscalTaxDocument: ${[issuerPartyIdValue:rutEmisor, fiscalTaxDocumenTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte]}")
-    existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([issuerPartyIdValue:rutEmisor, fiscalTaxDocumenTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte]).list()
+    existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([issuerPartyIdValue:rutEmisor, fiscalTaxDocumenTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte])
+            .disableAuthz().list()
     if (existingDteList) {
         ec.logger.info("Ya existe registrada DTE tipo ${tipoDteEnumId} para emisor ${rutEmisor} y folio ${folioDte}")
         dte = existingDteList.first
-        contentList = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']).list()
+        contentList = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml'])
+                .disableAuthz().list()
         if (contentList) {
         } else {
             ec.message.addError("No hay contenido local")
@@ -219,7 +221,7 @@ for (int i = 0; i < dteArray.size(); i++) {
     invoiceCreateMap =  [fromPartyId:issuerPartyId, toPartyId:receiverPartyId, invoiceTypeEnumId:'InvoiceFiscalTaxDocumentReception', invoiceDate:issuedTimestamp, currencyUomId:'CLP']
     if (dueTimestamp)
         invoiceCreateMap.dueDate = dueTimestamp
-    invoiceMap = ec.service.sync().name("mantle.account.InvoiceServices.create#Invoice").parameters(invoiceCreateMap).call()
+    invoiceMap = ec.service.sync().name("mantle.account.InvoiceServices.create#Invoice").parameters(invoiceCreateMap).disableAuthz().call()
     invoiceId = invoiceMap.invoiceId
     montoItem = 0 as Long
     Detalle[] detalleArray = dteArray[i].documento.detalleArray
