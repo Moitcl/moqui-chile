@@ -52,8 +52,6 @@ giro = giroOutMap.description
 codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameter("fiscalTaxDocumentTypeEnumId", fiscalTaxDocumentTypeEnumId).call()
 tipoFactura = codeOut.siiCode
 
-fechaEmision = null
-
 // Formas de pago
 if (settlementTermId.equals('Immediate'))
     formaPago = "1" // Contado
@@ -133,8 +131,7 @@ if (fechaVencimiento)
     iddoc.xsetFchVenc(FechaType.Factory.newValue(ec.l10n.format(fechaVencimiento, "yyyy-MM-dd")))
 
 SimpleDateFormat formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd")
-Date dateFechaEmision = new Date()
-fechaEmision = formatterFechaEmision.format(dateFechaEmision)
+fechaEmisionString = formatterFechaEmision.format(fechaEmision)
 // Indicador Servicio
 // 3 para Factura de Servicios
 // Para Facturas de Exportación:
@@ -459,7 +456,7 @@ if ((fiscalTaxDocumentTypeEnumId as String) in dteConstituyeVentaTypeList) {
 }
 
 // Creación de registro en FiscalTaxDocumentAttributes
-createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:amount, fechaEmision:fechaEmision, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmision,
+createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:amount, fechaEmision:fechaEmisionString, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmisionString,
              montoExento:montoExento, montoIVARecuperable:montoIVARecuperable]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call())
 fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId
