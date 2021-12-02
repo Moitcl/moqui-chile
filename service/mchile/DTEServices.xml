@@ -3576,12 +3576,12 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="sentRecStatusId" value="Ftd-NotSentRec"/>
             </entity-find>
             <iterate list="ftdList" entry="dte">
-                <service-call name="mchile.DTEServices.send#DteXmlToReceiver" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId]" out-map="context" transaction="force-new"/>
+                <service-call name="mchile.DTEServices.send#DteToReceiver" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId]" out-map="context" transaction="force-new"/>
             </iterate>
         </actions>
     </service>
 
-    <service verb="send" noun="DteXmlToReceiver">
+    <service verb="send" noun="DteToReceiver">
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
         </in-parameters>
@@ -3595,7 +3595,9 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <if condition="contentList.size() != 1"><return error="true" message="Found ${contentList.size()} XML content for fiscalTaxDocumentId ${fiscalTaxDocumentId}, expected 1"/></if>
             <set field="content" from="ec.resource.getLocationReference(contentList.first.contentLocation)"/>
-            <set field="xmlAttachment" from="[attachmentLocation:content.location, fileName:content.fileName, contentType:content.contentType]"/>
+            <service-call name="mchile.DTEServices.generaEnvio#Documentos" in-map="[rutReceptor:dte.receiverPartyIdValue, organizationPartyId:dte.issuerPartyId, documentIdList:[dte.fiscalTaxDocumentId]]" out-map="envio"/>
+            <set field="envioContent" from="ec.resource.getLocationReference(envio.xmlContentLocation)"/>
+            <set field="xmlAttachment" from="[attachmentLocation:envioContent.location, fileName:envioContent.fileName, contentType:envioContent.contentType]"/>
             <service-call name="mchile.sii.SIIServices.get#XmlReceptionEmail" in-map="[partyId:dte.receiverPartyId, partyIdValue:dte.receiverPartyIdValue, dtePartyId:dte.issuerPartyId]" out-map="context"/>
             <service-call name="mchile.DTEServices.get#DteInfo" in-map="context" out-map="bodyParameters"/>
             <entity-find-one entity-name="moqui.basic.email.EmailTemplate" value-field="emailTemplate" auto-field-map="[emailTemplateId:'MchDteSendXmlReceiver']"/>

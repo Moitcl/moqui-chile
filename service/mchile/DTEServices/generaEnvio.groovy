@@ -68,7 +68,7 @@ envio.getEnvioDTE().getSetDTE().setID(idS)
 
 cl.sii.siiDte.EnvioDTEDocument.EnvioDTE.SetDTE.Caratula car = envio.getEnvioDTE().getSetDTE().getCaratula()
 
-car.setRutReceptor('60803000-K') // El receptor del envío es el SII
+car.setRutReceptor(rutReceptor) // El receptor del envío es el SII
 car.setRutEnvia(rutEnvia)
 
 // documentos a enviar
