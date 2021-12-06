@@ -409,9 +409,10 @@ ByteArrayOutputStream out = new ByteArrayOutputStream()
 doc.save(out, opts)
 Document doc2 = MoquiDTEUtils.parseDocument(out.toByteArray())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
+
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
 
-if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", null)) {
+if (MoquiDTEUtils.verifySignature(doc2, "/DTE/Documento", null)) {
     ec.logger.warn("DTE folio ${folio} generada OK")
 } else {
     ec.message.addError("Error al generar DTE folio ${folio}")
