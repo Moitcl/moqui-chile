@@ -546,10 +546,10 @@ envioBoletaDocument.envioBOLETA.getSetDTE().getDTEArray(0).getDocumento().xsetTm
 byte[] salidaBoleta = BoletaSigner.signBoleta(doc2, key, cert)
 //byte[] salidaBoleta = BoletaSigner2.signBoleta(doc2, key, cert, uriBoleta)
 //byte[] salidaBoleta = Signer.signEmbededBoleta(doc2, uriBoleta, key, cert)
-//doc2 = XMLUtil.parseDocument(salidaBoleta)
+//doc2 = MoquiDTEUtils.parseDocument(salidaBoleta)
 // Firma de EnvioBOLETA
-byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, key, cert, uri, "SetDTE")
-doc2 = XMLUtil.parseDocument(facturaXml)
+byte[] facturaXml = MoquiDTEUtils.signSignature(doc2, uri, key, cert, uri, "SetDTE")
+doc2 = MoquiDTEUtils.parseDocument(facturaXml)
 
 if (MoquiDTEUtils.verify(doc2, "//sii:SetDTE")) {
     ec.logger.warn("Factura "+path+" folio "+folio+" generada OK")

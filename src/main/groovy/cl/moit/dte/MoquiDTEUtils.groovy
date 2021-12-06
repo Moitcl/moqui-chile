@@ -28,6 +28,8 @@ import javax.xml.crypto.dsig.dom.DOMValidateContext
 import javax.xml.crypto.dsig.keyinfo.KeyInfo
 import javax.xml.crypto.dsig.keyinfo.X509Data
 import javax.xml.namespace.NamespaceContext
+import javax.xml.parsers.DocumentBuilder
+import javax.xml.parsers.DocumentBuilderFactory
 import javax.xml.parsers.ParserConfigurationException
 import javax.xml.transform.OutputKeys
 import javax.xml.transform.Transformer
@@ -470,6 +472,27 @@ class MoquiDTEUtils {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    public static org.w3c.dom.Document parseDocument(byte[] entrada) {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+        factory.setIgnoringElementContentWhitespace(false);
+
+        DocumentBuilder builder;
+        try {
+            builder = factory.newDocumentBuilder();
+            InputStream inputStream = new ByteArrayInputStream(entrada);
+            Document doc = builder.parse(inputStream);
+            return doc;
+        } catch (ParserConfigurationException e) {
+            e.printStackTrace();
+        } catch (SAXException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        throw new RuntimeException("Error al parsear");
     }
 
 }

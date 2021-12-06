@@ -11,7 +11,6 @@ import org.w3c.dom.Document
 
 import cl.moit.dte.MoquiDTEUtils
 import cl.nic.dte.util.Utilities
-import cl.nic.dte.util.XMLUtil
 import cl.sii.siiDte.DTEDefType
 import cl.sii.siiDte.DTEDocument
 import cl.sii.siiDte.EnvioDTEDocument
@@ -122,10 +121,10 @@ if (saveSinFirma) {
 }
 ByteArrayOutputStream out = new ByteArrayOutputStream()
 envio.save(out, opts)
-Document doc2 = XMLUtil.parseDocument(out.toByteArray())
+Document doc2 = MoquiDTEUtils.parseDocument(out.toByteArray())
 
 byte[] salida = MoquiDTEUtils.sign(doc2, "#" + idS, pkey, certificate, "#" + idS,"SetDTE")
-doc2 = XMLUtil.parseDocument(salida)
+doc2 = MoquiDTEUtils.parseDocument(salida)
 
 if (MoquiDTEUtils.verifySignature(doc2, "/sii:EnvioDTE/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()") &&
     MoquiDTEUtils.verifySignature(doc2, "/sii:EnvioDTE/sii:SetDTE/sii:DTE/sii:Documento", "./sii:Encabezado/sii:IdDoc/sii:FchEmis/text()" )) {

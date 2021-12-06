@@ -194,7 +194,7 @@ envioBoletaDocument.save(out, opts2)
 xmlContentReference = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/ENVBOL-${idS}.xml")
 envioBoletaDocument.save(xmlContentLocation.outputStream, opts2)
 
-Document doc2 = XMLUtil.parseDocument(out.toByteArray())
+Document doc2 = MoquiDTEUtils.parseDocument(out.toByteArray())
 
 opts = new XmlOptions()
 opts.setCharacterEncoding("ISO-8859-1")
@@ -206,10 +206,10 @@ if (saveSinFirma) {
 out = new ByteArrayOutputStream()
 envio.save(out, opts)
 
-doc2 = XMLUtil.parseDocument(out.toByteArray())
+doc2 = MoquiDTEUtils.parseDocument(out.toByteArray())
 
 byte[] salida = MoquiDTEUtils.sign(doc2, "#" + idS, pKey, x509, "#" + idS,"SetDTE")
-doc2 = XMLUtil.parseDocument(salida)
+doc2 = MoquiDTEUtils.parseDocument(salida)
 
 if (MoquiDTEUtils.verifySignature(doc2, "//sii:SetDTE", null)) {
     xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}.xml"
