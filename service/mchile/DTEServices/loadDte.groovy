@@ -3,27 +3,14 @@ import cl.nic.dte.VerifyResult
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 
-import org.apache.xmlbeans.XmlOptions
-
 import cl.sii.siiDte.EnvioDTEDocument
 import cl.sii.siiDte.EnvioDTEDocument.EnvioDTE
 import cl.sii.siiDte.DTEDefType.Documento.Detalle
 import org.moqui.context.ExecutionContext
+import org.w3c.dom.Document
+import cl.moit.dte.MoquiDTEUtils
 
 ExecutionContext ec = context.ec
-
-// Debo meter el namespace porque SII no lo genera
-HashMap<String, String> namespaces = new HashMap<String, String>()
-namespaces.put("", "http://www.sii.cl/SiiDte")
-namespaces.put("xmlns:siid", "http://www.sii.cl/SiiDte")
-namespaces.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
-
-XmlOptions opts = new XmlOptions()
-opts.setCharacterEncoding("ISO-8859-1")
-//opts.setSaveImplicitNamespaces(namespaces)
-opts.setLoadSubstituteNamespaces(namespaces)
-opts.setLoadAdditionalNamespaces(namespaces)
-opts.setSaveImplicitNamespaces(namespaces)
 
 EnvioDTE.SetDTE setDTE = null
 EnvioDTE envio = null
@@ -34,8 +21,30 @@ try {
     bais.close()
     setDTE = envio.setDTE
 } catch (Exception e) {
-    ec.logger.warn("Could not parse as EnvioDTE (${e.toString()}")
+    ec.message.error("Could not parse as EnvioDTE (${e.toString()}")
 }
+
+cl.sii.siiDte.DTEDefType[] dteArray = setDTE.getDTEArray()
+if (dteArray.size() < 1) {
+    ec.message.addError("Documento no contiene DTEs")
+    return
+}
+
+// Check signatures
+Document doc
+try {
+    doc = MoquiDTEUtils.parseDocument(xml)
+} catch (Exception e) {
+    ec.message.error("Parsing document")
+}
+
+if (!MoquiDTEUtils.verifySignature(doc, "/sii:EnvioDTE/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()"))
+    ec.message.addError("Firma del envío inválida")
+if (!MoquiDTEUtils.verifySignature(doc, "/sii:EnvioDTE/sii:SetDTE/sii:DTE/sii:Documento", "./sii:Encabezado/sii:IdDoc/sii:FchEmis/text()"))
+    ec.message.addError("Firma de documento(s) inválida")
+
+if (ec.message.hasError())
+    return
 
 // Caratula
 rutEmisorCaratula = setDTE.caratula?.rutEmisor
@@ -68,27 +77,16 @@ if (rutEmisorCaratula) {
 
 ec.logger.warn("Emisor según carátula: ${rutEmisorCaratula}, issuerTaxName ${issuerTaxName}")
 
-cl.sii.siiDte.DTEDefType[] dteArray = setDTE.getDTEArray()
-if (dteArray.size() < 1) {
-    ec.message.addError("Documento no contiene DTEs")
-    return
-}
-
 for (int i = 0; i < dteArray.size(); i++) {
     totalIva = 0 as Long
     // tipo de DTE
     cl.sii.siiDte.DTEDefType.Documento.Encabezado encabezado = dteArray[i].documento.encabezado
+
     /*
-    verResult = dteArray[i].verifyXML()
-    if (verResult.code != VerifyResult.XML_STRUCTURE_OK)
-        ec.message.addError("Error en XML documento ${i}: ${verResult.message}")
-     */
-    verResult = dteArray[i].verifySignature()
-    if (verResult.code != VerifyResult.XML_SIGNATURE_OK)
-        ec.logger.warn("Error en firma documento ${i}: ${verResult.message}")
     verResult = dteArray[i].verifyTimbre()
     if (verResult.code != VerifyResult.TED_OK)
         ec.logger.warn("Error en timbre documento ${i}: ${verResult.message}")
+     */
     tipoDte = encabezado.idDoc.tipoDTE.toString()
     folioDte = encabezado.idDoc.folio
 
@@ -345,5 +343,8 @@ for (int i = 0; i < dteArray.size(); i++) {
         try { docRrPdf.putStream(fileStream) } finally { fileStream.close() }
         ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
     }
+
+    // Se agregan las referencias
+
 
 }
