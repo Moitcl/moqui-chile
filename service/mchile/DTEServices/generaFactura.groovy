@@ -412,11 +412,10 @@ byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Docum
 
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
 
-if (MoquiDTEUtils.verifySignature(doc2, "/DTE/Documento", null)) {
+if (MoquiDTEUtils.verifySignature(doc2, "/DTE/Documento", "/DTE/Documento/Encabezado/IdDoc/FchEmis/text()")) {
     ec.logger.warn("DTE folio ${folio} generada OK")
-} else {
+} else
     ec.message.addError("Error al generar DTE folio ${folio}")
-}
 
 // Registry de DTE en base de datos y generación de PDF -->
 fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoFactura}"
