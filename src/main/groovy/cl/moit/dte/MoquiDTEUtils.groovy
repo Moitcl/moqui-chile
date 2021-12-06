@@ -55,6 +55,7 @@ import java.security.interfaces.RSAPrivateKey
 import java.security.interfaces.RSAPublicKey
 import java.sql.Timestamp
 import javax.xml.crypto.dsig.XMLSignature
+import java.text.SimpleDateFormat
 
 class MoquiDTEUtils {
 
@@ -255,11 +256,13 @@ class MoquiDTEUtils {
         return [referenceArray:ref, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, dteExenta:dteExenta]
     }
 
-    public static boolean verifySignature(Document doc, String xPathExpression) throws NoSuchAlgorithmException, InvalidKeyException,
+    public static boolean verifySignature(Document doc, String xPathExpression, String dateXPathExpression) throws NoSuchAlgorithmException, InvalidKeyException,
             IOException, ParserConfigurationException, SAXException, XMLSecurityException {
         XPath xpath = XPathFactory.newInstance().newXPath()
         xpath.setNamespaceContext(new DefaultNamespaceContext().addNamespace("sii", "http://www.sii.cl/SiiDte"))
-        XPathExpression expression = xpath.compile(xPathExpression)
+        XPathExpression expression
+        Date signatureDate = null
+        expression = xpath.compile(xPathExpression)
         NodeList nodes = (NodeList) expression.evaluate(doc.getDocumentElement(), XPathConstants.NODESET)
         if (nodes == null || nodes.length < 1)
             throw new RuntimeException("Could not find any node using XPath expression ${xPathExpression}")
@@ -267,6 +270,13 @@ class MoquiDTEUtils {
 
         nodes.each { org.w3c.dom.Node node ->
             verificationCount++
+            if (dateXPathExpression != null) {
+                expression = xpath.compile(dateXPathExpression)
+                String signatureTimestamp = expression.evaluate(node, XPathConstants.STRING)
+                SimpleDateFormat dateFormat = new SimpleDateFormat(signatureTimestamp.size() == 10 ? "yyyy-MM-dd": "yyyy-MM-dd'T'HH:mm:ss")
+                signatureDate = dateFormat.parse(signatureTimestamp)
+                logger.error("got signatureTimestamp: ${signatureTimestamp}")
+            }
             ((Element)node).setIdAttributeNS(null, "ID", true)
             NodeList signatureNodeList = ((Element)node.getParentNode()).getElementsByTagNameNS("http://www.w3.org/2000/09/xmldsig#", "Signature");
             if (signatureNodeList == null || signatureNodeList.length < 1)
@@ -294,7 +304,7 @@ class MoquiDTEUtils {
                         if (entries[i] instanceof X509CertImpl) {
                             certificate = (X509CertImpl) entries[i];
                             try {
-                                certificate.checkValidity(signDate);
+                                certificate.checkValidity(signatureDate ?: new Date());
                             } catch (CertificateExpiredException expiredEx) {
                                 logger.error("CERTIFICATE EXPIRED!");
                                 return false;

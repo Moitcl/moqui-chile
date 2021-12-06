@@ -211,7 +211,7 @@ doc2 = XMLUtil.parseDocument(out.toByteArray())
 byte[] salida = MoquiDTEUtils.sign(doc2, "#" + idS, pKey, x509, "#" + idS,"SetDTE")
 doc2 = XMLUtil.parseDocument(salida)
 
-if (MoquiDTEUtils.verifySignature(doc2, "//sii:SetDTE")) {
+if (MoquiDTEUtils.verifySignature(doc2, "//sii:SetDTE", null)) {
     xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}.xml"
     ec.resource.getLocationReference(xmlContentLocation).putBytes(salida)
     ec.logger.warn("Envio generado OK")

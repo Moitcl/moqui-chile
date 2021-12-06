@@ -71,6 +71,7 @@ along with this software (see the LICENSE.md file). If not, see
                 import javax.xml.xpath.XPathFactory
                 import javax.xml.xpath.XPathExpression
                 import javax.xml.xpath.XPathConstants
+                import cl.moit.dte.MoquiDTEUtils
                 import cl.moit.dte.MoquiDTEUtils.DefaultNamespaceContext
             </script>
             <set field="messageId" from="headers.get('message-id')"/>
@@ -110,7 +111,9 @@ along with this software (see the LICENSE.md file). If not, see
                         internalSignedXPath = null
                         if (firstTag == 'EnvioDTE') {
                             generalSignedXPath = "/sii:EnvioDTE/sii:SetDTE"
+                            generalDateXPath = "./sii:Caratula/sii:TmstFirmaEnv/text()"
                             internalSignedXPath = "/sii:EnvioDTE/sii:SetDTE/sii:DTE/sii:Documento"
+                            internalDateXPath = "./sii:Encabezado/sii:IdDoc/sii:FchEmis/text()"
                         } else if (firstTag == 'RESULTADO_ENVIO') {
                         } else if (firstTag == 'EnvioRecibos') {
                             generalSignedXPath = "/sii:EnvioRecibos/sii:SetRecibos"
@@ -120,10 +123,10 @@ along with this software (see the LICENSE.md file). If not, see
                             ec.logger.error("Unrecognized content with filename ${bodyPart.filename} for email ${messageId}, firstTag: ${firstTag}")
                         }
                         if (generalSignedXPath)
-                            if (!cl.moit.dte.MoquiDTEUtils.verifySignature(doc, generalSignedXPath))
+                            if (!cl.moit.dte.MoquiDTEUtils.verifySignature(doc, generalSignedXPath, generalDateXPath))
                                 ec.message.addError("No se verifica firma en ${generalSignedXPath}")
                         if (internalSignedXPath)
-                            if (!cl.moit.dte.MoquiDTEUtils.verifySignature(doc, internalSignedXPath))
+                            if (!cl.moit.dte.MoquiDTEUtils.verifySignature(doc, internalSignedXPath, internalSignedXPath))
                                 ec.message.addError("No se verifica firma en ${internalSignedXPath}")
                         ]]></script>
                     <!--
@@ -133,7 +136,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <log message="           disposition: ${bodyPart.disposition}"/>
                     -->
                     <!--
-                    ToDo: determine fiscalTaxDocumentId and messageTypeEnumId when processing attachments
+                    ToDo: determine fiscalTaxDocumentIdList and messageTypeEnumId when processing attachments
                     -->
                 </else-if><else>
                     <log level="error" message="Ignoring bodyPart of type ${bodyPart.contentType} and filename ${bodyPart.filename}, disposition ${bodyPart.disposition} for mail ${messageId}"/>
@@ -159,11 +162,10 @@ along with this software (see the LICENSE.md file). If not, see
                 </else></if>
             </if>
 
-
-            <if condition="fiscalTaxDocumentId &amp;&amp; emailMesageId">
+            <iterate list="fiscalTaxDocumentIdList" entry="fiscalTaxDocumentId">
                 <service-call name="create#mchile.dte.FiscalTaxDocumentEmailMessage"
                               in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, emailMessageId:emailMessageId, messageTypeEnumId:messageTypeEnumId]"/>
-            </if>
+            </iterate>
         </actions>
     </service>
 
