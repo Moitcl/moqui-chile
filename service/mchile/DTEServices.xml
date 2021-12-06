@@ -1156,7 +1156,6 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-
     <service verb="preparaEnvio" noun="Documentos">
         <description>
             Obtiene datos para llamar a servicio enviar#Documento
@@ -3563,55 +3562,6 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="send" noun="EmittedDtesToReceivers" authenticate="anonymous-all">
-        <actions>
-            <entity-find entity-name="mantle.party.PartyRole" list="internalPartyList">
-                <econdition field-name="roleTypeId" value="OrgInternal"/>
-            </entity-find>
-            <set field="internalPartyIdList" from="internalPartyList.partyId"/>
-            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList">
-                <econdition field-name="issuerPartyId" operator="in" from="internalPartyIdList"/>
-                <econdition field-name="statusId" value="Ftd-Issued"/>
-                <econdition field-name="sentAuthStatusId" value="Ftd-SentAuth"/>
-                <econdition field-name="sentRecStatusId" value="Ftd-NotSentRec"/>
-            </entity-find>
-            <iterate list="ftdList" entry="dte">
-                <service-call name="mchile.DTEServices.send#DteToReceiver" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId]" out-map="context" transaction="force-new"/>
-            </iterate>
-        </actions>
-    </service>
-
-    <service verb="send" noun="DteToReceiver">
-        <in-parameters>
-            <parameter name="fiscalTaxDocumentId" required="true"/>
-        </in-parameters>
-        <actions>
-            <log message="Sending email for fiscalTaxDocumentId: ${fiscalTaxDocumentId}"/>
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" for-update="true"/>
-            <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument with id ${fiscalTaxDocumentId}"/></if>
-            <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="contentList">
-                <econdition field-name="fiscalTaxDocumentId"/>
-                <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
-            </entity-find>
-            <if condition="contentList.size() != 1"><return error="true" message="Found ${contentList.size()} XML content for fiscalTaxDocumentId ${fiscalTaxDocumentId}, expected 1"/></if>
-            <set field="content" from="ec.resource.getLocationReference(contentList.first.contentLocation)"/>
-            <service-call name="mchile.DTEServices.generaEnvio#Documentos" in-map="[rutReceptor:dte.receiverPartyIdValue, organizationPartyId:dte.issuerPartyId, documentIdList:[dte.fiscalTaxDocumentId]]" out-map="envio"/>
-            <set field="envioContent" from="ec.resource.getLocationReference(envio.xmlContentLocation)"/>
-            <set field="xmlAttachment" from="[attachmentLocation:envioContent.location, fileName:envioContent.fileName, contentType:envioContent.contentType]"/>
-            <service-call name="mchile.sii.SIIServices.get#XmlReceptionEmail" in-map="[partyId:dte.receiverPartyId, partyIdValue:dte.receiverPartyIdValue, dtePartyId:dte.issuerPartyId]" out-map="context"/>
-            <service-call name="mchile.DTEServices.get#DteInfo" in-map="context" out-map="bodyParameters"/>
-            <entity-find-one entity-name="moqui.basic.email.EmailTemplate" value-field="emailTemplate" auto-field-map="[emailTemplateId:'MchDteSendXmlReceiver']"/>
-            <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" in-map="[toAddresses:xmlReceptionEmailAddress, bccAddresses:'jhp@moit.cl', emailTemplateId:'MchDteSendXmlReceiver',
-                    attachments:[xmlAttachment], bodyParameters:bodyParameters+[fiscalTaxDocumentId:fiscalTaxDocumentId, subject:emailTemplate.subject]]" out-map="context"/>
-            <if condition="emailMessageId">
-                <set field="dte.sentRecStatusId" value="Ftd-SentRec"/>
-                <service-call name="create#mchile.dte.FiscalTaxDocumentEmailMessage"
-                              in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, emailMessageId:emailMessageId, messageTypeEnumId:'Ftdemt-SendXmlReceiverMandatory']"/>
-            </if>
-            <entity-update value-field="dte"/>
-        </actions>
-    </service>
-
     <service verb="compare" noun="RazonSocial">
         <in-parameters>
             <parameter name="rs1"/>
@@ -3633,19 +3583,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="rs2" from="rs2.replaceAll(pattern, replacement)"/>
             </iterate>
             <if condition="rs1.equals(rs2)"><set field="equivalent" from="true"/><return/></if>
-        </actions>
-    </service>
-
-    <service verb="process" noun="IncomingDteMessage">
-        <implements service="org.moqui.EmailServices.process#EmailEca"/>
-        <actions>
-            <iterate list="bodyPartList" entry="bodyPart">
-                <log message="processing bodyPart:"/>
-                <log message="           contentType: ${bodyPart.contentType}"/>
-                <log message="           filename: ${bodyPart.filename}"/>
-                <log message="           disposition: ${bodyPart.disposition}"/>
-                <log message="           contentText: ${bodyPart.contentText}"/>
-            </iterate>
         </actions>
     </service>
 

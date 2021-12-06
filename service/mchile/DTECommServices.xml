@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+    <service verb="send" noun="EmittedDtesToReceivers" authenticate="anonymous-all">
+        <actions>
+            <entity-find entity-name="mantle.party.PartyRole" list="internalPartyList">
+                <econdition field-name="roleTypeId" value="OrgInternal"/>
+            </entity-find>
+            <set field="internalPartyIdList" from="internalPartyList.partyId"/>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList">
+                <econdition field-name="issuerPartyId" operator="in" from="internalPartyIdList"/>
+                <econdition field-name="statusId" value="Ftd-Issued"/>
+                <econdition field-name="sentAuthStatusId" value="Ftd-SentAuth"/>
+                <econdition field-name="sentRecStatusId" value="Ftd-NotSentRec"/>
+            </entity-find>
+            <iterate list="ftdList" entry="dte">
+                <service-call name="mchile.DTECommServices.send#DteToReceiver" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId]" out-map="context" transaction="force-new"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="send" noun="DteToReceiver">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+        </in-parameters>
+        <actions>
+            <log message="Sending email for fiscalTaxDocumentId: ${fiscalTaxDocumentId}"/>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" for-update="true"/>
+            <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument with id ${fiscalTaxDocumentId}"/></if>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="contentList">
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
+            </entity-find>
+            <if condition="contentList.size() != 1"><return error="true" message="Found ${contentList.size()} XML content for fiscalTaxDocumentId ${fiscalTaxDocumentId}, expected 1"/></if>
+            <set field="content" from="ec.resource.getLocationReference(contentList.first.contentLocation)"/>
+            <service-call name="mchile.DTEServices.generaEnvio#Documentos" in-map="[rutReceptor:dte.receiverPartyIdValue, organizationPartyId:dte.issuerPartyId, documentIdList:[dte.fiscalTaxDocumentId]]" out-map="envio"/>
+            <set field="envioContent" from="ec.resource.getLocationReference(envio.xmlContentLocation)"/>
+            <set field="xmlAttachment" from="[attachmentLocation:envioContent.location, fileName:envioContent.fileName, contentType:envioContent.contentType]"/>
+            <service-call name="mchile.sii.SIIServices.get#XmlReceptionEmail" in-map="[partyId:dte.receiverPartyId, partyIdValue:dte.receiverPartyIdValue, dtePartyId:dte.issuerPartyId]" out-map="context"/>
+            <service-call name="mchile.DTEServices.get#DteInfo" in-map="context" out-map="bodyParameters"/>
+            <entity-find-one entity-name="moqui.basic.email.EmailTemplate" value-field="emailTemplate" auto-field-map="[emailTemplateId:'MchDteSendXmlReceiver']"/>
+            <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" in-map="[toAddresses:xmlReceptionEmailAddress, bccAddresses:'jhp@moit.cl', emailTemplateId:'MchDteSendXmlReceiver',
+                    attachments:[xmlAttachment], bodyParameters:bodyParameters+[fiscalTaxDocumentId:fiscalTaxDocumentId, subject:emailTemplate.subject]]" out-map="context"/>
+            <if condition="emailMessageId">
+                <set field="dte.sentRecStatusId" value="Ftd-SentRec"/>
+                <service-call name="create#mchile.dte.FiscalTaxDocumentEmailMessage"
+                              in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, emailMessageId:emailMessageId, messageTypeEnumId:'Ftdemt-SendXmlReceiverMandatory']"/>
+            </if>
+            <entity-update value-field="dte"/>
+        </actions>
+    </service>
+
+    <service verb="process" noun="IncomingDteMessage">
+        <implements service="org.moqui.EmailServices.process#EmailEca"/>
+        <actions>
+            <script>
+                import javax.xml.xpath.XPath
+                import javax.xml.xpath.XPathFactory
+                import javax.xml.xpath.XPathExpression
+                import javax.xml.xpath.XPathConstants
+                import cl.moit.dte.MoquiDTEUtils.DefaultNamespaceContext
+            </script>
+            <set field="messageId" from="headers.get('message-id')"/>
+            <log level="warn" message="Processing email ${messageId}"/>
+            <iterate list="bodyPartList" entry="bodyPart">
+                <if condition="(bodyPart.contentType.contains('text/plain') || bodyPart.contentType.contains('text/html')) &amp;&amp; bodyPart.filename == null"><then>
+                    <if condition="body == null"><then>
+                        <set field="body" from="bodyPart.contentText"/>
+                    </then><else-if condition="bodyPart.contentType.contains('text/plain')">
+                        <if condition="bodyText == null"><then>
+                            <set field="bodyText" from="bodyPart.contentText"/>
+                        </then><else>
+                            <log level="warn" message="More than one bodyPart with type text/plain for mail ${messageId}"/>
+                        </else></if>
+                    </else-if><else>
+                        <log level="warn" message="More than one bodyPart with type text/html for mail ${messageId}"/>
+                    </else></if>
+                </then><else-if condition="(bodyPart.contentType.contains('text/plain') || bodyPart.contentType.contains('text/html')) &amp;&amp; bodyPart.filename != null">
+                    <log level="warn" message="Ignoring bodyPart of type ${bodyPart.contentType} and filename ${filename} for mail ${messageId}"/>
+                </else-if><else-if condition="(bodyPart.disposition == 'attachment' || bodyPart.disposition == null) &amp;&amp; bodyPart.filename.endsWith('.xml')">
+                    <if condition="bodyPart.contentBytes == null &amp;&amp; bodyPart.contentText == null">
+                        <log level="error" message="No contentBytes nor contentText for message ${messageId}"/>
+                        <continue/>
+                    </if>
+                    <script><![CDATA[
+                        contentBytes = bodyPart.contentBytes ?: bodyPart.contentText.getBytes('ISO-8859-1')
+                        org.w3c.dom.Document doc = null
+                        try {
+                            doc = cl.nic.dte.util.XMLUtil.parseDocument(contentBytes)
+                        } catch (Exception e) {
+                            ec.logger.error("Parsing document ${bodyPart.filename} of message ${messageId}: ${e.toString()}")
+                            continue
+                        }
+                        firstTag = doc.getDocumentElement().getNodeName()
+                        ec.logger.warn("firstTag: ${firstTag}")
+                        generalSignedXPath = null
+                        internalSignedXPath = null
+                        if (firstTag == 'EnvioDTE') {
+                            generalSignedXPath = "/sii:EnvioDTE/sii:SetDTE"
+                            internalSignedXPath = "/sii:EnvioDTE/sii:SetDTE/sii:DTE/sii:Documento"
+                        } else if (firstTag == 'RESULTADO_ENVIO') {
+                        } else if (firstTag == 'EnvioRecibos') {
+                            generalSignedXPath = "/sii:EnvioRecibos/sii:SetRecibos"
+                        } else if (firstTag == 'RespuestaDTE') {
+                            generalSignedXPath = "/sii:RespuestaDTE/sii:Resultado"
+                        } else {
+                            ec.logger.error("Unrecognized content with filename ${bodyPart.filename} for email ${messageId}, firstTag: ${firstTag}")
+                        }
+                        if (generalSignedXPath)
+                            if (!cl.moit.dte.MoquiDTEUtils.verifySignature(doc, generalSignedXPath))
+                                ec.message.addError("No se verifica firma en ${generalSignedXPath}")
+                        if (internalSignedXPath)
+                            if (!cl.moit.dte.MoquiDTEUtils.verifySignature(doc, internalSignedXPath))
+                                ec.message.addError("No se verifica firma en ${internalSignedXPath}")
+                        ]]></script>
+                    <!--
+                    <log message="processing bodyPart, firstTag: ${firstTag}"/>
+                    <log message="           contentType: ${bodyPart.contentType}"/>
+                    <log message="           filename: ${bodyPart.filename}"/>
+                    <log message="           disposition: ${bodyPart.disposition}"/>
+                    -->
+                    <!--
+                    ToDo: determine fiscalTaxDocumentId and messageTypeEnumId when processing attachments
+                    -->
+                </else-if><else>
+                    <log level="error" message="Ignoring bodyPart of type ${bodyPart.contentType} and filename ${bodyPart.filename}, disposition ${bodyPart.disposition} for mail ${messageId}"/>
+                </else></if>
+            </iterate>
+
+            <!-- Save Message -->
+            <if condition="messageId">
+                <entity-find entity-name="moqui.basic.email.EmailMessage" list="emailMessageList">
+                    <econdition field-name="emailServerId" ignore-if-empty="true"/>
+                    <econdition field-name="messageId"/>
+                </entity-find>
+                <if condition="emailMessageList"><then>
+                    <set field="emailMessageId" from="emailMessageList.first.emailMessageId"/>
+                    <log message="Found duplicate message with Message-ID [${messageId}] from server [${emailServerId}]"/>
+                </then><else>
+                    <service-call name="create#moqui.basic.email.EmailMessage" out-map="context"
+                                  in-map="[sentDate:fields.sentDate, receivedDate:fields.receivedDate, statusId:statusId,
+                    subject:fields.subject, body:body, bodyText:bodyText,
+                    fromAddress:fields.from, toAddresses:fields.toList?.toString(),
+                    ccAddresses:fields.ccList?.toString(), bccAddresses:fields.bccList?.toString(),
+                    messageId:messageId, emailServerId:emailServerId]"/>
+                </else></if>
+            </if>
+
+
+            <if condition="fiscalTaxDocumentId &amp;&amp; emailMesageId">
+                <service-call name="create#mchile.dte.FiscalTaxDocumentEmailMessage"
+                              in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, emailMessageId:emailMessageId, messageTypeEnumId:messageTypeEnumId]"/>
+            </if>
+        </actions>
+    </service>
+
+</services>
