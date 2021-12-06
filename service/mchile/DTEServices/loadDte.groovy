@@ -21,7 +21,7 @@ try {
     bais.close()
     setDTE = envio.setDTE
 } catch (Exception e) {
-    ec.message.error("Could not parse as EnvioDTE (${e.toString()}")
+    ec.message.addError("Could not parse as EnvioDTE (${e.toString()}")
 }
 
 cl.sii.siiDte.DTEDefType[] dteArray = setDTE.getDTEArray()
@@ -35,7 +35,7 @@ Document doc
 try {
     doc = MoquiDTEUtils.parseDocument(xml)
 } catch (Exception e) {
-    ec.message.error("Parsing document")
+    ec.message.addError("Parsing document: ${e.toString()}")
 }
 
 if (!MoquiDTEUtils.verifySignature(doc, "/sii:EnvioDTE/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()"))

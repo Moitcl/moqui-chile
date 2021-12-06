@@ -478,8 +478,10 @@ class MoquiDTEUtils {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(true);
         factory.setIgnoringElementContentWhitespace(false);
+        factory.setValidating(true);
 
         DocumentBuilder builder;
+        String errorMessage = ""
         try {
             builder = factory.newDocumentBuilder();
             InputStream inputStream = new ByteArrayInputStream(entrada);
@@ -487,12 +489,15 @@ class MoquiDTEUtils {
             return doc;
         } catch (ParserConfigurationException e) {
             e.printStackTrace();
+            errorMessage = e.toString()
         } catch (SAXException e) {
             e.printStackTrace();
+            errorMessage = e.toString()
         } catch (IOException e) {
             e.printStackTrace();
+            errorMessage = e.toString()
         }
-        throw new RuntimeException("Error al parsear");
+        throw new RuntimeException("Error al parsear: ${errorMessage}");
     }
 
 }
