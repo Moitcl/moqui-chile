@@ -5,9 +5,7 @@ import java.text.SimpleDateFormat
 import org.apache.xmlbeans.XmlOptions
 import org.w3c.dom.Document
 
-import cl.nic.dte.util.Signer
 import cl.nic.dte.util.Utilities
-import cl.nic.dte.util.XMLUtil
 import cl.sii.siiDte.AUTORIZACIONDocument
 import cl.sii.siiDte.AutorizacionType
 import cl.sii.siiDte.DTEDefType.Documento.Detalle
@@ -20,6 +18,7 @@ import cl.sii.siiDte.DTEDocument
 import cl.sii.siiDte.FechaHoraType
 import cl.sii.siiDte.FechaType
 import cl.sii.siiDte.MedioPagoType
+import cl.moit.dte.MoquiDTEUtils
 
 import org.moqui.entity.EntityValue
 import org.moqui.context.ExecutionContext
