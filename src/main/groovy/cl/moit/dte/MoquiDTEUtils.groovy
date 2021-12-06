@@ -14,6 +14,7 @@ import org.w3c.dom.Element
 import org.w3c.dom.Document
 import org.w3c.dom.NodeList
 import org.xml.sax.SAXException
+import sun.security.x509.X509CertImpl
 
 import javax.xml.crypto.AlgorithmMethod
 import javax.xml.crypto.KeySelector
@@ -28,6 +29,13 @@ import javax.xml.crypto.dsig.keyinfo.KeyInfo
 import javax.xml.crypto.dsig.keyinfo.X509Data
 import javax.xml.namespace.NamespaceContext
 import javax.xml.parsers.ParserConfigurationException
+import javax.xml.transform.OutputKeys
+import javax.xml.transform.Transformer
+import javax.xml.transform.TransformerConfigurationException
+import javax.xml.transform.TransformerException
+import javax.xml.transform.TransformerFactory
+import javax.xml.transform.dom.DOMSource
+import javax.xml.transform.stream.StreamResult
 import javax.xml.xpath.XPath
 import javax.xml.xpath.XPathFactory
 import javax.xml.xpath.XPathExpression
@@ -35,8 +43,16 @@ import javax.xml.xpath.XPathConstants
 import java.security.InvalidKeyException
 import java.security.Key
 import java.security.NoSuchAlgorithmException
+import java.security.PrivateKey
 import java.security.PublicKey
+import java.security.cert.CertificateExpiredException
+import java.security.cert.CertificateNotYetValidException
+import java.security.cert.X509CRL
 import java.security.cert.X509Certificate
+import java.security.interfaces.DSAPrivateKey
+import java.security.interfaces.DSAPublicKey
+import java.security.interfaces.RSAPrivateKey
+import java.security.interfaces.RSAPublicKey
 import java.sql.Timestamp
 import javax.xml.crypto.dsig.XMLSignature
 
@@ -261,11 +277,42 @@ class MoquiDTEUtils {
             }
             DOMValidateContext valContext = new DOMValidateContext(new X509KeySelector(), signatureElem)
 
-// Unmarshal the XMLSignature.
+            // Unmarshal the XMLSignature.
             XMLSignatureFactory fac = XMLSignatureFactory.getInstance("DOM");
             XMLSignature signature = fac.unmarshalXMLSignature(valContext);
 
-// Validate the XMLSignature.
+            X509CertImpl certificate = null;
+            signature.keyInfo.content.each {
+                if (it instanceof X509Data) {
+                    X509Data xd = (X509Data) it;
+                    Object[] entries = xd.getContent().toArray();
+                    X509CRL crl = null;
+                    for (int i = 0; ( i < entries.length); i++) {
+                        if (entries[i] instanceof X509CRL) {
+                            crl = (X509CRL) entries[i];
+                        }
+                        if (entries[i] instanceof X509CertImpl) {
+                            certificate = (X509CertImpl) entries[i];
+                            try {
+                                certificate.checkValidity(signDate);
+                            } catch (CertificateExpiredException expiredEx) {
+                                logger.error("CERTIFICATE EXPIRED!");
+                                return false;
+                            } catch (CertificateNotYetValidException notYetValidEx) {
+                                logger.error("CERTIFICATE NOT VALID YET!");
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (certificate == null) {
+                logger.error("No Certificate found")
+                return false
+            }
+
+            // Validate the XMLSignature.
             if (!signature.validate(valContext))
                 return false
         }
@@ -345,6 +392,73 @@ class MoquiDTEUtils {
             } else {
                 return false;
             }
+        }
+    }
+
+    public static byte[] sign(Document doc, String baseUri, PrivateKey pKey, X509Certificate cert, String uri, String tagName) {
+        try {
+            NodeList nodes = doc.getElementsByTagName(tagName);
+            ((Element) nodes.item(0)).setIdAttributeNS(null, "ID", true);
+
+            javax.xml.parsers.DocumentBuilderFactory dbf = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            dbf.setNamespaceAware(true);
+
+            String alg = pKey.getAlgorithm();
+            if (!alg.equals(cert.getPublicKey().getAlgorithm()))
+                throw (new Exception("ERROR DE ALGORITMO"));
+            org.w3c.dom.Element root = doc.getDocumentElement();
+            org.apache.xml.security.signature.XMLSignature sig = null;
+            if (alg.equals("RSA")) {
+                if (!((RSAPrivateKey) pKey).getModulus().equals(((RSAPublicKey) cert.getPublicKey()).getModulus()))
+                    throw (new Exception("ERROR DE FIRMA RSA"));
+                sig = new org.apache.xml.security.signature.XMLSignature(doc, baseUri, org.apache.xml.security.signature.XMLSignature.ALGO_ID_SIGNATURE_RSA_SHA1);
+            } else if (alg.equals("DSA")) {
+                if (!(((DSAPrivateKey) pKey).getParams().getG()
+                        .equals(((DSAPublicKey) cert.getPublicKey()).getParams().getG())
+                        && ((DSAPrivateKey) pKey).getParams().getP()
+                        .equals(((DSAPublicKey) cert.getPublicKey()).getParams().getP())
+                        && ((DSAPrivateKey) pKey).getParams().getQ()
+                        .equals(((DSAPublicKey) cert.getPublicKey()).getParams().getQ())))
+                    throw (new Exception("ERROR DE FIRMA DSA"));
+                sig = new org.apache.xml.security.signature.XMLSignature(doc, baseUri, org.apache.xml.security.signature.XMLSignature.ALGO_ID_SIGNATURE_DSA);
+            }
+
+            root.appendChild(sig.getElement());
+            sig.addDocument(baseUri);
+            org.apache.xml.security.keys.content.X509Data xdata = new org.apache.xml.security.keys.content.X509Data(doc);
+            xdata.addCertificate(cert);
+            sig.getKeyInfo().addKeyValue(cert.getPublicKey());
+            sig.getKeyInfo().add(xdata);
+            sig.sign(pKey);
+            return getRawXML(doc);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public static byte[] getRawXML(Document doc) {
+        TransformerFactory transformerFactory = TransformerFactory.newInstance();
+        Transformer transformer;
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            baos.write("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n".getBytes("UTF-8"));
+            transformer = transformerFactory.newTransformer();
+            transformer.setOutputProperty(OutputKeys.INDENT, "no");
+            transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+            transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
+            transformer.setOutputProperty(OutputKeys.METHOD, "xml");
+            transformer.transform(new DOMSource(doc), new StreamResult(baos));
+
+            String outAux = new String(baos.toByteArray(), "UTF-8");
+            //outAux = outAux.replaceAll("&#13;", "");
+            return outAux.getBytes("ISO-8859-1")
+        } catch (TransformerConfigurationException e) {
+            e.printStackTrace();
+        } catch (TransformerException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 

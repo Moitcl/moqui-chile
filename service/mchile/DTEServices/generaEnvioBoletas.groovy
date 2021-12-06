@@ -11,7 +11,7 @@ import org.apache.xmlbeans.XmlCursor
 import org.apache.xmlbeans.XmlOptions
 import org.w3c.dom.Document
 
-import cl.nic.dte.util.Signer
+import cl.moit.dte.MoquiDTEUtils
 import cl.nic.dte.util.Utilities
 import cl.nic.dte.util.XMLUtil
 import cl.sii.siiDte.boletas.EnvioBOLETADocument
@@ -208,10 +208,10 @@ envio.save(out, opts)
 
 doc2 = XMLUtil.parseDocument(out.toByteArray())
 
-byte[] salida = Signer.sign(doc2, "#" + idS, pKey, x509, "#" + idS,"SetDTE")
+byte[] salida = MoquiDTEUtils.sign(doc2, "#" + idS, pKey, x509, "#" + idS,"SetDTE")
 doc2 = XMLUtil.parseDocument(salida)
 
-if (Signer.verify(doc2, "SetDTE")) {
+if (MoquiDTEUtils.verifySignature(doc2, "//sii:SetDTE")) {
     xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}.xml"
     ec.resource.getLocationReference(xmlContentLocation).putBytes(salida)
     ec.logger.warn("Envio generado OK")
