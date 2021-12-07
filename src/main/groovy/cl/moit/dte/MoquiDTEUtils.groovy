@@ -498,4 +498,8 @@ class MoquiDTEUtils {
         throw new RuntimeException("Error al parsear: ${errorMessage}");
     }
 
+    static {
+        org.apache.xml.security.Init.init();
+    }
+
 }
