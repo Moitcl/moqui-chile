@@ -449,7 +449,7 @@ class MoquiDTEUtils {
         return null;
     }
 
-    public static byte[] getRawXML(Document doc) {
+    public static byte[] getRawXML(org.w3c.dom.Node doc) {
         TransformerFactory transformerFactory = TransformerFactory.newInstance();
         Transformer transformer;
         try {
@@ -463,7 +463,6 @@ class MoquiDTEUtils {
             transformer.transform(new DOMSource(doc), new StreamResult(baos));
 
             String outAux = new String(baos.toByteArray(), "UTF-8");
-            //outAux = outAux.replaceAll("&#13;", "");
             return outAux.getBytes("ISO-8859-1")
         } catch (TransformerConfigurationException e) {
             e.printStackTrace();
@@ -478,7 +477,6 @@ class MoquiDTEUtils {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(true);
         factory.setIgnoringElementContentWhitespace(false);
-        factory.setValidating(true);
 
         DocumentBuilder builder;
         String errorMessage = ""
