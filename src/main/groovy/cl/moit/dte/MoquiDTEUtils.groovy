@@ -258,14 +258,14 @@ class MoquiDTEUtils {
         return [referenceArray:ref, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, dteExenta:dteExenta]
     }
 
-    public static boolean verifySignature(Document doc, String xPathExpression, String dateXPathExpression) throws NoSuchAlgorithmException, InvalidKeyException,
+    public static boolean verifySignature(org.w3c.dom.Node doc, String xPathExpression, String dateXPathExpression) throws NoSuchAlgorithmException, InvalidKeyException,
             IOException, ParserConfigurationException, SAXException, XMLSecurityException {
         XPath xpath = XPathFactory.newInstance().newXPath()
         xpath.setNamespaceContext(new DefaultNamespaceContext().addNamespace("sii", "http://www.sii.cl/SiiDte"))
         XPathExpression expression
         Date signatureDate = null
         expression = xpath.compile(xPathExpression)
-        NodeList nodes = (NodeList) expression.evaluate(doc.getDocumentElement(), XPathConstants.NODESET)
+        NodeList nodes = (NodeList) expression.evaluate(doc, XPathConstants.NODESET)
         if (nodes == null || nodes.length < 1)
             throw new RuntimeException("Could not find any node using XPath expression ${xPathExpression}")
         int verificationCount = 0
@@ -450,6 +450,9 @@ class MoquiDTEUtils {
     }
 
     public static byte[] getRawXML(org.w3c.dom.Node doc) {
+        return getRawXML(doc, "ISO-8859-1")
+    }
+    public static String getStringXML(org.w3c.dom.Node doc) {
         TransformerFactory transformerFactory = TransformerFactory.newInstance();
         Transformer transformer;
         try {
@@ -462,8 +465,7 @@ class MoquiDTEUtils {
             transformer.setOutputProperty(OutputKeys.METHOD, "xml");
             transformer.transform(new DOMSource(doc), new StreamResult(baos));
 
-            String outAux = new String(baos.toByteArray(), "UTF-8");
-            return outAux.getBytes("ISO-8859-1")
+            return new String(baos.toByteArray(), "UTF-8");
         } catch (TransformerConfigurationException e) {
             e.printStackTrace();
         } catch (TransformerException e) {
@@ -471,6 +473,20 @@ class MoquiDTEUtils {
         } catch (IOException e) {
             e.printStackTrace();
         }
+        return null
+    }
+    public static byte[] getRawXML(org.w3c.dom.Node doc, String encoding) {
+        try {
+            String outAux = getStringXML(doc)
+            return outAux?.getBytes(encoding)
+        } catch (TransformerConfigurationException e) {
+            e.printStackTrace();
+        } catch (TransformerException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null
     }
 
     public static org.w3c.dom.Document parseDocument(byte[] entrada) {
@@ -496,6 +512,16 @@ class MoquiDTEUtils {
             errorMessage = e.toString()
         }
         throw new RuntimeException("Error al parsear: ${errorMessage}");
+    }
+
+    public static groovy.util.Node dom2GroovyNode(org.w3c.dom.Node node) {
+        String xml = getStringXML(node)
+        return dom2GroovyNode(xml)
+    }
+    public static groovy.util.Node dom2GroovyNode(String xml) {
+        boolean validating = false
+        boolean namespaceAware = false
+        return new groovy.util.XmlParser(validating, namespaceAware).parseText(xml)
     }
 
     static {

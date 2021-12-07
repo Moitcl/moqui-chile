@@ -52,9 +52,8 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.sii.SIIServices.get#XmlReceptionEmail" in-map="[partyId:dte.receiverPartyId, partyIdValue:dte.receiverPartyIdValue, dtePartyId:dte.issuerPartyId]" out-map="context"/>
             <service-call name="mchile.DTEServices.get#DteInfo" in-map="context" out-map="bodyParameters"/>
             <entity-find-one entity-name="moqui.basic.email.EmailTemplate" value-field="emailTemplate" auto-field-map="[emailTemplateId:'MchDteSendXmlReceiver']"/>
-            <set field="emailTypeEnumId" value="Ftdemt-SendXmlReceiverMandatory"/>
             <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" in-map="[toAddresses:xmlReceptionEmailAddress, bccAddresses:'jhp@moit.cl', emailTemplateId:'MchDteSendXmlReceiver',
-                    emailTypeEnumId:emailTypeEnumId, attachments:[xmlAttachment], bodyParameters:bodyParameters+[fiscalTaxDocumentId:fiscalTaxDocumentId, subject:emailTemplate.subject]]"
+                    attachments:[xmlAttachment], bodyParameters:bodyParameters+[fiscalTaxDocumentId:fiscalTaxDocumentId, subject:emailTemplate.subject]]"
                     out-map="context"/>
             <if condition="emailMessageId">
                 <set field="dte.sentRecStatusId" value="Ftd-SentRec"/>
@@ -70,7 +69,6 @@ along with this software (see the LICENSE.md file). If not, see
             <script>
                 import cl.moit.dte.MoquiDTEUtils
                 import org.moqui.context.ExecutionContext
-
             </script>
             <set field="messageId" from="headers.get('message-id')"/>
             <log level="warn" message="Processing email ${messageId}"/>
@@ -95,6 +93,7 @@ along with this software (see the LICENSE.md file). If not, see
                         <continue/>
                     </if>
                     <script><![CDATA[
+                        org.moqui.context.ExecutionContext ec = context.ec
                         contentBytes = bodyPart.contentBytes ?: bodyPart.contentText.getBytes('ISO-8859-1')
                         org.w3c.dom.Document doc = null
                         try {
@@ -109,7 +108,8 @@ along with this software (see the LICENSE.md file). If not, see
                         internalSignedXPath = null
                         generalDateXPath = null
                         if (firstTag == 'EnvioDTE') {
-                            ec.service.sync().requireNewTransaction(true).name("mchile.DTEServices.load#EnvioDte").parameters([xml:contentBytes, xmlFilename:bodyPart.filename, attemptProductMatch:'true']).call()
+                            ec.service.sync().requireNewTransaction(true).name("mchile.DTECommServices.load#EnvioDte").parameters([xml:contentBytes, xmlFilename:bodyPart.filename, attemptProductMatch:'true']).call()
+                            ec.message.clearErrors()
                         } else if (firstTag == 'RESULTADO_ENVIO') {
                         } else if (firstTag == 'EnvioRecibos') {
                             // Recibos: aceptacion de los servicios y/o mercaderia para efecto de merito ejecutivo
@@ -167,6 +167,66 @@ along with this software (see the LICENSE.md file). If not, see
                               in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, emailMessageId:emailMessageId, messageTypeEnumId:messageTypeEnumId]"/>
             </iterate>
         </actions>
+    </service>
+
+    <service verb="load" noun="EnvioDte" type="script" location="component://MoquiChile/service/mchile/DTEServices/loadEnvioDte.groovy">
+        <in-parameters>
+            <parameter name="createUnknownIssuer" default="true" type="Boolean"/>
+            <parameter name="requireIssuerInternalOrg" default="false" type="Boolean"/>
+            <parameter name="createUnknownReceiver" default="false" type="Boolean"/>
+            <parameter name="requireReceiverInternalOrg" default="false" type="Boolean"/>
+            <parameter name="xml" type="Object" required="true"/>
+            <parameter name="xmlFileName"/>
+            <parameter name="pdf" type="Object"/>
+            <parameter name="pdfFileName"/>
+            <parameter name="attemptProductMatch" default-value="false"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="resultado" type="Map">
+                <parameter name="caratula" type="Map">
+                    <parameter name="rutResponde" required="true"/>
+                    <parameter name="rutRecibe" required="true"/>
+                    <parameter name="nroDetalles" required="true"/>
+                    <parameter name="nmbContacto"/>
+                    <parameter name="fonoContacto"/>
+                    <parameter name="mailContacto"/>
+                </parameter>
+                <!--
+                <parameter name="recepcionEnvio" type="List">
+                    <parameter name="recepcionEnvioDetalle" type="Map">
+                        <parameter name="nombreArchivo" required="true"/>
+                        <parameter name="fechaRecepcion" type="Timestamp" required="true"/>
+                        <parameter name="codigoEnvio" required="true"/>
+                        <parameter name="digestEnvio" required="true"/>
+                        <parameter name="rutEmisorEnvio" required="true"/>
+                        <parameter name="rutReceptorEnvio" required="true"/>
+                        <parameter name="estadoRecepcion" required="true"/>
+                        <parameter name="glosaEstadoRecepcion" required="true"/>
+                        <parameter name="numeroDocumentos" type="Integer"/>
+                        <parameter name="tipoDocumento" type="Integer" required="true"/>
+                        <parameter name="folioDocumento" type="Integer" required="true"/>
+                        <parameter name="fechaEmision" required="true"/>
+                        <parameter name="rutEmisorDocumento" required="true"/>
+                        <parameter name="rutReceptorDocumento" required="true"/>
+                        <parameter name="estadoRecepcionDocumento" required="true"/>
+                        <parameter name="glosaObservacion" required="true"/>
+                    </parameter>
+                </parameter>
+                -->
+                <parameter name="recepcionDte" type="List">
+                    <parameter name="recepcionDteDetalle" type="Map">
+                        <parameter name="tipoDte" type="Integer" required="true"/>
+                        <parameter name="folio" type="Integer" required="true"/>
+                        <parameter name="fchEmis" required="true"/>
+                        <parameter name="rutEmisor" required="true"/>
+                        <parameter name="rutRecep" required="true"/>
+                        <parameter name="mntTotal" required="true"/>
+                        <parameter name="estadoRecepDte" required="true"/>
+                        <parameter name="recepDteGlosa" required="true"/>
+                    </parameter>
+                </parameter>
+            </parameter>
+        </out-parameters>
     </service>
 
 </services>
