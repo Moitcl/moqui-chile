@@ -4,6 +4,7 @@ import org.w3c.dom.Document
 
 import java.math.RoundingMode
 import java.text.DateFormat
+import java.text.ParseException
 import java.text.SimpleDateFormat
 import cl.moit.dte.MoquiDTEUtils
 
@@ -138,7 +139,7 @@ if (fechaVencimiento != null && fechaVencimiento != 'null' && fechaVencimiento !
     dueTimestamp = null
 }
 
-String razonSocialReceptor = encabezado.receptor.rznSocRecep
+String razonSocialReceptor = encabezado.Receptor.RznSocRecep.text()
 partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([idValue:rutReceptor, partyIdTypeenumId:'PtidNationalTaxId']).list()
 if (!partyIdentificationList) {
     if (createUnknownReceiver) {
@@ -162,7 +163,8 @@ receiver = ec.entity.find("mantle.party.PartyDetail").condition("partyId", recei
 String razonSocialDb = receiver.taxOrganizationName
 if (razonSocialDb == null || razonSocialDb.size() == 0)
     razonSocialDb = ec.resource.expand("PartyNameOnlyTemplate", null, receiver)
-if ((razonSocialReceptor != razonSocialDb)) {
+rsResult = ec.service.sync().name("mchile.DTEServices.compare#RazonSocial").parameters([rs1:razonSocialReceptor, rs2:razonSocialDb]).call()
+if ((!rsResult.equivalent)) {
     ec.logger.warn("Razón social en XML no coincide con la registrada: $razonSocialReceptor != $razonSocialDb")
 }
 
@@ -210,10 +212,10 @@ detalleList.each { detalle ->
     ec.logger.warn("Cantidad: ${detalle.QtyItem.text()}")
     ec.logger.warn("Precio: ${detalle.PrcItem.text()}")
     ec.logger.warn("Monto: ${detalle.MontoItem.text()}")
-    itemDescription = detalle.NmbItem.text()
-    quantity = detalle.QtyItem.text() as BigDecimal
-    price = detalle.PrcItem.text() as BigDecimal
-    montoItem = detalle.MontoItem.text() as BigDecimal
+    itemDescription = detalle.NmbItem?.text()
+    quantity = detalle.QtyItem ? (detalle.QtyItem.text() as BigDecimal) : null
+    price = detalle.PrcItem ? (detalle.PrcItem.text() as BigDecimal) : null
+    montoItem = detalle.MontoItem ? (detalle.MontoItem.text() as BigDecimal) : null
     totalCalculado += montoItem
     if (price == null && montoItem != null) {
         price = montoItem / quantity
@@ -310,7 +312,6 @@ globalList.each { globalItem ->
     tpoVal = globalItem.TpoValor.text()
     BigDecimal amount = 0
     BigDecimal pctValue
-    ec.logger.info("tpoVal: ${tpoVal}")
     if (tpoVal == '$') {
         amount = globalItem.ValorDR.text() as BigDecimal
     } else if (tpoVal == '%') {
@@ -344,31 +345,35 @@ if (invoice.invoiceTotal != mntTotal)
 if (errorMessages.size() > 0) {
     estadoRecepDte = 2
     recepDteGlosa = 'RECHAZADO: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', ' + discrepancyMessages.join(', ')) : '')
+    ec.logger.error(recepDteGlosa)
     return
 } else if (discrepancyMessages.size() > 0) {
     estadoRecepDte = 1
     recepDteGlosa = 'ACEPTADO CON DISCREPANCIAS: ' + discrepancyMessages.join(', ')
+    ec.logger.warn(recepDteGlosa)
     return
 } else {
     estadoRecepDte = 0
     recepDteGlosa = 'ACEPTADO OK'
 }
+
 // Se guarda DTE recibido en la base de datos
 createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rutEmisor, fiscalTaxDocumentTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte,
              receiverPartyId:receiverPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', receiverPartyIdValue:rutReceptor, date:issuedTimestamp, invoiceId:invoiceId, statusId:'Ftd-Issued',
              sendAuthStatusId:'Ftd-SentAuth', sendRecStatusId:'Ftd-SentRec']
 mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call()
+fiscalTaxDocumentId = mapOut.fiscalTaxDocumentId
 
 locationReferenceBase = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folioDte}"
 contentLocationXml = "${locationReferenceBase}.xml"
 docRrXml = ec.resource.getLocationReference("${locationReferenceBase}.xml")
 docRrXml.putBytes(dteXml)
 
-createMap = [fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:issuedTimestamp]
+createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:issuedTimestamp]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
 if (pdf) {
     contentLocationPdf = "${locationReferenceBase}.pdf"
-    createMap = [fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:issuedTimestamp]
+    createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:issuedTimestamp]
     docRrPdf = ec.resource.getLocationReference("${locationReferenceBase}.pdf")
     fileStream = pdf.getInputStream()
     try { docRrPdf.putStream(fileStream) } finally { fileStream.close() }
@@ -376,12 +381,35 @@ if (pdf) {
 }
 
 // Se agregan las referencias
-referenciasList = documento.Documento.
-referenciasList.each { org.w3c.dom.Node referencia ->
-    org.w3c.dom.NodeList childNodes = referencia.getChildNodes()
-    referenciaMap = [:]
-    childNodes.each { org.w3c.dom.Node child ->
-        referenciaMap[child.getNodeName()] = child.textContent
+referenciasList = documento.Documento.Referencia
+Integer nroRef = 0
+referenciasList.each { groovy.util.Node referencia ->
+    nroRef++
+    Integer nroLinRef = null
+    try {
+        nroLinRef = referencia.NroLinRef.text() as Integer
+    } catch (NumberFormatException e) {
+        errorMessages.add("Valor inválido en referencia ${nroRef}: ${referencia.NroLinRef.text()}")
+        return
     }
-    ec.logger.info("referencia: ${referenciaMap}")
+    if (nroLinRef != nroRef)
+        errorMessages.add("Valor inesperado en referencia, campo NroLinRef, esperado ${nroRef}, recibido ${referencia.NroLinRef.text()}")
+    mapOut = ec.service.sync().name("mchile.DTEServices.get#MoquiSIICode").parameter("siiCode", referencia.TpoDocRef.text()).call()
+    tipoDteEnumId = mapOut.fiscalTaxDocumentTypeEnumId
+    Date refDate = null
+    try {
+        date = formatter.parse(fechaEmision)
+    } catch (ParseException e) {
+        errorMessages.add("Valor inválido en referencia ${nroRef}, campo FchRef: ${referencia.FchRef.text()}")
+        return
+    }
+    codRefEnum = ec.entity.find("moqui.basic.Enumeration").condition([enumTypeId:"FtdCodigoReferencia", enumCode:referencia.CodRef.text()]).list().first
+    codRefEnumId = codRefEnum?.enumId
+    if (!codRefEnumId)
+        errorMessages.add("Valor inválido en referencia ${nroRef}, campo CodRef: ${referencia.CodRef.text()}")
+    if (tipoDteEnumId && date && codRefEnumId) {
+        ec.service.sync().name("create#mchile.dte.ReferenciaDte").parameters([invoiceId:invoiceId, referenciaTypeEnumId:'RefDteTypeInvoice',
+                            fiscalTaxDocumentTypeEnumId:tipoDteEnumId, folio:referencia.FolioRef.text(), fecha: date, codigoReferenciaEnumId:codRefEnumId,
+                            razonReferencia:referencia.RazonRef?.text()]).call()
+    }
 }
