@@ -30,20 +30,17 @@ import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA
 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE
 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula
 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA.SetDTE.Caratula.SubTotDTE
-import java.nio.file.Path
-import java.nio.file.Paths
-import java.nio.file.Files
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.nio.charset.StandardCharsets;
 
-// Prueba
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerFactory;
-import java.io.StringWriter;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 
 ExecutionContext ec = context.ec
 
 rutEmisor = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").parameters([partyId:issuerPartyId, failIfNotFound:true]).call().rut
+
+rutEmisor = rutEmisor.replace(".","")
+System.out.println("\n\n\n *********************************************************** " + rutEmisor + " \n\n\n")
 
 // Validación rut
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutReceptor).call()
@@ -99,6 +96,7 @@ opts.setLoadSubstituteNamespaces(namespaces)
 //opts.setLoadAdditionalNamespaces(namespaces)
 opts.setSavePrettyPrint()
 opts.setSavePrettyPrintIndent(0)
+opts.setCharacterEncoding("ISO-8859-1")
 
 // Recuperación de archivo CAF desde BD
 caf = AUTORIZACIONDocument.Factory.parse(new ByteArrayInputStream(cafData.getBytes()), opts).getAUTORIZACION()
@@ -107,12 +105,14 @@ caf = AUTORIZACIONDocument.Factory.parse(new ByteArrayInputStream(cafData.getByt
 BOLETADefType boleta; // boleta tiene cargada toda la información correspondiente
 
 // (emisor, receptor, detalle, totales, etc)
-opts = new XmlOptions()
+opts = new XmlOptions() // reusamos opts
+opts.setSaveImplicitNamespaces(namespaces)
+opts.setLoadSubstituteNamespaces(namespaces)
+opts.setLoadAdditionalNamespaces(namespaces)
 opts.setSavePrettyPrint()
 opts.setSavePrettyPrintIndent(0)
+opts.setCharacterEncoding("ISO-8859-1")
 boleta = BOLETADefType.Factory.newInstance(opts)
-
-
 
 System.out.println("BOLETA1:"+boleta.toString())
 
@@ -148,7 +148,7 @@ boleta.setVersion(new BigDecimal("1.0"))
 //cursor2.toFirstChild()
 //cursor2.setAttributeText(new QName("", "xmlns"), "http://www.sii.cl/SiiDte")
 //cursor2.dispose()
-System.out.println("BOLETA2:"+boleta.xmlText())
+
 
 // Tipo de DTE
 boleta.getDocumento().getEncabezado().getIdDoc().setTipoDTE(tipoFactura as BigInteger)
@@ -162,8 +162,8 @@ fechaEmision = formatterFechaEmision.format(dateFechaEmision)
 // 1 Boleta de servicios periódicos
 // 2 Boleta de servicios periódicos domiciliarios
 // 3 Boleta de Venta de Servicios (soportado)
-//boleta.getDocumento().getEncabezado().getIdDoc().setIndServicio(BigInteger.valueOf(3))
-
+boleta.getDocumento().getEncabezado().getIdDoc().setIndServicio(BigInteger.valueOf(3))
+System.out.println("BOLETA2:"+boleta.xmlText())
 Calendar cal = Calendar.getInstance()
 cal.add(Calendar.DAY_OF_MONTH, 45)
 //boleta.getDocumento().getEncabezado().getIdDoc().xsetFchCancel(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
@@ -192,7 +192,8 @@ if (rutReceptor == "66666666-6") {
     recp.setCmnaRecep(cmnaReceptor)
     recp.setCiudadRecep(ciudadReceptor)
 }
-
+rutEmisor = rutEmisor.replace(".","")
+System.out.println("\n ****************************** "+rutEmisor + "\n\n")
 // Emisor
 Emisor emisor = boleta.getDocumento().getEncabezado().addNewEmisor()
 emisor.setRUTEmisor(rutEmisor)
@@ -201,6 +202,7 @@ emisor.setGiroEmisor(giroEmisor)
 emisor.setCdgSIISucur(Integer.valueOf(cdgSIISucur))
 emisor.setDirOrigen(dirOrigen)
 emisor.setCmnaOrigen(cmnaOrigen)
+emisor.setCmnaOrigen("Nunoa")
 emisor.setCiudadOrigen(ciudadOrigen)
 
 // Campos para elaboración de libro -->
@@ -407,14 +409,36 @@ opts.setUseDefaultNamespace()
 //opts.setSaveImplicitNamespaces(namespaces4)
 //opts.setLoadSubstituteNamespaces(namespaces4)
 //opts.setLoadAdditionalNamespaces(namespaces4)
-//opts.setSavePrettyPrint()
-//opts.setSavePrettyPrintIndent(0)
+opts.setSavePrettyPrint()
+opts.setSavePrettyPrintIndent(0)
+opts.setCharacterEncoding("ISO-8859-1")
 //boleta = BOLETADefType.Factory.parse(boleta.newInputStream(opts))
+
+// Debo agregar el schema location (Sino SII rechaza)
+//XmlCursor cursorBoleta = boleta.newCursor()
+//if (cursorBoleta.toFirstChild()) {
+//    cursorBoleta.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioBOLETA_v11.xsd")
+//}
+//cursorBoleta.dispose()
 
 boleta.timbrar(caf.getCAF(), caf.getPrivateKey(null))
 boleta.getDocumento().xsetTmstFirma(now)
-boleta.sign(key, cert)
+//boleta.sign(key, cert)
 //boleta.verifySignature(BOLETADefType.Factory.parse(boleta.newInputStream(opts)))
+
+// Prueba de instanciar documento para boleta
+DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+//factory.setNamespaceAware(true);
+//factory.setIgnoringElementContentWhitespace(false);
+String boletaTxt = boleta.toString();
+System.out.println("XML de boleta:"+boletaTxt);
+DocumentBuilder builder;
+builder = factory.newDocumentBuilder();
+InputStream stream = new ByteArrayInputStream(boletaTxt.getBytes());
+builder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
+Document boletaDoc = builder.parse(stream);
+byte[] boletaXml = Signer.sign(boletaDoc, uriBoleta, key, cert, uriBoleta, "Documento")
+System.out.println("**************************************\nBoleta primera firma: " + boleta)
 
 // Construyo base a partir de String XML
 rutEmisor="76222457-7"  // Corregir //<?xml version="1.0" encoding="ISO-8859-1"?>
@@ -433,8 +457,7 @@ templateEnvioBoleta = """
 
 System.out.println("dodododod"+fchResol +","+ nroResol+","+templateEnvioBoleta)
 
-cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument = EnvioBOLETADocument.Factory.parse(new ByteArrayInputStream(templateEnvioBoleta.getBytes("ISO-8859-1")))
-System.out.println("ppppp:")
+cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument = EnvioBOLETADocument.Factory.parse(new ByteArrayInputStream(templateEnvioBoleta.getBytes("ISO-8859-1")), opts)
 
 EnvioBOLETA eb = EnvioBOLETA.Factory.newInstance()
 SetDTE sdte = SetDTE.Factory.newInstance()
@@ -500,6 +523,7 @@ opts2.setLoadSubstituteNamespaces(namespaces2)
 opts2.setLoadAdditionalNamespaces(namespaces2)
 opts2.setSavePrettyPrint()
 opts2.setSavePrettyPrintIndent(0)
+opts2.setCharacterEncoding("ISO-8859-1")
 
 
 try {
@@ -527,6 +551,9 @@ namespaces2.put("", "http://www.sii.cl/SiiDte")
 opts2 = new XmlOptions()
 opts2.setUseDefaultNamespace()
 opts2.setSaveImplicitNamespaces(namespaces2)
+opts2.setSavePrettyPrint()
+opts2.setSavePrettyPrintIndent(0)
+opts2.setCharacterEncoding("ISO-8859-1")
 //boleta = BOLETADefType.Factory.parse(boleta.newInputStream(opts2))
 
 
@@ -551,9 +578,6 @@ uri = sdte.getID()
 uri = "#" + uri
 ec.logger.warn("URI: " + uri)
 
-opts = new XmlOptions()
-opts.setCharacterEncoding("ISO-8859-1")
-
 // Borrar, solo prueba
 ByteArrayOutputStream out = new ByteArrayOutputStream()
 pathResults = "/home/cherrera/moit/cowork/moqui-framework/runtime/component/moquichile/DTE/TEMP/"
@@ -566,14 +590,16 @@ if (saveSinFirma) {
 }
 
 ByteArrayOutputStream out2 = new ByteArrayOutputStream()
+envioBoletaDocument.envioBOLETA.getSetDTE().getDTEArray(0).getDocumento().xsetTmstFirma(now)
 envioBoletaDocument.save(out2, opts)
 
 System.out.println("Prueba: "+envioBoletaDocument)
 
-Document doc2 = XMLUtil.parseDocument(out2.toByteArray())
+Document doc2 = XMLUtil.parseDocumentBoleta(out2.toByteArray())
+System.out.println("ENCODING: "+ doc2.getXmlEncoding())
 
 // Firma de BOLETA
-envioBoletaDocument.envioBOLETA.getSetDTE().getDTEArray(0).getDocumento().xsetTmstFirma(now)
+
 // Deja segunda firma mal ubicada
 //byte[] salidaBoleta = Signer.sign(doc2, uriBoleta, key, cert, uriBoleta, "Documento")
 // Deja firma de boleta en lugar correcto, con URI correcta
@@ -581,30 +607,34 @@ envioBoletaDocument.envioBOLETA.getSetDTE().getDTEArray(0).getDocumento().xsetTm
 // Firma con metodo alterno (xpath)
 //byte[] salidaBoleta = BoletaSigner.signBoleta(doc2, key, cert)
 // Firma de EnvioBOLETA
-byte[] facturaXml = Signer.sign(doc2, uri, key, cert, uri, "SetDTE")
+//byte[] facturaXml = Signer.signBoleta(doc2, uriBoleta, key, cert, uri, "Documento")
 //Document doc3 = BoletaSigner.signBoleta(doc2, key, cert);
-//doc2 = XMLUtil.parseDocument(facturaXml)
+//byte[] facturaXml = BoletaSigner.signBoleta(doc2, key, cert);
+//byte[] facturaXml = Signer.signEmbededBoleta(doc2, uriBoleta, key, cert);
 
-//DOMSource source = new DOMSource(doc3);
-//TransformerFactory transformerFactory = TransformerFactory.newInstance();
-//Transformer transformer = transformerFactory.newTransformer();
-//ByteArrayOutputStream bos=new ByteArrayOutputStream();
-//StreamResult result=new StreamResult(bos);
-//transformer.transform(source, result);
-//byte []facturaXml=bos.toByteArray();
+System.setProperty("org.apache.xml.security.ignoreLineBreaks", "true")
 
-System.out.println("ppppppp2:"+facturaXml)
+byte[] facturaXml = BoletaSigner.signEnvioBoleta(doc2, key, cert);
 
-if (Signer.verify(doc2, "SetDTE")) {
+// Save con firma
+//OutputStream os = new ByteArrayOutputStream();
+//os.write(facturaXml);
+//os.close()
+
+//cl.sii.siiDte.boletas.EnvioBOLETADocument envioBoletaDocument2 = EnvioBOLETADocument.Factory.parse(new ByteArrayInputStream(facturaXml))
+
+//FileOutputStream outputStream2 = new FileOutputStream(pathResults + "BOL" + tipoFactura + "-" + folio + "-confirma.xml")
+//envioBoletaDocument2.save(outputStream2, opts)
+
+
+//if (Signer.verify(doc2, "SetDTE")) {
     FileOutputStream outputStream = new FileOutputStream(pathResults + "BOL" + tipoFactura + "-" + folio + ".xml")
     outputStream.write(facturaXml);
     outputStream.close();
-    //Path path = Paths.get(pathResults + "BOL" + tipoFactura + "-" + folio + ".xml");
-    //Files.write(path, salida);
     ec.logger.warn("Factura "+path+" folio "+folio+" generada OK")
-} else {
-    ec.logger.warn("Error al generar boleta folio "+folio)
-}
+//} else {
+//    ec.logger.warn("Error al generar boleta folio "+folio)
+//}
 
 // Registro de DTE en base de datos y generación de PDF -->
 
