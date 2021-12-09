@@ -2,6 +2,7 @@ import org.moqui.context.ExecutionContext
 import org.moqui.entity.EntityCondition
 import org.w3c.dom.Document
 
+import java.math.RoundingMode
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import cl.moit.dte.MoquiDTEUtils
@@ -25,7 +26,9 @@ if (!MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", null)) {
     errorMessages.add("Signature mismatch for document ${i}")
 }
 
-totalCalculadoIva = 0 as Long
+vatTaxRate = ec.service.sync().name("mchile.TaxServices.get#VatTaxRate").call().taxRate
+
+totalCalculadoIva = 0 as BigDecimal
 // tipo de DTE
 groovy.util.NodeList encabezado = documento.Documento.Encabezado
 
@@ -88,12 +91,15 @@ if (!rsResult.equivalent) {
 ec.logger.warn("folio: ${folioDte}")
 
 // Totales
-montoNeto = encabezado.Totales.MntNeto.text()
-montoTotal = encabezado.Totales.MntTotal.text()
-montoExento = encabezado.Totales.MntExe.text()
-tasaIva = encabezado.Totales.TasaIVA.text()
-iva = encabezado.Totales.IVA.text()
-mntTotal = montoTotal
+BigDecimal montoNeto = (encabezado.Totales.MntNeto.text() ?: 0) as BigDecimal
+BigDecimal montoTotal = (encabezado.Totales.MntTotal.text() ?: 0) as BigDecimal
+BigDecimal montoExento = (encabezado.Totales.MntExe.text() ?: 0) as BigDecimal
+BigDecimal tasaIva = (encabezado.Totales.TasaIVA.text() ?: 0) as BigDecimal
+BigDecimal iva = (encabezado.Totales.IVA.text() ?: 0) as BigDecimal
+BigDecimal mntTotal = montoTotal
+
+if ((montoNeto + montoExento + iva) != montoTotal) errorMessages.add("Total inválido (montoTotal no coincide con suma de monto neto, monto exento e iva.")
+if (tasaIva / 100 != vatTaxRate) errorMessages.add("Tasa IVA no coincide: esperada: ${vatTaxRate*100}%, recibida: ${tasaIva}%")
 
 // Datos receptor
 rutReceptor = encabezado.Receptor.RUTRecep.text()
@@ -109,7 +115,7 @@ ec.logger.info("Buscando FiscalTaxDocument: ${[issuerPartyIdValue:rutEmisor, fis
 existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([issuerPartyIdValue:rutEmisor, fiscalTaxDocumenTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte])
         .disableAuthz().list()
 if (existingDteList) {
-    ec.logger.info("Ya existe registrada DTE tipo ${tipoDteEnumId} para emisor ${rutEmisor} y folio ${folioDte}, ignorando")
+    errorMessages.add("Ya existe registrada DTE tipo ${tipoDte} para emisor ${rutEmisor} y folio ${folioDte}")
     dte = existingDteList.first
     contentList = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml'])
             .disableAuthz().list()
@@ -117,7 +123,6 @@ if (existingDteList) {
     } else {
         ec.message.addError("No hay contenido local")
     }
-    return
 }
 
 DateFormat formatter = new SimpleDateFormat("yyyy-MM-dd")
@@ -191,7 +196,7 @@ if (dueTimestamp)
     invoiceCreateMap.dueDate = dueTimestamp
 invoiceMap = ec.service.sync().name("mantle.account.InvoiceServices.create#Invoice").parameters(invoiceCreateMap).disableAuthz().call()
 invoiceId = invoiceMap.invoiceId
-montoItem = 0 as Long
+BigDecimal montoItem = 0 as BigDecimal
 detalleList = documento.Documento.Detalle
 ec.logger.warn("Recorriendo detalles: ${detalleList.size()}")
 int j = 0
@@ -213,10 +218,15 @@ detalleList.each { detalle ->
     if (price == null && montoItem != null) {
         price = montoItem / quantity
     }
+    try {
+        indExe = detalle.IndExe?.text() as Integer
+    } catch (NumberFormatException e) {
+        indExe = null
+    }
     // Si el indicador es no exento hay que agregar IVA como item aparte
     // Se puede ir sumando el IVA y si es mayor que 0 crear el item
-    Boolean itemExento = null
-    if (detalle.IndExe.text() == null && (tipoDte != '34')) {
+    Boolean itemExento = false
+    if (indExe == null && (tipoDte != '34')) {
         // Item y documento afecto
         ec.logger.warn("Item afecto")
         itemExento = false
@@ -224,8 +234,8 @@ detalleList.each { detalle ->
         ec.logger.warn("Item exento")
         itemExento = true
     }
-    if (!itemExento)
-        totalCalculadoIva = (montoItem * 0.19) + totalCalculadoIva
+    if (itemExento)
+        totalExento += montoItem
 
     productId = null
     if (attemptProductMatch == 'false') {
@@ -284,6 +294,7 @@ detalleList.each { detalle ->
 globalList = documento.Documento.DscRcgGlobal
 Integer globalItemCount = 0
 globalList.each { globalItem ->
+    globalItemCount++
     tpoMov = globalItem.TpoMov.text()
     nroLinea = globalItem.NroLinDR.text() as Integer
     if (globalItemCount != nroLinea)
@@ -295,33 +306,35 @@ globalList.each { globalItem ->
         itemTypeEnumId = 'ItemMiscCharge'
     } else {
         errorMessages.add("Tipo movimiento inválido DscRcgGlobal ${globalItemCount}, se esperaba D o R y se recibió ${tpoMov}")
-        return
     }
-    tpoVal = globalItem.TpoMov.text()
+    tpoVal = globalItem.TpoValor.text()
     BigDecimal amount = 0
     BigDecimal pctValue
+    ec.logger.info("tpoVal: ${tpoVal}")
     if (tpoVal == '$') {
-        amount = (globalItem.ValorDR.text() as BigDecimal)-1
+        amount = globalItem.ValorDR.text() as BigDecimal
     } else if (tpoVal == '%') {
         pctValue = globalItem.ValorDR.text() as BigDecimal
         amount = totalCalculado / 100.0 * pctValue
     } else {
         errorMessages.add("Tipo valor inválido DscRcgGlobal ${globalItemCount}, se esperaba \$ o % y se recibió ${tpoVal}")
-        return
     }
     if (itemTypeEnumId == 'ItemDiscount')
         amount = -1 * amount
     ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:itemTypeEnumId,
                                description: globalItem.GlosaDR.text(), quantity:1, amount: amount]).call()
-    globalItemCount++
+    totalCalculado += amount
 }
+
+if (totalCalculado != (montoNeto + montoExento)) errorMessages.add("Monto total (neto + exento) no coincide, calculado: ${totalCalculado}, recibido: ${montoNeto + montoExento}")
+
+totalCalculadoIva = (montoNeto * vatTaxRate).setScale(0, RoundingMode.HALF_UP)
 
 if (iva != totalCalculadoIva) {
     errorMessages.add("No coincide monto IVA, DTE indica ${iva}, calculado: ${totalCalculadoIva}")
 }
-ec.logger.warn("Total IVA: ${totalCalculadoIva}")
 if (totalCalculadoIva > 0) {
-    ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemVatTax', description: 'IVA', quantity: 1, amount: price, taxAuthorityId:'CL_SII']).call()
+    ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemVatTax', description: 'IVA', quantity: 1, amount: totalCalculadoIva, taxAuthorityId:'CL_SII']).call()
 }
 
 invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", invoiceId).one()
@@ -372,5 +385,3 @@ referenciasList.each { org.w3c.dom.Node referencia ->
     }
     ec.logger.info("referencia: ${referenciaMap}")
 }
-
-recepcionEnvio.add(recepcionEnvioDetalle)
