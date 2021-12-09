@@ -117,6 +117,10 @@ along with this software (see the LICENSE.md file). If not, see
                 <select-field field-name="contentLocation"/>
             </entity-find-one>
 
+            <if condition="!contentEv">
+                <return error="true" message="Boleta no tiene XML asociado"/>
+            </if>
+
             <set field="contentLocation" from="contentEv.contentLocation"/>
 
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
@@ -129,9 +133,22 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
 
+<<<<<<< HEAD
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
 
             <service-call name="mchile.DTEServices.enviaSII#Boleta" in-map="[compaS:rutEmisor, enviadorS:rutEnvia, documentoS:contentLocation, organizationPartyId:organizationPartyId]" out-map="context"/>
+=======
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="enviaMap"/>
+            <if condition="!enviaMap.rutEnvia">
+                <return error="true" message="Rut de quien envia no configurado"/>
+            </if>
+            <set field="enviadorS" value="${enviaMap.rutEnvia}"/>aaaaaa
+
+
+            <return error="true" message="$rutEmisor - $enviadorS - $contentLocation"/>
+
+            <service-call name="mchile.DTEServices.enviaSII#Boleta" in-map="[compaS:rutEmisor, enviadorS:enviadorS, documentoS:contentLocation, organizationPartyId:organizationPartyId]" out-map="context"/>
+>>>>>>> feat-BoletaRefactor
             <!-- TODO: Eliminar archivo temporal -->
             <!-- Marcar boleta como enviada -->
             <!-- Se marca DTE como enviada -->
@@ -163,6 +180,8 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <!-- Validación rut -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/>
+
+            <return error="true" message="pppp"/>
 
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
             <set field="certData" from="certData"/>
@@ -286,6 +305,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="certData" from="dteParams.certData"/>
             <set field="passCert" from="dteParams.passCert"/>
+
             <script><![CDATA[
                 import java.security.KeyStore
                 import java.security.PrivateKey
@@ -302,7 +322,7 @@ along with this software (see the LICENSE.md file). If not, see
                     pkey = (PrivateKey) ks.getKey(alias, ((String)passCert).toCharArray())
                 }
             ]]></script>
-
+<return error="true" message="$rutEnvia"/>
             <set field="pdfTemplate" from="dteParams.pdfTemplate"/>
             <if condition="!pdfTemplate">
                 <set field="pdfTemplate" from="ec.resource.getLocationReference('component://MoquiChile/DTE/TEMPLATES/plantilla_general.xsl').text"/>
@@ -765,6 +785,12 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="!contactPostalAddressField">
                 <return message="Receptor ${partyId} no tiene dirección postal para impuestos" error="true"/>
             </if>
+            <if condition="!contactPostalAddressField.address1">
+                <return error="true" message="Receptor no tiene nombre de calle o avenida"/>
+            </if>
+            <if condition="!contactPostalAddressField.unitNumber">
+                <return error="true" message="Receptor no tiene nro. de calle"/>
+            </if>
             <set field="dirReceptor" value="${contactPostalAddressField.address1?:''}${contactPostalAddressField.unitNumber? (' ' + contactPostalAddressField.unitNumber) : ''}"/>
             <!-- Comuna -->
             <entity-find-one entity-name="moqui.basic.Geo" value-field="geoField">
@@ -867,7 +893,7 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="boletear" noun="Invoice">
         <description>
-            Obtiene datos para llamar a método generar#Factura
+            Obtiene datos para llamar a método genera#Boleta
         </description>
         <in-parameters>
             <parameter name="invoiceId" required="true"/>
@@ -886,25 +912,35 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="organizationPartyId" from="invoiceEv.fromPartyId"/>
             <set field="globalDiscount" from="invoiceEv.globalDiscount"/>
             <set field="glosaDr" from="invoiceEv.glosaDr"/>
+            <set field="issuerPartyId" from="invoiceEv.fromPartyId"/>
 
             <set field="listItems" type="List"/>
-            <if condition="items">
+            <if condition="items"><then>
                 <set field="listItems" from="items instanceof List ? items : items.split(',') as List"/>
+                <iterate list="listItems" entry="detailItem">
+                    <set field="listProduct" from="detailItem instanceof List ? detailItem : detailItem.split('-') as List"/>
+                    <log message="Leyendo: $listProduct" level="warn"/>
+                    <!-- Con invoiceId se busca en invoiceItem y se actualiza porcentaje de descuento -->
+                    <entity-find-one entity-name="mantle.account.invoice.InvoiceItem" value-field="invoiceItemField">
+                        <field-map field-name="invoiceId" from="invoiceId"/>
+                        <field-map field-name="invoiceItemSeqId" value="${listProduct[0]}"/>
+                    </entity-find-one>
+                    <script>
+                        long discount = Long.valueOf(listProduct[3])
+                    </script>
+                    <set field="invoiceItemField.pctDiscount" from="discount"/>
+                    <entity-update value-field="invoiceItemField"/>
+                </iterate>
+            </then><else>
+                <!-- Items de invoice -->
+                <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="listItems">
+                    <econdition field-name="invoiceId"/>
+                    <econdition field-name="itemTypeEnumId" operator="not-in" from="['ItemSalesTax','ItemVatTax']"/>
+                    <econdition field-name="productId" operator="is-not-null"/>
+                    <order-by field-name="invoiceItemSeqId"/>
+                </entity-find>
+            </else>
             </if>
-            <iterate list="listItems" entry="detailItem">
-                <set field="listProduct" from="detailItem instanceof List ? detailItem : detailItem.split('-') as List"/>
-                <log message="Leyendo: $listProduct" level="warn"/>
-                <!-- Con invoiceId se busca en invoiceItem y se actualiza porcentaje de descuento -->
-                <entity-find-one entity-name="mantle.account.invoice.InvoiceItem" value-field="invoiceItemField">
-                    <field-map field-name="invoiceId" from="invoiceId"/>
-                    <field-map field-name="invoiceItemSeqId" value="${listProduct[0]}"/>
-                </entity-find-one>
-                <script>
-                    long discount = Long.valueOf(listProduct[3])
-                </script>
-                <set field="invoiceItemField.pctDiscount" from="discount"/>
-                <entity-update value-field="invoiceItemField"/>
-            </iterate>
 
             <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
 
@@ -967,7 +1003,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="itemTypeEnumId" operator="not-in" from="['ItemSalesTax','ItemVatTax']"/>
                 <order-by field-name="invoiceItemSeqId"/>
             </entity-find>
-
             <!-- email receptor -->
             <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:toPartyId]" out-map="context"/>
 
@@ -977,7 +1012,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="username" from="emailAddress"/>
             <!-- rut receptor -->
             <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
-            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyIdentificationEv"/>
+            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyIdentificationEv">
+                <field-map field-name="partyId" from="partyId"/>
+            </entity-find-one>
 
             <set field="rutReceptor" value="66666666-6"/>
             <if condition="!partyIdentificationEv">
@@ -1099,8 +1136,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="invoiceId" from="invoiceId"/>
                 <order-by field-name="fiscalTaxDocumentTypeEnumId"/>
             </entity-find>
-
-            <!-- TODO: Generación de Boletas -->
             <!-- Generacion de boletas -->
             <service-call name="mchile.DTEServices.genera#Boleta" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
                           contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
@@ -1338,7 +1373,8 @@ along with this software (see the LICENSE.md file). If not, see
                 <select-field field-name="receiverPartyId"/>
                 <select-field field-name="receiverPartyIdTypeEnumId"/>
             </entity-find-one>
-            <set field="folio" from="boletaField.fiscalTaxDocumentNumber"/>
+
+            <set field="folio" from="boletaField.fiscalTaxDocumentNumber" type="String"/>
             <set field="receiverPartyId" from="boletaField.receiverPartyId"/>
             <set field="receiverPartyIdTypeEnumId" from="boletaField.receiverPartyIdTypeEnumId"/>
             <set field="invoiceId" from="boletaField.invoiceId"/>
@@ -1349,6 +1385,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="partyId" from="receiverPartyId"/>
                 <econdition field-name="partyIdTypeEnumId" from="receiverPartyIdTypeEnumId"/>
             </entity-find>
+
             <if condition="!partyIdentificationList.idValue[0]">
                 <return error="true" message="No existe organización receptora definida en el sistema"/>
             </if>
@@ -1372,6 +1409,9 @@ along with this software (see the LICENSE.md file). If not, see
                 import java.text.DateFormat
                 import java.text.SimpleDateFormat
                 import java.util.Date
+
+                // Correccion de rut
+                rutEmisor = rutEmisor.replace(".","")
 
                 DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance()
                 DocumentBuilder builder = null
@@ -3210,6 +3250,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="organizationPartyId" required="true"/>
             <parameter name="encoding" default-value="UTF-8"/>
             <parameter name="passCert" required="true"/>
+            <parameter name="encoding" default-value="UTF-8"/>
         </in-parameters>
         <actions>
             <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams" for-update="true">
@@ -3220,6 +3261,12 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <set field="dteParams.certData" from="certificateFile.get().encodeBase64()" type="String"/>
             <set field="dteParams.passCert" from="passCert"/>
+<<<<<<< HEAD
+=======
+            <set field="dteParams.certData" from="certificateFile.getString(encoding)"/>
+
+            <entity-update value-field="dteParams"/>
+>>>>>>> feat-BoletaRefactor
         </actions>
     </service>
 
