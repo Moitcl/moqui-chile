@@ -71,11 +71,23 @@ if (issuerPartyIdentificationList.size() < 1) {
     ec.message.addError("Más de un sujeto con mismo rut de emisor (${rutEmisorCaratula}: partyIds ${issuerPartyIdentificationList.partyId}")
 }
 
-envioDteId = ec.service.sync().name("create#mchile.dte.Envio").parameters([envioTypeEnumId:'Ftde-EnvioDte', rutEmisor:rutEmisorCaratula, rutReceptor:rutReceptorCaratula, fechaEnvio:'', fechaRegistro:'']).call().envioId
-documentLocation ="dbresource://moit/erp/dte/caf/EnvioDTE/${rutEmisorCaratula}/${rutEmisorCaratula}-${envioDteId}.xml"
+fechaFirmaEnvio = ec.l10n.parseTimestamp(caratula.TmstFirmaEnv.text(), "yyyy-MM-dd'T'HH:mm:ss")
+emisor = setDte.DTE[0].Documento.Encabezado.Emisor
+if (rutEmisorCaratula != emisor.RUTEmisor.text())
+    ec.message.addError("Rut emisor de carátula (${rutEmisorCaratula} y DTE (${emisor.RUTEmisor.text()}) no coinciden")
+issuerPartyId = ec.service.sync().name("mchile.DTECommServices.get#PartyIdByRut").parameters([idValue:rutEmisorCaratula, createUnknown:true, razonSocial:emisor.RznSoc.text(), roleTypeId:'Supplier',
+        giro:emisor.GiroEmis.text(), direccion:emisor.DirOrigen.text(), comuna:emisor.CmnaOrigen.text(), ciudad:emisor.CiudadOrigen.text()]).call().partyId
+receptor = setDte.DTE[0].Documento.Encabezado.Receptor
+if (rutReceptorCaratula != receptor.RUTRecep.text())
+    ec.message.addError("Rut receptor de carátula (${rutReceptorCaratula} y DTE (${receptor.RUTRecep.text()}) no coinciden")
+receiverPartyId = ec.service.sync().name("mchile.DTECommServices.get#PartyIdByRut").parameters([idValue:rutReceptorCaratula, createUnknown:false, razonSocial:receptor.RznSocRecep.text(), roleTypeId:'Customer',
+                                                                                              giro:emisor.GiroRecep.text(), direccion:emisor.DirRecep.text(), comuna:emisor.CmnaRecep.text(), ciudad:emisor.CiudadRecep.text()]).call().partyId
+
+envioDteId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-EnvioDte', rutEmisor:rutEmisorCaratula, rutReceptor:rutReceptorCaratula, fechaEnvio:fechaFirmaEnvio, fechaRegistro:ec.user.nowTimestamp]).call().envioId
+documentLocation ="dbresource://moit/erp/dte/EnvioDTE/${rutEmisorCaratula}/${rutEmisorCaratula}-${envioDteId}.xml"
 ec.resource.getLocationReference(documentLocation).putBytes(xml)
-ec.service.sync().name("update#mchile.dte.Envio").parameters([envioId:envioDteId, documentLocation:documentLocation, receivedFileName:xmlFileName]).call().envioId
-envioRespuestaId = ec.service.sync().name("create#mchile.dte.Envio").parameters([envioTypeEnumId:'Ftde-RespuestaDte', rutEmisor:rutReceptorCaratula, rutReceptor:rutEmisorCaratula, fechaEnvio:'', fechaRegistro:'']).call().envioId
+ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioDteId, documentLocation:documentLocation, receivedFileName:xmlFileName]).call().envioId
+envioRespuestaId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-RespuestaDte', rutEmisor:rutReceptorCaratula, rutReceptor:rutEmisorCaratula, fechaEnvio:ec.user.nowTimestamp]).call().envioId
 
 EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()
 issuerTaxName = issuer.taxOrganizationName
@@ -101,7 +113,8 @@ org.w3c.dom.NodeList dteNodeList = (org.w3c.dom.NodeList) expression.evaluate(do
 
 recepcionList = []
 dteNodeList.each { org.w3c.dom.Node domNode ->
-    recepcionList.add(ec.service.sync().name("mchile.DTEServices.load#DteFromDom").requireNewTransaction(true).parameters(context+[requireReceiverInternalOrg:true, domNode:domNode]).call())
+    recepcion = ec.service.sync().name("mchile.DTEServices.load#DteFromDom").parameters(context+[requireReceiverInternalOrg:true, domNode:domNode]).call()
+    recepcionList.add(recepcion)
     ec.message.clearErrors()
     processedDocuments++
 }
@@ -110,7 +123,7 @@ SimpleDateFormat ft = new SimpleDateFormat("yyyyMMddhhmmssMs")
 String datetime = ft.format(new Date())
 idS = "EnvRecibo" + datetime
 def StringWriter writer = new StringWriter()
-def MarkupBuilder recepcionDte = new MarkupBuilder()
+def MarkupBuilder recepcionDte = new MarkupBuilder(writer)
 SimpleDateFormat fts = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss")
 tmstFirmaResp = fts.format(new Date())
 recepcionDte.'sii:RespuestaDTE'('xmlns:sii': 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version:'1.0', 'xsi:schemaLocation': 'http://www.sii.cl/SiiDte RespuestaEnvioDTE_v10.xsd') {
@@ -125,10 +138,10 @@ recepcionDte.'sii:RespuestaDTE'('xmlns:sii': 'http://www.sii.cl/SiiDte', 'xmlns:
             //'sii:MailContacto'("")
             'sii:TmstFirmaResp'(tmstFirmaResp)
         }
-        recepcionList.each { recepcion ->
+        recepcionList.each { Map recepcion ->
             'sii:ResultadoDTE' {
                 'sii:TipoDTE'(recepcion.tipoDte)
-                'sii:Folio'(recepcion.folio)
+                'sii:Folio'(recepcion.folioDte)
                 'sii:RUTEmisor'(recepcion.rutEmisor)
                 'sii:RUTRecep'(recepcion.rutRecep)
                 'sii:MntTotal'(recepcion.mntTotal)
@@ -139,4 +152,20 @@ recepcionDte.'sii:RespuestaDTE'('xmlns:sii': 'http://www.sii.cl/SiiDte', 'xmlns:
     }
 }
 
-// ToDo: sign and send respuesta
+ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:receiverPartyId]).call())
+xml = writer.toString()
+ec.logger.info("xml: ${xml}")
+Document doc2 = MoquiDTEUtils.parseDocument(xml.getBytes())
+byte[] salida = MoquiDTEUtils.sign(doc2, "#" + idS, pkey, certificate, "#" + idS,"sii:Resultado")
+
+doc2 = MoquiDTEUtils.parseDocument(salida)
+
+if (MoquiDTEUtils.verifySignature(doc2, "/sii:RespuestaDTE/sii:Resultado", "./sii:Caratula/sii:TmstFirmaResp/text()")) {
+    xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDTE/${rutReceptorCaratula}/${idS}.xml"
+    ec.logger.warn("Envio generado OK")
+} else {
+    xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDTE/${rutEmisor}/${idS}-mala.xml"
+    ec.logger.warn("Error al generar envio")
+}
+ec.resource.getLocationReference(xmlContentLocation).putBytes(salida)
+ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioRespuestaId, documentLocation:xmlContentLocation]).call()

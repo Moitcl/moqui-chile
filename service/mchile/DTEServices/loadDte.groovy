@@ -97,10 +97,10 @@ BigDecimal montoTotal = (encabezado.Totales.MntTotal.text() ?: 0) as BigDecimal
 BigDecimal montoExento = (encabezado.Totales.MntExe.text() ?: 0) as BigDecimal
 BigDecimal tasaIva = (encabezado.Totales.TasaIVA.text() ?: 0) as BigDecimal
 BigDecimal iva = (encabezado.Totales.IVA.text() ?: 0) as BigDecimal
-BigDecimal mntTotal = montoTotal
+mntTotal = montoTotal as BigDecimal
 
 if ((montoNeto + montoExento + iva) != montoTotal) errorMessages.add("Total inválido (montoTotal no coincide con suma de monto neto, monto exento e iva.")
-if (tasaIva / 100 != vatTaxRate) errorMessages.add("Tasa IVA no coincide: esperada: ${vatTaxRate*100}%, recibida: ${tasaIva}%")
+if (montoNeto > 0 && tasaIva / 100 != vatTaxRate) errorMessages.add("Tasa IVA no coincide: esperada: ${vatTaxRate*100}%, recibida: ${tasaIva}%")
 
 // Datos receptor
 rutReceptor = encabezado.Receptor.RUTRecep.text()
@@ -112,7 +112,6 @@ if (rutReceptorCaratula != null && rutReceptorCaratula != rutReceptor) {
 
 mapOut = ec.service.sync().name("mchile.DTEServices.get#MoquiSIICode").parameter("siiCode", tipoDte).call()
 tipoDteEnumId = mapOut.fiscalTaxDocumentTypeEnumId
-ec.logger.info("Buscando FiscalTaxDocument: ${[issuerPartyIdValue:rutEmisor, fiscalTaxDocumenTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte]}")
 existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([issuerPartyIdValue:rutEmisor, fiscalTaxDocumenTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte])
         .disableAuthz().list()
 if (existingDteList) {
@@ -203,6 +202,7 @@ detalleList = documento.Documento.Detalle
 ec.logger.warn("Recorriendo detalles: ${detalleList.size()}")
 int nroDetalles = 0
 BigDecimal totalCalculado = 0
+BigDecimal totalExento = 0
 detalleList.each { detalle ->
     nroDetalles++
     // Adición de items a orden
@@ -363,8 +363,6 @@ createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalT
              sendAuthStatusId:'Ftd-SentAuth', sendRecStatusId:'Ftd-SentRec']
 mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call()
 fiscalTaxDocumentId = mapOut.fiscalTaxDocumentId
-if (envioReciboId)
-    ec.service.syn().name("create#mchile.dte.EnvioFiscalTaxDocument").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, envioReciboId:envioReciboId])
 
 locationReferenceBase = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folioDte}"
 contentLocationXml = "${locationReferenceBase}.xml"
@@ -421,6 +419,8 @@ referenciasList.each { groovy.util.Node referencia ->
 }
 
 if (envioDteId)
-    ec.service.sync().name("create#mchile.dte.EnvioFiscalTaxDocument").parameters([envioId:envioDteId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
+    ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioDteId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
 if (envioRespuestaId)
-    ec.service.sync().name("create#mchile.dte.EnvioFiscalTaxDocument").parameters([envioId:envioRespuestaId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
+    ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioRespuestaId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
+
+return
