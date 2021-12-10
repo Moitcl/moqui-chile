@@ -201,12 +201,13 @@ invoiceId = invoiceMap.invoiceId
 BigDecimal montoItem = 0 as BigDecimal
 detalleList = documento.Documento.Detalle
 ec.logger.warn("Recorriendo detalles: ${detalleList.size()}")
-int j = 0
+int nroDetalles = 0
 BigDecimal totalCalculado = 0
 detalleList.each { detalle ->
+    nroDetalles++
     // Adición de items a orden
     ec.logger.warn("-----------------------------------")
-    ec.logger.warn("Leyendo línea detalle " + j + ",")
+    ec.logger.warn("Leyendo línea detalle " + nroDetalles + ",")
     ec.logger.warn("Indicador exento: ${detalle.IndExe.text()}")
     ec.logger.warn("Nombre item: ${detalle.NmbItem.text()}")
     ec.logger.warn("Cantidad: ${detalle.QtyItem.text()}")
@@ -290,7 +291,6 @@ detalleList.each { detalle ->
                                                                                                 productId: productId, description: itemDescription, quantity: quantity, amount: price]).call()
     }
 
-    j++
 }
 
 globalList = documento.Documento.DscRcgGlobal
