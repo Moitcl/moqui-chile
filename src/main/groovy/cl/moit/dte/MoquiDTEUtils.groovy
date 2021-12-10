@@ -264,6 +264,7 @@ class MoquiDTEUtils {
         xpath.setNamespaceContext(new DefaultNamespaceContext().addNamespace("sii", "http://www.sii.cl/SiiDte"))
         XPathExpression expression
         Date signatureDate = null
+        List<String> verifiedIdList = new LinkedList<String>()
         expression = xpath.compile(xPathExpression)
         NodeList nodes = (NodeList) expression.evaluate(doc, XPathConstants.NODESET)
         if (nodes == null || nodes.length < 1)
@@ -277,8 +278,9 @@ class MoquiDTEUtils {
                 String signatureTimestamp = expression.evaluate(node, XPathConstants.STRING)
                 SimpleDateFormat dateFormat = new SimpleDateFormat(signatureTimestamp.size() == 10 ? "yyyy-MM-dd": "yyyy-MM-dd'T'HH:mm:ss")
                 signatureDate = dateFormat.parse(signatureTimestamp)
-                logger.error("got signatureTimestamp: ${signatureTimestamp}")
+                logger.debug("got signatureTimestamp: ${signatureTimestamp}")
             }
+            String signedElementId = ((Element)node).getAttribute("ID")
             ((Element)node).setIdAttributeNS(null, "ID", true)
             NodeList signatureNodeList = ((Element)node.getParentNode()).getElementsByTagNameNS("http://www.w3.org/2000/09/xmldsig#", "Signature");
             if (signatureNodeList == null || signatureNodeList.length < 1)
@@ -327,8 +329,10 @@ class MoquiDTEUtils {
             // Validate the XMLSignature.
             if (!signature.validate(valContext))
                 return false
+
+            verifiedIdList.add(signedElementId)
         }
-        logger.info("Checked ${verificationCount} signatures successfully")
+        logger.info("Checked ${verificationCount} signature${verificationCount > 1? 's': ''} successfully, ID${verificationCount > 1? ('s: ' + verifiedIdList): verifiedIdList.get(0)}")
         return true;
     }
 
