@@ -265,14 +265,13 @@ class MoquiDTEUtils {
         XPathExpression expression
         Date signatureDate = null
         List<String> verifiedIdList = new LinkedList<String>()
+        List<String> failedIdList = new LinkedList<String>()
         expression = xpath.compile(xPathExpression)
         NodeList nodes = (NodeList) expression.evaluate(doc, XPathConstants.NODESET)
         if (nodes == null || nodes.length < 1)
             throw new RuntimeException("Could not find any node using XPath expression ${xPathExpression}")
-        int verificationCount = 0
 
         nodes.each { org.w3c.dom.Node node ->
-            verificationCount++
             if (dateXPathExpression != null) {
                 expression = xpath.compile(dateXPathExpression)
                 String signatureTimestamp = expression.evaluate(node, XPathConstants.STRING)
@@ -323,17 +322,26 @@ class MoquiDTEUtils {
 
             if (certificate == null) {
                 logger.error("No Certificate found")
-                return false
+                failedIdList.add(signedElementId)
+                return
             }
 
             // Validate the XMLSignature.
-            if (!signature.validate(valContext))
-                return false
+            if (!signature.validate(valContext)) {
+                failedIdList.add(signedElementId)
+                return
+            }
 
             verifiedIdList.add(signedElementId)
         }
-        logger.info("Checked ${verificationCount} signature${verificationCount > 1? 's': ''} successfully, ID${verificationCount > 1? ('s: ' + verifiedIdList): verifiedIdList.get(0)}")
-        return true;
+        int verifyCount = verifiedIdList.size()
+        int failCount = failedIdList.size()
+        int totalCount = verifyCount + failCount
+        if (failCount == 0)
+            logger.info("Checked ${verifyCount} signature${verifyCount > 1? 's': ''} successfully, ID${verifyCount > 1? ('s ' + verifiedIdList): verifiedIdList.get(0)}")
+        else
+            logger.info("Checked ${totalCount} signature${totalCount > 1? 's': ''} , ${verifyCount} successful, ${failCount} failed: ID${failCount > 1? ('s ' + failedIdList): failedIdList.get(0)}")
+        return (failCount == 0);
     }
 
     public static class DefaultNamespaceContext implements NamespaceContext {

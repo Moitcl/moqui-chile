@@ -24,7 +24,7 @@ warningMessages = []
 byte[] dteXml = MoquiDTEUtils.getRawXML(domNode)
 Document doc2 = MoquiDTEUtils.parseDocument(dteXml)
 if (!MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", null)) {
-    errorMessages.add("Signature mismatch for document ${i}")
+    errorMessages.add("Signature mismatch for document ${documento.Documento.'@ID'.text()}")
 }
 
 vatTaxRate = ec.service.sync().name("mchile.TaxServices.get#VatTaxRate").call().taxRate
