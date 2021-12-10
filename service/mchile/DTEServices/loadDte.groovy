@@ -363,6 +363,8 @@ createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalT
              sendAuthStatusId:'Ftd-SentAuth', sendRecStatusId:'Ftd-SentRec']
 mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call()
 fiscalTaxDocumentId = mapOut.fiscalTaxDocumentId
+if (envioReciboId)
+    ec.service.syn().name("create#mchile.dte.EnvioFiscalTaxDocument").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, envioReciboId:envioReciboId])
 
 locationReferenceBase = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folioDte}"
 contentLocationXml = "${locationReferenceBase}.xml"
@@ -417,3 +419,8 @@ referenciasList.each { groovy.util.Node referencia ->
     }
 
 }
+
+if (envioDteId)
+    ec.service.sync().name("create#mchile.dte.EnvioFiscalTaxDocument").parameters([envioId:envioDteId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
+if (envioRespuestaId)
+    ec.service.sync().name("create#mchile.dte.EnvioFiscalTaxDocument").parameters([envioId:envioRespuestaId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()

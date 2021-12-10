@@ -4,10 +4,13 @@ import javax.xml.xpath.XPath
 import javax.xml.xpath.XPathConstants
 import javax.xml.xpath.XPathExpression
 import javax.xml.xpath.XPathFactory
+import groovy.xml.MarkupBuilder
 
 import org.moqui.context.ExecutionContext
 import org.w3c.dom.Document
 import cl.moit.dte.MoquiDTEUtils
+
+import java.text.SimpleDateFormat
 
 ExecutionContext ec = context.ec
 
@@ -42,37 +45,42 @@ resultado = [recepcionEnvio:recepcionEnvio]
 caratula = setDte.Caratula
 String issuerPartyId = null
 String issuerTaxName = null
-if (caratula) {
-    rutEmisorCaratula = caratula.RutEmisor.text()
-    rutReceptorCaratula = caratula.RutReceptor.text()
-    caratulaResultado = [rutRecibe:rutEmisorCaratula, rutResponde:rutReceptorCaratula, nroDetalles:dteList.size()]
-    resultado.caratula = caratulaResultado
-    issuerPartyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([idValue:rutEmisorCaratula, partyIdTypeEnumId:'PtidNationalTaxId']).list()
-    if (issuerPartyIdentificationList.size() < 1) {
-        if (createUnknownIssuer) {
-            emisor = setDte.DTE[0].Documento.Encabezado.Emisor
-            mapOut = ec.service.sync().name("mantle.party.PartyServices.create#Organization").parameters([organizationName:emisor.RznSoc.text(), taxOrganizationName:emisor.RznSoc.text(), roleTypeId:'Supplier']).call()
-            issuerPartyId = mapOut.partyId
-            ec.service.sync().name("create#mantle.party.PartyIdentification").parameters([partyId:issuerPartyId, partyIdTypeEnumId:'PtidNationalTaxId', idValue:rutEmisorCaratula]).call()
-            ec.service.sync().name("create#mchile.dte.PartyGiro").parameters([partyId:issuerPartyId, description:emisor.GiroEmis.text(), isPrimary:'Y']).call()
-            comunaList = ec.entity.find("moqui.basic.GeoAssocAndToDetail").condition("geoId", "CHL").condition(ec.entity.conditionFactory.makeCondition("geoName", EntityCondition.EQUALS, emisor.CmnaOrigen.text()).ignoreCase()).list()
-            comunaId = comunaList? comunaList.first.geoId : null
-            ec.service.sync().name("mantle.party.ContactServices.store#PartyContactInfo").parameters([partyId:issuerPartyId, address1:emisor.DirOrigen.text(),
-                                                                                                 postalContactMechPurposeId:'PostalTax', stateProvinceGeoId:comunaId, countryGeoId:"CHL", city:emisor.CiudadOrigen.text()]).call()
-        } else {
-            ec.message.addError("No existe organización con RUT ${rutReceptorCaratula} (emisor) definida en el sistema")
-        }
-    } else if (issuerPartyIdentificationList.size() == 1) {
-        issuerPartyId = issuerPartyIdentificationList.first.partyId
-    } else {
-        ec.message.addError("Más de un sujeto con mismo rut de emisor (${rutEmisorCaratula}: partyIds ${issuerPartyIdentificationList.partyId}")
-    }
 
-    EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()
-    issuerTaxName = issuer.taxOrganizationName
-    if (issuerTaxName == null || issuerTaxName.size() == 0)
-        issuerTaxName = ec.resource.expand("PartyNameOnlyTemplate", null, issuer)
+rutEmisorCaratula = caratula.RutEmisor.text()
+rutReceptorCaratula = caratula.RutReceptor.text()
+caratulaResultado = [rutRecibe:rutEmisorCaratula, rutResponde:rutReceptorCaratula, nroDetalles:dteList.size()]
+resultado.caratula = caratulaResultado
+issuerPartyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([idValue:rutEmisorCaratula, partyIdTypeEnumId:'PtidNationalTaxId']).list()
+if (issuerPartyIdentificationList.size() < 1) {
+    if (createUnknownIssuer) {
+        emisor = setDte.DTE[0].Documento.Encabezado.Emisor
+        mapOut = ec.service.sync().name("mantle.party.PartyServices.create#Organization").parameters([organizationName:emisor.RznSoc.text(), taxOrganizationName:emisor.RznSoc.text(), roleTypeId:'Supplier']).call()
+        issuerPartyId = mapOut.partyId
+        ec.service.sync().name("create#mantle.party.PartyIdentification").parameters([partyId:issuerPartyId, partyIdTypeEnumId:'PtidNationalTaxId', idValue:rutEmisorCaratula]).call()
+        ec.service.sync().name("create#mchile.dte.PartyGiro").parameters([partyId:issuerPartyId, description:emisor.GiroEmis.text(), isPrimary:'Y']).call()
+        comunaList = ec.entity.find("moqui.basic.GeoAssocAndToDetail").condition("geoId", "CHL").condition(ec.entity.conditionFactory.makeCondition("geoName", EntityCondition.EQUALS, emisor.CmnaOrigen.text()).ignoreCase()).list()
+        comunaId = comunaList? comunaList.first.geoId : null
+        ec.service.sync().name("mantle.party.ContactServices.store#PartyContactInfo").parameters([partyId:issuerPartyId, address1:emisor.DirOrigen.text(),
+                                                                                                  postalContactMechPurposeId:'PostalTax', stateProvinceGeoId:comunaId, countryGeoId:"CHL", city:emisor.CiudadOrigen.text()]).call()
+    } else {
+        ec.message.addError("No existe organización con RUT ${rutReceptorCaratula} (emisor) definida en el sistema")
+    }
+} else if (issuerPartyIdentificationList.size() == 1) {
+    issuerPartyId = issuerPartyIdentificationList.first.partyId
+} else {
+    ec.message.addError("Más de un sujeto con mismo rut de emisor (${rutEmisorCaratula}: partyIds ${issuerPartyIdentificationList.partyId}")
 }
+
+envioDteId = ec.service.sync().name("create#mchile.dte.Envio").parameters([envioTypeEnumId:'Ftde-EnvioDte', rutEmisor:rutEmisorCaratula, rutReceptor:rutReceptorCaratula, fechaEnvio:'', fechaRegistro:'']).call().envioId
+documentLocation ="dbresource://moit/erp/dte/caf/EnvioDTE/${rutEmisorCaratula}/${rutEmisorCaratula}-${envioDteId}.xml"
+ec.resource.getLocationReference(documentLocation).putBytes(xml)
+ec.service.sync().name("update#mchile.dte.Envio").parameters([envioId:envioDteId, documentLocation:documentLocation, receivedFileName:xmlFileName]).call().envioId
+envioRespuestaId = ec.service.sync().name("create#mchile.dte.Envio").parameters([envioTypeEnumId:'Ftde-RespuestaDte', rutEmisor:rutReceptorCaratula, rutReceptor:rutEmisorCaratula, fechaEnvio:'', fechaRegistro:'']).call().envioId
+
+EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()
+issuerTaxName = issuer.taxOrganizationName
+if (issuerTaxName == null || issuerTaxName.size() == 0)
+    issuerTaxName = ec.resource.expand("PartyNameOnlyTemplate", null, issuer)
 
 ec.logger.warn("Emisor según carátula: ${rutEmisorCaratula}, issuerTaxName ${issuerTaxName}")
 
