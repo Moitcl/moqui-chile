@@ -91,7 +91,6 @@ recepcionEnvioDetalle = [nombreArchivo:xmlFilename, fechaRecepcion:ec.l10n.forma
                 rutEmisorEnvio:rutReceptorCaratula, rutReceptorEnvio:rutEmisorCaratula, estadoRecepcion:0]
 recepcionEnvioDetalle.glosaEstadoRecepcion = glosaEstadoRecepcionMap[recepcionEnvioDetalle.estadoRecepcion]
  */
-recepcionDte = []
 
 XPath xpath = XPathFactory.newInstance().newXPath()
 xpath.setNamespaceContext(new MoquiDTEUtils.DefaultNamespaceContext().addNamespace("sii", "http://www.sii.cl/SiiDte"))
@@ -99,10 +98,45 @@ xpath.setNamespaceContext(new MoquiDTEUtils.DefaultNamespaceContext().addNamespa
 processedDocuments = 0
 XPathExpression expression = xpath.compile("/sii:EnvioDTE/sii:SetDTE/sii:DTE")
 org.w3c.dom.NodeList dteNodeList = (org.w3c.dom.NodeList) expression.evaluate(doc.getDocumentElement(), XPathConstants.NODESET)
+
+recepcionList = []
 dteNodeList.each { org.w3c.dom.Node domNode ->
-    recepcionDte.add(ec.service.sync().name("mchile.DTEServices.load#DteFromDom").requireNewTransaction(true).parameters(context+[domNode:domNode]).call())
+    recepcionList.add(ec.service.sync().name("mchile.DTEServices.load#DteFromDom").requireNewTransaction(true).parameters(context+[requireReceiverInternalOrg:true, domNode:domNode]).call())
     ec.message.clearErrors()
     processedDocuments++
 }
 
-// ToDo: codigo envio
+SimpleDateFormat ft = new SimpleDateFormat("yyyyMMddhhmmssMs")
+String datetime = ft.format(new Date())
+idS = "EnvRecibo" + datetime
+def StringWriter writer = new StringWriter()
+def MarkupBuilder recepcionDte = new MarkupBuilder()
+SimpleDateFormat fts = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss")
+tmstFirmaResp = fts.format(new Date())
+recepcionDte.'sii:RespuestaDTE'('xmlns:sii': 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version:'1.0', 'xsi:schemaLocation': 'http://www.sii.cl/SiiDte RespuestaEnvioDTE_v10.xsd') {
+    'sii:Resultado'(ID:idS) {
+        'sii:Caratula'(version:"1.0") {
+            'sii:RutResponde'(rutReceptorCaratula)
+            'sii:RutRecibe'(rutEmisorCaratula)
+            'sii:IdRespuesta'(envioRespuestaId)
+            'sii:NroDetalles'(processedDocuments)
+            //'sii:NmbContacto'("")
+            //'sii:FonoContacto'("")
+            //'sii:MailContacto'("")
+            'sii:TmstFirmaResp'(tmstFirmaResp)
+        }
+        recepcionList.each { recepcion ->
+            'sii:ResultadoDTE' {
+                'sii:TipoDTE'(recepcion.tipoDte)
+                'sii:Folio'(recepcion.folio)
+                'sii:RUTEmisor'(recepcion.rutEmisor)
+                'sii:RUTRecep'(recepcion.rutRecep)
+                'sii:MntTotal'(recepcion.mntTotal)
+                'sii:EstadoDTE'(recepcion.estadoRecepDte)
+                'sii:EstadoDTEGlosa'(recepcion.recepDteGlosa)
+            }
+        }
+    }
+}
+
+// ToDo: sign and send respuesta
