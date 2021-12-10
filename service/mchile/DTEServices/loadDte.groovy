@@ -46,28 +46,9 @@ fchEmis = encabezado.IdDoc.FchEmis.text()
 emisor = encabezado.Emisor
 rutEmisor = emisor.RUTEmisor.text()
 
-issuerPartyId = null
+issuerPartyId = ec.service.sync().name("mchile.DTECommServices.get#PartyIdByRut").parameters([idValue:rutEmisor, createUnknown:createUnknownIssuer, razonSocial:emisor.RznSoc.text(), roleTypeId:'Supplier',
+                                                                                              giro:emisor.GiroEmis.text(), direccion:emisor.DirOrigen.text(), comuna:emisor.CmnaOrigen.text(), ciudad:emisor.CiudadOrigen.text()]).call().partyId
 issuerTaxName = null
-issuerPartyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([idValue:rutEmisor, partyIdTypeEnumId:'PtidNationalTaxId']).list()
-if (issuerPartyIdentificationList.size() < 1) {
-    if (createUnknownIssuer) {
-        mapOut = ec.service.sync().name("mantle.party.PartyServices.create#Organization").parameters([organizationName:emisor.RznSoc.text(), taxOrganizationName:emisor.RznSoc.text(), roleTypeId:'Supplier']).call()
-        issuerPartyId = mapOut.partyId
-        ec.service.sync().name("create#mantle.party.PartyIdentification").parameters([partyId:issuerPartyId, partyIdTypeEnumId:'PtidNationalTaxId', idValue:rutEmisor]).call()
-        ec.service.sync().name("create#mchile.dte.PartyGiro").parameters([partyId:issuerPartyId, description:emisor.GiroEmis.text(), isPrimary:'Y']).call()
-        comunaList = ec.entity.find("moqui.basic.GeoAssocAndToDetail").condition("geoId", "CHL").condition(ec.entity.conditionFactory.makeCondition("geoName", EntityCondition.EQUALS, emisor.CmnaOrigen.text()).ignoreCase()).list()
-        comunaId = comunaList? comunaList.first.geoId : null
-        ec.service.sync().name("mantle.party.ContactServices.store#PartyContactInfo").parameters([partyId:issuerPartyId, address1:emisor.DirOrigen.text(),
-                                                                                             postalContactMechPurposeId:'PostalTax', stateProvinceGeoId:comunaId, countryGeoId:"CHL", city:emisor.CiudadOrigen.text()]).call()
-    } else {
-        errorMessages.add("No se encuentra emisor ${rutEmisor}")
-    }
-} else if (issuerPartyIdentificationList.size() == 1) {
-    issuerPartyId = issuerPartyIdentificationList.first.partyId
-} else {
-    ec.message.addError("Más de un sujeto con mismo rut de emisor (${rutEmisor}: partyIds ${issuerPartyIdentificationList.partyId}")
-}
-
 EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()
 issuerTaxName = issuer.taxOrganizationName
 if (issuerTaxName == null || issuerTaxName.size() == 0)
@@ -138,25 +119,10 @@ if (fechaVencimiento != null && fechaVencimiento != 'null' && fechaVencimiento !
     dueTimestamp = null
 }
 
-String razonSocialReceptor = encabezado.Receptor.RznSocRecep.text()
-partyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([idValue:rutReceptor, partyIdTypeenumId:'PtidNationalTaxId']).list()
-if (!partyIdentificationList) {
-    if (createUnknownReceiver) {
-        mapOut = ec.service.sync().name("mantle.party.PartyServices.create#Organization").parameters([organizationName:razonSocialReceptor, taxOrganizationName:razonSocialReceptor,
-                                                                                                      roleTypeId:'Customer']).call()
-        receiverPartyId = mapOut.partyId
-        ec.service.sync().name("create#mantle.party.PartyIdentification").parameters([partyId:receiverPartyId, partyIdTypeEnumId:'PtidNationalTaxId', idValue:rutReceptor]).call()
-        ec.service.sync().name("create#mchile.dte.PartyGiro").parameters([partyId:issuerPartyId, description:encabezado.receptor.giroRecep, isPrimary:'Y']).call()
-    } else {
-        ec.message.addError("No existe organización con RUT ${rutReceptor} (receptor) definida en el sistema")
-        receiverPartyId = null
-    }
-} else if (partyIdentificationList.size() > 1) {
-    ec.message.addError("Se encontró más de un sujeto con RUT ${rutEmisor}: ${partyIdentificationList.partyId}")
-    receiverPartyId = partyIdentificationList.first.partyId
-} else {
-    receiverPartyId = partyIdentificationList.first.partyId
-}
+receptor = encabezado.Receptor
+String razonSocialReceptor = receptor.RznSocRecep.text()
+receiverPartyId = ec.service.sync().name("mchile.DTECommServices.get#PartyIdByRut").parameters([idValue:rutReceptor, createUnknown:createUnknownReceiver, razonSocial:razonSocialReceptor, roleTypeId:'Customer',
+                                                                                              giro:receptor.GiroRecep.text(), direccion:receptor.DirRecep.text(), comuna:receptor.CmnaRecep.text(), ciudad:receptor.CiudadRecep.text()]).call().partyId
 receiver = ec.entity.find("mantle.party.PartyDetail").condition("partyId", receiverPartyId).one()
 // Verificación de Razón Social en XML vs lo guardado en Moqui
 String razonSocialDb = receiver.taxOrganizationName

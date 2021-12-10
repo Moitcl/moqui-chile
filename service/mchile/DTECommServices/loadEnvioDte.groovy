@@ -38,9 +38,6 @@ if (dteList.size() < 1) {
     return
 }
 
-recepcionEnvio = []
-resultado = [recepcionEnvio:recepcionEnvio]
-
 // Caratula
 caratula = setDte.Caratula
 String issuerPartyId = null
@@ -48,29 +45,6 @@ String issuerTaxName = null
 
 rutEmisorCaratula = caratula.RutEmisor.text()
 rutReceptorCaratula = caratula.RutReceptor.text()
-caratulaResultado = [rutRecibe:rutEmisorCaratula, rutResponde:rutReceptorCaratula, nroDetalles:dteList.size()]
-resultado.caratula = caratulaResultado
-issuerPartyIdentificationList = ec.entity.find("mantle.party.PartyIdentification").condition([idValue:rutEmisorCaratula, partyIdTypeEnumId:'PtidNationalTaxId']).list()
-if (issuerPartyIdentificationList.size() < 1) {
-    if (createUnknownIssuer) {
-        emisor = setDte.DTE[0].Documento.Encabezado.Emisor
-        mapOut = ec.service.sync().name("mantle.party.PartyServices.create#Organization").parameters([organizationName:emisor.RznSoc.text(), taxOrganizationName:emisor.RznSoc.text(), roleTypeId:'Supplier']).call()
-        issuerPartyId = mapOut.partyId
-        ec.service.sync().name("create#mantle.party.PartyIdentification").parameters([partyId:issuerPartyId, partyIdTypeEnumId:'PtidNationalTaxId', idValue:rutEmisorCaratula]).call()
-        ec.service.sync().name("create#mchile.dte.PartyGiro").parameters([partyId:issuerPartyId, description:emisor.GiroEmis.text(), isPrimary:'Y']).call()
-        comunaList = ec.entity.find("moqui.basic.GeoAssocAndToDetail").condition("geoId", "CHL").condition(ec.entity.conditionFactory.makeCondition("geoName", EntityCondition.EQUALS, emisor.CmnaOrigen.text()).ignoreCase()).list()
-        comunaId = comunaList? comunaList.first.geoId : null
-        ec.service.sync().name("mantle.party.ContactServices.store#PartyContactInfo").parameters([partyId:issuerPartyId, address1:emisor.DirOrigen.text(),
-                                                                                                  postalContactMechPurposeId:'PostalTax', stateProvinceGeoId:comunaId, countryGeoId:"CHL", city:emisor.CiudadOrigen.text()]).call()
-    } else {
-        ec.message.addError("No existe organización con RUT ${rutReceptorCaratula} (emisor) definida en el sistema")
-    }
-} else if (issuerPartyIdentificationList.size() == 1) {
-    issuerPartyId = issuerPartyIdentificationList.first.partyId
-} else {
-    ec.message.addError("Más de un sujeto con mismo rut de emisor (${rutEmisorCaratula}: partyIds ${issuerPartyIdentificationList.partyId}")
-}
-
 fechaFirmaEnvio = ec.l10n.parseTimestamp(caratula.TmstFirmaEnv.text(), "yyyy-MM-dd'T'HH:mm:ss")
 emisor = setDte.DTE[0].Documento.Encabezado.Emisor
 if (rutEmisorCaratula != emisor.RUTEmisor.text())

@@ -760,5 +760,48 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-update value-field="dteEv"/>
         </actions>
     </service>
+    
+    <service verb="get" noun="PartyIdByRut">
+        <in-parameters>
+            <parameter name="idValue" required="true"/>
+            <parameter name="createUnknown" type="Boolean" default="false"/>
+            <parameter name="razonSocial"/>
+            <parameter name="roleTypeId"/>
+            <parameter name="giro"/>
+            <parameter name="direccion"/>
+            <parameter name="comuna"/>
+            <parameter name="ciudad"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="partyId"/>
+        </out-parameters>
+        <actions>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
+                <econdition field-name="idValue"/>
+                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+            </entity-find>
+            <if condition="!partyIdentificationList"><then>
+                <if condition="createUnknown"><then>
+                    <service-call name="mantle.party.PartyServices.create#Organization" in-map="[organizationName:razonSocial, taxOrganizationName:razonSocial, roleTypeId:'Supplier']"
+                                  out-map="context"/>
+                    <service-call name="create#mantle.party.PartyIdentification" in-map="[partyId:partyId, partyIdTypeEnumId:'PtidNationalTaxId', idValue:idValue]"/>
+                    <service-call name="create#mchile.dte.PartyGiro" in-map="[partyId:partyId, description:giro, isPrimary:'Y']"/>
+                    <entity-find entity-name="moqui.basic.GeoAssocAndToDetail" list="comunaList">
+                        <econdition field-name="geoId" value="CHL"/>
+                        <econdition field-name="geoName" ignore-case="true" from="comuna"/>
+                    </entity-find>
+                    <set field="comunaId" from="comunaList.first?.geoId"/>
+                    <service-call name="mantle.party.ContactServices.store#PartyContactInfo"
+                                  in-map="[partyId:issuerPartyId, address1:direccion, postalContactMechPurposeId:'PostalTax', stateProvinceGeoId:comunaId, countryGeoId:'CHL', city:ciudad]"/>
+                </then><else>
+                    <return error="true" message="No existe organización con RUT ${idValue} definida en el sistema"/>
+                </else></if>
+            </then><else-if condition="partyIdentificationList.size() == 1">
+                <set field="partyId" from="partyIdentificationList.first.partyId"/>
+            </else-if><else>
+                <return error="true" message="Más de un sujeto con mismo rut de emisor (${idValue}: partyIds ${partyIdentificationList.partyId}"/>
+            </else></if>
+        </actions>
+    </service>
 
 </services>
