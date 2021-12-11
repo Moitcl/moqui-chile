@@ -4,18 +4,27 @@ import javax.xml.xpath.XPathExpression
 import javax.xml.xpath.XPathFactory
 import groovy.xml.MarkupBuilder
 
-import org.moqui.context.ExecutionContext
 import org.w3c.dom.Document
 import cl.moit.dte.MoquiDTEUtils
 
 import java.text.SimpleDateFormat
 
-ExecutionContext ec = context.ec
+processed = false
+org.moqui.context.ExecutionContext ec = context.ec
+
+dteEnvioEv = ec.entity.find("mchile.dte.DteEnvio").parameter("envioId", envioId).one()
+inputStream = ec.resource.getLocationReference(dteEnvioEv.documentLocation).getInputStream()
+Map processingParameters = ec.resource.eval(dteEnvioEv.processingParameters)
+
+Boolean createUnknownIssuer = processingParameters.createUnknownIssuer ?: true
+Boolean requireIssuerInternalOrg = processingParameters.requireIssuerInternalOrg ?: false
+Boolean createUnknownReceiver = processingParameters.createUnknownReceiver ?: Net5
+Boolean requireReceiverInternalOrg = processingParameters.requireReceiverInternalOrg ?: true
 
 // Check signatures
 Document doc
 try {
-    doc = MoquiDTEUtils.parseDocument(xml)
+    doc = MoquiDTEUtils.parseDocument(inputStream)
 } catch (Exception e) {
     ec.message.addError("Parsing document: ${e.toString()}")
 }
@@ -47,12 +56,12 @@ fechaFirmaEnvio = ec.l10n.parseTimestamp(caratula.TmstFirmaEnv.text(), "yyyy-MM-
 emisor = setDte.DTE[0].Documento.Encabezado.Emisor
 if (rutEmisorCaratula != emisor.RUTEmisor.text())
     ec.message.addError("Rut emisor de carátula (${rutEmisorCaratula} y DTE (${emisor.RUTEmisor.text()}) no coinciden")
-issuerPartyId = ec.service.sync().name("mchile.DTECommServices.get#PartyIdByRut").parameters([idValue:rutEmisorCaratula, createUnknown:true, razonSocial:emisor.RznSoc.text(), roleTypeId:'Supplier',
+issuerPartyId = ec.service.sync().name("mchile.DTECommServices.get#PartyIdByRut").parameters([idValue:rutEmisorCaratula, createUnknown:createUnknownIssuer, razonSocial:emisor.RznSoc.text(), roleTypeId:'Supplier',
         giro:emisor.GiroEmis.text(), direccion:emisor.DirOrigen.text(), comuna:emisor.CmnaOrigen.text(), ciudad:emisor.CiudadOrigen.text()]).call().partyId
 receptor = setDte.DTE[0].Documento.Encabezado.Receptor
 if (rutReceptorCaratula != receptor.RUTRecep.text())
     ec.message.addError("Rut receptor de carátula (${rutReceptorCaratula} y DTE (${receptor.RUTRecep.text()}) no coinciden")
-receiverPartyId = ec.service.sync().name("mchile.DTECommServices.get#PartyIdByRut").parameters([idValue:rutReceptorCaratula, createUnknown:false, razonSocial:receptor.RznSocRecep.text(), roleTypeId:'Customer',
+receiverPartyId = ec.service.sync().name("mchile.DTECommServices.get#PartyIdByRut").parameters([idValue:rutReceptorCaratula, createUnknown:createUnknownReceiver, razonSocial:receptor.RznSocRecep.text(), roleTypeId:'Customer',
                                                                                               giro:emisor.GiroRecep.text(), direccion:emisor.DirRecep.text(), comuna:emisor.CmnaRecep.text(), ciudad:emisor.CiudadRecep.text()]).call().partyId
 
 envioRespuestaId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-RespuestaDte', rutEmisor:rutReceptorCaratula, rutReceptor:rutEmisorCaratula, fechaEnvio:ec.user.nowTimestamp]).call().envioId
@@ -78,7 +87,7 @@ org.w3c.dom.NodeList dteNodeList = (org.w3c.dom.NodeList) expression.evaluate(do
 
 recepcionList = []
 dteNodeList.each { org.w3c.dom.Node domNode ->
-    recepcion = ec.service.sync().name("mchile.DTEServices.load#DteFromDom").parameters(context+[requireReceiverInternalOrg:true, domNode:domNode]).call()
+    recepcion = ec.service.sync().name("mchile.DTEServices.load#DteFromDom").parameters(context+[domNode:domNode]).call()
     recepcionList.add(recepcion)
     ec.message.clearErrors()
     processedDocuments++
@@ -134,3 +143,6 @@ if (MoquiDTEUtils.verifySignature(doc2, "/sii:RespuestaDTE/sii:Resultado", "./si
 }
 ec.resource.getLocationReference(xmlContentLocation).putBytes(salida)
 ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioRespuestaId, documentLocation:xmlContentLocation]).call()
+
+processed = true
+return

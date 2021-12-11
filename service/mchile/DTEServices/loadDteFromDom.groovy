@@ -208,7 +208,7 @@ detalleList.each { detalle ->
         totalExento += montoItem
 
     productId = null
-    if (attemptProductMatch == 'false') {
+    if (!attemptProductMatch) {
         ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales',
                                                                                                 productId: (itemExento? 'SRVCEXENTO': null), description: itemDescription, quantity: quantity, amount: price]).call()
     } else {
@@ -338,12 +338,11 @@ docRrXml.putBytes(dteXml)
 
 createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:issuedTimestamp]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
-if (pdf) {
+if (pdfBytes) {
     contentLocationPdf = "${locationReferenceBase}.pdf"
     createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:issuedTimestamp]
-    docRrPdf = ec.resource.getLocationReference("${locationReferenceBase}.pdf")
-    fileStream = pdf.getInputStream()
-    try { docRrPdf.putStream(fileStream) } finally { fileStream.close() }
+    docRrPdf = ec.resource.getLocationReference(contentLoationPdf)
+    docRrPdf.putBytes(pdfBytes)
     ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
 }
 

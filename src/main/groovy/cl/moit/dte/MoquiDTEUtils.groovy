@@ -502,6 +502,10 @@ class MoquiDTEUtils {
     }
 
     public static org.w3c.dom.Document parseDocument(byte[] entrada) {
+        return parseDocument(new ByteArrayInputStream(entrada));
+    }
+
+    public static org.w3c.dom.Document parseDocument(InputStream inputStream) {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(true);
         factory.setIgnoringElementContentWhitespace(false);
@@ -510,7 +514,6 @@ class MoquiDTEUtils {
         String errorMessage = ""
         try {
             builder = factory.newDocumentBuilder();
-            InputStream inputStream = new ByteArrayInputStream(entrada);
             Document doc = builder.parse(inputStream);
             return doc;
         } catch (ParserConfigurationException e) {

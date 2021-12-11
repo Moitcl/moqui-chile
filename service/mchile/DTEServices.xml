@@ -1055,13 +1055,14 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
     </service>
 
-    <service verb="load" noun="DteFromDom" type="script" location="component://MoquiChile/service/mchile/DTEServices/loadDte.groovy">
+    <service verb="load" noun="DteFromDom" type="script" location="component://MoquiChile/service/mchile/DTEServices/loadDteFromDom.groovy">
         <in-parameters>
             <parameter name="createUnknownIssuer" default="true" type="Boolean"/>
             <parameter name="requireIssuerInternalOrg" default="false" type="Boolean"/>
             <parameter name="createUnknownReceiver" default="false" type="Boolean"/>
             <parameter name="requireReceiverInternalOrg" default="false" type="Boolean"/>
             <parameter name="domNode" type="org.w3c.dom.Node" required="true"/>
+            <parameter name="pdfBytes" type="Object"/>
             <parameter name="rutEmisorCaratula"><description>Rut de emisor cuando documento es enviado en un EnviaDTE con su respectiva carátula</description></parameter>
             <parameter name="rutReceptorCaratula"><description>Rut de receptor cuando documento es enviado en un EnviaDTE con su respectiva carátula</description></parameter>
             <parameter name="envioDteId"><description>Si el DTE forma parte de un EnvioDTE, el ID de envío DTE recibido en la BD para asociar el documento a crear</description></parameter>
@@ -1082,7 +1083,7 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
     </service>
 
-    <service verb="load" noun="EnvioDteFromFile">
+    <service verb="load" noun="DteFromFile">
         <description>
             Carga DTE recibida al sistema y llama a servicio que crea orden de compra + invoice correspondiente
         </description>
@@ -1102,24 +1103,30 @@ along with this software (see the LICENSE.md file). If not, see
                 if (xmlFile) {
                     xmlBytes = xmlFile.get()
                     org.w3c.dom.Document doc = MoquiDTEUtils.parseDocument(xmlBytes)
-                    if (doc.getNodeName() != 'EnvioDTE') {
-                        xml = new String(xmlBytes, "ISO-8859-1")
-                        xml = xml.replace('<SetDTE', '<EnvioDTE xmlns="http://www.sii.cl/SiiDte" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.0" xsi:schemaLocation="http://www.sii.cl/SiiDte EnvioDTE_v10.xsd"><SetDTE') + "</EnvioDTE>"
-                        xml = xml.getBytes("ISO-8859-1")
-                    } else {
-                        xml = xmlBytes
+                    if (pdfFile) {
+                        pdfBytes = pdfFile.get()
+                        pdfFileName = pdfFile.name
                     }
-                    /*
-                    if (xml.contains('<SetDTE>'))
-                        xml = xml.replace('<SetDTE>', '<SetDTE ID="MI_ENVIO">')
-                     */
+                    if (doc.getNodeName() == "DTE") {
+                        ec.service.sync().name("mchile.DTEServices.load#DteFromDom").parameters(context + [domNode: doc])
+                    } else if (doc.getNodeName() == "SetDTE") {
+                        XPath xpath = XPathFactory.newInstance().newXPath()
+                        xpath.setNamespaceContext(new MoquiDTEUtils.DefaultNamespaceContext().addNamespace("sii", "http://www.sii.cl/SiiDte"))
+                        XPathExpression expression = xpath.compile("/sii:SetDTE/sii:DTE")
+                        org.w3c.dom.NodeList dteNodeList = (org.w3c.dom.NodeList) expression.evaluate(doc.getDocumentElement(), XPathConstants.NODESET)
+                        dteNodeList.each { org.w3c.dom.Node domNode ->
+                            ec.service.sync().name("mchile.DTEServices.load#DteFromDom").parameters(context + [domNode: domNode])
+                        }
+                        ec.message.addMessage("Procesados ${dteNodeList.size()} DTEs")
+                    } else if (doc.getNodeName() == "EnvioDTE") {
+                        if (!MoquiDTEUtils.verifySignature(doc, "/sii:EnvioDTE/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()"))
+                            ec.message.addError("Firma del envío inválida")
+                        ec.service.sync().name("mchile.DTECommServices.store#ReceivedEnvioDte").parameters(context + [envioDteBytes:xmlBytes, receivedFileName:xmlFile.getName() ])
+                    } else {
+                        ec.message.addError("Unknown document ${doc.getNodeName()}")
+                    }
                 }
-                if (pdfFile) {
-                    pdf = pdfFile.get()
-                    pdfFileName = pdfFile.name
-                }
-                ]]></script>
-            <service-call name="mchile.DTECommServices.load#EnvioDte" in-map="context" out-map="context"/>
+            ]]></script>
         </actions>
     </service>
 

@@ -136,12 +136,7 @@ along with this software (see the LICENSE.md file). If not, see
                         }
 
                         if (envioTypeEnumId) {
-                            envioDteId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:envioTypeEnumId, statusId:'Ftde-Received', rutEmisor:rutEmisorCaratula,
-                                                           rutReceptor:rutReceptorCaratula, fechaEnvio:fechaFirmaEnvio, fechaRegistro:ec.user.nowTimestamp]).call().envioId
-                            envEv = ec.entity.find("moqui.basic.Enumeration").condition("enumId", envioTypeEnumId).one()
-                            documentLocation ="dbresource://moit/erp/dte/${envEv.enumCode}/${rutEmisorCaratula}/${rutEmisorCaratula}-${envioDteId}.xml"
-                            ec.resource.getLocationReference(documentLocation).putBytes(contentBytes)
-                            ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioDteId, documentLocation:documentLocation, receivedFileName:xmlFileName]).call().envioId
+                            ec.service.sync().name("mchile.DTECommServices.store#ReceivedEnvioDte").parameters(context + [envioDteBytes:contentBytes, receivedFileName:xmlFileName ])
                         }
 
                         /*
@@ -207,17 +202,11 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="processed" type="Boolean"/>
         </out-parameters>
     </service>
-    <service verb="process" noun="EnvioDte">
+    <service verb="process" noun="EnvioDte" type="script" location="component://MoquiChile/service/mchile/DTECommServices/processEnvioDte.groovy">
         <implements service="mchile.DTECommServices.process#EnvioInterface"/>
-        <actions>
-            <set field="processed" from="false"/>
-            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="dteEnvio"/>
-            <set field="resourceReference" from="ec.resource.getLocationReference(dteEnvio.documentLocation)"/>
-            <!-- ToDo: send content -->
-            <service-call name="mchile.DTECommServices.load#EnvioDte" in-map="[xml:contentBytes, xmlFilename:dteEnvio.receivedFileName, attemptProductMatch:'true', attemptProductMatch:true]"/>
-            <check-errors/>
-            <set field="processed" from="true"/>
-        </actions>
+        <out-parameters>
+            <parameter name="envioRespuestaId"/>
+        </out-parameters>
     </service>
     <service verb="process" noun="RespuestaDte">
         <implements service="mchile.DTECommServices.process#EnvioInterface"/>
@@ -236,66 +225,6 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <set field="processed" from="false"/>
         </actions>
-    </service>
-
-    <service verb="load" noun="EnvioDte" type="script" location="component://MoquiChile/service/mchile/DTECommServices/loadEnvioDte.groovy">
-        <in-parameters>
-            <parameter name="createUnknownIssuer" default="true" type="Boolean"/>
-            <parameter name="requireIssuerInternalOrg" default="false" type="Boolean"/>
-            <parameter name="createUnknownReceiver" default="false" type="Boolean"/>
-            <parameter name="requireReceiverInternalOrg" default="false" type="Boolean"/>
-            <parameter name="xml" type="Object" required="true"/>
-            <parameter name="xmlFileName"/>
-            <parameter name="pdf" type="Object"/>
-            <parameter name="pdfFileName"/>
-            <parameter name="attemptProductMatch" default-value="false"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="resultado" type="Map">
-                <parameter name="caratula" type="Map">
-                    <parameter name="rutResponde" required="true"/>
-                    <parameter name="rutRecibe" required="true"/>
-                    <parameter name="nroDetalles" required="true"/>
-                    <parameter name="nmbContacto"/>
-                    <parameter name="fonoContacto"/>
-                    <parameter name="mailContacto"/>
-                </parameter>
-                <!--
-                <parameter name="recepcionEnvio" type="List">
-                    <parameter name="recepcionEnvioDetalle" type="Map">
-                        <parameter name="nombreArchivo" required="true"/>
-                        <parameter name="fechaRecepcion" type="Timestamp" required="true"/>
-                        <parameter name="codigoEnvio" required="true"/>
-                        <parameter name="digestEnvio" required="true"/>
-                        <parameter name="rutEmisorEnvio" required="true"/>
-                        <parameter name="rutReceptorEnvio" required="true"/>
-                        <parameter name="estadoRecepcion" required="true"/>
-                        <parameter name="glosaEstadoRecepcion" required="true"/>
-                        <parameter name="numeroDocumentos" type="Integer"/>
-                        <parameter name="tipoDocumento" type="Integer" required="true"/>
-                        <parameter name="folioDocumento" type="Integer" required="true"/>
-                        <parameter name="fechaEmision" required="true"/>
-                        <parameter name="rutEmisorDocumento" required="true"/>
-                        <parameter name="rutReceptorDocumento" required="true"/>
-                        <parameter name="estadoRecepcionDocumento" required="true"/>
-                        <parameter name="glosaObservacion" required="true"/>
-                    </parameter>
-                </parameter>
-                -->
-                <parameter name="recepcionDte" type="List">
-                    <parameter name="recepcionDteDetalle" type="Map">
-                        <parameter name="tipoDte" type="Integer" required="true"/>
-                        <parameter name="folio" type="Integer" required="true"/>
-                        <parameter name="fchEmis" required="true"/>
-                        <parameter name="rutEmisor" required="true"/>
-                        <parameter name="rutRecep" required="true"/>
-                        <parameter name="mntTotal" required="true"/>
-                        <parameter name="estadoRecepDte" required="true"/>
-                        <parameter name="recepDteGlosa" required="true"/>
-                    </parameter>
-                </parameter>
-            </parameter>
-        </out-parameters>
     </service>
 
     <service verb="generaEnvio" noun="Documentos" type="script" location="component://MoquiChile/service/mchile/DTECommServices/generaEnvio.groovy">
@@ -867,6 +796,38 @@ along with this software (see the LICENSE.md file). If not, see
             </else-if><else>
                 <return error="true" message="Más de un sujeto con mismo rut de emisor (${idValue}: partyIds ${partyIdentificationList.partyId}"/>
             </else></if>
+        </actions>
+    </service>
+
+    <service verb="store" noun="ReceivedEnvioDte">
+        <in-parameters>
+            <parameter name="envioDteBytes" type="Object"/>
+            <parameter name="receivedFileName"/>
+            <parameter name="envioTypeEnumId" default-value="Ftde-EnvioDte"/>
+            <parameter name="createUnknownIssuer" default="true" type="Boolean"/>
+            <parameter name="requireIssuerInternalOrg" default="false" type="Boolean"/>
+            <parameter name="createUnknownReceiver" default="false" type="Boolean"/>
+            <parameter name="requireReceiverInternalOrg" default="false" type="Boolean"/>
+        </in-parameters>
+        <actions>
+            <script><![CDATA[
+                import cl.moit.dte.MoquiDTEUtils
+                groovy.util.Node envioDte = MoquiDTEUtils.dom2GroovyNode(new String(envioDteBytes, "ISO-8859-1"))
+                setDte = envioDte.SetDTE
+                caratula = setDte.Caratula
+                rutEmisorCaratula = caratula.RutEmisor.text()
+                rutReceptorCaratula = caratula.RutReceptor.text()
+                fechaFirmaEnvio = ec.l10n.parseTimestamp(caratula.TmstFirmaEnv.text(), "yyyy-MM-dd'T'HH:mm:ss")
+                if (envioTypeEnumId == 'Ftde-EnvioDte')
+                    processingParameters = [createUnknownIssuer:createUnknownIssuer, requireIssuerInternalOrg:requireIssuerInternalOrg, createUnknownReceiver:createUnknownReceiver, requireReceiverInternalOrg:requireReceiverInternalOrg]
+                envioDteId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:envioTypeEnumId, statusId:'Ftde-Received', rutEmisor:rutEmisorCaratula,
+                                rutReceptor:rutReceptorCaratula, fechaEnvio:fechaFirmaEnvio, fechaRegistro:ec.user.nowTimestamp, processingParameters:processingParameters]).call().envioId
+                envEv = ec.entity.find("moqui.basic.Enumeration").condition("enumId", envioTypeEnumId).one()
+                documentLocation ="dbresource://moit/erp/dte/${envEv.enumCode}/${rutEmisorCaratula}/${rutEmisorCaratula}-${envioDteId}.xml"
+                ec.resource.getLocationReference(documentLocation).putBytes(envioDteBytes)
+                ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioDteId, documentLocation:documentLocation, receivedFileName:receivedFileName]).call().envioId
+            ]]></script>
+
         </actions>
     </service>
 
