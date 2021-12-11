@@ -283,10 +283,10 @@ class MoquiDTEUtils {
             ((Element)node).setIdAttributeNS(null, "ID", true)
             NodeList signatureNodeList = ((Element)node.getParentNode()).getElementsByTagNameNS("http://www.w3.org/2000/09/xmldsig#", "Signature");
             if (signatureNodeList == null || signatureNodeList.length < 1)
-                throw (new SAXException("No se encuentra firma para verificacion ${verificationCount}"));
+                throw (new SAXException("No se encuentra firma para verificacion"));
             org.w3c.dom.Element signatureElem = (org.w3c.dom.Element) signatureNodeList.item(signatureNodeList.length - 1);
             if (signatureElem == null) {
-                throw (new SAXException("No se encuentra firma para verificacion ${verificationCount}"));
+                throw (new SAXException("No se encuentra firma para verificacion"));
             }
             DOMValidateContext valContext = new DOMValidateContext(new X509KeySelector(), signatureElem)
 

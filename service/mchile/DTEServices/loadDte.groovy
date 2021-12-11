@@ -21,9 +21,10 @@ errorMessages = []
 discrepancyMessages = []
 warningMessages = []
 
+domNode.setAttribute("xmlns", null)
 byte[] dteXml = MoquiDTEUtils.getRawXML(domNode)
 Document doc2 = MoquiDTEUtils.parseDocument(dteXml)
-if (!MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", null)) {
+if (!MoquiDTEUtils.verifySignature(doc2, "/DTE/Documento", null)) {
     errorMessages.add("Signature mismatch for document ${documento.Documento.'@ID'.text()}")
 }
 
