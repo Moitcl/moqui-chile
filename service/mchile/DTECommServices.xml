@@ -107,20 +107,25 @@ along with this software (see the LICENSE.md file). If not, see
                         generalSignedXPath = null
                         internalSignedXPath = null
                         generalDateXPath = null
+                        envioTypeEnumId = null
                         if (firstTag == 'EnvioDTE') {
                             /*
                             internalSignedXPath = "/sii:EnvioDTE/sii:SetDTE/sii:DTE/sii:Documento"
                             internalDateXPath = "./sii:Encabezado/sii:IdDoc/sii:FchEmis/text()"
                              */
-                            ec.service.sync().requireNewTransaction(true).name("mchile.DTECommServices.load#EnvioDte").parameters([xml:contentBytes, xmlFilename:bodyPart.filename, attemptProductMatch:'true']).call()
-                            ec.message.clearErrors()
+                            envioTypeEnumId = 'Ftde-EnvioDte'
+                            /*
+                             */
                         } else if (firstTag == 'RESULTADO_ENVIO') {
+                            envioTypeEnumId = 'Ftde-ResultadoEnvio'
                             // Envío recibido en SII
                         } else if (firstTag == 'EnvioRecibos') {
+                            envioTypeEnumId = 'Ftde-EnvioRecibos'
                             // Recibos: aceptacion de los servicios y/o mercaderia para efecto de merito ejecutivo
                             generalSignedXPath = "/sii:EnvioRecibos/sii:SetRecibos"
                             generalDateXPath = "./sii:Caratula/sii:TmstFirmaEnv/text()"
                         } else if (firstTag == 'RespuestaDTE') {
+                            envioTypeEnumId = 'Ftde-RespuestaDTE'
                             // Recepción de los DTE
                             // Si es respuesta a un envío: RespuestaDTE/Resultado/RecepcionEnvio
                             // Si es respuesta a un DTE en particular: RespuestaDTE/Resultado/ResultadoDTE
@@ -129,22 +134,25 @@ along with this software (see the LICENSE.md file). If not, see
                         } else {
                             ec.logger.error("Unrecognized content with filename ${bodyPart.filename} for email ${messageId}, firstTag: ${firstTag}")
                         }
+
+                        if (envioTypeEnumId) {
+                            envioDteId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:envioTypeEnumId, statusId:'Ftde-Received', rutEmisor:rutEmisorCaratula,
+                                                           rutReceptor:rutReceptorCaratula, fechaEnvio:fechaFirmaEnvio, fechaRegistro:ec.user.nowTimestamp]).call().envioId
+                            envEv = ec.entity.find("moqui.basic.Enumeration").condition("enumId", envioTypeEnumId).one()
+                            documentLocation ="dbresource://moit/erp/dte/${envEv.enumCode}/${rutEmisorCaratula}/${rutEmisorCaratula}-${envioDteId}.xml"
+                            ec.resource.getLocationReference(documentLocation).putBytes(contentBytes)
+                            ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioDteId, documentLocation:documentLocation, receivedFileName:xmlFileName]).call().envioId
+                        }
+
+                        /*
                         if (generalSignedXPath)
                             if (!MoquiDTEUtils.verifySignature(doc, generalSignedXPath, generalDateXPath))
                                 ec.message.addError("No se verifica firma en ${generalSignedXPath}")
                         if (internalSignedXPath)
                             if (!MoquiDTEUtils.verifySignature(doc, internalSignedXPath, internalDateXPath))
                                 ec.message.addError("No se verifica firma en ${internalSignedXPath}")
+                         */
                         ]]></script>
-                    <!--
-                    <log message="processing bodyPart, firstTag: ${firstTag}"/>
-                    <log message="           contentType: ${bodyPart.contentType}"/>
-                    <log message="           filename: ${bodyPart.filename}"/>
-                    <log message="           disposition: ${bodyPart.disposition}"/>
-                    -->
-                    <!--
-                    ToDo: determine fiscalTaxDocumentIdList and messageTypeEnumId when processing attachments
-                    -->
                 </else-if><else>
                     <log level="error" message="Ignoring bodyPart of type ${bodyPart.contentType} and filename ${bodyPart.filename}, disposition ${bodyPart.disposition} for mail ${messageId}"/>
                 </else></if>
@@ -168,11 +176,65 @@ along with this software (see the LICENSE.md file). If not, see
                     messageId:messageId, emailServerId:emailServerId]"/>
                 </else></if>
             </if>
+        </actions>
+    </service>
 
-            <iterate list="fiscalTaxDocumentIdList" entry="fiscalTaxDocumentId">
-                <service-call name="create#mchile.dte.FiscalTaxDocumentEmailMessage"
-                              in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, emailMessageId:emailMessageId, messageTypeEnumId:messageTypeEnumId]"/>
+    <service verb="process" noun="ReceivedDteEnvio" authenticate="anonymous-all">
+        <actions>
+            <set field="maxAttemptCount" from="3"/>
+            <set field="minTimeBeforeRetry" from="120"/>
+            <entity-find entity-name="mchile.dte.DteEnvio" list="envioList">
+                <econdition field-name="statusId" value="Ftde-Received"/>
+                <econdition field-name="lastAttempt" operator="less" from="ec.user.nowTimestamp.time-(minTimeBeforeRetry*60*1000)" or-null="true"/>
+            </entity-find>
+            <iterate list="envioList" entry="envio">
+                <entity-find-one entity-name="moqui.basic.Enumeration" value-field="envEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
+                <service-call name="mchile.DTECommServices.process#${envEv.enumCode}" transaction="force-new" in-map="[envioId:envio.envioId]" out-map="processOut"/>
+                <if condition="procedssOut.processed"><then>
+                    <service-call name="update#mchile.dte.DteEnvio" transaction="force-new" in-map="[envioId:envio.envioId, statusId:'Ftde-Processed']"/>
+                </then><else-if condition="envio.attemptCount &gt;= maxAttemptCount">
+                    <service-call name="update#mchile.dte.DteEnvio" transaction="force-new" in-map="[envioId:envio.envioId, attemptCount:(envio.attemptCount?:0 + 1), lastAttempt:ec.user.nowTimestamp]"/>
+                </else-if></if>
             </iterate>
+        </actions>
+    </service>
+
+    <service verb="process" noun="EnvioInterface">
+        <in-parameters>
+            <parameter name="envioId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="processed" type="Boolean"/>
+        </out-parameters>
+    </service>
+    <service verb="process" noun="EnvioDte">
+        <implements service="mchile.DTECommServices.process#EnvioInterface"/>
+        <actions>
+            <set field="processed" from="false"/>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="dteEnvio"/>
+            <set field="resourceReference" from="ec.resource.getLocationReference(dteEnvio.documentLocation)"/>
+            <!-- ToDo: send content -->
+            <service-call name="mchile.DTECommServices.load#EnvioDte" in-map="[xml:contentBytes, xmlFilename:dteEnvio.receivedFileName, attemptProductMatch:'true', attemptProductMatch:true]"/>
+            <check-errors/>
+            <set field="processed" from="true"/>
+        </actions>
+    </service>
+    <service verb="process" noun="RespuestaDte">
+        <implements service="mchile.DTECommServices.process#EnvioInterface"/>
+        <actions>
+            <set field="processed" from="false"/>
+        </actions>
+    </service>
+    <service verb="process" noun="EnvioRecibo">
+        <implements service="mchile.DTECommServices.process#EnvioInterface"/>
+        <actions>
+            <set field="processed" from="false"/>
+        </actions>
+    </service>
+    <service verb="process" noun="ResultadoEnvio">
+        <implements service="mchile.DTECommServices.process#EnvioInterface"/>
+        <actions>
+            <set field="processed" from="false"/>
         </actions>
     </service>
 

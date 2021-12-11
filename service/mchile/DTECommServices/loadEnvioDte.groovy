@@ -1,5 +1,3 @@
-import org.moqui.entity.EntityCondition
-
 import javax.xml.xpath.XPath
 import javax.xml.xpath.XPathConstants
 import javax.xml.xpath.XPathExpression
@@ -57,10 +55,6 @@ if (rutReceptorCaratula != receptor.RUTRecep.text())
 receiverPartyId = ec.service.sync().name("mchile.DTECommServices.get#PartyIdByRut").parameters([idValue:rutReceptorCaratula, createUnknown:false, razonSocial:receptor.RznSocRecep.text(), roleTypeId:'Customer',
                                                                                               giro:emisor.GiroRecep.text(), direccion:emisor.DirRecep.text(), comuna:emisor.CmnaRecep.text(), ciudad:emisor.CiudadRecep.text()]).call().partyId
 
-envioDteId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-EnvioDte', rutEmisor:rutEmisorCaratula, rutReceptor:rutReceptorCaratula, fechaEnvio:fechaFirmaEnvio, fechaRegistro:ec.user.nowTimestamp]).call().envioId
-documentLocation ="dbresource://moit/erp/dte/EnvioDTE/${rutEmisorCaratula}/${rutEmisorCaratula}-${envioDteId}.xml"
-ec.resource.getLocationReference(documentLocation).putBytes(xml)
-ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioDteId, documentLocation:documentLocation, receivedFileName:xmlFileName]).call().envioId
 envioRespuestaId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-RespuestaDte', rutEmisor:rutReceptorCaratula, rutReceptor:rutEmisorCaratula, fechaEnvio:ec.user.nowTimestamp]).call().envioId
 
 EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()
@@ -73,9 +67,6 @@ ec.logger.warn("Emisor según carátula: ${rutEmisorCaratula}, issuerTaxName ${i
 /*
 glosaEstadoRecepcionMap = [0:'Envío Recibido Conforme.', 1:'Envío Rechazado – Error de Schema', 2:'Envío Rechazado - Error de Firma', 3:'Envío Rechazado - RUT Receptor No Corresponde',
                            90:'Envío Rechazado - Archivo Repetido', 91:'Envío Rechazado - Archivo Ilegigle', 99:'Envío Rechazado - Otros']
-recepcionEnvioDetalle = [nombreArchivo:xmlFilename, fechaRecepcion:ec.l10n.format(ec.user.nowTimestamp,"yyyy-MM-dd'T'HH:mm:ss"),
-                rutEmisorEnvio:rutReceptorCaratula, rutReceptorEnvio:rutEmisorCaratula, estadoRecepcion:0]
-recepcionEnvioDetalle.glosaEstadoRecepcion = glosaEstadoRecepcionMap[recepcionEnvioDetalle.estadoRecepcion]
  */
 
 XPath xpath = XPathFactory.newInstance().newXPath()
