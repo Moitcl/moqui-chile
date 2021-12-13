@@ -156,7 +156,7 @@ along with this software (see the LICENSE.md file). If not, see
                     internalDateXPath = "./sii:Encabezado/sii:IdDoc/sii:FchEmis/text()"
                      */
                     envioTypeEnumId = 'Ftde-EnvioDte'
-                    processingParameters = [createUnknownIssuer:createUnknownIssuer, requireIssuerInternalOrg:requireIssuerInternalOrg, createUnknownReceiver:createUnknownReceiver, requireReceiverInternalOrg:requireReceiverInternalOrg]
+                    processingParameters = groovy.json.JsonOutput.toJson([createUnknownIssuer:createUnknownIssuer, requireIssuerInternalOrg:requireIssuerInternalOrg, createUnknownReceiver:createUnknownReceiver, requireReceiverInternalOrg:requireReceiverInternalOrg])
                     setDte = envio.SetDTE
                     caratula = setDte.Caratula
                     rutEmisorCaratula = caratula.RutEmisor.text()
@@ -222,21 +222,24 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="process" noun="ReceivedDteEnvio" authenticate="anonymous-all">
+    <service verb="process" noun="PendingEnvio" authenticate="anonymous-all">
         <actions>
-            <set field="maxAttemptCount" from="3"/>
-            <set field="minTimeBeforeRetry" from="120"/>
+            <set field="maxAttemptThreshold" from="3"/>
+            <set field="minutesBeforeRetry" from="120"/>
             <entity-find entity-name="mchile.dte.DteEnvio" list="envioList">
                 <econdition field-name="statusId" value="Ftde-Received"/>
-                <econdition field-name="lastAttempt" operator="less" from="ec.user.nowTimestamp.time-(minTimeBeforeRetry*60*1000)" or-null="true"/>
+                <econdition field-name="lastAttempt" operator="less" from="ec.user.nowTimestamp.time-(minutesBeforeRetry*60*1000)" or-null="true"/>
             </entity-find>
             <iterate list="envioList" entry="envio">
                 <entity-find-one entity-name="moqui.basic.Enumeration" value-field="envEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
                 <service-call name="mchile.DTECommServices.process#${envEv.enumCode}" transaction="force-new" in-map="[envioId:envio.envioId]" out-map="processOut"/>
-                <if condition="procedssOut.processed"><then>
+                <if condition="processOut.processedItems == processOut.totalItems"><then>
                     <service-call name="update#mchile.dte.DteEnvio" transaction="force-new" in-map="[envioId:envio.envioId, statusId:'Ftde-Processed']"/>
                 </then><else-if condition="envio.attemptCount &gt;= maxAttemptCount">
-                    <service-call name="update#mchile.dte.DteEnvio" transaction="force-new" in-map="[envioId:envio.envioId, attemptCount:(envio.attemptCount?:0 + 1), lastAttempt:ec.user.nowTimestamp]"/>
+                    <set field="newAttemptCount" from="(envio.attemptCount?:0) + 1"/>
+                    <set field="newStatusId" from="newAttemptCount >= maxAttemptThreshold ? 'Ftde-ProcessFailed': envio.statusId"/>
+                    <service-call name="update#mchile.dte.DteEnvio" transaction="force-new"
+                                  in-map="[envioId:envio.envioId, attemptCount:newAttemptCount, lastAttempt:ec.user.nowTimestamp, statusId:newStatusId]"/>
                 </else-if></if>
             </iterate>
         </actions>
@@ -247,7 +250,8 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="envioId" required="true"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="processed" type="Boolean"/>
+            <parameter name="totalItems" type="Integer"/>
+            <parameter name="processedItems" type="Integer"/>
         </out-parameters>
     </service>
     <service verb="process" noun="EnvioDte" type="script" location="component://MoquiChile/service/mchile/DTECommServices/processEnvioDte.groovy">

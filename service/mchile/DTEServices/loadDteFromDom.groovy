@@ -21,10 +21,15 @@ errorMessages = []
 discrepancyMessages = []
 warningMessages = []
 
-domNode.setAttribute("xmlns", null)
+if (domNode.getAttributes().getNamedItem("xmlns").getTextContent() == "http://www.sii.cl/SiiDte") {
+    documentPath = "/sii:DTE/sii:Documento"
+} else {
+    domNode.setAttribute("xmlns", null)
+    documentPath = "/DTE/Documento"
+}
 byte[] dteXml = MoquiDTEUtils.getRawXML(domNode)
 Document doc2 = MoquiDTEUtils.parseDocument(dteXml)
-if (!MoquiDTEUtils.verifySignature(doc2, "/DTE/Documento", null)) {
+if (!MoquiDTEUtils.verifySignature(doc2, documentPath, null)) {
     errorMessages.add("Signature mismatch for document ${documento.Documento.'@ID'.text()}")
 }
 

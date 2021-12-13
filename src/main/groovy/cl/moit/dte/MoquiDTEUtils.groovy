@@ -338,9 +338,9 @@ class MoquiDTEUtils {
         int failCount = failedIdList.size()
         int totalCount = verifyCount + failCount
         if (failCount == 0)
-            logger.info("Checked ${verifyCount} signature${verifyCount > 1? 's': ''} successfully, ID${verifyCount > 1? ('s ' + verifiedIdList): verifiedIdList.get(0)}")
+            logger.info("Checked ${verifyCount} signature${verifyCount > 1? 's': ''} successfully, ID${verifyCount > 1? ('s ' + verifiedIdList): ' ' + verifiedIdList.get(0)}")
         else
-            logger.info("Checked ${totalCount} signature${totalCount > 1? 's': ''} , ${verifyCount} successful, ${failCount} failed: ID${failCount > 1? ('s ' + failedIdList): failedIdList.get(0)}")
+            logger.info("Checked ${totalCount} signature${totalCount > 1? 's': ''} , ${verifyCount} successful, ${failCount} failed: ID${failCount > 1? ('s ' + failedIdList): ' ' + failedIdList.get(0)}")
         return (failCount == 0);
     }
 
@@ -506,9 +506,19 @@ class MoquiDTEUtils {
     }
 
     public static org.w3c.dom.Document parseDocument(InputStream inputStream) {
+        return parseDocument(inputStream, false)
+    }
+    public static org.w3c.dom.Document parseDocument(InputStream inputStream, boolean validating) {
+        String JAXP_SCHEMA_LANGUAGE = "http://java.sun.com/xml/jaxp/properties/schemaLanguage"
+        String W3C_XML_SCHEMA = "http://www.w3.org/2001/XMLSchema"
+        String JAXP_SCHEMA_SOURCE = "http://java.sun.com/xml/jaxp/properties/schemaSource"
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(true);
         factory.setIgnoringElementContentWhitespace(false);
+        factory.setValidating(validating)
+        if (validating) {
+            factory.setAttribute(JAXP_SCHEMA_LANGUAGE, W3C_XML_SCHEMA);
+        }
 
         DocumentBuilder builder;
         String errorMessage = ""
