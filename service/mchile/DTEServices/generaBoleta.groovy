@@ -4,7 +4,7 @@ import org.moqui.impl.context.reference.BaseResourceReference
 import java.text.SimpleDateFormat
 import cl.sii.siiDte.FechaHoraType
 import cl.sii.siiDte.FechaType
-import cl.nic.dte.util.Signer
+import cl.moit.dte.MoquiDTEUtils
 import cl.nic.dte.util.BoletaSigner
 import cl.nic.dte.util.Utilities
 import cl.nic.dte.util.XMLUtil
@@ -539,19 +539,19 @@ Document doc2 = XMLUtil.parseDocument(out.toByteArray())
 // Firma de BOLETA
 envioBoletaDocument.envioBOLETA.getSetDTE().getDTEArray(0).getDocumento().xsetTmstFirma(now)
 // Deja segunda firma mal ubicada
-//byte[] salidaBoleta = Signer.sign(doc2, uriBoleta, key, cert, uriBoleta, "Documento")
+//byte[] salidaBoleta = MoquiDTEUtils.sign(doc2, uriBoleta, key, cert, uriBoleta, "Documento")
 // Deja firma de boleta en lugar correcto, con URI correcta
 //byte[] salidaBoleta = Signer.sign2(doc2, uriBoleta, key, cert, uriBoleta, "Documento")
 // Firma con metodo alterno (xpath)
 byte[] salidaBoleta = BoletaSigner.signBoleta(doc2, key, cert)
 //byte[] salidaBoleta = BoletaSigner2.signBoleta(doc2, key, cert, uriBoleta)
 //byte[] salidaBoleta = Signer.signEmbededBoleta(doc2, uriBoleta, key, cert)
-//doc2 = XMLUtil.parseDocument(salidaBoleta)
+//doc2 = MoquiDTEUtils.parseDocument(salidaBoleta)
 // Firma de EnvioBOLETA
-byte[] facturaXml = Signer.sign(doc2, uri, key, cert, uri, "SetDTE")
-doc2 = XMLUtil.parseDocument(facturaXml)
+byte[] facturaXml = MoquiDTEUtils.signSignature(doc2, uri, key, cert, uri, "SetDTE")
+doc2 = MoquiDTEUtils.parseDocument(facturaXml)
 
-if (Signer.verify(doc2, "SetDTE")) {
+if (MoquiDTEUtils.verify(doc2, "//sii:SetDTE")) {
     ec.logger.warn("Factura "+path+" folio "+folio+" generada OK")
 } else {
     ec.logger.warn("Error al generar boleta folio "+folio)

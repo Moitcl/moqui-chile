@@ -4,13 +4,64 @@ import cl.nic.dte.util.Utilities
 import cl.sii.siiDte.DTEDefType.Documento.Detalle
 import cl.sii.siiDte.DTEDefType.Documento.Referencia
 import cl.sii.siiDte.FechaType
+import org.apache.xml.security.exceptions.XMLSecurityException
 import org.moqui.BaseArtifactException
 import org.moqui.context.ExecutionContext
 import org.moqui.entity.EntityValue
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+import org.w3c.dom.Element
+import org.w3c.dom.Document
+import org.w3c.dom.NodeList
+import org.xml.sax.SAXException
+import sun.security.x509.X509CertImpl
 
+import javax.xml.crypto.AlgorithmMethod
+import javax.xml.crypto.KeySelector
+import javax.xml.crypto.KeySelectorException
+import javax.xml.crypto.KeySelectorResult
+import javax.xml.crypto.XMLCryptoContext
+import javax.xml.crypto.XMLStructure
+import javax.xml.crypto.dsig.SignatureMethod
+import javax.xml.crypto.dsig.XMLSignatureFactory
+import javax.xml.crypto.dsig.dom.DOMValidateContext
+import javax.xml.crypto.dsig.keyinfo.KeyInfo
+import javax.xml.crypto.dsig.keyinfo.X509Data
+import javax.xml.namespace.NamespaceContext
+import javax.xml.parsers.DocumentBuilder
+import javax.xml.parsers.DocumentBuilderFactory
+import javax.xml.parsers.ParserConfigurationException
+import javax.xml.transform.OutputKeys
+import javax.xml.transform.Transformer
+import javax.xml.transform.TransformerConfigurationException
+import javax.xml.transform.TransformerException
+import javax.xml.transform.TransformerFactory
+import javax.xml.transform.dom.DOMSource
+import javax.xml.transform.stream.StreamResult
+import javax.xml.xpath.XPath
+import javax.xml.xpath.XPathFactory
+import javax.xml.xpath.XPathExpression
+import javax.xml.xpath.XPathConstants
+import java.security.InvalidKeyException
+import java.security.Key
+import java.security.NoSuchAlgorithmException
+import java.security.PrivateKey
+import java.security.PublicKey
+import java.security.cert.CertificateExpiredException
+import java.security.cert.CertificateNotYetValidException
+import java.security.cert.X509CRL
+import java.security.cert.X509Certificate
+import java.security.interfaces.DSAPrivateKey
+import java.security.interfaces.DSAPublicKey
+import java.security.interfaces.RSAPrivateKey
+import java.security.interfaces.RSAPublicKey
 import java.sql.Timestamp
+import javax.xml.crypto.dsig.XMLSignature
+import java.text.SimpleDateFormat
 
 class MoquiDTEUtils {
+
+    protected final static Logger logger = LoggerFactory.getLogger(MoquiDTEUtils.class)
 
     public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType) throws BaseArtifactException {
         return prepareDetails(ec, detailList, detailType, null)
@@ -207,6 +258,301 @@ class MoquiDTEUtils {
             i = i + 1
         }
         return [referenceArray:ref, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, dteExenta:dteExenta]
+    }
+
+    public static boolean verifySignature(org.w3c.dom.Node doc, String xPathExpression, String dateXPathExpression) throws NoSuchAlgorithmException, InvalidKeyException,
+            IOException, ParserConfigurationException, SAXException, XMLSecurityException {
+        XPath xpath = XPathFactory.newInstance().newXPath()
+        xpath.setNamespaceContext(new DefaultNamespaceContext().addNamespace("sii", "http://www.sii.cl/SiiDte"))
+        XPathExpression expression
+        Date signatureDate = null
+        List<String> verifiedIdList = new LinkedList<String>()
+        List<String> failedIdList = new LinkedList<String>()
+        expression = xpath.compile(xPathExpression)
+        NodeList nodes = (NodeList) expression.evaluate(doc, XPathConstants.NODESET)
+        if (nodes == null || nodes.length < 1)
+            throw new RuntimeException("Could not find any node using XPath expression ${xPathExpression}")
+
+        nodes.each { org.w3c.dom.Node node ->
+            if (dateXPathExpression != null) {
+                expression = xpath.compile(dateXPathExpression)
+                String signatureTimestamp = expression.evaluate(node, XPathConstants.STRING)
+                SimpleDateFormat dateFormat = new SimpleDateFormat(signatureTimestamp.size() == 10 ? "yyyy-MM-dd": "yyyy-MM-dd'T'HH:mm:ss")
+                signatureDate = dateFormat.parse(signatureTimestamp)
+                logger.debug("got signatureTimestamp: ${signatureTimestamp}")
+            }
+            String signedElementId = ((Element)node).getAttribute("ID")
+            ((Element)node).setIdAttributeNS(null, "ID", true)
+            NodeList signatureNodeList = ((Element)node.getParentNode()).getElementsByTagNameNS("http://www.w3.org/2000/09/xmldsig#", "Signature");
+            if (signatureNodeList == null || signatureNodeList.length < 1)
+                throw (new SAXException("No se encuentra firma para verificacion"));
+            org.w3c.dom.Element signatureElem = (org.w3c.dom.Element) signatureNodeList.item(signatureNodeList.length - 1);
+            if (signatureElem == null) {
+                throw (new SAXException("No se encuentra firma para verificacion"));
+            }
+            DOMValidateContext valContext = new DOMValidateContext(new X509KeySelector(), signatureElem)
+
+            // Unmarshal the XMLSignature.
+            XMLSignatureFactory fac = XMLSignatureFactory.getInstance("DOM");
+            XMLSignature signature = fac.unmarshalXMLSignature(valContext);
+
+            X509CertImpl certificate = null;
+            signature.keyInfo.content.each {
+                if (it instanceof X509Data) {
+                    X509Data xd = (X509Data) it;
+                    Object[] entries = xd.getContent().toArray();
+                    X509CRL crl = null;
+                    for (int i = 0; ( i < entries.length); i++) {
+                        if (entries[i] instanceof X509CRL) {
+                            crl = (X509CRL) entries[i];
+                        }
+                        if (entries[i] instanceof X509CertImpl) {
+                            certificate = (X509CertImpl) entries[i];
+                            try {
+                                certificate.checkValidity(signatureDate ?: new Date());
+                            } catch (CertificateExpiredException expiredEx) {
+                                logger.error("CERTIFICATE EXPIRED!");
+                                return false;
+                            } catch (CertificateNotYetValidException notYetValidEx) {
+                                logger.error("CERTIFICATE NOT VALID YET!");
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (certificate == null) {
+                logger.error("No Certificate found")
+                failedIdList.add(signedElementId)
+                return
+            }
+
+            // Validate the XMLSignature.
+            if (!signature.validate(valContext)) {
+                failedIdList.add(signedElementId)
+                return
+            }
+
+            verifiedIdList.add(signedElementId)
+        }
+        int verifyCount = verifiedIdList.size()
+        int failCount = failedIdList.size()
+        int totalCount = verifyCount + failCount
+        if (failCount == 0)
+            logger.info("Checked ${verifyCount} signature${verifyCount > 1? 's': ''} successfully, ID${verifyCount > 1? ('s ' + verifiedIdList): ' ' + verifiedIdList.get(0)}")
+        else
+            logger.info("Checked ${totalCount} signature${totalCount > 1? 's': ''} , ${verifyCount} successful, ${failCount} failed: ID${failCount > 1? ('s ' + failedIdList): ' ' + failedIdList.get(0)}")
+        return (failCount == 0);
+    }
+
+    public static class DefaultNamespaceContext implements NamespaceContext {
+        private HashMap<String,String> keyMap = new HashMap<String,String>()
+
+        public DefaultNamespaceContext addNamespace(String prefix, String uri) {
+            keyMap.put(prefix, uri)
+            return this
+        }
+
+        @Override
+        String getNamespaceURI(String prefix) {
+            return keyMap.get(prefix)
+        }
+
+        @Override
+        String getPrefix(String namespaceURI) {
+            keyMap.keySet().each { key, value ->
+                if (value == namespaceURI)
+                    return key
+            }
+            return null
+        }
+
+        @Override
+        Iterator<String> getPrefixes(String namespaceURI) {
+            LinkedList<String> prefixList = new LinkedList<String>()
+            keyMap.keySet().each { key, value ->
+                if (value == namespaceURI)
+                    prefixList.add(key)
+            }
+            return prefixList
+        }
+    }
+
+    public static class X509KeySelector extends KeySelector {
+        public KeySelectorResult select(KeyInfo keyInfo,
+                                        KeySelector.Purpose purpose,
+                                        AlgorithmMethod method,
+                                        XMLCryptoContext context)
+                throws KeySelectorException {
+            Iterator ki = keyInfo.getContent().iterator();
+            while (ki.hasNext()) {
+                XMLStructure info = (XMLStructure) ki.next();
+                if (!(info instanceof X509Data))
+                    continue;
+                X509Data x509Data = (X509Data) info;
+                Iterator xi = x509Data.getContent().iterator();
+                while (xi.hasNext()) {
+                    Object o = xi.next();
+                    if (!(o instanceof X509Certificate))
+                        continue;
+                    final PublicKey key = ((X509Certificate)o).getPublicKey();
+                    // Make sure the algorithm is compatible
+                    // with the method.
+                    if (algEquals(method.getAlgorithm(), key.getAlgorithm())) {
+                        return new KeySelectorResult() {
+                            public Key getKey() { return key; }
+                        };
+                    }
+                }
+            }
+            throw new KeySelectorException("No key found!");
+        }
+
+        static boolean algEquals(String algURI, String algName) {
+            if ((algName.equalsIgnoreCase("DSA") &&
+                    algURI.equalsIgnoreCase(SignatureMethod.DSA_SHA1)) ||
+                    (algName.equalsIgnoreCase("RSA") &&
+                            algURI.equalsIgnoreCase(SignatureMethod.RSA_SHA1))) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
+
+    public static byte[] sign(Document doc, String baseUri, PrivateKey pKey, X509Certificate cert, String uri, String tagName) {
+        try {
+            NodeList nodes = doc.getElementsByTagName(tagName);
+            ((Element) nodes.item(0)).setIdAttributeNS(null, "ID", true);
+
+            javax.xml.parsers.DocumentBuilderFactory dbf = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            dbf.setNamespaceAware(true);
+
+            String alg = pKey.getAlgorithm();
+            if (!alg.equals(cert.getPublicKey().getAlgorithm()))
+                throw (new Exception("ERROR DE ALGORITMO"));
+            org.w3c.dom.Element root = doc.getDocumentElement();
+            org.apache.xml.security.signature.XMLSignature sig = null;
+            if (alg.equals("RSA")) {
+                if (!((RSAPrivateKey) pKey).getModulus().equals(((RSAPublicKey) cert.getPublicKey()).getModulus()))
+                    throw (new Exception("ERROR DE FIRMA RSA"));
+                sig = new org.apache.xml.security.signature.XMLSignature(doc, baseUri, org.apache.xml.security.signature.XMLSignature.ALGO_ID_SIGNATURE_RSA_SHA1);
+            } else if (alg.equals("DSA")) {
+                if (!(((DSAPrivateKey) pKey).getParams().getG()
+                        .equals(((DSAPublicKey) cert.getPublicKey()).getParams().getG())
+                        && ((DSAPrivateKey) pKey).getParams().getP()
+                        .equals(((DSAPublicKey) cert.getPublicKey()).getParams().getP())
+                        && ((DSAPrivateKey) pKey).getParams().getQ()
+                        .equals(((DSAPublicKey) cert.getPublicKey()).getParams().getQ())))
+                    throw (new Exception("ERROR DE FIRMA DSA"));
+                sig = new org.apache.xml.security.signature.XMLSignature(doc, baseUri, org.apache.xml.security.signature.XMLSignature.ALGO_ID_SIGNATURE_DSA);
+            }
+
+            root.appendChild(sig.getElement());
+            sig.addDocument(baseUri);
+            org.apache.xml.security.keys.content.X509Data xdata = new org.apache.xml.security.keys.content.X509Data(doc);
+            xdata.addCertificate(cert);
+            sig.getKeyInfo().addKeyValue(cert.getPublicKey());
+            sig.getKeyInfo().add(xdata);
+            sig.sign(pKey);
+            return getRawXML(doc);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public static byte[] getRawXML(org.w3c.dom.Node doc) {
+        return getRawXML(doc, "ISO-8859-1")
+    }
+    public static String getStringXML(org.w3c.dom.Node doc) {
+        TransformerFactory transformerFactory = TransformerFactory.newInstance();
+        Transformer transformer;
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            baos.write("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n".getBytes("UTF-8"));
+            transformer = transformerFactory.newTransformer();
+            transformer.setOutputProperty(OutputKeys.INDENT, "no");
+            transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+            transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
+            transformer.setOutputProperty(OutputKeys.METHOD, "xml");
+            transformer.transform(new DOMSource(doc), new StreamResult(baos));
+
+            return new String(baos.toByteArray(), "UTF-8");
+        } catch (TransformerConfigurationException e) {
+            e.printStackTrace();
+        } catch (TransformerException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null
+    }
+    public static byte[] getRawXML(org.w3c.dom.Node doc, String encoding) {
+        try {
+            String outAux = getStringXML(doc)
+            return outAux?.getBytes(encoding)
+        } catch (TransformerConfigurationException e) {
+            e.printStackTrace();
+        } catch (TransformerException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null
+    }
+
+    public static org.w3c.dom.Document parseDocument(byte[] entrada) {
+        return parseDocument(new ByteArrayInputStream(entrada));
+    }
+
+    public static org.w3c.dom.Document parseDocument(InputStream inputStream) {
+        return parseDocument(inputStream, false)
+    }
+    public static org.w3c.dom.Document parseDocument(InputStream inputStream, boolean validating) {
+        String JAXP_SCHEMA_LANGUAGE = "http://java.sun.com/xml/jaxp/properties/schemaLanguage"
+        String W3C_XML_SCHEMA = "http://www.w3.org/2001/XMLSchema"
+        String JAXP_SCHEMA_SOURCE = "http://java.sun.com/xml/jaxp/properties/schemaSource"
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+        factory.setIgnoringElementContentWhitespace(false);
+        factory.setValidating(validating)
+        if (validating) {
+            factory.setAttribute(JAXP_SCHEMA_LANGUAGE, W3C_XML_SCHEMA);
+        }
+
+        DocumentBuilder builder;
+        String errorMessage = ""
+        try {
+            builder = factory.newDocumentBuilder();
+            Document doc = builder.parse(inputStream);
+            return doc;
+        } catch (ParserConfigurationException e) {
+            e.printStackTrace();
+            errorMessage = e.toString()
+        } catch (SAXException e) {
+            e.printStackTrace();
+            errorMessage = e.toString()
+        } catch (IOException e) {
+            e.printStackTrace();
+            errorMessage = e.toString()
+        }
+        throw new RuntimeException("Error al parsear: ${errorMessage}");
+    }
+
+    public static groovy.util.Node dom2GroovyNode(org.w3c.dom.Node node) {
+        String xml = getStringXML(node)
+        return dom2GroovyNode(xml)
+    }
+    public static groovy.util.Node dom2GroovyNode(String xml) {
+        boolean validating = false
+        boolean namespaceAware = false
+        return new groovy.util.XmlParser(validating, namespaceAware).parseText(xml)
+    }
+
+    static {
+        org.apache.xml.security.Init.init();
     }
 
 }

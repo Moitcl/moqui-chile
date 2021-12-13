@@ -5,9 +5,7 @@ import java.text.SimpleDateFormat
 import org.apache.xmlbeans.XmlOptions
 import org.w3c.dom.Document
 
-import cl.nic.dte.util.Signer
 import cl.nic.dte.util.Utilities
-import cl.nic.dte.util.XMLUtil
 import cl.sii.siiDte.AUTORIZACIONDocument
 import cl.sii.siiDte.AutorizacionType
 import cl.sii.siiDte.DTEDefType.Documento.Detalle
@@ -20,6 +18,7 @@ import cl.sii.siiDte.DTEDocument
 import cl.sii.siiDte.FechaHoraType
 import cl.sii.siiDte.FechaType
 import cl.sii.siiDte.MedioPagoType
+import cl.moit.dte.MoquiDTEUtils
 
 import org.moqui.entity.EntityValue
 import org.moqui.context.ExecutionContext
@@ -51,8 +50,6 @@ giro = giroOutMap.description
 // Recuperación del código SII de DTE -->
 codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameter("fiscalTaxDocumentTypeEnumId", fiscalTaxDocumentTypeEnumId).call()
 tipoFactura = codeOut.siiCode
-
-fechaEmision = null
 
 // Formas de pago
 if (settlementTermId.equals('Immediate'))
@@ -133,8 +130,7 @@ if (fechaVencimiento)
     iddoc.xsetFchVenc(FechaType.Factory.newValue(ec.l10n.format(fechaVencimiento, "yyyy-MM-dd")))
 
 SimpleDateFormat formatterFechaEmision = new SimpleDateFormat("yyyy-MM-dd")
-Date dateFechaEmision = new Date()
-fechaEmision = formatterFechaEmision.format(dateFechaEmision)
+fechaEmisionString = formatterFechaEmision.format(fechaEmision)
 // Indicador Servicio
 // 3 para Factura de Servicios
 // Para Facturas de Exportación:
@@ -410,15 +406,15 @@ uri = "#" + uri
 
 ByteArrayOutputStream out = new ByteArrayOutputStream()
 doc.save(out, opts)
-Document doc2 = XMLUtil.parseDocument(out.toByteArray())
-byte[] facturaXml = Signer.sign(doc2, uri, pkey, certificate, uri, "Documento")
-doc2 = XMLUtil.parseDocument(facturaXml)
+Document doc2 = MoquiDTEUtils.parseDocument(out.toByteArray())
+byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
 
-if (Signer.verify(doc2, "Documento")) {
+doc2 = MoquiDTEUtils.parseDocument(facturaXml)
+
+if (MoquiDTEUtils.verifySignature(doc2, "/DTE/Documento", "/DTE/Documento/Encabezado/IdDoc/FchEmis/text()")) {
     ec.logger.warn("DTE folio ${folio} generada OK")
-} else {
+} else
     ec.message.addError("Error al generar DTE folio ${folio}")
-}
 
 // Registry de DTE en base de datos y generación de PDF -->
 fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoFactura}"
@@ -458,7 +454,7 @@ if ((fiscalTaxDocumentTypeEnumId as String) in dteConstituyeVentaTypeList) {
 }
 
 // Creación de registro en FiscalTaxDocumentAttributes
-createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:amount, fechaEmision:fechaEmision, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmision,
+createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:amount, fechaEmision:fechaEmisionString, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:montoNeto, tasaImpuesto:19, fechaEmision:fechaEmisionString,
              montoExento:montoExento, montoIVARecuperable:montoIVARecuperable]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call())
 fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId
