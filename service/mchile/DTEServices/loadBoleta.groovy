@@ -199,7 +199,7 @@ for (int i = 0; i < boletaArray.size(); i++) {
     // Se guarda DTE recibido en la base de datos -->
     createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rutEmisor, fiscalTaxDocumentTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte,
                 receiverPartyId:organizationPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', receiverPartyIdValue:rutReceptor, date:ts, invoiceId:invoiceId, statusId:'Ftd-Issued',
-                sentAuthStatusId:'Ftd-SentAuth', sentRecStatusId:'Ftd-SentRec']
+                sentAuthStatusId:'Ftd-SentAuthAccepted', sentRecStatusId:'Ftd-SentRec']
     mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call()
     // Se guarda contenido asociado a la DTE, todas las DTE que vienen en el mismo envío comparten el mismo XML
     createMap = [fiscalTaxDocumentId:mapOut.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:ts]

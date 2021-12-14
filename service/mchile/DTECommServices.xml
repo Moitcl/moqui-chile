@@ -23,7 +23,7 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList">
                 <econdition field-name="issuerPartyId" operator="in" from="internalPartyIdList"/>
                 <econdition field-name="statusId" value="Ftd-Issued"/>
-                <econdition field-name="sentAuthStatusId" value="Ftd-SentAuth"/>
+                <econdition field-name="sentAuthStatusId" value="Ftd-SentAuthAccepted"/>
                 <econdition field-name="sentRecStatusId" value="Ftd-NotSentRec"/>
             </entity-find>
             <iterate list="ftdList" entry="dte">
@@ -143,8 +143,7 @@ along with this software (see the LICENSE.md file). If not, see
                     return
                 }
                 firstTag = doc.getDocumentElement().getNodeName()
-                ec.logger.warn("firstTag: ${firstTag}")
-                groovy.util.Node envio = MoquiDTEUtils.dom2GroovyNode(new String(contentBytes, "ISO-8859-1"))
+                groovy.util.Node envio = MoquiDTEUtils.dom2GroovyNode(doc)
                 generalSignedXPath = null
                 internalSignedXPath = null
                 generalDateXPath = null
@@ -223,12 +222,16 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="process" noun="PendingEnvio" authenticate="anonymous-all">
+        <in-parameters>
+            <parameter name="envioId"/>
+        </in-parameters>
         <actions>
             <set field="maxAttemptThreshold" from="3"/>
             <set field="minutesBeforeRetry" from="120"/>
             <entity-find entity-name="mchile.dte.DteEnvio" list="envioList">
                 <econdition field-name="statusId" value="Ftde-Received"/>
                 <econdition field-name="lastAttempt" operator="less" from="ec.user.nowTimestamp.time-(minutesBeforeRetry*60*1000)" or-null="true"/>
+                <econdition field-name="envioId" ignore-if-empty="true"/>
             </entity-find>
             <iterate list="envioList" entry="envio">
                 <entity-find-one entity-name="moqui.basic.Enumeration" value-field="envEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
@@ -475,7 +478,7 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="errCode == '0'">
                 <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" for-update="true"/>
                 <if condition="dte.sentAuthStatusId == 'Ftd-SentAuthUnverified'">
-                    <set field="dte.sentAuthStatusId" value="Ftd-SentAuth"/>
+                    <set field="dte.sentAuthStatusId" value="Ftd-SentAuthAccepted"/>
                     <entity-update value-field="dte"/>
                 </if>
             </if>
@@ -803,7 +806,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="No existe DTE especificada"/>
             </if>
 
-            <set field="dteEv.sentAuthStatusId" value="Ftd-SentAuth"/>
+            <set field="dteEv.sentAuthStatusId" value="Ftd-SentAuthAccepted"/>
             <entity-update value-field="dteEv"/>
         </actions>
     </service>
