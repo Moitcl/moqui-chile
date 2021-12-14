@@ -281,9 +281,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="envioRr" from="ec.resource.getLocationReference(envio.documentLocation)"/>
             <set field="respuesta" from=" new groovy.util.XmlParser(false, false).parse(envioRr.openStream())"/>
             <set field="caratula" from="respuesta.Resultado.Caratula"/>
-            <set field="recepcionEnvio" from="respuesta.Resultado.RecepcionEnvio"/>
-            <set field="resultadoDte" from="respuesta.ResultadoDTE"/>
-            <if condition="recepcionEnvio.size() > 0 &amp;&amp; resultadoDte.size() > 0">
+            <set field="recepcionEnvioList" from="respuesta.Resultado.RecepcionEnvio"/>
+            <set field="resultadoDteList" from="respuesta.Resultado.ResultadoDTE"/>
+            <if condition="recepcionEnvioList.size() > 0 &amp;&amp; resultadoDteList.size() > 0">
                 <log level="error" message="Error: RespuestaDte incluye tanto RecepcionEnvio como ResultadoDTE, ignorando."/>
                 <return/>
             </if>
@@ -292,99 +292,162 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="idRespuesta" from="caratula.IdRespuesta.text()"/>
             <set field="nroDetalles" from="caratula.NroDetalles.text()" type="Integer"/>
             <set field="tmstFirmaResp" from="ec.l10n.parseTimestamp(caratula.TmstFirmaResp.text(), &quot;yyyy-MM-dd'T'HH:mm:ss&quot;)" type="Timestamp"/>
-            <set field="nmbEnvio" from="recepcionEnvio.NmbEnvio.text()"/>
-            <set field="fchRecep" from="ec.l10n.parseTimestamp(recepcionEnvio.FchRecep.text(), &quot;yyyy-MM-dd'T'HH:mm:ss&quot;)" type="Timestamp"/>
-            <set field="codEnvio" from="recepcionEnvio.CodEnvio.text()"/>
-            <set field="envioDteId" from="recepcionEnvio.EnvioDTEID.text()"/>
-            <set field="digest" from="recepcionEnvio.Digest.text()"/>
-            <set field="rutEmisorEnvio" from="recepcionEnvio.RutEmisor.text()"/>
-            <set field="rutReceptorEnvio" from="recepcionEnvio.RutReceptor.text()"/>
-            <set field="estadoRecepEnvio" from="recepcionEnvio.EstadoRecepDTE.text()"/>
-            <set field="recepEnvioGlosa" from="recepcionEnvio.RecepDTEGlosa.text()"/>
-            <set field="nroDte" from="recepcionEnvio.NroDTE.text()" type="Integer"/>
-            <set field="dteList" from="recepcionEnvio.RecepcionDTE"/>
-            <entity-find entity-name="mchile.dte.DteEnvio" list="envioDteList">
-                <econdition field-name="rutEmisor" from="rutReceptorEnvio"/>
-                <econdition field-name="rutReceptor" from="rutEmisorEnvio"/>
-                <econdition field-name="fileName" from="nmbEnvio"/>
-                <econdition field-name="envioTypeEnumId" value="Ftde-EnvioDte"/>
-                <econdition field-name="internalId" from="envioDteId"/>
-            </entity-find>
-            <if condition="envioDteList.size() == 0">
-                <log level="error" message="No se encuentra envío al cual hace referencia RespuestaDte ${envioId}"/>
-                <return/>
-            </if>
-            <set field="envioDteEnvioId" from="envioDteList.first.envioId"/>
-            <entity-find entity-name="mchile.dte.DteEnvioFiscalTaxDocument" list="envioFtdList">
-                <econdition field-name="envioId" from="envioDteEnvioId"/>
-            </entity-find>
-            <if condition="estadoRecepEnvio != '0'">
-                <log level="error" message="Envío rechazado (no se procesa), con código ${estadoRecepEnvio}, status ${recepEnvioGlosa}"/>
-                <return/>
-            </if>
-            <set field="processedItems" from="0" type="Integer"/>
-            <iterate list="dteList" entry="dte">
-                <set field="tipoDte" from="dte.TipoDTE.text()"/>
-                <set field="folio" from="dte.Folio.text()" type="Integer"/>
-                <set field="fchEmis" from="l10n.parseDate(dte.FchEmis.text(), 'yyyy-MM-dd')" type="Date"/>
-                <set field="rutEmisor" from="dte.RutEmisor.text()"/>
-                <set field="rutReceptor" from="dte.RutReceptor.text()"/>
-                <set field="mntTotal" from="dte.MntTotal.text()" type="BigDecimal"/>
-                <set field="estadoRecepDte" from="recepcionEnvio.EstadoRecepDTE.text()"/>
-                <set field="recepDteGlosa" from="recepcionEnvio.RecepDTEGlosa.text()"/>
-                <set field="process" from="true" type="Boolean"/>
-                <if condition="rutEmisorEnvio != rutEmisor || rutEmisorEnvio == null || rutEmisorEnvio == ''">
-                    <log level="warn" message="Rut mismatch en envío ${envioId} rut emisor indicado en inicio: ${rutEmisorEnvio}, en documento tipo ${tipoDte} folio ${folio} es ${rutEmisor}"/>
-                    <set field="process" from="false" type="Boolean"/>
-                </if>
-                <if condition="rutReceptorEnvio != rutReceptor || rutReceptorEnvio == null || rutReceptorEnvio == ''">
-                    <log level="warn" message="Rut mismatch en envío ${envioId} rut receptor indicado en inicio: ${rutReceptorEnvio}, en documento tipo ${tipoDte} folio ${folio} es ${rutReceptor}"/>
-                    <set field="process" from="false" type="Boolean"/>
-                </if>
-                <if condition="process">
-                    <service-call name="mchile.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="context"/>
-                    <entity-find entity-name="mchile.dte.InvoiceAndFiscalTaxDocument" list="dbDteList" for-update="true">
-                        <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
-                        <econdition field-name="fiscalTaxDocumentNumber" from="folio"/>
-                        <econdition field-name="date" from="fchEmis"/>
-                        <econdition field-name="issuerPartyIdValue" from="rutEmisor"/>
-                        <econdition field-name="receiverPartyIdValue" from="rutReceptor"/>
-                        <econdition field-name="invoiceTotal" from="mntTotal"/>
+
+            <if condition="recepcionEnvioList">
+                <iterate list="recepcionEnvioList" entry="recepcionEnvio">
+                    <set field="nmbEnvio" from="recepcionEnvio.NmbEnvio.text()"/>
+                    <set field="fchRecep" from="ec.l10n.parseTimestamp(recepcionEnvio.FchRecep.text(), &quot;yyyy-MM-dd'T'HH:mm:ss&quot;)" type="Timestamp"/>
+                    <set field="codEnvio" from="recepcionEnvio.CodEnvio.text()"/>
+                    <set field="envioDteId" from="recepcionEnvio.EnvioDTEID.text()"/>
+                    <set field="digest" from="recepcionEnvio.Digest.text()"/>
+                    <set field="rutEmisorEnvio" from="recepcionEnvio.RutEmisor.text()"/>
+                    <set field="rutReceptorEnvio" from="recepcionEnvio.RutReceptor.text()"/>
+                    <set field="estadoRecepEnvio" from="recepcionEnvio.EstadoRecepEnv.text()"/>
+                    <set field="recepEnvioGlosa" from="recepcionEnvio.RecepEnvGlosa.text()"/>
+                    <set field="nroDte" from="recepcionEnvio.NroDTE.text()" type="Integer"/>
+                    <set field="dteList" from="recepcionEnvio.RecepcionDTE"/>
+                    <entity-find entity-name="mchile.dte.DteEnvio" list="envioDteList">
+                        <econdition field-name="rutEmisor" from="rutEmisorEnvio"/>
+                        <econdition field-name="rutReceptor" from="rutReceptorEnvio"/>
+                        <econdition field-name="envioTypeEnumId" value="Ftde-EnvioDte"/>
+                        <econdition field-name="internalId" from="envioDteId"/>
                     </entity-find>
-                    <if condition="dbDteList"><then>
-                        <set field="dbDte" from="dbDteList.first"/>
-                        <if condition="dbDte.fiscalTaxDocumentId in envioFtdList.fiscalTaxDocumentId"><then>
-                            <if condition="dbDte.sentRecStatusId == 'Ftd-SentRec' &amp;&amp; estadoRecepDte == '0'">
+                    <if condition="envioDteList.size() > 1">
+                        <entity-find entity-name="mchile.dte.DteEnvio" list="envioDteList">
+                            <econdition field-name="rutEmisor" from="rutReceptorEnvio"/>
+                            <econdition field-name="rutReceptor" from="rutEmisorEnvio"/>
+                            <econdition field-name="fileName" from="nmbEnvio"/>
+                            <econdition field-name="envioTypeEnumId" value="Ftde-EnvioDte"/>
+                            <econdition field-name="internalId" from="envioDteId" ignore-if-empty="true"/>
+                        </entity-find>
+                    </if>
+                    <if condition="envioDteList.size() == 0">
+                        <log level="error" message="No se encuentra envío al cual hace referencia RespuestaDte ${envioId}: ${envioDteId}"/>
+                    </if>
+                    <set field="envioDteEnvioId" from="envioDteList.first.envioId"/>
+                    <entity-find entity-name="mchile.dte.DteEnvioFiscalTaxDocument" list="envioFtdList">
+                        <econdition field-name="envioId" from="envioDteEnvioId"/>
+                    </entity-find>
+                    <set field="validFiscalTaxDocumentIdList" from="envioFtdList.fiscalTaxDocumentId"/>
+                    <if condition="estadoRecepEnvio != '0'">
+                        <log level="error" message="Envío rechazado (no se procesa), con código ${estadoRecepEnvio}, status ${recepEnvioGlosa}"/>
+                        <return/>
+                    </if>
+                    <set field="processedItems" from="0" type="Integer"/>
+                    <iterate list="dteList" entry="dte">
+                        <set field="tipoDte" from="dte.TipoDTE.text()"/>
+                        <set field="folio" from="dte.Folio.text()" type="Integer"/>
+                        <set field="fchEmis" from="ec.l10n.parseDate(dte.FchEmis.text(), 'yyyy-MM-dd')" type="Date"/>
+                        <set field="rutEmisor" from="dte.RUTEmisor.text()"/>
+                        <set field="rutReceptor" from="dte.RUTRecep.text()"/>
+                        <set field="mntTotal" from="dte.MntTotal.text()" type="BigDecimal"/>
+                        <set field="estadoDte" from="dte.EstadoRecepDTE.text()"/>
+                        <set field="estadoDteGlosa" from="dte.RecepDTEGlosa.text()"/>
+                        <service-call name="mchile.DTECommServices.process#DteInRespuestaDte" in-map="context" out-map="processDte"/>
+                        <if condition="processDte.processed">
+                            <set field="processedItems" from="processedItems+1"/>
+                        </if>
+                    </iterate>
+                    <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dbDteList" for-update="true">
+                        <econdition field-name="fiscalTaxDocumentId" operator="in" from="envioFtdList.fiscalTaxDocumentId"/>
+                        <econdition field-name="sentRecStatusId" value="Ftd-SentRec"/>
+                    </entity-find>
+                    <if condition="dbDteList">
+                        <if condition="dbDteList.size() == nroDte - processedItems"><then>
+                            <iterate list="dbDteList" entry="dbDte">
                                 <set field="dbDte.sentRecStatusId" value="Ftd-ReceiverAck"/>
                                 <entity-update value-field="dbDte"/>
-                            </if>
-                            <service-call name="store#mchile.dte.DteEnvioFiscalTaxDocument" in-map="[envioId:envioId, fiscalTaxDocumentId:dbDte.fiscalTaxDocumentId]"/>
-                            <set field="processedItems" from="processedItems+1"/>
+                            </iterate>
                         </then><else>
-                            <log level="error" message="DTE ${fiscalTaxDocumentId} was not sent in envioDte ${envioDteEnvioId} which is responded by RespuestaDte ${envioId}, ignoring"/>
+                            <return error="true" message="Number of documents (${nroDte}) minus processed documents (${processedItems}) does not match found DTEs in DB associated to envioDte (${dbDteList.size()}), so not processing"/>
                         </else></if>
+                    </if>
+                    <set field="totalItems" from="nroDte"/>
+                </iterate>
+                <set field="processed" from="processedItems == totalItems"/>
+            </if>
+
+            <if condition="resultadoDteList">
+                <set field="processed" from="true"/>
+                <iterate list="resultadoDteList" entry="resultadoDte">
+                    <set field="tipoDte" from="resultadoDte.TipoDTE.text()"/>
+                    <set field="folio" from="resultadoDte.Folio.text()" type="Integer"/>
+                    <set field="fchEmis" from="ec.l10n.parseDate(resultadoDte.FchEmis.text(), 'yyyy-MM-dd')" type="Date"/>
+                    <set field="rutEmisor" from="resultadoDte.RUTEmisor.text()"/>
+                    <set field="rutReceptor" from="resultadoDte.RUTRecep.text()"/>
+                    <set field="mntTotal" from="resultadoDte.MntTotal.text()" type="BigDecimal"/>
+                    <set field="estadoDte" from="resultadoDte.EstadoDTE.text()"/>
+                    <set field="estadoDteGlosa" from="resultadoDte.EstadoDTEGlosa.text()"/>
+                    <service-call name="mchile.DTECommServices.process#DteInRespuestaDte" in-map="context" out-map="processDte"/>
+                    <if condition="!processDte.processed">
+                        <set field="processed" from="false"/>
+                    </if>
+                </iterate>
+            </if>
+
+        </actions>
+    </service>
+    <service verb="process" noun="DteInRespuestaDte">
+        <in-parameters>
+            <parameter name="tipoDte" required="true"/>
+            <parameter name="folio" type="Integer"/>
+            <parameter name="fchEmis" type="Date"/>
+            <parameter name="rutEmisor"/>
+            <parameter name="rutReceptor"/>
+            <parameter name="mntTotal" type="BigDecimal"/>
+            <parameter name="estadoDte"/>
+            <parameter name="rutEmisorEnvio"/>
+            <parameter name="rutReceptorEnvio"/>
+            <parameter name="envioDteEnvioId"/>
+            <parameter name="envioId"/>
+            <parameter name="validFiscalTaxDocumentIdList" type="List"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="processed" type="Boolean"/>
+        </out-parameters>
+        <actions>
+            <set field="process" from="true" type="Boolean"/>
+            <set field="processed" from="false" type="Boolean"/>
+            <if condition="rutEmisorEnvio != null &amp;&amp; rutEmisorEnvio != rutEmisor">
+                <log level="warn" message="Rut mismatch en envío ${envioId} rut emisor indicado en inicio: ${rutEmisorEnvio}, en documento tipo ${tipoDte} folio ${folio} es ${rutEmisor}"/>
+                <set field="process" from="false" type="Boolean"/>
+            </if>
+            <if condition="rutReceptorEnvio != null &amp;&amp; rutReceptorEnvio != rutReceptor">
+                <log level="warn" message="Rut mismatch en envío ${envioId} rut receptor indicado en inicio: ${rutReceptorEnvio}, en documento tipo ${tipoDte} folio ${folio} es ${rutReceptor}"/>
+                <set field="process" from="false" type="Boolean"/>
+            </if>
+            <if condition="process">
+                <service-call name="mchile.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="context"/>
+                <log message="looking for DTE: ${fiscalTaxDocumentTypeEnumId}/${folio} date=${fchEmis}, issuerPartyIdValue=${rutEmisor}, receiverPartyIdValue=${rutReceptor}, invoiceTotal=${mntTotal}"/>
+                <entity-find entity-name="mchile.dte.InvoiceAndFiscalTaxDocument" list="dbDteList" for-update="true">
+                    <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
+                    <econdition field-name="fiscalTaxDocumentNumber" from="folio"/>
+                    <econdition field-name="date" operator="greater-equals" from="fchEmis"/>
+                    <econdition field-name="date" operator="less-equals" from="fchEmis+1"/>
+                    <econdition field-name="issuerPartyIdValue" from="rutEmisor"/>
+                    <econdition field-name="receiverPartyIdValue" from="rutReceptor"/>
+                    <econdition field-name="invoiceTotal" from="mntTotal"/>
+                </entity-find>
+                <log message="Found DTE: ${dbDteList.first}"/>
+                <if condition="dbDteList"><then>
+                    <set field="dbDte" from="dbDteList.first"/>
+                    <!--
+                    <if condition="validFiscalTaxDocumentIdList == null || dbDte.fiscalTaxDocumentId in validFiscalTaxDocumentIdList"><then>
+                    -->
+                        <if condition="dbDte.sentRecStatusId == 'Ftd-SentRec' &amp;&amp; estadoDte == '0'">
+                            <service-call name="update#mchile.dte.FiscalTaxDocument" in-map="[fiscalTaxDocumentId:dbDte.fiscalTaxDocumentId, sentRecStatusId:'Ftd-ReceiverAck']"/>
+                        </if>
+                        <service-call name="store#mchile.dte.DteEnvioFiscalTaxDocument" in-map="[envioId:envioId, fiscalTaxDocumentId:dbDte.fiscalTaxDocumentId]"/>
+                        <set field="processed" from="true"/>
+                    <!--
                     </then><else>
-                        <log level="warn" message="No se encuentra DTE para envío ${envioId}, documento tipo ${tipoDte} folio ${folio} emitido por ${rutEmisor}"/>
+                        <log level="error" message="DTE ${dbDte.fiscalTaxDocumentId} was not sent in envioDte ${envioDteEnvioId} which is responded by RespuestaDte ${envioId}, ignoring"/>
                     </else></if>
-                </if>
-            </iterate>
-            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dbDteList" for-update="true">
-                <econdition field-name="fiscalTaxDocumentId" operator="in" from="envioFtdList.fiscalTaxDocumentId"/>
-                <econdition field-name="sentRecStatusId" value="Ftd-SentRec"/>
-            </entity-find>
-            <if condition="dbDteList">
-                <if condition="dbDteList.size() == nroDte - processedItems"><then>
-                    <iterate list="dbDteList" entry="dbDte">
-                        <set field="dbDte.sentRecStatusId" value="Ftd-ReceiverAck"/>
-                        <entity-update value-field="dbDte"/>
-                    </iterate>
+                    -->
                 </then><else>
-                    <log level="error" message="Number of documents (${nroDte}) minus processed documents (${processedItems}) does not match found DTEs in DB associated to envioDte (${dbDteList.size()}), so not processing"/>
-                    <return/>
+                    <log level="warn" message="No se encuentra DTE para envío ${envioId}, documento tipo ${tipoDte} folio ${folio} emitido por ${rutEmisor}"/>
                 </else></if>
             </if>
-            <set field="totalItems" from="nroDte"/>
-            <set field="processed" from="true"/>
         </actions>
     </service>
     <service verb="process" noun="EnvioRecibo">
@@ -433,14 +496,16 @@ along with this software (see the LICENSE.md file). If not, see
                 </iterate>
                 <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" for-update="true">
                     <econdition field-name="trackId"/>
-                    <econdition field-name="sentAuthStatusId" value="Ftd-SentAuthUnverified"/>
+                    <econdition field-name="sentAuthStatusId" operator="in" value="Ftd-SentAuthUnverified,Ftd-SentAuthAccepted"/>
                 </entity-find>
-                <iterate list="dteList" entry="dte">
-                    <service-call name="mchile.DTECommServices.verificaEnSii#Documento" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId,
-                        fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId, organizationPartyId:ftd.issuerPartyId]" out-map="verificaRes"/>
-                    <if condition="verificaRes.errCode == '0'">
+                <iterate list="ftdList" entry="dte">
+                    <if condition="dte.sentAuthStatusId == 'Ftd-SentAuthUnverified'"><then>
+                        <service-call name="mchile.DTECommServices.verificaEnSii#Documento" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId,
+                                                                                                     organizationPartyId:ftd.issuerPartyId]" out-map="verificaRes"/>
+                        <if condition="verificaRes.errCode == '0'"><set field="processedItems" from="processedItems+1"/></if>
+                    </then><else>
                         <set field="processedItems" from="processedItems+1"/>
-                    </if>
+                    </else></if>
                 </iterate>
             </if>
             <set field="processed" from="totalItems == processedItems"/>

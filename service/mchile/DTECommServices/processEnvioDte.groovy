@@ -161,7 +161,7 @@ if (MoquiDTEUtils.verifySignature(doc2, "/sii:RespuestaDTE/sii:Resultado", "./si
     xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDTE/${rutEmisor}/${idAcuseRecibo}-mala.xml"
     ec.logger.warn("Error al generar envio")
 }
-ResourceReference xmlContentRr = ec.resource.getLocationReference(xmlContentLocation)
+xmlContentRr = ec.resource.getLocationReference(xmlContentLocation)
 xmlContentRr.putBytes(salida)
 ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioRespuestaId, documentLocation:xmlContentLocation, internalId:idAcuseRecibo, fileName:xmlContentRr.fileName]).call()
 
