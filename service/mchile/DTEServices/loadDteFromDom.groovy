@@ -332,7 +332,7 @@ if (errorMessages.size() > 0) {
 // Se guarda DTE recibido en la base de datos
 createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rutEmisor, fiscalTaxDocumentTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte,
              receiverPartyId:receiverPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', receiverPartyIdValue:rutReceptor, date:issuedTimestamp, invoiceId:invoiceId, statusId:'Ftd-Issued',
-             sendAuthStatusId:'Ftd-SentAuth', sendRecStatusId:'Ftd-SentRec']
+             sendAuthStatusId:'Ftd-SentAuthAccepted', sendRecStatusId:'Ftd-SentRec']
 mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call()
 fiscalTaxDocumentId = mapOut.fiscalTaxDocumentId
 
