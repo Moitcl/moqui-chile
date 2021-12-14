@@ -224,19 +224,28 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="process" noun="PendingEnvio" authenticate="anonymous-all">
         <in-parameters>
             <parameter name="envioId"/>
+            <parameter name="ignoreLastAttempt" type="Boolean" default="false"/>
         </in-parameters>
         <actions>
             <set field="maxAttemptThreshold" from="3"/>
             <set field="minutesBeforeRetry" from="120"/>
             <entity-find entity-name="mchile.dte.DteEnvio" list="envioList">
-                <econdition field-name="statusId" value="Ftde-Received"/>
-                <econdition field-name="lastAttempt" operator="less" from="ec.user.nowTimestamp.time-(minutesBeforeRetry*60*1000)" or-null="true"/>
+                <econditions combine="or">
+                    <econdition field-name="statusId" value="Ftde-Received"/>
+                    <econditions>
+                        <econdition field-name="statusId" value="Ftde-ProcessFailed"/>
+                        <econdition field-name="envioId"/>
+                        <econdition field-name="envioId" operator="is-not-null"/>
+                    </econditions>
+                </econditions>
+                <econdition field-name="lastAttempt" operator="less" from="ec.user.nowTimestamp.time-(minutesBeforeRetry*60*1000)" or-null="true" ignore="ignoreLastAttempt"/>
                 <econdition field-name="envioId" ignore-if-empty="true"/>
             </entity-find>
             <iterate list="envioList" entry="envio">
                 <entity-find-one entity-name="moqui.basic.Enumeration" value-field="envEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
                 <service-call name="mchile.DTECommServices.process#${envEv.enumCode}" transaction="force-new" in-map="[envioId:envio.envioId]" out-map="processOut"/>
-                <if condition="processOut.processedItems == processOut.totalItems"><then>
+                <script>ec.message.clearErrors()</script>
+                <if condition="processOut.processedItems == processOut.totalItems &amp;&amp; processOut.processedItems != null"><then>
                     <service-call name="update#mchile.dte.DteEnvio" transaction="force-new" in-map="[envioId:envio.envioId, statusId:'Ftde-Processed']"/>
                 </then><else-if condition="envio.attemptCount &gt;= maxAttemptCount">
                     <set field="newAttemptCount" from="(envio.attemptCount?:0) + 1"/>
@@ -266,7 +275,9 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="process" noun="RespuestaDte">
         <implements service="mchile.DTECommServices.process#EnvioInterface"/>
         <actions>
-            <set field="processed" from="false"/>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
+            <set field="envioRr" from="ec.resource.getLocationReference(envio.documentLocation)"/>
+            <set field="respuesta" from=" new groovy.util.XmlParser(validating, namespaceAware).parse(envioRr.openStream())"/>
         </actions>
     </service>
     <service verb="process" noun="EnvioRecibo">
@@ -278,7 +289,55 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="process" noun="ResultadoEnvio">
         <implements service="mchile.DTECommServices.process#EnvioInterface"/>
         <actions>
-            <set field="processed" from="false"/>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
+            <set field="envioRr" from="ec.resource.getLocationReference(envio.documentLocation)"/>
+            <set field="resultado" from=" new groovy.util.XmlParser(false, false).parse(envioRr.openStream())"/>
+            <set field="rutEmisor" from="resultado.IDENTIFICACION.RUTEMISOR.text().toUpperCase()"/>
+            <set field="estadoResultado" from="resultado.IDENTIFICACION.ESTADO.text()"/>
+            <set field="trackId" from="resultado.IDENTIFICACION.TRACKID.text()"/>
+            <set field="dteList" from="resultado.REVISIONENVIO.REVISIONDTE"/>
+            <set field="totalItems" from="0" type="Integer"/>
+            <set field="itemSubtotalList" from="resultado.ESTADISTICA.SUBTOTAL.INFORMADO"/>
+            <iterate list="itemSubtotalList" entry="subtotal">
+                <set field="totalItems" from="totalItems + (subtotal.text() as Integer)"/>
+            </iterate>
+            <set field="processedItems" from="0"/>
+            <if condition="estadoResultado == 'EPR - Envio Procesado'">
+                <iterate list="dteList" entry="dte">
+                    <set field="folio" from="dte.FOLIO.text()" type="Integer"/>
+                    <set field="tipoDte" from="dte.TIPODTE.text()"/>
+                    <set field="estadoDte" from="dte.ESTADO.text()"/>
+                    <set field="detalle" from="dte.DETALLE.text()"/>
+                    <service-call name="mchile.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="context"/>
+                    <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" for-update="true">
+                        <econdition field-name="issuerPartyIdValue" from="rutEmisor"/>
+                        <econdition field-name="fiscalTaxDocumentNumber" from="folio"/>
+                        <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
+                        <econdition field-name="trackId"/>
+                        <econdition field-name="sentAuthStatusId" value="Ftd-SentAuthUnverified"/>
+                    </entity-find>
+                    <set field="ftd" from="ftdList.first"/>
+                    <if condition="ftd">
+                        <if condition="estadoDte.startsWith('RCH')"><then>
+                            <set field="ftd.sentAuthStatusId" value="Ftd-SentAuthRejected"/>
+                        </then></if>
+                        <log message="Changing status of FTD ${ftd.fiscalTaxDocumentId} to ${ftd.sentAuthStatusId}"/>
+                        <entity-update value-field="ftd"/>
+                    </if>
+                    <set field="processedItems" from="processedItems+1"/>
+                </iterate>
+                <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" for-update="true">
+                    <econdition field-name="trackId"/>
+                    <econdition field-name="sentAuthStatusId" value="Ftd-SentAuthUnverified"/>
+                </entity-find>
+                <iterate list="dteList" entry="dte">
+                    <service-call name="mchile.DTECommServices.verificaEnSii#Documento" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId,
+                        fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId, organizationPartyId:ftd.issuerPartyId]" out-map="verificaRes"/>
+                    <if condition="verificaRes.errCode == '0'">
+                        <set field="processedItems" from="processedItems+1"/>
+                    </if>
+                </iterate>
+            </if>
         </actions>
     </service>
 
