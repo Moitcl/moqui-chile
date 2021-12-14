@@ -21,7 +21,7 @@ errorMessages = []
 discrepancyMessages = []
 warningMessages = []
 
-if (domNode.getAttributes().getNamedItem("xmlns").getTextContent() == "http://www.sii.cl/SiiDte") {
+if (domNode.getAttributes().getNamedItem("xmlns")?.getTextContent() == "http://www.sii.cl/SiiDte") {
     documentPath = "/sii:DTE/sii:Documento"
 } else {
     domNode.setAttribute("xmlns", null)
