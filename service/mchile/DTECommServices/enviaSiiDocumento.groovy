@@ -12,7 +12,6 @@ ConexionSii con = new ConexionSii()
 
 ec.logger.warn("Archivo enviado: " + documentLocation)
 
-locationDataSource = ec.resource.getLocationDataSource(documentLocation)
 locationReference = ec.resource.getLocationReference(documentLocation)
 
 java.io.File tempFile = File.createTempFile("envioSii", ".xml");

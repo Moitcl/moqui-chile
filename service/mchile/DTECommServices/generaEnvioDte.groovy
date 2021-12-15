@@ -1,143 +1,106 @@
 import org.moqui.context.ExecutionContext
-
-import java.text.SimpleDateFormat
 import org.moqui.resource.ResourceReference
-
-import javax.xml.namespace.QName
-
-import org.apache.xmlbeans.XmlCursor
-import org.apache.xmlbeans.XmlOptions
 import org.w3c.dom.Document
+import groovy.xml.MarkupBuilder
 
 import cl.moit.dte.MoquiDTEUtils
-import cl.nic.dte.util.Utilities
-import cl.sii.siiDte.DTEDefType
-import cl.sii.siiDte.DTEDocument
-import cl.sii.siiDte.EnvioDTEDocument
-import cl.sii.siiDte.FechaHoraType
-import cl.sii.siiDte.EnvioDTEDocument.EnvioDTE.SetDTE.Caratula.SubTotDTE
 
 ExecutionContext ec = context.ec
 
 // Recuperacion de parametros de la organizacion
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
-idS = "Doc"
-
-Date dNow = new Date()
-SimpleDateFormat ft = new SimpleDateFormat("yyMMddhhmmssMs")
-String datetime = ft.format(dNow)
-idS = idS + datetime
 
 ResourceReference[] DTEList = new ResourceReference[documentIdList.size()]
-int j = 0
 
-documentIdList.each { fiscalTaxDocumentId ->
-    dteEv = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).selectField("contentLocation").one()
-    xml = dteEv.contentLocation
-    DTEList[j] = ec.resource.getLocationReference((String)xml)
-    ec.logger.warn("Agregado: " + DTEList[j])
-    j++
+docNumberByType = [:]
+dteEvList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("fiscalTaxDocumentId", "in", documentIdList).list()
+dteList = []
+dteEvList.each { dte ->
+    tipoDte = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameter("fiscalTaxDocumentTypeEnumId", dte.fiscalTaxDocumentTypeEnumId).call().siiCode
+    contentLocation = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).one()?.contentLocation
+    if (contentLocation == null) {
+        ec.message.addError("Did not find XML content for FiscalTaxDocument with id ${fiscalTaxDocumentId}")
+        return
+    }
+    docNumberByType[tipoDte] = (docNumberByType[tipoDte]?:0) + 1
+    InputStream is = null
+    try {
+        is = ec.resource.getLocationReference(contentLocation).openStream()
+        xmlString = new String(is.readAllBytes(), "ISO-8859-1").replaceAll("<\\?xml[^>]*\\?>\n*","")
+        dteList.add(xmlString)
+    } catch (IOException e) {
+        ec.message.addError("Could not read DTE content: ${e.toString()}")
+    } finally {
+        is?.close()
+    }
+    ec.logger.warn("Agregado: " + dte.fiscalTaxDocumentId)
 }
+
 // Validación rut
 if (rutReceptor) {
     ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rutReceptor]).call()
 }
 
-// Construyo Envio
-plantillaEnvio = """<?xml version="1.0" encoding="UTF-8"?>
-<EnvioDTE version="1.0" xmlns="http://www.sii.cl/SiiDte">
-	<SetDTE>
-		<Caratula version="1.0">
-			<RutEmisor>${rutEmisor}</RutEmisor>
-			<FchResol>${fchResol}</FchResol>
-			<NroResol>${nroResol}</NroResol>
-		</Caratula>
-	</SetDTE>
-</EnvioDTE>"""
-EnvioDTEDocument envio = EnvioDTEDocument.Factory.parse(new ByteArrayInputStream(plantillaEnvio.bytes))
+idEnvio = ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
+String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
 
-// Debo agregar el schema location (Sino SII rechaza)
-XmlCursor cursor = envio.newCursor()
-if (cursor.toFirstChild()) {
-    cursor.setAttributeText(new QName("http://www.w3.org/2001/XMLSchema-instance", "schemaLocation"), "http://www.sii.cl/SiiDte EnvioDTE_v10.xsd")
-}
+StringWriter xmlWriter = new StringWriter()
+MarkupBuilder xmlBuilder = new MarkupBuilder(xmlWriter)
 
-// Asigno un ID
-envio.getEnvioDTE().getSetDTE().setID(idS)
-
-cl.sii.siiDte.EnvioDTEDocument.EnvioDTE.SetDTE.Caratula car = envio.getEnvioDTE().getSetDTE().getCaratula()
-
-car.setRutReceptor(rutReceptor) // El receptor del envío es el SII
-car.setRutEnvia(rutEnvia)
-
-// documentos a enviar
-HashMap<String, String> namespaces = new HashMap<String, String>()
-namespaces.put("", "http://www.sii.cl/SiiDte")
-XmlOptions opts = new XmlOptions()
-opts.setLoadSubstituteNamespaces(namespaces)
-
-// Cantidad de documentos a enviar
-
-DTEDefType[] dtes = new DTEDefType[DTEList.size()]
-
-HashMap<Integer, Integer> hashTot = new HashMap<Integer, Integer>()
-
-for (int i = 0; i < DTEList.length; i++) {
-    dtes[i] = DTEDocument.Factory.parse(DTEList[i].openStream(), opts).getDTE()
-    // armar hash para totalizar por tipoDTE
-    if (hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) != null) {
-        hashTot.put(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue(),
-                hashTot.get(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue()) + 1)
-    } else {
-        hashTot.put(dtes[i].getDocumento().getEncabezado().getIdDoc().getTipoDTE().intValue(), 1)
+xmlBuilder.'EnvioDTE'(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': 'http://www.sii.cl/SiiDte RespuestaEnvioDTE_v10.xsd') {
+    'SetDTE'(ID: idEnvio) {
+        'Caratula'(version: '1.0') {
+            'RutEmisor'(rutEmisor)
+            'RutReceptor'(rutReceptor)
+            'RutEnvia'(rutEnvia)
+            'FchResol'(fchResol)
+            'NroResol'(nroResol)
+            'TmstFirmaEnv'(tmstFirmaResp)
+            docNumberByType.each { key, value ->
+                'SubTotDTE' {
+                    'TipoDTE'(key)
+                    'NroDTE'(value)
+                }
+            }
+        }
+        dteList.each { dte ->
+            xmlBuilder.getMkp().yieldUnescaped(dte)
+        }
     }
 }
-SubTotDTE[] subtDtes = new SubTotDTE[hashTot.size()]
-int i = 0
-for (Integer tipo : hashTot.keySet()) {
-    SubTotDTE subt = SubTotDTE.Factory.newInstance()
-    subt.setTpoDTE(new BigInteger(tipo.toString()))
-    subt.setNroDTE(new BigInteger(hashTot.get(tipo).toString()))
-    subtDtes[i] = subt
-    i++
-}
-car.setSubTotDTEArray(subtDtes)
-// Le doy un formato bonito (debo hacerlo antes de firmar para no
-// afectar los DTE internos)
-opts = new XmlOptions()
-opts.setSavePrettyPrint()
-opts.setSavePrettyPrintIndent(4)
-envio = EnvioDTEDocument.Factory.parse(envio.newInputStream(opts))
-envio.getEnvioDTE().getSetDTE().setDTEArray(dtes)
-FechaHoraType now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()))
-envio.getEnvioDTE().getSetDTE().getCaratula().xsetTmstFirmaEnv(now)
 
-opts = new XmlOptions()
-opts.setCharacterEncoding("ISO-8859-1")
+xml = xmlWriter.toString()
 
 if (saveSinFirma) {
-    ResourceReference xmlContentReference = ec.resource.getLocationReference("dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}-sinfirma.xml")
-    envioBoletaDocument.save(xmlContentReference.outputStream, opts)
+    ResourceReference xmlContentReference = ec.resource.getLocationReference("dbresource://moit/erp/dte/EnvioDte-sinfirma/${rutEmisor}/EnvDte-${idEnvio}-sinfirma.xml")
+    //envioBoletaDocument.save(xmlContentReference.outputStream, opts)
 }
-ByteArrayOutputStream out = new ByteArrayOutputStream()
-envio.save(out, opts)
-Document doc2 = MoquiDTEUtils.parseDocument(out.toByteArray())
+Document doc = MoquiDTEUtils.parseDocument(("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>" + xmlWriter.toString()).getBytes("ISO-8859-1"))
 
-byte[] salida = MoquiDTEUtils.sign(doc2, "#" + idS, pkey, certificate, "#" + idS,"SetDTE")
-doc2 = MoquiDTEUtils.parseDocument(salida)
+byte[] salida = MoquiDTEUtils.sign(doc, "#" + idEnvio, pkey, certificate, "#" + idEnvio, "SetDTE")
+doc = MoquiDTEUtils.parseDocument(salida)
 
-if (MoquiDTEUtils.verifySignature(doc2, "/sii:EnvioDTE/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()")) {
-    xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}.xml"
-    ec.resource.getLocationReference(xmlContentLocation).putBytes(salida)
+ts = ec.user.nowTimestamp
+if (MoquiDTEUtils.verifySignature(doc, "/sii:EnvioDTE/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()")) {
+    xmlContentLocation = "dbresource://moit/erp/dte/EnvioDte/${rutEmisor}/EnvDte-${idEnvio}.xml"
+    envioRr = ec.resource.getLocationReference(xmlContentLocation)
+    envioRr.putBytes(salida)
+    fileName = envioRr.fileName
     ec.logger.warn("Envio generado OK")
+    xmlContentLocation = "file:///Users/jhp/EnvioDte.xml"
+    envioRr = ec.resource.getLocationReference(xmlContentLocation)
+    envioRr.putBytes(salida)
 } else {
-    xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/ENV-${idS}-mala.xml"
-    ec.resource.getLocationReference(xmlContentLocation).putBytes(salida)
+    xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/ENV-${idEnvio}-mala.xml"
+    envioRr = ec.resource.getLocationReference(xmlContentLocation)
+    envioRr.putBytes(salida)
+    fileName = envioRr.fileName
     ec.logger.warn("Error al generar envio")
 }
 
-// Se guarda referencia a XML de envío en BD -->
+envioId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-EnvioDte', statusId:'Ftde-Created', internalId:idEnvio, rutEmisor:rutEmisor, rutReceptor:rutReceptor,
+                                                                 registerDate:ec.user.nowTimestamp, documentLocation:xmlContentLocation, fileName:fileName]).call().envioId
 documentIdList.each { documentId ->
-    createMap = [fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Misc', contentLocation:xmlContentLocation, contentDate:ts]
-    ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
+    ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters([fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Misc', contentLocation:xmlContentLocation, contentDate:ts]).call()
+    ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([fiscalTaxDocumentId:documentId, envioId:envioId]).call()
 }
