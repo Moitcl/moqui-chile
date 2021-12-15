@@ -22,11 +22,19 @@ import javax.xml.crypto.KeySelectorException
 import javax.xml.crypto.KeySelectorResult
 import javax.xml.crypto.XMLCryptoContext
 import javax.xml.crypto.XMLStructure
+import javax.xml.crypto.dsig.DigestMethod
 import javax.xml.crypto.dsig.SignatureMethod
+import javax.xml.crypto.dsig.SignedInfo
+import javax.xml.crypto.dsig.Transform
 import javax.xml.crypto.dsig.XMLSignatureFactory
+import javax.xml.crypto.dsig.dom.DOMSignContext
 import javax.xml.crypto.dsig.dom.DOMValidateContext
 import javax.xml.crypto.dsig.keyinfo.KeyInfo
+import javax.xml.crypto.dsig.keyinfo.KeyInfoFactory
+import javax.xml.crypto.dsig.keyinfo.KeyValue
 import javax.xml.crypto.dsig.keyinfo.X509Data
+import javax.xml.crypto.dsig.spec.C14NMethodParameterSpec
+import javax.xml.crypto.dsig.spec.TransformParameterSpec
 import javax.xml.namespace.NamespaceContext
 import javax.xml.parsers.DocumentBuilder
 import javax.xml.parsers.DocumentBuilderFactory
@@ -51,8 +59,6 @@ import java.security.cert.CertificateExpiredException
 import java.security.cert.CertificateNotYetValidException
 import java.security.cert.X509CRL
 import java.security.cert.X509Certificate
-import java.security.interfaces.DSAPrivateKey
-import java.security.interfaces.DSAPublicKey
 import java.security.interfaces.RSAPrivateKey
 import java.security.interfaces.RSAPublicKey
 import java.sql.Timestamp
@@ -424,36 +430,29 @@ class MoquiDTEUtils {
             NodeList nodes = doc.getElementsByTagName(tagName);
             ((Element) nodes.item(0)).setIdAttributeNS(null, "ID", true);
 
-            javax.xml.parsers.DocumentBuilderFactory dbf = javax.xml.parsers.DocumentBuilderFactory.newInstance();
-            dbf.setNamespaceAware(true);
-
             String alg = pKey.getAlgorithm();
             if (!alg.equals(cert.getPublicKey().getAlgorithm()))
                 throw (new Exception("ERROR DE ALGORITMO"));
             org.w3c.dom.Element root = doc.getDocumentElement();
-            org.apache.xml.security.signature.XMLSignature sig = null;
+            DOMSignContext dsc = new DOMSignContext(pKey, root);
+            XMLSignatureFactory fac = XMLSignatureFactory.getInstance("DOM");
+            javax.xml.crypto.dsig.Reference ref = fac.newReference(uri, fac.newDigestMethod(DigestMethod.SHA1, null), List.of(fac.newTransform (Transform.ENVELOPED, (TransformParameterSpec) null)), null, null);
+            String signatureAlgorithm = null
             if (alg.equals("RSA")) {
                 if (!((RSAPrivateKey) pKey).getModulus().equals(((RSAPublicKey) cert.getPublicKey()).getModulus()))
                     throw (new Exception("ERROR DE FIRMA RSA"));
-                sig = new org.apache.xml.security.signature.XMLSignature(doc, baseUri, org.apache.xml.security.signature.XMLSignature.ALGO_ID_SIGNATURE_RSA_SHA1);
+                signatureAlgorithm = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
             } else if (alg.equals("DSA")) {
-                if (!(((DSAPrivateKey) pKey).getParams().getG()
-                        .equals(((DSAPublicKey) cert.getPublicKey()).getParams().getG())
-                        && ((DSAPrivateKey) pKey).getParams().getP()
-                        .equals(((DSAPublicKey) cert.getPublicKey()).getParams().getP())
-                        && ((DSAPrivateKey) pKey).getParams().getQ()
-                        .equals(((DSAPublicKey) cert.getPublicKey()).getParams().getQ())))
-                    throw (new Exception("ERROR DE FIRMA DSA"));
-                sig = new org.apache.xml.security.signature.XMLSignature(doc, baseUri, org.apache.xml.security.signature.XMLSignature.ALGO_ID_SIGNATURE_DSA);
+                signatureAlgorithm = "http://www.w3.org/2000/09/xmldsig#dsa-sha1"
             }
+            SignedInfo si = fac.newSignedInfo(fac.newCanonicalizationMethod ("http://www.w3.org/TR/2001/REC-xml-c14n-20010315", (C14NMethodParameterSpec) null), fac.newSignatureMethod(signatureAlgorithm, null), List.of(ref));
+            KeyInfoFactory kif = fac.getKeyInfoFactory();
+            KeyValue kv = kif.newKeyValue(cert.getPublicKey());
+            X509Data certData = kif.newX509Data(Collections.singletonList ( cert ));
+            KeyInfo ki = kif.newKeyInfo(List.of(kv, certData));
+            XMLSignature signature = fac.newXMLSignature(si, ki);
+            signature.sign(dsc);
 
-            root.appendChild(sig.getElement());
-            sig.addDocument(baseUri);
-            org.apache.xml.security.keys.content.X509Data xdata = new org.apache.xml.security.keys.content.X509Data(doc);
-            xdata.addCertificate(cert);
-            sig.getKeyInfo().addKeyValue(cert.getPublicKey());
-            sig.getKeyInfo().add(xdata);
-            sig.sign(pKey);
             return getRawXML(doc);
         } catch (Exception e) {
             e.printStackTrace();
