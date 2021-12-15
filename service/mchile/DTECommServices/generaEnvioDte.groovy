@@ -47,19 +47,19 @@ String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:
 StringWriter xmlWriter = new StringWriter()
 MarkupBuilder xmlBuilder = new MarkupBuilder(xmlWriter)
 
-xmlBuilder.'EnvioDTE'(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': 'http://www.sii.cl/SiiDte EnvioDTE_v10.xsd') {
-    'SetDTE'(ID: idEnvio) {
-        'Caratula'(version: '1.0') {
-            'RutEmisor'(rutEmisor)
-            'RutEnvia'(rutEnvia)
-            'RutReceptor'(rutReceptor)
-            'FchResol'(fchResol)
-            'NroResol'(nroResol)
-            'TmstFirmaEnv'(tmstFirmaResp)
+xmlBuilder.EnvioDTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': 'http://www.sii.cl/SiiDte EnvioDTE_v10.xsd') {
+    SetDTE(ID: idEnvio) {
+        Caratula(version: '1.0') {
+            RutEmisor(rutEmisor)
+            RutEnvia(rutEnvia)
+            RutReceptor(rutReceptor)
+            FchResol(fechaResolucionSii)
+            NroResol(numeroResolucionSii)
+            TmstFirmaEnv(tmstFirmaResp)
             docNumberByType.each { key, value ->
-                'SubTotDTE' {
-                    'TpoDTE'(key)
-                    'NroDTE'(value)
+                SubTotDTE {
+                    TpoDTE(key)
+                    NroDTE(value)
                 }
             }
         }

@@ -58,8 +58,8 @@ templateEnvioBoleta = """
     <SetDTE>
         <Caratula version="1.0">
             <RutEmisor>${rutEmisor}</RutEmisor>
-            <FchResol>${fchResol}</FchResol>
-            <NroResol>${nroResol}</NroResol>
+            <FchResol>${fechaResolucionSii}</FchResol>
+            <NroResol>${numeroResolucionSii}</NroResol>
         </Caratula>
     </SetDTE>
 </EnvioBOLETA>"""
@@ -103,7 +103,7 @@ cal.set(Calendar.MONTH, Integer.valueOf('09'))
 cal.set(Calendar.DAY_OF_MONTH, Integer.valueOf('24'))
 caratula.setFchResol(cal)
 
-caratula.setNroResol(Integer.valueOf(nroResol))
+caratula.setNroResol(Integer.valueOf(numeroResolucionSii))
 caratula.xsetTmstFirmaEnv(now)
 
 // documentos a enviar

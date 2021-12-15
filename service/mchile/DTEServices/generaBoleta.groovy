@@ -41,8 +41,8 @@ ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rut
 // Recuperacion de parametros de la organizacion -->
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", issuerPartyId).call())
 // REVISAR
-if (cdgSIISucur == "LOCAL")
-    cdgSIISucur = "0"
+if (codigoSucursalSii == "LOCAL")
+    codigoSucursalSii = "0"
 if (continua)
     pdfTemplateBoleta = pdfTemplateBoletaContinua
 
@@ -171,22 +171,22 @@ if (rutReceptor == "66666666-6") {
     // Receptor
     Receptor recp = boleta.getDocumento().getEncabezado().addNewReceptor()
     recp.setRUTRecep(rutReceptor.trim())
-    recp.setRznSocRecep(rznSocReceptor)
+    recp.setRznSocRecep(razonSocialReceptor)
 // Campo giro receptor no existe en esquema BOLETADefType
     recp.setContacto(contactoReceptor)
-    recp.setDirRecep(dirReceptor)
-    recp.setCmnaRecep(cmnaReceptor)
+    recp.setDirRecep(direccionReceptor)
+    recp.setCmnaRecep(comunaReceptor)
     recp.setCiudadRecep(ciudadReceptor)
 }
 
 // Emisor
 Emisor emisor = boleta.getDocumento().getEncabezado().addNewEmisor()
 emisor.setRUTEmisor(rutEmisor)
-emisor.setRznSocEmisor(rznSocEmisor)
+emisor.setRznSocEmisor(razonSocialEmisor)
 emisor.setGiroEmisor(giroEmisor)
-emisor.setCdgSIISucur(Integer.valueOf(cdgSIISucur))
-emisor.setDirOrigen(dirOrigen)
-emisor.setCmnaOrigen(cmnaOrigen)
+emisor.setCdgSIISucur(Integer.valueOf(codigoSucursalSii))
+emisor.setDirOrigen(direccionOrigen)
+emisor.setCmnaOrigen(comunaOrigen)
 emisor.setCiudadOrigen(ciudadOrigen)
 
 // Campos para elaboración de libro -->
@@ -403,8 +403,8 @@ templateEnvioBoleta = """
     <SetDTE>
         <Caratula version="1.0">
             <RutEmisor>${rutEmisor}</RutEmisor>
-            <FchResol>${fchResol}</FchResol>
-            <NroResol>${nroResol}</NroResol>
+            <FchResol>${fechaResolucionSii}</FchResol>
+            <NroResol>${numeroResolucionSii}</NroResol>
         </Caratula>
     </SetDTE>
 </EnvioBOLETA>
@@ -425,10 +425,10 @@ caratula.setRutEnvia(rutEnvia)
 caratula.setRutReceptor('60803000-K') // El receptor debe ser el SII
 caratula.setVersion(new BigDecimal("1.0"))
 
-Date dateFchResol = new SimpleDateFormat("yyyy-MM-dd").parse(fchResol)
+Date dateFchResol = new SimpleDateFormat("yyyy-MM-dd").parse(fechaResolucionSii)
 caratula.xsetFchResol(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol)))
 
-caratula.setNroResol(Integer.valueOf(nroResol))
+caratula.setNroResol(Integer.valueOf(numeroResolucionSii))
 now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()))
 
 caratula.xsetTmstFirmaEnv(now)

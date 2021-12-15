@@ -103,7 +103,7 @@ caratula.setRutEnvia(rutEnvia)
 //caratula.setRutReceptor(rutReceptor)
 
 
-Date dateFchResol = new SimpleDateFormat("yyyy-MM-dd").parse(fchResol)
+Date dateFchResol = new SimpleDateFormat("yyyy-MM-dd").parse(fechaResolucionSii)
 
 //iddoc.xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
 caratula.xsetFchResol(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol)))
@@ -123,7 +123,7 @@ caratula.setCorrelativo(1)
 // Secuencia de envío
 caratula.setSecEnvio(1)
 
-caratula.setNroResol(Integer.valueOf(nroResol))
+caratula.setNroResol(Integer.valueOf(numeroResolucionSii))
 now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()))
 
 caratula.xsetTmstFirmaEnv(now)

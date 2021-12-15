@@ -5,7 +5,7 @@
 
             <strong>Pago Periódico ${periodicPaymentId} de cliente ${orgName} está próximo a vencer</strong><br/>
 
-        <strong>En caso de dudas, contactar a:</strong> ${nmbContacto}, fono ${fonoContacto} - ${mailContacto}<br/>
+        <strong>En caso de dudas, contactar a:</strong> ${nombreContacto}, fono ${fonoContacto} - ${mailContacto}<br/>
         <br/>
     </td>
 </tr></table>

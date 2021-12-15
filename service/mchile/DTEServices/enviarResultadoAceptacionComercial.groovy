@@ -36,7 +36,7 @@ passS = passCert
 dirS = pathRecibidos
 
 // Se guarda aceptacion para obtener el aceptacionDteId
-createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nmbContacto:nmbContacto,
+createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nombreContacto:nombreContacto,
              fonoContacto:fonoContacto, mailContacto:mailContacto, issuerPartyId:organizationPartyId]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.AceptacionDte").parameters(createMap).call())
 
@@ -222,7 +222,7 @@ caratula.setRutRecibe(rutEmisor)
 caratula.setIdRespuesta(new Long(idS))
 caratula.setVersion(new BigDecimal("1.0"))
 // Datos en plantilla?
-caratula.setNmbContacto(nmbContacto)
+caratula.setNmbContacto(nombreContacto)
 caratula.setMailContacto(mailContacto)
 caratula.setFonoContacto(fonoContacto)
 caratula.setNroDetalles(nroDetalles)
@@ -300,7 +300,7 @@ emailAceptacion = contactOut.emailAddress
 // Recuperación de algunos datos desde FiscalTaxDocument
 fiscalTaxDocumentEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("fiscalTaxDocumentId", fiscalTaxDocumentId).one()
 folioAceptacion = fiscalTaxDocumentEv.fiscalTaxDocumentNumber
-createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nmbContacto:nmbContacto,
+createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nombreContacto:nombreContacto,
              fonoContacto:fonoContacto, mailContacto:mailContacto]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.AceptacionDte").parameters(createMap).call())
 
@@ -317,6 +317,6 @@ aceptacionEv.estadoRecepEnvEnumId = estadoRecepEnvEnumId
 aceptacionEv.nroDetalles = 1 as Integer
 aceptacionEv.xml = xmlContentResource.location
 aceptacionEv.update()
-bodyParameters = [fiscalTaxDocumentId:folioAceptacion, nmbContacto:nmbContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]
+bodyParameters = [fiscalTaxDocumentId:folioAceptacion, nombreContacto:nombreContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]
 ec.service.async().name("org.moqui.impl.EmailServices.send#EmailTemplate").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId,
                     emailTypeEnumId:emailTypeEnumId, toAddresses:emailAceptacion, emailTemplateId:"Aceptacion", bodyParameters:bodyParameters]).call()

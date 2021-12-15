@@ -11,8 +11,8 @@
     <xsl:param name="oficinaSII" select="'Santiago Oriente'"/>
     <xsl:param name="logo"/>
     <xsl:param name="cedible"/>
-    <xsl:param name="nroResol" select="'80'"/>
-    <xsl:param name="fchResol" select="'2014'"/>
+    <xsl:param name="numeroResolucionSii" select="'80'"/>
+    <xsl:param name="fechaResolucionSii" select="'2014'"/>
     <xsl:param name="showItemNumber" select="'Y'"/>
     <xsl:param name="commentAfterDetalle" select="''"/>
     <xsl:param name="cuentaBancariaText" select="''"/>
@@ -613,7 +613,7 @@
         <fo:block-container margin-top="4pt" margin-left="1pt">
             <fo:block><fo:instream-foreign-object content-width="5.6cm"><xsl:copy-of select="tedbarcode:generate($myted)"/></fo:instream-foreign-object></fo:block>
             <fo:block font-size="7pt" font-family="sans-serif" text-align="center">Timbre Electrónico SII</fo:block>
-            <fo:block font-size="7pt" font-family="sans-serif" text-align="center">Resolución Ex. SII N° <xsl:value-of select="$nroResol"/> de <xsl:value-of select="$fchResol"/> - Verifique Documento: www.sii.cl</fo:block>
+            <fo:block font-size="7pt" font-family="sans-serif" text-align="center">Resolución Ex. SII N° <xsl:value-of select="$numeroResolucionSii"/> de <xsl:value-of select="$fechaResolucionSii"/> - Verifique Documento: www.sii.cl</fo:block>
         </fo:block-container>
     </xsl:template>
 

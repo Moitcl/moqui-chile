@@ -45,11 +45,11 @@ if (giroOutMap == null) {
     ec.message.addError("No se encuentra giro primario para partyId ${issuerPartyId}")
     return
 }
-giro = giroOutMap.description
+giroEmisor = giroOutMap.description
 
 // Recuperación del código SII de DTE -->
 codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameter("fiscalTaxDocumentTypeEnumId", fiscalTaxDocumentTypeEnumId).call()
-tipoFactura = codeOut.siiCode
+tipoDte = codeOut.siiCode
 
 // Formas de pago
 if (settlementTermId.equals('Immediate'))
@@ -77,7 +77,7 @@ codRef = 0 as Integer
 
 DTEDocument doc
 AutorizacionType caf
-int frmPago = 1
+int formaPago = 1
 int listSize = 0
 
 // Forma de pago
@@ -103,13 +103,13 @@ cl.sii.siiDte.DTEDefType.Documento.Encabezado encabezado = doc.getDTE().getDocum
 
 cl.sii.siiDte.DTEDefType.Documento.Encabezado.Emisor emisor = encabezado.addNewEmisor()
 emisor.setRUTEmisor(rutEmisor)
-emisor.setRznSoc(rznSocEmisor)
-emisor.setGiroEmis(giro)
+emisor.setRznSoc(razonSocialEmisor)
+emisor.setGiroEmis(giroEmisor)
 emisor.addNewTelefono().setStringValue(fonoContacto)
 emisor.setCorreoEmisor(mailContacto)
 codigosActividadEconomica.split(',').each { emisor.addNewActeco().setStringValue(it) }
-emisor.setDirOrigen(dirOrigen)
-emisor.setCmnaOrigen(cmnaOrigen)
+emisor.setDirOrigen(direccionOrigen)
+emisor.setCmnaOrigen(comunaOrigen)
 emisor.setCiudadOrigen(ciudadOrigen)
 
 IdDoc iddoc = encabezado.addNewIdDoc()
@@ -147,10 +147,10 @@ if (medioPago != null ) {
 } else {
     iddoc.setMedioPago(MedioPagoType.Enum.forString("CH"))
 }
-iddoc.setFmaPago(BigInteger.valueOf(frmPago))
+iddoc.setFmaPago(BigInteger.valueOf(formaPago))
 
 // Si es guía de despacho se configura indicador de traslado
-if(tipoFactura == 52) {
+if(tipoDte == 52) {
     iddoc.setIndTraslado(indTraslado)
 }
 if(tipoDespacho != null) {
@@ -160,7 +160,7 @@ if(tipoDespacho != null) {
 // Receptor
 Receptor recp = encabezado.addNewReceptor()
 recp.setRUTRecep(rutReceptor.trim())
-recp.setRznSocRecep(rznSocReceptor)
+recp.setRznSocRecep(razonSocialReceptor)
 if(giroReceptor.length() > 39)
     recp.setGiroRecep(giroReceptor.substring(0,39))
 else
@@ -213,7 +213,7 @@ if (invoiceId) {
         referenciaList.add(reference)
     }
 }
-if (tipoFactura == 33) {
+if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     Detalle[] det = detMap.detailArray
     totalNeto = detMap.totalNeto
@@ -221,13 +221,13 @@ if (tipoFactura == 33) {
     numberExentos = detMap.numberExentos
     if (numberAfectos == 0 && numberExentos > 0)
         throw new BaseArtifactException("Factura afecta tiene solamente ítemes exentos")
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoFactura)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     Referencia[] ref = refMap.referenceArray
 
     doc.getDTE().getDocumento().setDetalleArray(det)
     doc.getDTE().getDocumento().setReferenciaArray(ref)
 
-} else if (tipoFactura == 34) {
+} else if (tipoDte == 34) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     det = detMap.detailArray
     Long totalInvoice = detMap.totalInvoice
@@ -235,15 +235,15 @@ if (tipoFactura == 33) {
     numberExentos = detMap.numberExentos
     if (numberAfectos > 0)
         throw new BaseArtifactException("Factura exenta tiene ítemes afectos")
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoFactura)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     Referencia[] ref = refMap.referenceArray
 
     doc.getDTE().getDocumento().setReferenciaArray(ref)
     doc.getDTE().getDocumento().setDetalleArray(det)
-} else if (tipoFactura == 61) {
+} else if (tipoDte == 61) {
     // Nota de Crédito Electrónica
     ec.logger.warn("Creando DTE tipo 61")
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, null, tipoFactura)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, null, tipoDte)
     Referencia[] ref = refMap.referenceArray
     anulaBoleta = refMap.anulaBoleta
     folioAnulaBoleta = refMap.folioAnulaBoleta
@@ -267,7 +267,7 @@ if (tipoFactura == 33) {
         totalNeto = 0
         totalExento = 0
     }
-} else if (tipoFactura == 56) {
+} else if (tipoDte == 56) {
     // Nota de Débito Electrónica
     ec.logger.warn("Creando DTE tipo 56")
 
@@ -279,7 +279,7 @@ if (tipoFactura == 33) {
         listSize = 0
     }
 
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoFactura)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     Referencia[] ref = refMap.referenceArray
     dteExenta = refMap.dteExenta
     // codRef = refMap.codRef
@@ -300,12 +300,12 @@ if (tipoFactura == 33) {
     }
 
     doc.getDTE().getDocumento().setReferenciaArray(ref)
-} else if (tipoFactura == 52) {
+} else if (tipoDte == 52) {
     // Guías de Despacho
     ec.logger.warn("Creando DTE tipo 52")
 
     // TODO: Si la referencia es tipo fe de erratas, Monto Item puede ser 0
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoFactura)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     Referencia[] ref = refMap.referenceArray
     dteExenta = refMap.dteExenta
     codRef = refMap.codRef
@@ -418,7 +418,7 @@ if (MoquiDTEUtils.verifySignature(doc2, "/DTE/Documento", "/DTE/Documento/Encabe
     ec.message.addError("Error al generar DTE folio ${folio}")
 
 // Registry de DTE en base de datos y generación de PDF -->
-fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoFactura}"
+fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoDte}"
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([dte:facturaXml, issuerPartyId:issuerPartyId, invoiceMessage:invoiceMessage]).call())
 
 // Creación de registro en FiscalTaxDocument -->
@@ -437,9 +437,9 @@ Timestamp ts = new Timestamp(date.getTime())
 dteEv.date = ts
 dteEv.update()
 
-xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoFactura}-${folio}.xml"
-pdfContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoFactura}-${folio}.pdf"
-pdfCedibleContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoFactura}-${folio}-cedible.pdf"
+xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folio}.xml"
+pdfContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folio}.pdf"
+pdfCedibleContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folio}-cedible.pdf"
 
 // Creacion de registros en FiscalTaxDocumentContent
 createMapBase = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, contentDte:ts]

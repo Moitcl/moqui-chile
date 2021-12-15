@@ -109,38 +109,38 @@ idAcuseRecibo = "EnvAcuseRecibo-" + envioRespuestaId
 StringWriter writer = new StringWriter()
 MarkupBuilder acuseRecibo = new MarkupBuilder(writer)
 String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
-acuseRecibo.'sii:RespuestaDTE'('xmlns:sii': 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version:'1.0', 'xsi:schemaLocation': 'http://www.sii.cl/SiiDte RespuestaEnvioDTE_v10.xsd') {
-    'sii:Resultado'(ID:idAcuseRecibo) {
-        'sii:Caratula'(version:"1.0") {
-            'sii:RutResponde'(rutReceptorCaratula)
-            'sii:RutRecibe'(rutEmisorCaratula)
-            'sii:IdRespuesta'(idAcuseRecibo)
-            'sii:NroDetalles'(processedItems)
-            //'sii:NmbContacto'("")
-            //'sii:FonoContacto'("")
-            //'sii:MailContacto'("")
-            'sii:TmstFirmaResp'(tmstFirmaResp)
+acuseRecibo.RespuestaDTE('xmlns': 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version:'1.0', 'xsi:schemaLocation': 'http://www.sii.cl/SiiDte RespuestaEnvioDTE_v10.xsd') {
+    Resultado(ID:idAcuseRecibo) {
+        Caratula(version:"1.0") {
+            RutResponde(rutReceptorCaratula)
+            RutRecibe(rutEmisorCaratula)
+            IdRespuesta(idAcuseRecibo)
+            NroDetalles(processedItems)
+            //NmbContacto("")
+            //FonoContacto("")
+            //MailContacto("")
+            TmstFirmaResp(tmstFirmaResp)
         }
-        'sii:RecepcionEnvio' {
-            'sii:NmbEnvio'(dteEnvioEv.fileName)
-            'sii:FchRecep'(ec.l10n.format(dteEnvioEv.registerDate, "yyyy-MM-dd HH"))
-            'sii:CodEnvio'(envioRespuestaId)
-            'sii:EnvioDTEID'(dteEnvioEv.internalId)
-            'sii:Digest'(digestValue)
-            'sii:RutEmisor'(rutEmisorCaratula)
-            'sii:RutReceptor'(rutReceptorCaratula)
-            'sii:EstadoRecepEnv'(estadoRecepEnv)
-            'sii:RecepEnvGlosa'(estadoGlosaMap[estadoRecepEnv])
-            'sii:NroDTE'(processedItems)
+        RecepcionEnvio {
+            NmbEnvio(dteEnvioEv.fileName)
+            FchRecep(ec.l10n.format(dteEnvioEv.registerDate, "yyyy-MM-dd HH"))
+            CodEnvio(envioRespuestaId)
+            EnvioDTEID(dteEnvioEv.internalId)
+            Digest(digestValue)
+            RutEmisor(rutEmisorCaratula)
+            RutReceptor(rutReceptorCaratula)
+            EstadoRecepEnv(estadoRecepEnv)
+            RecepEnvGlosa(estadoGlosaMap[estadoRecepEnv])
+            NroDTE(processedItems)
             recepcionList.each { Map recepcion ->
-                'sii:RecepcionDTE' {
-                    'sii:TipoDTE'(recepcion.tipoDte)
-                    'sii:Folio'(recepcion.folioDte)
-                    'sii:RUTEmisor'(recepcion.rutEmisor)
-                    'sii:RUTRecep'(recepcion.rutRecep)
-                    'sii:MntTotal'(recepcion.mntTotal)
-                    'sii:EstadoDTE'(recepcion.estadoRecepDte)
-                    'sii:EstadoDTEGlosa'(recepcion.recepDteGlosa)
+                RecepcionDTE {
+                    TipoDTE(recepcion.tipoDte)
+                    Folio(recepcion.folioDte)
+                    RUTEmisor(recepcion.rutEmisor)
+                    RUTRecep(recepcion.rutRecep)
+                    MntTotal(recepcion.mntTotal)
+                    EstadoDTE(recepcion.estadoRecepDte)
+                    EstadoDTEGlosa(recepcion.recepDteGlosa)
                 }
             }
         }
