@@ -65,7 +65,7 @@ codRef = 0 as Integer
 idS = "BO"
 
 Date dNow = new Date()
-SimpleDateFormat ft = new SimpleDateFormat("yyMMddhhmmssMs")
+SimpleDateFormat ft = new SimpleDateFormat("yyyyMMddHHmmssSSS")
 String datetime = ft.format(dNow)
 idS = idS + datetime
 String uriBoleta = "#"+idS

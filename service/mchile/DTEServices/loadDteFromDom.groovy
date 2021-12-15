@@ -1,5 +1,4 @@
 import org.moqui.context.ExecutionContext
-import org.moqui.entity.EntityCondition
 import org.w3c.dom.Document
 
 import java.math.RoundingMode

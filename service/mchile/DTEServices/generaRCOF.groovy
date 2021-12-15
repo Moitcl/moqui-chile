@@ -46,7 +46,7 @@ mapBoletaExenta = ec.service.sync().name("mchile.DTEServices.get#ResumenRcof").p
 mapNotaCredito = ec.service.sync().name("mchile.DTEServices.get#ResumenRcof").parameters([fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-61', organizationPartyId:organizationPartyId]).call()
 
 Date dNow = new Date()
-SimpleDateFormat ft = new SimpleDateFormat("yyMMddhhmmssMs")
+SimpleDateFormat ft = new SimpleDateFormat("yyyyMMddHHmmssSSS")
 String datetime = ft.format(dNow)
 idS = idS + datetime
 
