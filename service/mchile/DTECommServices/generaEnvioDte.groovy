@@ -41,30 +41,30 @@ if (rutReceptor) {
     ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rutReceptor]).call()
 }
 
-idEnvio = ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
+idEnvio = "EnvDte-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
 String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
 
 StringWriter xmlWriter = new StringWriter()
 MarkupBuilder xmlBuilder = new MarkupBuilder(xmlWriter)
 
-xmlBuilder.'EnvioDTE'(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': 'http://www.sii.cl/SiiDte RespuestaEnvioDTE_v10.xsd') {
+xmlBuilder.'EnvioDTE'(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': 'http://www.sii.cl/SiiDte EnvioDTE_v10.xsd') {
     'SetDTE'(ID: idEnvio) {
         'Caratula'(version: '1.0') {
             'RutEmisor'(rutEmisor)
-            'RutReceptor'(rutReceptor)
             'RutEnvia'(rutEnvia)
+            'RutReceptor'(rutReceptor)
             'FchResol'(fchResol)
             'NroResol'(nroResol)
             'TmstFirmaEnv'(tmstFirmaResp)
             docNumberByType.each { key, value ->
                 'SubTotDTE' {
-                    'TipoDTE'(key)
+                    'TpoDTE'(key)
                     'NroDTE'(value)
                 }
             }
         }
         dteList.each { dte ->
-            xmlBuilder.getMkp().yieldUnescaped(dte)
+            xmlBuilder.getMkp().yieldUnescaped("\n"+dte)
         }
     }
 }
@@ -75,7 +75,7 @@ if (saveSinFirma) {
     ResourceReference xmlContentReference = ec.resource.getLocationReference("dbresource://moit/erp/dte/EnvioDte-sinfirma/${rutEmisor}/EnvDte-${idEnvio}-sinfirma.xml")
     //envioBoletaDocument.save(xmlContentReference.outputStream, opts)
 }
-Document doc = MoquiDTEUtils.parseDocument(("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>" + xmlWriter.toString()).getBytes("ISO-8859-1"))
+Document doc = MoquiDTEUtils.parseDocument(xmlWriter.toString().getBytes())
 
 byte[] salida = MoquiDTEUtils.sign(doc, "#" + idEnvio, pkey, certificate, "#" + idEnvio, "SetDTE")
 doc = MoquiDTEUtils.parseDocument(salida)
