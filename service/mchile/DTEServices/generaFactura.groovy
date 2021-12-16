@@ -6,10 +6,7 @@ import org.moqui.context.ExecutionContext
 
 import cl.moit.dte.MoquiDTEUtils
 
-import java.security.KeyFactory
-import org.bouncycastle.openssl.PEMKeyPair
-import org.bouncycastle.openssl.PEMParser
-import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter
+import groovy.xml.MarkupBuilder
 
 ExecutionContext ec = context.ec
 
@@ -27,7 +24,7 @@ if (invoiceId != null && fiscalTaxDocumentTypeEnumId in dteConstituyeVentaTypeLi
 // Recuperacion de parametros de la organizacion -->
 ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", issuerPartyId).call())
 
-vatTaxRate = ec.service.sync().name("mchile.TaxServices.get#VatTaxRate").parameter("date", fechaEmision).call().taxRate
+vatTaxRate = ec.service.sync().name("mchile.TaxServices.get#VatTaxRate").parameter("date", new Timestamp(fechaEmision.time)).call().taxRate
 
 // Giro Emisor
 giroOutMap = ec.service.sync().name("mchile.DTEServices.get#GiroPrimario").parameter("partyId", issuerPartyId).call()

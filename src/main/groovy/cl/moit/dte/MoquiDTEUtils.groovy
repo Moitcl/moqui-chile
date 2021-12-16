@@ -170,7 +170,7 @@ class MoquiDTEUtils {
                 numberExentos++
 
             // Agrego detalles
-            detailMap = [:]
+            Map detailMap = [:]
             detalleList.add(detailMap)
             detailMap.numeroLinea = i+1
             if (detailEntry.productId)
@@ -226,7 +226,7 @@ class MoquiDTEUtils {
             Timestamp fechaRef = referenciaEntry.fecha instanceof java.sql.Date? new Timestamp(referenciaEntry.fecha.time) : referenciaEntry.fecha
 
             // Agrego referencias
-            referenciaMap = [:]
+            Map referenciaMap = [:]
             referenciaListOut.add(refrenciaMap)
             referenciaMap.numeroLinea = i+1
             referenciaMap.fecha = fechaRef
