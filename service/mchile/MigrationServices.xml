@@ -99,4 +99,48 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="migrate" noun="Caf">
+        <out-parameters>
+            <parameter name="updateCount"/>
+        </out-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.Caf" list="cafList" for-update="true">
+                <econditions combine="or">
+                    <econdition field-name="publicKey" operator="is-null"/>
+                    <econdition field-name="publicKey" value=""/>
+                    <econdition field-name="privateKey" operator="is-null"/>
+                    <econdition field-name="privateKey" value=""/>
+                    <econdition field-name="keyType" operator="is-null"/>
+                    <econdition field-name="keyType" value=""/>
+                    <econdition field-name="cafFragment" operator="is-null"/>
+                    <econdition field-name="cafFragment" value=""/>
+                    <econdition field-name="cafFragment" value="[]"/>
+                    <econdition field-name="siguienteFolio" operator="is-null"/>
+                    <econdition field-name="razonSocial" operator="is-null"/>
+                </econditions>
+            </entity-find>
+            <set field="updateCount" from="cafList.size()"/>
+            <iterate list="cafList" entry="caf">
+                <!-- parse -->
+                <set field="autorizacion" from="new groovy.util.XmlParser(false, false).parseText(caf.cafData)"/>
+                <set field="privateKey" from="autorizacion.RSASK.text()"/>
+                <set field="publicKey" from="autorizacion.RSAPUBK.text()"/>
+                <set field="keyType" value="RSA"/>
+                <script><![CDATA[
+                    StringWriter writer = new StringWriter()
+                    new groovy.util.XmlNodePrinter(new PrintWriter(writer)).print(autorizacion.CAF[0])
+                    writer.close()
+                    cafFragment = writer.toString()
+                ]]></script>
+                <set field="caf.siguienteFolio" from="caf.ultimoFolio"/>
+                <set field="caf.publicKey" from="publicKey"/>
+                <set field="caf.privateKey" from="privateKey"/>
+                <set field="caf.keyType" from="keyType"/>
+                <set field="caf.cafFragment" from="cafFragment"/>
+                <set field="caf.razonSocial" from="autorizacion.CAF.DA.RS.text()"/>
+                <entity-update value-field="caf"/>
+            </iterate>
+        </actions>
+    </service>
+
 </services>

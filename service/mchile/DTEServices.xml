@@ -252,16 +252,9 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="partyId" required="true"/>
         </in-parameters>
         <actions>
-            <set field="archivo" from="cafFile.getName()"/>
+            <set field="filename" from="cafFile.getName()"/>
             <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:partyId]" out-map="context"/>
-            <set field="contentLocation" value="dbresource://moit/erp/dte/caf/${partyId}/${archivo}"/>
-
-            <set field="docRr" from="ec.resource.getLocationReference(contentLocation)"/>
-            <script>
-                fileStream = cafFile.getInputStream()
-                try { docRr.putStream(fileStream) } finally { fileStream.close() }
-            </script>
-
+            <set field="contentByteArray" from="cafFile.get()"/>
             <service-call name="mchile.DTEServices.load#CafInternal" in-map="context" out-map="context"/>
         </actions>
     </service>
@@ -271,7 +264,9 @@ along with this software (see the LICENSE.md file). If not, see
             Carga CAF en Sistema
         </description>
         <in-parameters>
-            <parameter name="contentLocation" required="true"/>
+            <parameter name="contentLocation"/>
+            <parameter name="contentByteArray" type="Object"/>
+            <parameter name="filename"/>
             <parameter name="partyId" required="true"/>
             <parameter name="activateCaf" type="Boolean" default="false"/>
         </in-parameters>
@@ -279,77 +274,55 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="cafId"/>
         </out-parameters>
         <actions>
+            <if condition="contentLocation != null &amp;&amp; contentLocation.length > 0 &amp;&amp; contentByteArray != null &amp;&amp; contentByteArray.size() > 0">
+                <return error="true" message="Specified both, contentLocation and contentByteArray, please specify only one"/>
+            </if>
+            <if condition="contentByteArray == null || contentByteArray.size() == 0">
+                <if condition="contentLocation == null || contentLocation.length == 0">
+                    <return error="true" message="One of contentByteArray or contentLocation is required"/>
+                </if>
+                <set field="contentRr" from="ec.resource.getLocationReference(contentLocation)"/>
+                <set field="contentByteArray" from="contentRr.openStream().readAllBytes()"/>
+                <set field="filename" from="contentRr.fileName"/>
+            </if>
+            <set field="cafDataString" from="new String(contentByteArray, 'ISO-8859-1')"/>
+            <set field="autorizacion" from="new groovy.util.XmlParser(false, false).parseText(cafDataString)"/>
+            <set field="privateKey" from="autorizacion.RSASK.text()"/>
+            <if condition="privateKey == null || privateKey.length == 0"><then>
+                <set field="privateKey" from="autorizacion.DSASK.text()"/>
+                <set field="publicKey" from="autorizacion.DSAPUBK.text()"/>
+                <set field="keyType" value="DSA"/>
+            </then><else>
+                <set field="publicKey" from="autorizacion.RSAPUBK.text()"/>
+                <set field="keyType" value="RSA"/>
+            </else></if>
+            <script><![CDATA[
+                StringWriter writer = new StringWriter()
+                new groovy.util.XmlNodePrinter(new PrintWriter(writer)).print(autorizacion.CAF[0])
+                writer.close()
+                cafFragment = writer.toString()
+            ]]></script>
+            <set field="datosAutorizacion" from="autorizacion.CAF.DA"/>
+            <set field="rango" from="datosAutorizacion.RNG"/>
+            <set field="desde" from="rango.D.text()"/>
+            <set field="hasta" from="rango.H.text()"/>
+            <set field="fechaAutorizacion" from="ec.l10n.parseDate(datosAutorizacion.FA.text(), 'yyyy-MM-dd')"/>
+            <set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${datosAutorizacion.TD.text()}"/>
+            <set field="rutCaf" from="datosAutorizacion.RE.text()"/>
+
             <!-- Carga de RUT de empresa -->
             <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:partyId]" out-map="salidaRut"/>
             <set field="rut" from="salidaRut.rutSinFormato"/>
             <set field="rutNoDv" from="salidaRut.rutSinDv"/>
 
-            <set field="desde" value=""/>
-            <set field="hasta" value=""/>
-            <set field="fechaAutorizacion" value=""/>
-            <set field="fiscalTaxDocumentTypeEnumId" value=""/>
-            <set field="rutCaf" value=""/>
-
-            <script>
-                import java.io.ByteArrayOutputStream
-                import java.io.File
-                import java.io.FileInputStream
-                import java.math.BigDecimal
-                import java.math.BigInteger
-                import java.security.KeyStore
-                import java.security.PrivateKey
-                import java.security.cert.X509Certificate
-                import java.util.Calendar
-                import java.util.Date
-                import java.util.HashMap
-                import java.text.ParseException
-                import java.text.SimpleDateFormat
-                import java.util.Date
-
-                import org.apache.xmlbeans.XmlOptions
-                import org.w3c.dom.Document
-
-                import cl.nic.dte.util.Signer
-                import cl.nic.dte.util.Utilities
-                import cl.nic.dte.util.XMLUtil
-                import cl.sii.siiDte.AUTORIZACIONDocument
-                import cl.sii.siiDte.AutorizacionType
-                import cl.sii.siiDte.DTEDefType.Documento.Detalle
-                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.IdDoc
-                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Receptor
-                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Totales
-                import cl.sii.siiDte.DTEDefType.Documento.Referencia
-                import cl.sii.siiDte.DTEDocument
-                import cl.sii.siiDte.FechaHoraType
-                import cl.sii.siiDte.FechaType
-                import cl.sii.siiDte.MedioPagoType
-
-                // Debo meter el namespace porque SII no lo genera
-                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;()
-                namespaces.put("", "http://www.sii.cl/SiiDte")
-                namespaces.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
-                XmlOptions opts = new XmlOptions()
-                opts.setLoadSubstituteNamespaces(namespaces)
-
-                AutorizacionType caf
-                docRr = ec.resource.getLocationReference(contentLocation)
-                caf = AUTORIZACIONDocument.Factory.parse(docRr.openStream(), opts).getAUTORIZACION()
-                desde = caf.getCAF().getDA().getRNG().getD().toString()
-                hasta = caf.getCAF().getDA().getRNG().getH().toString()
-                fechaAutorizacion = caf.getCAF().getDA().getFA().toString()
-                fiscalTaxDocumentTypeEnumId = "Ftdt-${caf.getCAF().getDA().getTD().toString()}"
-                rutCaf = caf.getCAF().getDA().getRE()
-                logger.warn("===>" + caf.toString())
-
-            </script>
-
             <if condition="!rutCaf.equals(rut.trim())">
                 <return error="true" message="RUT de archivo CAF no corresponde al registrado en el sistema como emisor: $rutCaf :: $rut"/>
             </if>
 
-            <set field="updateMap"
-                 from="[filename:docRr.fileName,desde:desde, hasta:hasta, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, ultimoFolio:desde, issuerPartyId:partyId, cafData:docRr.getText()]"/>
-            <service-call name="create#mchile.dte.Caf" out-map="context" in-map="updateMap"/>
+            <set field="createMap"
+                 from="[filename:filename, desde:desde, hasta:hasta, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, issuerPartyId:partyId,
+                  cafData:cafDataString, publicKey:publicKey, privateKey:privateKey, keyType:keyType, cafFragment:cafFragment]"/>
+            <service-call name="create#mchile.dte.Caf" out-map="context" in-map="createMap"/>
 
             <!-- Creación de registros para reservar folios -->
             <script><![CDATA[
@@ -378,8 +351,15 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <out-parameters>
             <parameter name="folio" type="Integer"/>
-            <parameter name="caf"/>
-            <parameter name="cafData"/>
+            <parameter name="cafFragment"/>
+            <parameter name="keyType"/>
+            <parameter name="publicKey"/>
+            <parameter name="privateKey"/>
+            <parameter name="rut"/>
+            <parameter name="razonSocial"/>
+            <parameter name="desde"/>
+            <parameter name="hasta"/>
+            <parameter name="fechaAutorizacion" type="Date"/>
         </out-parameters>
         <actions>
 
@@ -407,7 +387,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="No existe CAF activo para DTE tipo ${fiscalTaxDocumentTypeEnumId}"/>
             </if>
 
-            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="reservedList">
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="reservedList" for-update="true">
                 <econdition field-name="fiscalTaxDocumentTypeEnumId" value="${fiscalTaxDocumentTypeEnumId}"/>
                 <econdition field-name="issuerPartyId" from="partyId"/>
                 <econdition field-name="fiscalTaxDocumentNumber" operator="greater-equals" from="cafEntry.desde"/>
@@ -422,8 +402,18 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="folio" from="reservedList.first().fiscalTaxDocumentNumber"/>
 
-            <set field="caf" from="cafEntry.filename"/>
-            <set field="cafData" from="cafEntry.cafData"/>
+            <set field="cafFragment" from="cafEntry.cafFragment"/>
+            <set field="keyType" from="cafEntry.keyType"/>
+            <set field="publicKey" from="cafEntry.publicKey"/>
+            <set field="privateKey" from="cafEntry.privateKey"/>
+            <set field="rut" from="cafEntry.rut"/>
+            <set field="razonSocial" from="cafEntry.razonSocial"/>
+            <set field="desde" from="cafEntry.desde"/>
+            <set field="hasta" from="cafEntry.hasta"/>
+            <set field="fechaAutorizacion" from="cafEntry.fechaAutorizacion"/>
+
+            <set field="caf.siguienteFolio" from="folio"/>
+            <entity-update value-field="caf"/>
 
         </actions>
     </service>
