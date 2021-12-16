@@ -25,8 +25,6 @@ public class ClientAuthRequestFactory implements RestClient.RequestFactory {
         sslContextFactory.setKeyStore(ks);
         String alias = ks.aliases().nextElement();
         sslContextFactory.setCertAlias(alias);
-        sslContextFactory.setNeedClientAuth(true);
-        sslContextFactory.setWantClientAuth(true);
         sslContextFactory.setKeyStorePassword(password);
         sslContextFactory.setEndpointIdentificationAlgorithm("HTTPS");
 
