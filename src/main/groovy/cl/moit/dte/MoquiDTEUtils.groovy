@@ -48,6 +48,7 @@ import javax.xml.xpath.XPathExpression
 import javax.xml.xpath.XPathConstants
 import java.security.InvalidKeyException
 import java.security.Key
+import java.security.KeyFactory
 import java.security.NoSuchAlgorithmException
 import java.security.PrivateKey
 import java.security.PublicKey
@@ -57,9 +58,14 @@ import java.security.cert.X509CRL
 import java.security.cert.X509Certificate
 import java.security.interfaces.RSAPrivateKey
 import java.security.interfaces.RSAPublicKey
+import java.security.spec.X509EncodedKeySpec
 import java.sql.Timestamp
 import javax.xml.crypto.dsig.XMLSignature
 import java.text.SimpleDateFormat
+import org.bouncycastle.openssl.PEMKeyPair
+import org.bouncycastle.openssl.PEMParser
+import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter
+import java.security.Signature
 
 class MoquiDTEUtils {
 
@@ -537,8 +543,46 @@ class MoquiDTEUtils {
         return new groovy.util.XmlParser(validating, namespaceAware).parseText(xml)
     }
 
+    public static String firmaTimbre(String datosTed, String privateKeyData) {
+        if (privateKeyData.startsWith('-----BEGIN RSA PRIVATE KEY-----\n')) {
+            //privateKeyData = privateKeyData.replace("-----BEGIN RSA PRIVATE KEY-----\n", "").replace("\n-----END RSA PRIVATE KEY-----", "")
+            try {
+                logger.warn("parsing: ${privateKeyData}")
+                PEMParser pemParser = new PEMParser(new InputStreamReader(new ByteArrayInputStream(privateKeyData.getBytes())))
+                Object result = pemParser.readObject()
+                if (result == null)
+                    throw new RuntimeException("No object read from data")
+                pemParser.close()
+                if (result instanceof PEMKeyPair) {
+                    PEMKeyPair keyPair = (PEMKeyPair)result
+                    java.security.KeyPair kp = new JcaPEMKeyConverter().getKeyPair(result)
+                    java.security.Signature sig = Signature.getInstance("SHA1WithRSA");
+                    sig.initSign(kp.getPrivate())
+                    sig.update(datosTed.getBytes("ISO-8859-1"))
+                    return Base64.mimeEncoder.encodeToString(sig.sign())
+                } else {
+                    throw new RuntimeException("No se pudo recuperar llave privada")
+                }
+            } catch (Exception ex) {
+                throw new RuntimeException("Unable to recover private key..." + ex.getMessage());
+            }
+        } else {
+            throw new RuntimeException("Unsupported keyType (does not start with '-----BEGIN RSA PRIVATE KEY-----\\n'")
+        }
+    }
+
+    public static String verificaTimbre(String timbreXml, String firma, String publicKeyData) {
+        publicKeyData = publicKeyData.replace("-----BEGIN PUBLIC KEY-----\n", "").replace("\n-----END PUBLIC KEY-----", "")
+        KeyFactory keyFactory = KeyFactory.getInstance("RSA")
+        byte[] keyBytes = Base64.mimeDecoder.decode(publicKeyData)
+        RSAPublicKey publicKey = keyFactory.generatePublic(new X509EncodedKeySpec(keyBytes))
+        List rsaPublicKey = [modulus: publicKey.getModulus(), exponent: publicKey.getPublicExponent()]
+    }
+
     static {
         org.apache.xml.security.Init.init();
     }
+
+
 
 }

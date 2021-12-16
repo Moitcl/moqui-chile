@@ -6,6 +6,11 @@ import org.moqui.context.ExecutionContext
 
 import cl.moit.dte.MoquiDTEUtils
 
+import java.security.KeyFactory
+import org.bouncycastle.openssl.PEMKeyPair
+import org.bouncycastle.openssl.PEMParser
+import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter
+
 ExecutionContext ec = context.ec
 
 dteConstituyeVentaTypeList = ['Ftdt-101', 'Ftdt-102', 'Ftdt-109', 'Ftdt-110', 'Ftdt-30', 'Ftdt-32', 'Ftdt-33', 'Ftdt-34', 'Ftdt-35', 'Ftdt-38', 'Ftdt-39']
@@ -217,6 +222,9 @@ MarkupBuilder xmlBuilder = new MarkupBuilder(xmlWriter)
 if (giroReceptor.length > 39)
     giroReceptor = giroReceptor.substring(0,39)
 
+// Timbre
+datosTed = "<DD><RE>${rutEmisor}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptor}</RSR><MNT>${totalInvoice}</MNT><IT1>${detalleList.get(0).nombreItem}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
+
 xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': 'http://www.sii.cl/SiiDte DTE_v10.xsd') {
     Documento(ID: idDocumento) {
         Encabezado {
@@ -383,51 +391,13 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
             }
         }
         //Comisiones{}
-        TED {
-            DD {
-                RE(RutEmisor)
-                TD(tipoDte)
-                F(folio)
-                FE(ec.l10n.format(fechaEmision, "yyyy-MM-dd"))
-                RR(rutReceptor)
-                RSR(razonSocialReceptor)
-                MNT(totalInvoice)
-                if (detalleList.size() > 0)
-                    IT1(detalleList.get(0).nombreItem)
-                CAF{
-                    DA {
-                        RE(folioResult.rut)
-                        RS(folioResult.razonSocial)
-                        TD(tipoDte)
-                        RNG {
-                            D(folioResult.desde)
-                            H(folioResult.hasta)
-                        }
-                        FA(ec.l10n.format(folioResult.fechaAutorizacion, "yyyy-MM-dd"))
-                        if (folioResult.keyType == 'RSA') {
-                            RSAPK {
-                                M()
-                                E()
-                            }
-                        } else {
-                            DSAPK {
-                                P()
-                                Q()
-                                G()
-                                Y()
-                            }
-                        }
-                    }
-                    xmlBuilder.getMkp().yieldUnescaped("\n"+folioResult.cafFragment)
-                }
-            }
+        TED (version:"1.0") {
+            xmlBuilder.getMkp().yieldUnescaped(datosTed)
+            FRMT(algoritmo:"SHA1withRSA", MoquiDTEUtils.firmaTimbre(datosTed, folioResult.privateKey))
         }
         TmstFirma(ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss"))
     }
 }
-
-// Timbro
-doc.getDTE().timbrar(caf.getCAF(), caf.getPrivateKey(null))
 
 uri = "#" + idDocumento
 
