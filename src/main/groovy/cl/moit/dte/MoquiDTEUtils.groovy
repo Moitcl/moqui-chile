@@ -547,7 +547,6 @@ class MoquiDTEUtils {
         if (privateKeyData.startsWith('-----BEGIN RSA PRIVATE KEY-----\n')) {
             //privateKeyData = privateKeyData.replace("-----BEGIN RSA PRIVATE KEY-----\n", "").replace("\n-----END RSA PRIVATE KEY-----", "")
             try {
-                logger.warn("parsing: ${privateKeyData}")
                 PEMParser pemParser = new PEMParser(new InputStreamReader(new ByteArrayInputStream(privateKeyData.getBytes())))
                 Object result = pemParser.readObject()
                 if (result == null)

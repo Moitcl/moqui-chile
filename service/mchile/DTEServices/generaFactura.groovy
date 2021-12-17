@@ -60,7 +60,7 @@ else
 
 //Obtención de folio y CAF -->
 folioResult = ec.service.sync().name("mchile.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call()
-folio = folioResult
+folio = folioResult.folio
 codRef = 0 as Integer
 
 // Indicador Servicio
@@ -127,13 +127,13 @@ if (tipoDte == 33) {
     referenciaList = refMap.referenciaList
     anulaBoleta = refMap.anulaBoleta
     folioAnulaBoleta = refMap.folioAnulaBoleta
-    BigInteger codRef = ref[ref.length-1].getCodRef()
+    BigInteger codRef = ref[ref.length()-1].getCodRef()
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
 
-    if (codRef == 2 && det.length > 1) {
-        ec.message.addError("codRef = 2 && det.length = ${det.length}")
+    if (codRef == 2 && det.length() > 1) {
+        ec.message.addError("codRef = 2 && det.length() = ${det.length()}")
         return
     }
 
@@ -216,7 +216,7 @@ String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:
 StringWriter xmlWriter = new StringWriter()
 MarkupBuilder xmlBuilder = new MarkupBuilder(xmlWriter)
 
-if (giroReceptor.length > 39)
+if (giroReceptor.length() > 39)
     giroReceptor = giroReceptor.substring(0,39)
 
 // Timbre
@@ -302,7 +302,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                     MntExe(totalExento)
                 //MntBase()
                 //MntMargenCom()
-                TasaIVA(vatTaxRate*100)
+                TasaIVA(ec.l10n.format(vatTaxRate*100, "##"))
                 IVA(Math.round(totalNeto * vatTaxRate))
                 //IVAProp()
                 //IVATerc()
@@ -398,14 +398,14 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
 
 uri = "#" + idDocumento
 
-ByteArrayOutputStream out = new ByteArrayOutputStream()
-doc.save(out, opts)
-Document doc2 = MoquiDTEUtils.parseDocument(out.toByteArray())
+String facturaXmlString = xmlWriter.toString()
+xmlWriter.close()
+Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
 
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
 
-if (MoquiDTEUtils.verifySignature(doc2, "/DTE/Documento", "/DTE/Documento/Encabezado/IdDoc/FchEmis/text()")) {
+if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
     ec.logger.warn("DTE folio ${folio} generada OK")
 } else
     ec.message.addError("Error al generar DTE folio ${folio}")
