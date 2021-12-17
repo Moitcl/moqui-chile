@@ -522,14 +522,14 @@
             </fo:table-cell>
             <fo:table-cell text-align="right"><fo:block margin="2pt">
                 <xsl:choose>
-                    <xsl:when test="string(number(siidte:PrcItem | PrcItem))='NaN' or string(number(siidte:DescuentoPct | DescuentoPct))='NaN'">0</xsl:when>
-                    <xsl:otherwise>$&#160;<xsl:value-of select="format-number(siidte:PrcItem | PrcItem, '###.###', 'european')"/></xsl:otherwise>
+                    <xsl:when test="siidte:PrcItem | PrcItem | siidte:DescuentoPct | DescuentoPct">$&#160;<xsl:value-of select="format-number(siidte:PrcItem | PrcItem, '###.###', 'european')"/></xsl:when>
+                    <xsl:otherwise>0</xsl:otherwise>
                 </xsl:choose>
             </fo:block></fo:table-cell>
             <fo:table-cell text-align="right"><fo:block margin="2pt">
                 <xsl:choose>
-                    <xsl:when test="string(number(siidte:DescuentoPct | DescuentoPct))='NaN'">0%</xsl:when>
-                    <xsl:otherwise><xsl:value-of select="format-number(siidte:DescuentoPct | DescuentoPct, '###.###', 'european')"/>%</xsl:otherwise>
+                    <xsl:when test="siidte:DescuentoPct | DescuentoPct"><xsl:value-of select="format-number(siidte:DescuentoPct | DescuentoPct, '###.###', 'european')"/></xsl:when>
+                    <xsl:otherwise>0</xsl:otherwise>%
                 </xsl:choose>
             </fo:block></fo:table-cell>
             <fo:table-cell>
@@ -541,8 +541,7 @@
                 </fo:block>
             </fo:table-cell>
             <fo:table-cell text-align="right"><fo:block margin="2pt">
-                $&#160;<xsl:when test="siidte:MontoItem | MontoItem"><xsl:value-of select="format-number(siidte:MontoItem | MontoItem, '###.###', 'european')"/></xsl:when>
-            </fo:block></fo:table-cell>
+                $&#160;<xsl:value-of select="format-number(siidte:MontoItem | MontoItem, '###.###', 'european')"/></fo:block></fo:table-cell>
         </fo:table-row>
     </xsl:template>
 
@@ -566,32 +565,32 @@
         <fo:table-row>
             <fo:table-cell text-align="left"><fo:block>
                 <xsl:choose>
-                    <xsl:when test="(siidte:TpoDocRef=30) | (TpoDocRef=30)">Factura</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=32) | (TpoDocRef=32)">Factura de Venta Bienes y Servicios</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=33) | (TpoDocRef=33)">Factura Electrónica</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=34) | (TpoDocRef=34)">Factura Electrónica Exenta</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=35) | (TpoDocRef=35)">Boleta</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=38) | (TpoDocRef=38)">Boleta Exenta</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=39) | (TpoDocRef=39)">Boleta Electrónica</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=52) | (TpoDocRef=52)">Guía de Despacho Electrónica</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=56) | (TpoDocRef=56)">Nota de Débito Electrónica</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=61) | (TpoDocRef=61)">Nota de Crédito Electrónica</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=801) | (TpoDocRef=801)">Orden de Compra</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=802) | (TpoDocRef=802)">Nota de pedido</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=803) | (TpoDocRef=803)">Contrato</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=804) | (TpoDocRef=804)">Resolución</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=805) | (TpoDocRef=805)">Proceso ChileCompra</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=806) | (TpoDocRef=806)">Ficha ChileCompra</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=807) | (TpoDocRef=807)">DUS</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=808) | (TpoDocRef=808)">B/L (Conocimiento de embarque)</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=809) | (TpoDocRef=809)">AWB (Air Will Bill)</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=810) | (TpoDocRef=810)">MIC/DTA</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=811) | (TpoDocRef=811)">Carta de Porte</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=812) | (TpoDocRef=812)">Resolución del SNA donde califica Servicios de Exportación</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=813) | (TpoDocRef=813)">Pasporte</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=814) | (TpoDocRef=814)">Certificado de Depósito Bolsa Prod. Chile</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=815) | (TpoDocRef=815)">Vale de Prenda Bolsa Prod. Chile</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef=820) | (TpoDocRef=820)">Código de Inscripción en el Registro de Acuerdos con Plazo de Pago Excepcional</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=30">Factura</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=32">Factura de Venta Bienes y Servicios</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=33">Factura Electrónica</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=34">Factura Electrónica Exenta</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=35">Boleta</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=38">Boleta Exenta</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=39">Boleta Electrónica</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=52">Guía de Despacho Electrónica</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=56">Nota de Débito Electrónica</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=61">Nota de Crédito Electrónica</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=801">Orden de Compra</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=802">Nota de pedido</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=803">Contrato</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=804">Resolución</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=805">Proceso ChileCompra</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=806">Ficha ChileCompra</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=807">DUS</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=808">B/L (Conocimiento de embarque)</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=809">AWB (Air Will Bill)</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=810">MIC/DTA</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=811">Carta de Porte</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=812">Resolución del SNA donde califica Servicios de Exportación</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=813">Pasporte</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=814">Certificado de Depósito Bolsa Prod. Chile</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=815">Vale de Prenda Bolsa Prod. Chile</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=820">Código de Inscripción en el Registro de Acuerdos con Plazo de Pago Excepcional</xsl:when>
                     <xsl:otherwise>Tipo <xsl:value-of select="siidte:TpoDocRef | TpoDocRef"/></xsl:otherwise>
                 </xsl:choose>
             </fo:block></fo:table-cell>
@@ -614,7 +613,7 @@
         <fo:block-container margin-top="4pt" margin-left="1pt">
             <fo:block><fo:instream-foreign-object content-width="5.6cm"><xsl:copy-of select="tedbarcode:generate($myted)"/></fo:instream-foreign-object></fo:block>
             <fo:block font-size="7pt" font-family="sans-serif" text-align="center">Timbre Electrónico SII</fo:block>
-            <fo:block font-size="7pt" font-family="sans-serif" text-align="center">Resolución Ex. SII N° <xsl:value-of select="$nroResol"/> de <xsl:value-of select="$fchResol"/> - Verifique Documento: www.sii.cl</fo:block>
+            <fo:block font-size="7pt" font-family="sans-serif" text-align="center">Resolución Ex. SII N° <xsl:value-of select="$numeroResolucionSii"/> de <xsl:value-of select="$fechaResolucionSii"/> - Verifique Documento: www.sii.cl</fo:block>
         </fo:block-container>
     </xsl:template>
 

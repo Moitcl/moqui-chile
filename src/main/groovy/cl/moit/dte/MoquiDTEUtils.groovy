@@ -1,28 +1,22 @@
 package cl.moit.dte
 
 import org.apache.xml.security.exceptions.XMLSecurityException
+import org.bouncycastle.openssl.PEMKeyPair
+import org.bouncycastle.openssl.PEMParser
+import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter
 import org.moqui.BaseArtifactException
 import org.moqui.context.ExecutionContext
 import org.moqui.entity.EntityValue
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import org.w3c.dom.Element
 import org.w3c.dom.Document
+import org.w3c.dom.Element
 import org.w3c.dom.NodeList
 import org.xml.sax.SAXException
 import sun.security.x509.X509CertImpl
 
-import javax.xml.crypto.AlgorithmMethod
-import javax.xml.crypto.KeySelector
-import javax.xml.crypto.KeySelectorException
-import javax.xml.crypto.KeySelectorResult
-import javax.xml.crypto.XMLCryptoContext
-import javax.xml.crypto.XMLStructure
-import javax.xml.crypto.dsig.DigestMethod
-import javax.xml.crypto.dsig.SignatureMethod
-import javax.xml.crypto.dsig.SignedInfo
-import javax.xml.crypto.dsig.Transform
-import javax.xml.crypto.dsig.XMLSignatureFactory
+import javax.xml.crypto.*
+import javax.xml.crypto.dsig.*
 import javax.xml.crypto.dsig.dom.DOMSignContext
 import javax.xml.crypto.dsig.dom.DOMValidateContext
 import javax.xml.crypto.dsig.keyinfo.KeyInfo
@@ -35,23 +29,14 @@ import javax.xml.namespace.NamespaceContext
 import javax.xml.parsers.DocumentBuilder
 import javax.xml.parsers.DocumentBuilderFactory
 import javax.xml.parsers.ParserConfigurationException
-import javax.xml.transform.OutputKeys
-import javax.xml.transform.Transformer
-import javax.xml.transform.TransformerConfigurationException
-import javax.xml.transform.TransformerException
-import javax.xml.transform.TransformerFactory
+import javax.xml.transform.*
 import javax.xml.transform.dom.DOMSource
 import javax.xml.transform.stream.StreamResult
 import javax.xml.xpath.XPath
-import javax.xml.xpath.XPathFactory
-import javax.xml.xpath.XPathExpression
 import javax.xml.xpath.XPathConstants
-import java.security.InvalidKeyException
-import java.security.Key
-import java.security.KeyFactory
-import java.security.NoSuchAlgorithmException
-import java.security.PrivateKey
-import java.security.PublicKey
+import javax.xml.xpath.XPathExpression
+import javax.xml.xpath.XPathFactory
+import java.security.*
 import java.security.cert.CertificateExpiredException
 import java.security.cert.CertificateNotYetValidException
 import java.security.cert.X509CRL
@@ -60,12 +45,7 @@ import java.security.interfaces.RSAPrivateKey
 import java.security.interfaces.RSAPublicKey
 import java.security.spec.X509EncodedKeySpec
 import java.sql.Timestamp
-import javax.xml.crypto.dsig.XMLSignature
 import java.text.SimpleDateFormat
-import org.bouncycastle.openssl.PEMKeyPair
-import org.bouncycastle.openssl.PEMParser
-import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter
-import java.security.Signature
 
 class MoquiDTEUtils {
 
@@ -227,7 +207,7 @@ class MoquiDTEUtils {
 
             // Agrego referencias
             Map referenciaMap = [:]
-            referenciaListOut.add(refrenciaMap)
+            referenciaListOut.add(referenciaMap)
             referenciaMap.numeroLinea = i+1
             referenciaMap.fecha = fechaRef
             if(referenciaEntry.razonReferencia != null)
