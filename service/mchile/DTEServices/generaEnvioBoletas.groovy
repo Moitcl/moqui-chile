@@ -13,7 +13,6 @@ import org.w3c.dom.Document
 
 import cl.moit.dte.MoquiDTEUtils
 import cl.nic.dte.util.Utilities
-import cl.nic.dte.util.XMLUtil
 import cl.sii.siiDte.boletas.EnvioBOLETADocument
 import cl.sii.siiDte.boletas.BOLETADefType
 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA
