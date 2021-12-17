@@ -220,7 +220,7 @@ if (giroReceptor.length() > 39)
     giroReceptor = giroReceptor.substring(0,39)
 
 // Timbre
-datosTed = "<DD><RE>${rutEmisor}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptor}</RSR><MNT>${totalInvoice}</MNT><IT1>${detalleList.get(0).nombreItem}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
+datosTed = "<DD><RE>${rutEmisor}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptor}</RSR><MNT>${totalInvoice}</MNT><IT1>${detalleList.get(0).nombreItem}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
 
 xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': 'http://www.sii.cl/SiiDte DTE_v10.xsd') {
     Documento(ID: idDocumento) {
