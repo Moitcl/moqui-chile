@@ -87,9 +87,6 @@ if (MoquiDTEUtils.verifySignature(doc, "/sii:EnvioDTE/sii:SetDTE", "./sii:Caratu
     envioRr.putBytes(salida)
     fileName = envioRr.fileName
     ec.logger.warn("Envio generado OK")
-    xmlContentLocation = "file:///Users/jhp/EnvioDte.xml"
-    envioRr = ec.resource.getLocationReference(xmlContentLocation)
-    envioRr.putBytes(salida)
 } else {
     xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/ENV-${idEnvio}-mala.xml"
     envioRr = ec.resource.getLocationReference(xmlContentLocation)
@@ -101,6 +98,6 @@ if (MoquiDTEUtils.verifySignature(doc, "/sii:EnvioDTE/sii:SetDTE", "./sii:Caratu
 envioId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-EnvioDte', statusId:'Ftde-Created', internalId:idEnvio, rutEmisor:rutEmisor, rutReceptor:rutReceptor,
                                                                  registerDate:ec.user.nowTimestamp, documentLocation:xmlContentLocation, fileName:fileName]).call().envioId
 documentIdList.each { documentId ->
-    ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters([fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Misc', contentLocation:xmlContentLocation, contentDate:ts]).call()
+    ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters([fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Envio', contentLocation:xmlContentLocation, contentDate:ts]).call()
     ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([fiscalTaxDocumentId:documentId, envioId:envioId]).call()
 }
