@@ -27,7 +27,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="sentRecStatusId" value="Ftd-NotSentRec"/>
             </entity-find>
             <iterate list="ftdList" entry="dte">
-                <service-call name="mchile.DTECommServices.send#DteToReceiver" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId]" out-map="context" transaction="force-new"/>
+                <service-call name="mchile.sii.DTECommServices.send#DteToReceiver" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId]" out-map="context" transaction="force-new"/>
             </iterate>
         </actions>
     </service>
@@ -46,12 +46,12 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <if condition="contentList.size() != 1"><return error="true" message="Found ${contentList.size()} XML content for fiscalTaxDocumentId ${fiscalTaxDocumentId}, expected 1"/></if>
             <set field="content" from="ec.resource.getLocationReference(contentList.first.contentLocation)"/>
-            <service-call name="mchile.DTECommServices.genera#EnvioDte" in-map="[rutReceptor:dte.receiverPartyIdValue, organizationPartyId:dte.issuerPartyId, documentIdList:[dte.fiscalTaxDocumentId]]" out-map="envio"/>
+            <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[rutReceptor:dte.receiverPartyIdValue, organizationPartyId:dte.issuerPartyId, documentIdList:[dte.fiscalTaxDocumentId]]" out-map="envio"/>
             <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="dteEnvio" auto-field-map="[envioId:envio.envioId]"/>
             <set field="envioContent" from="ec.resource.getLocationReference(dteEnvio.documentLocation)"/>
             <set field="xmlAttachment" from="[attachmentLocation:envioContent.location, fileName:envioContent.fileName, contentType:envioContent.contentType]"/>
             <service-call name="mchile.sii.SIIServices.get#XmlReceptionEmail" in-map="[partyId:dte.receiverPartyId, partyIdValue:dte.receiverPartyIdValue, dtePartyId:dte.issuerPartyId]" out-map="context"/>
-            <service-call name="mchile.DTEServices.get#DteInfo" in-map="context" out-map="bodyParameters"/>
+            <service-call name="mchile.sii.DTEServices.get#DteInfo" in-map="context" out-map="bodyParameters"/>
             <entity-find-one entity-name="moqui.basic.email.EmailTemplate" value-field="emailTemplate" auto-field-map="[emailTemplateId:'MchDteSendXmlReceiver']"/>
             <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" in-map="[toAddresses:xmlReceptionEmailAddress, bccAddresses:'jhp@moit.cl', emailTemplateId:'MchDteSendXmlReceiver',
                     attachments:[xmlAttachment], bodyParameters:bodyParameters+[fiscalTaxDocumentId:fiscalTaxDocumentId, subject:emailTemplate.subject]]"
@@ -112,7 +112,7 @@ along with this software (see the LICENSE.md file). If not, see
                         <continue/>
                     </if>
                     <set field="contentBytes" from="bodyPart.contentBytes ?: bodyPart.contentText.getBytes('ISO-8859-1')"/>
-                    <service-call name="mchile.DTECommServices.store#ReceivedEnvio" in-map="context + [contentBytes:contentBytes, fileName:bodyPart.filename ]"/>
+                    <service-call name="mchile.sii.DTECommServices.store#ReceivedEnvio" in-map="context + [contentBytes:contentBytes, fileName:bodyPart.filename ]"/>
                 </else-if><else>
                     <log level="error" message="Ignoring bodyPart of type ${bodyPart.contentType} and filename ${bodyPart.filename}, disposition ${bodyPart.disposition} for mail ${messageId}"/>
                 </else></if>
@@ -244,7 +244,7 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <iterate list="envioList" entry="envio">
                 <entity-find-one entity-name="moqui.basic.Enumeration" value-field="envEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
-                <service-call name="mchile.DTECommServices.process#${envEv.enumCode}" transaction="force-new" in-map="[envioId:envio.envioId]" out-map="processOut"/>
+                <service-call name="mchile.sii.DTECommServices.process#${envEv.enumCode}" transaction="force-new" in-map="[envioId:envio.envioId]" out-map="processOut"/>
                 <script>ec.message.clearErrors()</script>
                 <if condition="processOut.processed"><then>
                     <service-call name="update#mchile.dte.DteEnvio" transaction="force-new" in-map="[envioId:envio.envioId, statusId:'Ftde-Processed']"/>
@@ -269,13 +269,13 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
     </service>
     <service verb="process" noun="EnvioDte" type="script" location="component://MoquiChile/service/mchile/DTECommServices/processEnvioDte.groovy">
-        <implements service="mchile.DTECommServices.process#EnvioInterface"/>
+        <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
         <out-parameters>
             <parameter name="envioRespuestaId"/>
         </out-parameters>
     </service>
     <service verb="process" noun="RespuestaDte">
-        <implements service="mchile.DTECommServices.process#EnvioInterface"/>
+        <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
         <actions>
             <set field="processed" from="false"/>
             <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
@@ -344,7 +344,7 @@ along with this software (see the LICENSE.md file). If not, see
                         <set field="mntTotal" from="dte.MntTotal.text()" type="BigDecimal"/>
                         <set field="estadoDte" from="dte.EstadoRecepDTE.text()"/>
                         <set field="estadoDteGlosa" from="dte.RecepDTEGlosa.text()"/>
-                        <service-call name="mchile.DTECommServices.process#DteInRespuestaDte" in-map="context" out-map="processDte"/>
+                        <service-call name="mchile.sii.DTECommServices.process#DteInRespuestaDte" in-map="context" out-map="processDte"/>
                         <if condition="processDte.processed">
                             <set field="processedItems" from="processedItems+1"/>
                         </if>
@@ -379,7 +379,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="mntTotal" from="resultadoDte.MntTotal.text()" type="BigDecimal"/>
                     <set field="estadoDte" from="resultadoDte.EstadoDTE.text()"/>
                     <set field="estadoDteGlosa" from="resultadoDte.EstadoDTEGlosa.text()"/>
-                    <service-call name="mchile.DTECommServices.process#DteInRespuestaDte" in-map="context" out-map="processDte"/>
+                    <service-call name="mchile.sii.DTECommServices.process#DteInRespuestaDte" in-map="context" out-map="processDte"/>
                     <if condition="!processDte.processed">
                         <set field="processed" from="false"/>
                     </if>
@@ -418,7 +418,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="process" from="false" type="Boolean"/>
             </if>
             <if condition="process">
-                <service-call name="mchile.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="context"/>
+                <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="context"/>
                 <log message="looking for DTE: ${fiscalTaxDocumentTypeEnumId}/${folio} date=${fchEmis}, issuerPartyIdValue=${rutEmisor}, receiverPartyIdValue=${rutReceptor}, invoiceTotal=${mntTotal}"/>
                 <entity-find entity-name="mchile.dte.InvoiceAndFiscalTaxDocument" list="dbDteList" for-update="true">
                     <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
@@ -452,11 +452,11 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
     <service verb="process" noun="EnvioRecibo">
-        <implements service="mchile.DTECommServices.process#EnvioInterface"/>
+        <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
         <actions></actions>
     </service>
     <service verb="process" noun="ResultadoEnvio">
-        <implements service="mchile.DTECommServices.process#EnvioInterface"/>
+        <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
         <actions>
             <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
             <set field="envioRr" from="ec.resource.getLocationReference(envio.documentLocation)"/>
@@ -477,7 +477,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="tipoDte" from="dte.TIPODTE.text()"/>
                     <set field="estadoDte" from="dte.ESTADO.text()"/>
                     <set field="detalle" from="dte.DETALLE.text()"/>
-                    <service-call name="mchile.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="context"/>
+                    <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="context"/>
                     <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" for-update="true">
                         <econdition field-name="issuerPartyIdValue" from="rutEmisor"/>
                         <econdition field-name="fiscalTaxDocumentNumber" from="folio"/>
@@ -501,7 +501,7 @@ along with this software (see the LICENSE.md file). If not, see
                 </entity-find>
                 <iterate list="ftdList" entry="dte">
                     <if condition="dte.sentAuthStatusId == 'Ftd-SentAuthUnverified'"><then>
-                        <service-call name="mchile.DTECommServices.verificaEnSii#Documento" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId,
+                        <service-call name="mchile.sii.DTECommServices.verificaEnSii#Documento" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId,
                                                                                                      organizationPartyId:ftd.issuerPartyId]" out-map="verificaRes"/>
                         <if condition="verificaRes.errCode == '0'"><set field="processedItems" from="processedItems+1"/></if>
                     </then><else>
@@ -555,7 +555,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="trackId"/>
         </out-parameters>
         <actions>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
 
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="contentEv">
                 <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
@@ -575,9 +575,9 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
 
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
 
-            <service-call name="mchile.DTECommServices.enviaSII#Boleta" in-map="[compaS:rutEmisor, enviadorS:rutEnvia, documentoS:contentLocation, organizationPartyId:organizationPartyId]" out-map="context"/>
+            <service-call name="mchile.sii.DTECommServices.enviaSII#Boleta" in-map="[compaS:rutEmisor, enviadorS:rutEnvia, documentoS:contentLocation, organizationPartyId:organizationPartyId]" out-map="context"/>
             <!-- TODO: Eliminar archivo temporal -->
             <!-- Marcar boleta como enviada -->
             <!-- Se marca DTE como enviada -->
@@ -644,8 +644,8 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
             <set field="statusSii" value=""/>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-            <service-call name="mchile.DTEServices.get#DteContent"
+            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.get#DteContent"
                           in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
             <if condition="!content">
                 <return error="true" message="DTE no existe"/>
@@ -729,11 +729,11 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="salida" required="true"/>
         </out-parameters>
         <actions>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
 
-            <service-call name="mchile.DTEServices.get#DteContent"
+            <service-call name="mchile.sii.DTEServices.get#DteContent"
                           in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
 
             <if condition="!content">
@@ -864,7 +864,7 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Validación rut -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/>
 
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
 
@@ -948,11 +948,11 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <set field="statusSii" value=""/>
 
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
             <set field="certData" from="certData"/>
             <set field="passS" from="passCert"/>
 
-            <service-call name="mchile.DTEServices.get#DteContent"
+            <service-call name="mchile.sii.DTEServices.get#DteContent"
                           in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
 
             <if condition="!content">

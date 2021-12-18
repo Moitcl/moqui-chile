@@ -24,7 +24,7 @@ import cl.sii.siiDte.FechaHoraType
 ExecutionContext ec = context.ec
 
 // Recuperacion de parametros de la organizacion -->
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
 idS = "Doc"
 
 Date dNow = new Date()
@@ -48,7 +48,7 @@ if (recepS)
     ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:recepS]).call()
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:enviadorS]).call()
 
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
 
 // Construyo Envio
 templateEnvioBoleta = """

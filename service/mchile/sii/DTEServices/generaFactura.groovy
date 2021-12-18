@@ -22,12 +22,12 @@ if (invoiceId != null && fiscalTaxDocumentTypeEnumId in dteConstituyeVentaTypeLi
 }
 
 // Recuperacion de parametros de la organizacion -->
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", issuerPartyId).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameter("partyId", issuerPartyId).call())
 
 vatTaxRate = ec.service.sync().name("mchile.TaxServices.get#VatTaxRate").parameter("date", new Timestamp(fechaEmision.time)).call().taxRate
 
 // Giro Emisor
-giroOutMap = ec.service.sync().name("mchile.DTEServices.get#GiroPrimario").parameter("partyId", issuerPartyId).call()
+giroOutMap = ec.service.sync().name("mchile.sii.DTEServices.get#GiroPrimario").parameter("partyId", issuerPartyId).call()
 if (giroOutMap == null) {
     ec.message.addError("No se encuentra giro primario para partyId ${issuerPartyId}")
     return
@@ -35,7 +35,7 @@ if (giroOutMap == null) {
 giroEmisor = giroOutMap.description
 
 // Recuperación del código SII de DTE -->
-codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameter("fiscalTaxDocumentTypeEnumId", fiscalTaxDocumentTypeEnumId).call()
+codeOut = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameter("fiscalTaxDocumentTypeEnumId", fiscalTaxDocumentTypeEnumId).call()
 tipoDte = codeOut.siiCode
 
 // Formas de pago
@@ -59,7 +59,7 @@ else
     formaPago = 2 // Credito (usar GlosaPagos)
 
 //Obtención de folio y CAF -->
-folioResult = ec.service.sync().name("mchile.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call()
+folioResult = ec.service.sync().name("mchile.sii.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call()
 folio = folioResult.folio
 codRef = 0 as Integer
 
@@ -412,7 +412,7 @@ if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:
 
 // Registry de DTE en base de datos y generación de PDF -->
 fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoDte}"
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([dte:facturaXml, issuerPartyId:issuerPartyId, invoiceMessage:invoiceMessage]).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.genera#PDF").parameters([dte:facturaXml, issuerPartyId:issuerPartyId, invoiceMessage:invoiceMessage]).call())
 
 // Creación de registro en FiscalTaxDocument -->
 dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:issuerPartyId]).one()

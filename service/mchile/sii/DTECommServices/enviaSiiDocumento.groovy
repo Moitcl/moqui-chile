@@ -6,7 +6,7 @@ import org.moqui.context.ExecutionContext
 ExecutionContext ec = context.ec
 
 // Validación rut -->
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", organizationPartyId).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameter("partyId", organizationPartyId).call())
 
 ConexionSii con = new ConexionSii()
 

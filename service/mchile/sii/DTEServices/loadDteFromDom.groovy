@@ -51,7 +51,7 @@ fchEmis = encabezado.IdDoc.FchEmis.text()
 emisor = encabezado.Emisor
 rutEmisor = emisor.RUTEmisor.text()
 
-issuerPartyId = ec.service.sync().name("mchile.DTECommServices.get#PartyIdByRut").parameters([idValue:rutEmisor, createUnknown:createUnknownIssuer, razonSocial:emisor.RznSoc.text(), roleTypeId:'Supplier',
+issuerPartyId = ec.service.sync().name("mchile.sii.DTECommServices.get#PartyIdByRut").parameters([idValue:rutEmisor, createUnknown:createUnknownIssuer, razonSocial:emisor.RznSoc.text(), roleTypeId:'Supplier',
                                                                                               giro:emisor.GiroEmis.text(), direccion:emisor.DirOrigen.text(), comuna:emisor.CmnaOrigen.text(), ciudad:emisor.CiudadOrigen.text()]).call().partyId
 issuerTaxName = null
 EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()
@@ -70,7 +70,7 @@ if (requireIssuerInternalOrg && !issuerIsInternalOrg) {
 }
 
 razonSocialEmisor = emisor.RznSoc.text()
-rsResult = ec.service.sync().name("mchile.DTEServices.compare#RazonSocial").parameters([rs1:issuerTaxName, rs2:razonSocialEmisor]).call()
+rsResult = ec.service.sync().name("mchile.sii.DTEServices.compare#RazonSocial").parameters([rs1:issuerTaxName, rs2:razonSocialEmisor]).call()
 if (!rsResult.equivalent) {
     discrepancyMessages.add("Razón Social mismatch, en BD '${issuerTaxName}', en documento ${i} '${razonSocialEmisor}'")
 }
@@ -96,7 +96,7 @@ if (rutReceptorCaratula != null && rutReceptorCaratula != rutReceptor) {
     discrepancyMessages.add("Rut mismatch: carátula indica Rut receptor ${rutEmisorCaratula}, pero documento ${i} indica ${rutEmisor}")
 }
 
-mapOut = ec.service.sync().name("mchile.DTEServices.get#MoquiSIICode").parameter("siiCode", tipoDte).call()
+mapOut = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameter("siiCode", tipoDte).call()
 tipoDteEnumId = mapOut.fiscalTaxDocumentTypeEnumId
 existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([issuerPartyIdValue:rutEmisor, fiscalTaxDocumenTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte])
         .disableAuthz().list()
@@ -126,14 +126,14 @@ if (fechaVencimiento != null && fechaVencimiento != 'null' && fechaVencimiento !
 
 receptor = encabezado.Receptor
 String razonSocialReceptor = receptor.RznSocRecep.text()
-receiverPartyId = ec.service.sync().name("mchile.DTECommServices.get#PartyIdByRut").parameters([idValue:rutReceptor, createUnknown:createUnknownReceiver, razonSocial:razonSocialReceptor, roleTypeId:'Customer',
+receiverPartyId = ec.service.sync().name("mchile.sii.DTECommServices.get#PartyIdByRut").parameters([idValue:rutReceptor, createUnknown:createUnknownReceiver, razonSocial:razonSocialReceptor, roleTypeId:'Customer',
                                                                                               giro:receptor.GiroRecep.text(), direccion:receptor.DirRecep.text(), comuna:receptor.CmnaRecep.text(), ciudad:receptor.CiudadRecep.text()]).call().partyId
 receiver = ec.entity.find("mantle.party.PartyDetail").condition("partyId", receiverPartyId).one()
 // Verificación de Razón Social en XML vs lo guardado en Moqui
 String razonSocialDb = receiver.taxOrganizationName
 if (razonSocialDb == null || razonSocialDb.size() == 0)
     razonSocialDb = ec.resource.expand("PartyNameOnlyTemplate", null, receiver)
-rsResult = ec.service.sync().name("mchile.DTEServices.compare#RazonSocial").parameters([rs1:razonSocialReceptor, rs2:razonSocialDb]).call()
+rsResult = ec.service.sync().name("mchile.sii.DTEServices.compare#RazonSocial").parameters([rs1:razonSocialReceptor, rs2:razonSocialDb]).call()
 if ((!rsResult.equivalent)) {
     ec.logger.warn("Razón social en XML no coincide con la registrada: $razonSocialReceptor != $razonSocialDb")
 }
@@ -373,7 +373,7 @@ referenciasList.each { groovy.util.Node referencia ->
     }
     if (nroLinRef != nroRef)
         errorMessages.add("Valor inesperado en referencia, campo NroLinRef, esperado ${nroRef}, recibido ${referencia.NroLinRef.text()}")
-    mapOut = ec.service.sync().name("mchile.DTEServices.get#MoquiSIICode").parameter("siiCode", referencia.TpoDocRef.text()).call()
+    mapOut = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameter("siiCode", referencia.TpoDocRef.text()).call()
     tipoDteEnumId = mapOut.fiscalTaxDocumentTypeEnumId
     Date refDate = null
     try {

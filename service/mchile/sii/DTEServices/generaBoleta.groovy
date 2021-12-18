@@ -39,7 +39,7 @@ rutEmisor = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").par
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutReceptor).call()
 
 // Recuperacion de parametros de la organizacion -->
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameter("partyId", issuerPartyId).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameter("partyId", issuerPartyId).call())
 // REVISAR
 if (codigoSucursalSii == "LOCAL")
     codigoSucursalSii = "0"
@@ -52,15 +52,15 @@ if (!pdfTemplateBoleta) {
 }
 
 // Giro del emisor
-giroOutMap = ec.service.sync().name("mchile.DTEServices.get#GiroPrimario").parameter("partyId", issuerPartyId).call()
+giroOutMap = ec.service.sync().name("mchile.sii.DTEServices.get#GiroPrimario").parameter("partyId", issuerPartyId).call()
 giroEmisor = giroOutMap.description
 
 // Recuperación del código SII de DTE
-codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]).call()
+codeOut = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]).call()
 Integer tipoFactura = codeOut.siiCode
 
 // Obtención de folio y path de CAF -->
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call())
 codRef = 0 as Integer
 idS = "BO"
 
@@ -209,7 +209,7 @@ if (tipoFactura == 39) {
         unmdItem = detailEntry.quantityUomId
 
         // Verificar si item es afecto o exento
-        afectoOutMap = ec.service.sync().name("mchile.DTEServices.check#Afecto").parameter("productId", detailEntry.productId).call()
+        afectoOutMap = ec.service.sync().name("mchile.sii.DTEServices.check#Afecto").parameter("productId", detailEntry.productId).call()
         itemAfecto = afectoOutMap.afecto
         ec.logger.warn("Item afecto: $itemAfecto, $totalItem")
 
@@ -256,7 +256,7 @@ if (tipoFactura == 39) {
             ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)))
             ref[i].setRazonRef(referenciaEntry.razonReferencia)
         } else {
-            codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
+            codeOut = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
             tpoDocRef = codeOut.siiCode
             //ref[i].setTpoDocRef(tpoDocRef as String)
             ref[i].setRUTOtr(rutReceptor)
@@ -342,7 +342,7 @@ if (tipoFactura == 41) {
             ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(referenciaEntry.fecha)))
             ref[i].setRazonRef(referenciaEntry.razonReferencia)
         } else {
-            codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
+            codeOut = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
             tpoDocRef = codeOut.siiCode
             //ref[i].setTpoDocRef(referenciaEntry.fiscalTaxDocumentTypeEnumId)
             ref[i].setTpoDocRef(tpoDocRef as String)
@@ -560,7 +560,7 @@ if (MoquiDTEUtils.verify(doc2, "//sii:SetDTE")) {
 // Registro de DTE en base de datos y generación de PDF -->
 
 fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoFactura}"
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([dte:facturaXml, issuerPartyId:issuerPartyId, boleta:true, continua:continua]).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.genera#PDF").parameters([dte:facturaXml, issuerPartyId:issuerPartyId, boleta:true, continua:continua]).call())
 
 // Creación de registro en FiscalTaxDocument
 dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio]).forUpdate(true).one()
