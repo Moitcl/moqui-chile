@@ -403,7 +403,8 @@ class MoquiDTEUtils {
     public static byte[] sign(Document doc, String baseUri, PrivateKey pKey, X509Certificate cert, String uri, String tagName) {
         try {
             NodeList nodes = doc.getElementsByTagName(tagName);
-            ((Element) nodes.item(0)).setIdAttributeNS(null, "ID", true);
+            if (tagName != "")
+                ((Element) nodes.item(0)).setIdAttributeNS(null, "ID", true);
 
             String alg = pKey.getAlgorithm();
             if (!alg.equals(cert.getPublicKey().getAlgorithm()))
