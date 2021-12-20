@@ -13,12 +13,16 @@
  */
 package cl.moit.moqui.remote
 
-import groovy.util.slurpersupport.GPathResult
-import wslite.http.auth.HTTPBasicAuthorization
-import wslite.soap.SOAPClient
-import wslite.soap.SOAPResponse
-import wslite.soap.SOAPMessageBuilder
-import wslite.soap.SOAPVersion
+import javax.xml.namespace.QName
+import javax.xml.soap.Name
+import javax.xml.soap.SOAPBody
+import javax.xml.soap.SOAPBodyElement
+import javax.xml.soap.SOAPConnection
+import javax.xml.soap.SOAPConnectionFactory
+import javax.xml.soap.SOAPEnvelope
+import javax.xml.soap.SOAPHeader
+import javax.xml.soap.SOAPMessage
+import javax.xml.soap.SOAPPart
 
 import org.moqui.impl.service.ServiceDefinition
 import org.moqui.impl.service.ServiceFacadeImpl
@@ -41,215 +45,181 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
         if (!location) throw new IllegalArgumentException("Cannot call remote service [${sd.serviceName}] because it has no location specified.")
         if (!method) throw new IllegalArgumentException("Cannot call remote service [${sd.serviceName}] because it has no method specified.")
 
-        SOAPClient client = new SOAPClient()
-        client.setServiceURL(location)
+        SOAPConnection connection = SOAPConnectionFactory.newInstance().createConnection()
 
-        SOAPMessageBuilder smb = new SOAPMessageBuilder()
-        smb.setVersion(SOAPVersion.V1_2)
+        SOAPMessage message = javax.xml.soap.MessageFactory.newInstance().createMessage();
+        SOAPPart soapPart = message.getSOAPPart();
+        SOAPEnvelope envelope = soapPart.getEnvelope();
+        SOAPHeader header = envelope.getHeader();
+        SOAPBody body = envelope.getBody();
+        header.detachNode();
 
         Map<String, Object> serviceParams = (Map<String, Object>)parameters.get("xmlRpcServiceParams")
         if (serviceParams) {
             parameters.remove("xmlRpcServiceParams")
         }
         boolean debug = serviceParams?.debug
-        if (debug) logger.info("Debug mode is ON")
-        else logger.info("Debug mode is OFF")
+        if (debug)
+            logger.info("Debug mode is ON")
+        else
+            logger.info("Debug mode is OFF")
+        String soapAction = serviceParams.get("soapAction")
+
+        String methodNamespace = serviceParams?.methodNamespace
+        String methodNamespacePrefix = serviceParams?.methodNamespacePrefix
 
         boolean proxy = serviceParams?.proxy
         if (proxy) {
             logger.info("Proxy mode is ON ")
+            logger.error("Proxy mode unsupported")
             def proxyhost = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(serviceParams?.proxyhost, serviceParams?.proxyport))
-            client.httpClient.proxy = proxyhost
         }
         else logger.info("Proxy mode is OFF")
 
         Map<String, Object> basicAuthAttributes = (Map<String, Object>)parameters.get("xmlRpcBasicAuthentication")
         if (basicAuthAttributes) {
-            if (debug) logger.info("user: ${basicAuthAttributes['user']}, pass: ${basicAuthAttributes['pass']}")
-            client.authorization = new HTTPBasicAuthorization( basicAuthAttributes['user'].toString(), basicAuthAttributes['pass'].toString() )
+            if (debug) logger.info("user: ${basicAuthAttributes.user}, pass: ${basicAuthAttributes.pass}")
+            String authString = "Basic ${basicAuthAttributes.user}:${basicAuthAttributes.pass}"
+            message.getMimeHeaders().addHeader("Authorization", "Basic " + Base64.mimeEncoder.encode(authString.getBytes()))
             parameters.remove("xmlRpcBasicAuthentication")
         }
 
+        /*
         Map<String, Object> soapConfig = (Map<String, Object>)parameters.get("xmlRpcSoapAttributes")
         if (soapConfig) {
-            if (soapConfig['version'] == 'v1.1') smb.setVersion(SOAPVersion.V1_1)
+            if (soapConfig['version'] == 'v1.1') ;
             parameters.remove("xmlRpcSoapAttributes")
         }
+         */
 
         Map<String, Object> envelopeAttributes = (Map<String, Object>)parameters.get("xmlRpcEnvelopeAttributes")
         if (envelopeAttributes) {
-            smb.envelopeAttributes(envelopeAttributes)
             parameters.remove("xmlRpcEnvelopeAttributes")
-        }
-
-        Map<String, Object> requestParams = (Map<String, Object>)parameters.get("xmlRpcRequestParams")
-        if (requestParams) {
-            parameters.remove("xmlRpcRequestParams")
-        }
-
-        String queryXml = createQueryXml(method, parameters)
-        if (debug) logger.info("queryXml: ${queryXml}")
-
-        def msg = smb.build() {
-            body = {
-                mkp.yieldUnescaped(queryXml)
+            envelopeAttributes.each { key, value ->
+                envelope.addAttribute(envelope.createName(key), value)
             }
         }
 
-        if (debug) logger.info("RequestParams: ${requestParams}")
-        if (debug) logger.info("ContentType: ${msg.version}; ${msg.encoding}")
-        if (debug) logger.info("XML String: ${msg}")
+        Name bodyName = envelope.createName(method, methodNamespacePrefix, methodNamespace);
+        message.getMimeHeaders().addHeader("SOAPAction", soapAction);
 
-        SOAPResponse response = client.send(requestParams, msg.version, msg.toString())
-        // SOAPResponse response = client.send(msg.toString())
-        /*def response = client.send(requestParams) {
-            version msg.version      // SOAPVersion.V1_1 is default
-            encoding msg.encoding()  // "UTF-8" is default encoding for xml
-            envelopeAttributes "xmlns:hr":"http://example.org/hr"
-            header(mustUnderstand:false) {
-                auth {
-                    apiToken("1234567890")
-                }
-            }
-            body {
-                GetWeatherByZipCode(xmlns:"http://example.weather.org") {
-                    ZipCode("93657")
-                }
-            }
-        }*/
+        SOAPBodyElement bodyElement = body.addBodyElement(bodyName);
+        addToBodyElement(bodyElement, parameters)
 
-        Map<String, Object> xmlRpcResult = (Map<String, Object>) toMap(response.body)
+        URL endpoint = new URL(location);
 
-        if (debug) logger.info("XML Result: ${xmlRpcResult}")
+        if (debug) logger.info("Parameters: ${parameters}")
+        //if (debug) logger.info("ContentType: ${message.version}; ${msg.encoding}")
+        if (debug) logger.info("XML String: ${body.toString()}")
 
-        return xmlRpcResult
+        SOAPMessage response = connection.call(message, endpoint);
+
+        SOAPPart sp = response.getSOAPPart();
+        SOAPBody resultBody = sp.getEnvelope().getBody();
+
+        Map resultMap = toMap(resultBody)
+        if (debug) logger.info("XML Result: ${resultMap}")
+
+        return toMap(resultBody)
 
     }
 
-    String createQueryXml(String method, Map<String, Object> parameters) {
-        return "<${method}>${createQueryXml(parameters)}</${method}>"
-    }
-
-    Map<String, Object> stringToMap(String value) {
-        logger.warn("starting stringToMap('${value}')")
-        value = value.trim()
-        if (value.charAt(0) != '[')
-            throw new IllegalArgumentException("String does not start with '[', not a map")
-        if (value.charAt(value.length()-1) != ']')
-            throw new IllegalArgumentException("String does not end with ']', not a map")
-        int pos = 1
-        int parLevel = 0
-        int squareBrackLevel = 0
-        int keyStart = -1
-        int keyEnd = -1
-        int valueStart = -1
-        Map<String, Object> newMap = new HashMap<String, Object>()
-        while (pos < value.length()) {
-            switch(value.charAt(pos)) {
-                case '(':
-                    parLevel++
-                    break
-                case ')':
-                    parLevel++
-                    break
-                case '[':
-                    squareBrackLevel++
-                    break
-                case ':':
-                    if (parLevel == 0 && squareBrackLevel == 0) {
-                        keyEnd = pos
-                        valueStart = pos+1
-                    }
-                    break
-                case ']':
-                    logger.warn("found ']' at position ${pos} (length: ${value.length()})")
-                    if (pos < value.length()-1) {
-                        squareBrackLevel--
-                        break
-                    } // No break outside the if because ']' as last character marks end of value and should add to the
-                      // map, same case as if we found a ',' so just continue to the next
-                case ',':
-                    if (parLevel == 0 && squareBrackLevel == 0) {
-                        if (valueStart > 0 && valueStart < pos) {
-                            String key = value.substring(keyStart, keyEnd).trim()
-                            String val = value.substring(valueStart, pos).trim()
-                            if (val.startsWith('['))
-                                newMap.put(key, stringToMap(val))
-                            else
-                                newMap.put(key, val)
-                            keyStart = -1
-                            keyEnd = -1
-                            valueStart = -1
-                        }
-                    }
-                    break
-                default:
-                    if (parLevel == 0 && squareBrackLevel == 0) {
-                        if (keyStart == -1) {
-                            keyStart = pos
-                            valueStart = -1
-                        }
-                    }
-            }
-            pos++
+    public static void addToBodyElement(SOAPBodyElement bodyElement, Object parameters) {
+        if (parameters == null)
+            return
+        if (parameters instanceof Collection) {
+            //logger.info("Processing collection: ${parameters}")
+            Collection collection = (Collection) parameters
+            collection.each { addToBodyElement(bodyElement, it) }
+        } else if (!parameters instanceof Map) {
+            throw new RuntimeException("Unhandled object type in addToBodyElement: ${parameters.class}")
         }
-        return newMap
-    }
-
-    String createQueryXml(Map<String, Object> parameters) {
-        StringBuffer sb = new StringBuffer()
-        parameters.each {key, value ->
-            sb.append("<${key}>")
-            if (value instanceof Map) {
-                sb.append(createQueryXml(value))
-            } else if (value instanceof String) {
-                if (value.startsWith('[')) {
-                    Map<String, Object> valueMap = stringToMap(value)
-                    sb.append(createQueryXml(valueMap))
+        Map map = (Map)parameters
+        //logger.info("Processing map: ${parameters}")
+        String namespace = map.namespace
+        String key = map.key
+        Object value = map.value
+        if (key == null) {
+            //logger.info("Key is null, value: ${value}")
+            map.each { intKey, intValue ->
+                Map newMap = [:]
+                newMap.key = intKey
+                newMap.value = intValue
+                if (intValue instanceof List) {
+                    //logger.info("Value is list, adding each element")
+                    intValue.each { item ->
+                        newMap.value = item
+                        addToBodyElement(bodyElement, newMap)
+                    }
                 } else {
-                    sb.append(value)
+                    //logger.info("Value is not list, adding")
+                    addToBodyElement(bodyElement, newMap)
                 }
-            } else {
-                throw new IllegalArgumentException("Unsupported type for parameters")
             }
-            sb.append("</${key}>\n")
+            return
         }
-        return sb.toString()
+        logger.info("Adding child element with name ${key}")
+        SOAPBodyElement childElement = bodyElement.addChildElement(new QName(namespace, key))
+        if (value instanceof List) {
+            logger.info("Value is list and key is not null, adding each element")
+            List childList = (List)value
+            childList.each {
+                logger.info("processing child: ${it}")
+                if (it instanceof String) {
+                    logger.info("child is string, adding textNode")
+                    childElement.addTextNode(it)
+                } else {
+                    logger.info("child is not string, adding")
+                    addToBodyElement(childElement, it)
+                }
+            }
+        } else if (value instanceof Map) {
+            logger.info("Value is Map and key is not null, adding recursively")
+            addToBodyElement(childElement, value)
+        } else if (value != null) {
+            logger.info("value is neither list nor map and is not null, adding textNode")
+            childElement.addTextNode(value.toString())
+        }
     }
 
-    Map<String, Object> toMap(Object node) {
-        if (node instanceof Closure) {
-            throw new IllegalArgumentException("Unsupported type for node: 'Closure'")
-        }
-        if (!node instanceof GPathResult) {
-            throw new IllegalArgumentException("Unsupported type for node: '${node.class}'")
-        }
-        GPathResult gpr = (GPathResult)node
-        if (gpr.name() != "Body")
-            throw new IllegalArgumentException("Result body has name: '${gpr.name()}'")
-        GPathResult children = gpr.children()
-        if (children.isEmpty())
-            return [(gpr.name()):null]
-        else if (gpr.size() == 1)
-            gpr = children.getAt(0) // should always be the case, one single child
-        Object childRes = toMapInternal(gpr)
+    public void destroy() { }
+
+    Map<String, Object> toMap(org.w3c.dom.Node node) {
+        if (node.getLocalName() != "Body" || node.getNamespaceURI() != "http://schemas.xmlsoap.org/soap/envelope/")
+            throw new IllegalArgumentException("Result body has name: '${node.getNodeName()}'")
+        org.w3c.dom.NodeList children = node.getChildNodes()
+        if (children.length == 0 || node.nodeType == org.w3c.dom.Node.TEXT_NODE)
+            return node.getTextContent()
+        if (children.length == 1 && node.getFirstChild().nodeType == org.w3c.dom.Node.TEXT_NODE)
+            return node.getFirstChild().getTextContent()
+        if (children.length == 1)
+            node = children.item(0) // should always be the case, one single child
+        Object childRes = toMapInternal(node)
         if (childRes instanceof Map<String,Object>)
             return (Map<String, Object>)childRes
-        return [(gpr.name()):childRes]
+        return [(node.getLocalName()):childRes]
     }
 
-    Object toMapInternal(GPathResult gpr) {
-        GPathResult children = gpr.children()
-        if (children.isEmpty())
-            return gpr.text()
+    Object toMapInternal(org.w3c.dom.Node node) {
+        org.w3c.dom.NodeList children = node.getChildNodes()
+        if (children.length == 0 || node.nodeType == org.w3c.dom.Node.TEXT_NODE)
+            return node.getTextContent()
+        if (children.length == 1 && node.getFirstChild().nodeType == org.w3c.dom.Node.TEXT_NODE)
+            return node.getFirstChild().getTextContent()
         Map<String, List<Object>> childMaps = new HashMap<String, List<Object>>()
-        children.each { child ->
-            List<Object> childNameList = childMaps.get(child.name())
-            if (childNameList == null) {
-                childNameList = new LinkedList<Object>()
-                childMaps.put(child.name(), childNameList)
+        List<String> childTexts = new LinkedList<String>()
+        children.each { org.w3c.dom.Node child ->
+            if (child.nodeType == org.w3c.dom.Node.TEXT_NODE) {
+                if (child.textContent != null && child.textContent.trim().size() > 0)
+                    logger.error("Unhandled text for child of node ${node.getLocalName()} with name ${child.getLocalName()}: ${child.textContent}")
+            } else {
+                List<Object> childNameList = childMaps.get(child.getLocalName())
+                if (childNameList == null) {
+                    childNameList = new LinkedList<Object>()
+                    childMaps.put(child.getLocalName(), childNameList)
+                }
+                childNameList.add(toMapInternal(child))
             }
-            childNameList.add(toMapInternal(child))
         }
         Map<String, Object> returnMap = new HashMap<String, Object>()
         childMaps.each { key, value ->
@@ -262,5 +232,7 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
         return returnMap
     }
 
-    public void destroy() { }
+    static {
+        System.setProperty("javax.xml.soap.SAAJMetaFactory", "com.sun.xml.messaging.saaj.soap.SAAJMetaFactoryImpl")
+    }
 }
