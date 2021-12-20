@@ -19,7 +19,7 @@ dteEvList.each { dte ->
     tipoDte = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameter("fiscalTaxDocumentTypeEnumId", dte.fiscalTaxDocumentTypeEnumId).call().siiCode
     contentLocation = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).one()?.contentLocation
     if (contentLocation == null) {
-        ec.message.addError("Did not find XML content for FiscalTaxDocument with id ${fiscalTaxDocumentId}")
+        ec.message.addError("Did not find XML content for FiscalTaxDocument with id ${dte.fiscalTaxDocumentId}")
         return
     }
     docNumberByType[tipoDte] = (docNumberByType[tipoDte]?:0) + 1
@@ -35,6 +35,9 @@ dteEvList.each { dte ->
     }
     ec.logger.warn("Agregado: " + dte.fiscalTaxDocumentId)
 }
+
+if (ec.message.hasError())
+    return
 
 // Validación rut
 if (rutReceptor) {

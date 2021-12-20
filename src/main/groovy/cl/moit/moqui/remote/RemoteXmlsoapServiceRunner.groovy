@@ -158,26 +158,26 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
             }
             return
         }
-        logger.info("Adding child element with name ${key}")
+        //logger.info("Adding child element with name ${key}")
         SOAPBodyElement childElement = bodyElement.addChildElement(new QName(namespace, key))
         if (value instanceof List) {
-            logger.info("Value is list and key is not null, adding each element")
+            //logger.info("Value is list and key is not null, adding each element")
             List childList = (List)value
             childList.each {
-                logger.info("processing child: ${it}")
+                //logger.info("processing child: ${it}")
                 if (it instanceof String) {
-                    logger.info("child is string, adding textNode")
+                    //logger.info("child is string, adding textNode")
                     childElement.addTextNode(it)
                 } else {
-                    logger.info("child is not string, adding")
+                    //logger.info("child is not string, adding")
                     addToBodyElement(childElement, it)
                 }
             }
         } else if (value instanceof Map) {
-            logger.info("Value is Map and key is not null, adding recursively")
+            //logger.info("Value is Map and key is not null, adding recursively")
             addToBodyElement(childElement, value)
         } else if (value != null) {
-            logger.info("value is neither list nor map and is not null, adding textNode")
+            //logger.info("value is neither list nor map and is not null, adding textNode")
             childElement.addTextNode(value.toString())
         }
     }
