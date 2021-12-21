@@ -534,7 +534,6 @@ along with this software (see the LICENSE.md file). If not, see
             documentoS: nombre de documento a enviar (que puede contener varios)
         </description>
         <in-parameters>
-            <parameter name="rutOrganizacion" required="true"/>
             <parameter name="envioId" required="true"/>
             <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
@@ -1086,12 +1085,17 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="get" noun="Seed">
+        <in-parameters>
+            <parameter name="isProduction" type="Boolean"/>
+        </in-parameters>
         <out-parameters>
             <parameter name="estado"/>
             <parameter name="semilla"/>
         </out-parameters>
         <actions>
-            <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+            <if condition="isProduction == null">
+                <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+            </if>
             <if condition="isProduction"><then>
                 <service-call name="mchile.sii.DTECommServices.get#SeedProduction" out-map="context"/>
             </then><else>
@@ -1133,6 +1137,7 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="get" noun="Token">
         <in-parameters>
             <parameter name="partyId" required="true"/>
+            <parameter name="isProduction" type="Boolean"/>
         </in-parameters>
         <out-parameters>
             <parameter name="token"/>
@@ -1140,7 +1145,10 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="glosa"/>
         </out-parameters>
         <actions>
-            <service-call name="mchile.sii.DTECommServices.get#Seed" out-map="seed"/>
+            <if condition="isProduction == null">
+                <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+            </if>
+            <service-call name="mchile.sii.DTECommServices.get#Seed" in-map="context" out-map="seed"/>
             <if condition="seed.estado != '00'">
                 <return error="true" message="Estado inválido al obtener semilla: ${seed.estado}"/>
             </if>
@@ -1162,7 +1170,6 @@ along with this software (see the LICENSE.md file). If not, see
                 byte[] signedXmlBytes = MoquiDTEUtils.sign(doc, "", pkey, certificate, "", "")
                 String signedXml = new String(signedXmlBytes)
             ]]></script>
-            <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
             <if condition="isProduction"><then>
                 <service-call name="mchile.sii.DTECommServices.get#TokenProduction" in-map="[pszXml:signedXml]" out-map="context"/>
             </then><else>

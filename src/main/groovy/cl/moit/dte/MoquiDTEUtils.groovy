@@ -46,6 +46,8 @@ import java.security.interfaces.RSAPublicKey
 import java.security.spec.X509EncodedKeySpec
 import java.sql.Timestamp
 import java.text.SimpleDateFormat
+import java.util.regex.Matcher
+import java.util.regex.Pattern
 
 class MoquiDTEUtils {
 
@@ -559,10 +561,24 @@ class MoquiDTEUtils {
         List rsaPublicKey = [modulus: publicKey.getModulus(), exponent: publicKey.getPublicExponent()]
     }
 
+    /**
+     * Obtiene el RUT desde un certificado digital. Busca en la extension
+     * 2.5.29.17
+     *
+     * @param x509
+     * @return
+     */
+    public static String getRutFromCertificate(X509Certificate x509) {
+        String rut = null;
+        Pattern p = Pattern.compile("[\\d]{6,8}-[\\dkK]");
+        Matcher m = p.matcher(new String(x509.getExtensionValue("2.5.29.17")));
+        if (m.find())
+            rut = m.group();
+        return rut;
+    }
+
     static {
         org.apache.xml.security.Init.init();
     }
-
-
 
 }
