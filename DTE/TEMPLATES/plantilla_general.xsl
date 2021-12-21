@@ -599,9 +599,9 @@
             <fo:table-cell><fo:block><xsl:value-of select="siidte:RazonRef | RazonRef"/></fo:block></fo:table-cell>
             <fo:table-cell><fo:block>
                 <xsl:choose>
-                    <xsl:when test="(siidte:CodRef=1) | (CodRef=1)">Anula Doc. Ref.</xsl:when>
-                    <xsl:when test="(siidte:CodRef=2) | (CodRef=2)">Corrige Texto</xsl:when>
-                    <xsl:when test="(siidte:CodRef=3) | (CodRef=3)">Corrige Montos</xsl:when>
+                    <xsl:when test="(siidte:CodRef | CodRef)=1">Anula Doc. Ref.</xsl:when>
+                    <xsl:when test="(siidte:CodRef | CodRef)=2">Corrige Texto</xsl:when>
+                    <xsl:when test="(siidte:CodRef | CodRef)=3">Corrige Montos</xsl:when>
                 </xsl:choose>
             </fo:block></fo:table-cell>
         </fo:table-row>
