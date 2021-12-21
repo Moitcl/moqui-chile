@@ -61,8 +61,6 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
         boolean debug = serviceParams?.debug
         if (debug)
             logger.info("Debug mode is ON")
-        else
-            logger.info("Debug mode is OFF")
         String soapAction = serviceParams.get("soapAction")
 
         String methodNamespace = serviceParams?.methodNamespace
@@ -74,7 +72,7 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
             logger.error("Proxy mode unsupported")
             def proxyhost = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(serviceParams?.proxyhost, serviceParams?.proxyport))
         }
-        else logger.info("Proxy mode is OFF")
+        else if (debug) logger.info("Proxy mode is OFF")
 
         Map<String, Object> basicAuthAttributes = (Map<String, Object>)parameters.get("xmlRpcBasicAuthentication")
         if (basicAuthAttributes) {
