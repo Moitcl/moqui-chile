@@ -71,7 +71,7 @@ class FacturacionTests extends Specification {
       Map productOut = ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem")
               .parameters([invoiceId:invoiceId, productId:productId, quantity:5, amount:500000, description:'HORAS PROGRAMADOR'])
               .call()
-      Map factOut = ec.service.sync().name("mchile.DTEServices.facturar#Invoice")
+      Map factOut = ec.service.sync().name("mchile.sii.DTEServices.facturar#Invoice")
               .parameters([invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dteType, activeOrgId:partyId])
               .call()
       String fiscalTaxDocumentId = factOut.fiscalTaxDocumentId

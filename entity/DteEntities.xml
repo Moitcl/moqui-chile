@@ -68,6 +68,8 @@
             <moqui.basic.StatusType statusTypeId="FiscalTaxDocumentSentRec" description="Fiscal Tax Document Sent to Receiver"/>
             <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentRec" statusId="Ftd-NotSentRec" statusCode="0" description="DTE not sent to Receiver"/>
             <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentRec" statusId="Ftd-SentRec" statusCode="2" description="DTE sent to Receiver"/>
+            <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentRec" statusId="Ftd-ReceiverAck" statusCode="3" description="DTE acknowledged by Receiver"/>
+            <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentRec" statusId="Ftd-ReceiverAccept" statusCode="4" description="DTE accepted by Receiver"/>
             <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="Ftd-NotSentRec" toStatusId="Ftd-SentRec"/>
 
             <moqui.basic.StatusType statusTypeId="FiscalTaxDocumentStatus" description="Fiscal Tax Document Status"/>
@@ -170,6 +172,7 @@
             <moqui.basic.Enumeration enumTypeId="TaxDocumentContentType" enumId="Ftdct-Pdf" description="Archivo PDF con la representación impresa del DTE"/>
             <moqui.basic.Enumeration enumTypeId="TaxDocumentContentType" enumId="Ftdct-PdfCedible" description="Archivo PDF Cedible con la representación impresa del DTE"/>
             <moqui.basic.Enumeration enumTypeId="TaxDocumentContentType" enumId="Ftdct-Xml" description="Archivo XML con la representación electrónica del DTE"/>
+            <moqui.basic.Enumeration enumTypeId="TaxDocumentContentType" enumId="Ftdct-Envio" description="Archivo XML con Envio DTE"/>
             <moqui.basic.Enumeration enumTypeId="TaxDocumentContentType" enumId="Ftdct-RecAck" description="Aceptación de receptor del DTE"/>
             <moqui.basic.Enumeration enumTypeId="TaxDocumentContentType" enumId="Ftdct-Misc" description="Contenido adicional relacionado con el DTE"/>
         </seed-data>
@@ -190,19 +193,24 @@
         <alias-all entity-alias="FTDEM"/><alias-all entity-alias="EMSG"/>
     </view-entity>
 
-
     <entity entity-name="Caf" package="mchile.dte" cache="never" >
         <field name="cafId" type="id" is-pk="true"/>
         <field name="activo" type="text-short"/>
         <field name="filename" type="text-medium"/>
         <field name="desde" type="number-integer"/>
         <field name="hasta" type="number-integer"/>
+        <field name="razonSocial" type="text-medium"/>
         <field name="fiscalTaxDocumentTypeEnumId" type="text-short"/>
         <field name="fechaAutorizacion" type="date"/>
         <field name="rut" type="text-medium"/>
-        <field name="ultimoFolio" type="number-integer"/>
+        <field name="ultimoFolio" type="number-integer"><description>To be removed after data migration</description></field>
+        <field name="siguienteFolio" type="number-integer"/>
         <field name="issuerPartyId" type="id"/>
         <field name="cafData" type="text-very-long" encrypt="true"/>
+        <field name="cafFragment" type="text-long"/>
+        <field name="keyType" type="text-short"/>
+        <field name="publicKey" type="text-long"/>
+        <field name="privateKey" type="text-long" encrypt="true"/>
         <relationship type="one" related="moqui.basic.Enumeration" title="FiscalTaxDocumentType">
             <key-map field-name="fiscalTaxDocumentTypeEnumId"/>
         </relationship>
@@ -276,9 +284,10 @@
         <field name="rutReceptor" type="text-medium"/>
         <field name="registerDate" type="date-time" default="ec.user.nowTimestamp"/>
         <field name="documentLocation" type="text-medium"/>
-        <field name="receivedFileName" type="text-medium"><description>Nombre de archivo con que se recibió</description></field>
+        <field name="fileName" type="text-medium"><description>Nombre de archivo con que se recibió</description></field>
         <field name="processingParameters" type="text-medium"/>
         <field name="emailMessageId" type="id"/>
+        <field name="trackId" type="text-medium" enable-audit-log="true"/>
         <relationship type="one" related="moqui.basic.Enumeration" title="DteEnvioType">
             <key-map field-name="envioTypeEnumId" related="enumId"/>
         </relationship>
@@ -352,17 +361,24 @@
         <field name="templatePdfBoleta" type="text-medium"/>
         <field name="templatePdfBoletaContinua" type="text-medium"/>
         <field name="logo" type="text-medium"/>
-        <field name="fchResol" type="text-medium"/>
-        <field name="nroResol" type="text-medium"/>
-        <field name="rznSocEmisor" type="text-medium"/>
-        <field name="cdgSIISucur" type="text-medium"/>
+        <field name="fechaResolucionSii" type="text-medium"/>
+        <field name="fchResol" type="text-medium"><description>Old field name for fechaResolucionSii, remove when migration is complete</description></field>
+        <field name="numeroResolucionSii" type="text-medium"/>
+        <field name="nroResol" type="text-medium"><description>Old field name for numeroResolucionSii, remove when migration is complete</description></field>
+        <field name="razonSocialEmisor" type="text-medium"/>
+        <field name="rznSocEmisor" type="text-medium"><description>Old field name for razonSocialEmisor, remove when migration is complete</description></field>
+        <field name="codigoSucursalSii" type="text-medium"/>
+        <field name="cdgSIISucur" type="text-medium"><description>Old field name for codigoSucursalSii, remove when migration is complete</description></field>
         <field name="oficinaSII" type="text-medium"/>
-        <field name="dirOrigen" type="text-medium"/>
-        <field name="cmnaOrigen" type="text-medium"/>
+        <field name="direccionOrigen" type="text-medium"/>
+        <field name="dirOrigen" type="text-medium"><description>Old field name for direccionOrigen, remove when migration is complete</description></field>
+        <field name="comunaOrigen" type="text-medium"/>
+        <field name="cmnaOrigen" type="text-medium"><description>Old field name for comunaOrigen, remove when migration is complete</description></field>
         <field name="ciudadOrigen" type="text-medium"/>
         <field name="certData" type="text-very-long" encrypt="true"><description>Base64-encoded X509 certificate in PKCS12 format</description></field>
         <field name="passCert" type="text-medium" encrypt="true"/>
-        <field name="nmbContacto" type="text-medium"/>
+        <field name="nombreContacto" type="text-medium"/>
+        <field name="nmbContacto" type="text-medium"><description>Old field name for nombreContacto", remove when migration is complete</description></field>
         <field name="mailContacto" type="text-medium"/>
         <field name="fonoContacto" type="text-medium"/>
         <field name="pdfTemplate" type="text-very-long"/>
@@ -429,6 +445,21 @@
         </member-entity>
         <alias-all entity-alias="DTE"/>
         <alias-all entity-alias="CONT"/>
+    </view-entity>
+
+    <view-entity entity-name="InvoiceAndFiscalTaxDocument" package="mchile.dte">
+        <member-entity entity-name="mchile.dte.FiscalTaxDocument" entity-alias="DTE"/>
+        <member-entity entity-alias="INV" entity-name="mantle.account.invoice.Invoice" join-from-alias="DTE" join-optional="true">
+            <key-map field-name="invoiceId"/>
+        </member-entity>
+        <alias-all entity-alias="DTE">
+            <exclude field="statusId"/>
+        </alias-all>
+        <alias-all entity-alias="INV">
+            <exclude field="statusId"/>
+        </alias-all>
+        <alias name="fiscalTaxDocumentStatusId" entity-alias="DTE" field="statusId"/>
+        <alias name="invoiceStatusId" entity-alias="INV" field="statusId"/>
     </view-entity>
 
 </entities>

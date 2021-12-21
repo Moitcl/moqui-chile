@@ -35,18 +35,18 @@ rutEmisor = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").par
 // ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rutReceptor]).call()
 
 // Recuperacion de parametros de la organizacion
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
 resultadoFirmado = pathResults
 
 // Buscar lista de DTE 39 que se hayan emitido/anulado
-mapBoleta = ec.service.sync().name("mchile.DTEServices.get#ResumenRcof").parameters([fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-39', organizationPartyId:organizationPartyId]).call()
+mapBoleta = ec.service.sync().name("mchile.sii.DTEServices.get#ResumenRcof").parameters([fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-39', organizationPartyId:organizationPartyId]).call()
 // Buscar lista de DTE 41
-mapBoletaExenta = ec.service.sync().name("mchile.DTEServices.get#ResumenRcof").parameters([fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-41', organizationPartyId:organizationPartyId]).call()
+mapBoletaExenta = ec.service.sync().name("mchile.sii.DTEServices.get#ResumenRcof").parameters([fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-41', organizationPartyId:organizationPartyId]).call()
 // Buscar lista de DTE 61 que anulen boletas
-mapNotaCredito = ec.service.sync().name("mchile.DTEServices.get#ResumenRcof").parameters([fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-61', organizationPartyId:organizationPartyId]).call()
+mapNotaCredito = ec.service.sync().name("mchile.sii.DTEServices.get#ResumenRcof").parameters([fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-61', organizationPartyId:organizationPartyId]).call()
 
 Date dNow = new Date()
-SimpleDateFormat ft = new SimpleDateFormat("yyMMddhhmmssMs")
+SimpleDateFormat ft = new SimpleDateFormat("yyyyMMddHHmmssSSS")
 String datetime = ft.format(dNow)
 idS = idS + datetime
 
@@ -103,7 +103,7 @@ caratula.setRutEnvia(rutEnvia)
 //caratula.setRutReceptor(rutReceptor)
 
 
-Date dateFchResol = new SimpleDateFormat("yyyy-MM-dd").parse(fchResol)
+Date dateFchResol = new SimpleDateFormat("yyyy-MM-dd").parse(fechaResolucionSii)
 
 //iddoc.xsetFchEmis(FechaType.Factory.newValue(Utilities.fechaFormat.format(new Date())))
 caratula.xsetFchResol(FechaType.Factory.newValue(Utilities.fechaFormat.format(dateFchResol)))
@@ -123,7 +123,7 @@ caratula.setCorrelativo(1)
 // Secuencia de envío
 caratula.setSecEnvio(1)
 
-caratula.setNroResol(Integer.valueOf(nroResol))
+caratula.setNroResol(Integer.valueOf(numeroResolucionSii))
 now = FechaHoraType.Factory.newValue(Utilities.fechaHoraFormat.format(new Date()))
 
 caratula.xsetTmstFirmaEnv(now)
@@ -330,7 +330,7 @@ return
 //fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoFacturaS}"
 xml = "${pathResults}BOL${tipoFactura}-${folio}.xml"
 pdf = "${pathPdf}BOL${tipoFactura}-${folio}.pdf"
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.genera#PDF").parameters([pdf:pdf, dte:xml, issuerPartyId:organizationPartyId, boleta:true]).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.genera#PDF").parameters([pdf:pdf, dte:xml, issuerPartyId:organizationPartyId, boleta:true]).call())
 
 // Creación de registro en FiscalTaxDocument
 dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio]).forUpdate(true).one()

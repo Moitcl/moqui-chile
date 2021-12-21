@@ -13,7 +13,7 @@ ExecutionContext ec = context.ec
 rut = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").parameters([partyId:organizationPartyId, failIfNotFound:true]).call().rut
 // Carga XML
 archivoXml = xml.getName()
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
 contentLocationXml = "dbresource://moit/erp/dte/${rut}/DTERECIBIDA-39-${invoiceId}.xml"
 docRrXml = ec.resource.getLocationReference(contentLocationXml)
 
@@ -113,7 +113,7 @@ for (int i = 0; i < boletaArray.size(); i++) {
         ec.message.addError("Razón social en XML no coindice con la registrada: $razonSocialEmisor != $razonSocialMoqui")
         return
     }
-    mapOut = ec.service.sync().name("mchile.DTEServices.get#MoquiSIICode").parameters([siiCode:tipoDte]).call()
+    mapOut = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameters([siiCode:tipoDte]).call()
     tipoDteEnumId = mapOut.fiscalTaxDocumentTypeEnumId
     // Creación de orden de compra
     purchaseOutMap = ec.service.sync().name("mchile.PurchaseServices.create#Purchase").parameters([vendorPartyId:issuerPartyId]).call()

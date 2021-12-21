@@ -1,63 +1,53 @@
 package cl.moit.dte
 
-import cl.nic.dte.util.Utilities
-import cl.sii.siiDte.DTEDefType.Documento.Detalle
-import cl.sii.siiDte.DTEDefType.Documento.Referencia
-import cl.sii.siiDte.FechaType
 import org.apache.xml.security.exceptions.XMLSecurityException
+import org.bouncycastle.openssl.PEMKeyPair
+import org.bouncycastle.openssl.PEMParser
+import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter
 import org.moqui.BaseArtifactException
 import org.moqui.context.ExecutionContext
 import org.moqui.entity.EntityValue
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import org.w3c.dom.Element
 import org.w3c.dom.Document
+import org.w3c.dom.Element
 import org.w3c.dom.NodeList
 import org.xml.sax.SAXException
 import sun.security.x509.X509CertImpl
 
-import javax.xml.crypto.AlgorithmMethod
-import javax.xml.crypto.KeySelector
-import javax.xml.crypto.KeySelectorException
-import javax.xml.crypto.KeySelectorResult
-import javax.xml.crypto.XMLCryptoContext
-import javax.xml.crypto.XMLStructure
-import javax.xml.crypto.dsig.SignatureMethod
-import javax.xml.crypto.dsig.XMLSignatureFactory
+import javax.xml.crypto.*
+import javax.xml.crypto.dsig.*
+import javax.xml.crypto.dsig.dom.DOMSignContext
 import javax.xml.crypto.dsig.dom.DOMValidateContext
 import javax.xml.crypto.dsig.keyinfo.KeyInfo
+import javax.xml.crypto.dsig.keyinfo.KeyInfoFactory
+import javax.xml.crypto.dsig.keyinfo.KeyValue
 import javax.xml.crypto.dsig.keyinfo.X509Data
+import javax.xml.crypto.dsig.spec.C14NMethodParameterSpec
+import javax.xml.crypto.dsig.spec.TransformParameterSpec
 import javax.xml.namespace.NamespaceContext
 import javax.xml.parsers.DocumentBuilder
 import javax.xml.parsers.DocumentBuilderFactory
 import javax.xml.parsers.ParserConfigurationException
-import javax.xml.transform.OutputKeys
-import javax.xml.transform.Transformer
-import javax.xml.transform.TransformerConfigurationException
-import javax.xml.transform.TransformerException
-import javax.xml.transform.TransformerFactory
+import javax.xml.transform.*
 import javax.xml.transform.dom.DOMSource
 import javax.xml.transform.stream.StreamResult
 import javax.xml.xpath.XPath
-import javax.xml.xpath.XPathFactory
-import javax.xml.xpath.XPathExpression
 import javax.xml.xpath.XPathConstants
-import java.security.InvalidKeyException
-import java.security.Key
-import java.security.NoSuchAlgorithmException
-import java.security.PrivateKey
-import java.security.PublicKey
+import javax.xml.xpath.XPathExpression
+import javax.xml.xpath.XPathFactory
+import java.security.*
 import java.security.cert.CertificateExpiredException
 import java.security.cert.CertificateNotYetValidException
 import java.security.cert.X509CRL
 import java.security.cert.X509Certificate
-import java.security.interfaces.DSAPrivateKey
-import java.security.interfaces.DSAPublicKey
 import java.security.interfaces.RSAPrivateKey
 import java.security.interfaces.RSAPublicKey
+import java.security.spec.X509EncodedKeySpec
 import java.sql.Timestamp
-import javax.xml.crypto.dsig.XMLSignature
 import java.text.SimpleDateFormat
+import java.util.regex.Matcher
+import java.util.regex.Pattern
 
 class MoquiDTEUtils {
 
@@ -69,8 +59,7 @@ class MoquiDTEUtils {
 
     public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType, BigInteger codRef) throws BaseArtifactException {
         int i = 0
-        int listSize = detailList.size()
-        Detalle[] det = new Detalle[listSize]
+        List detalleList = []
         Long totalNeto = null
         Long totalExento = null
         int numberAfectos = 0
@@ -83,7 +72,7 @@ class MoquiDTEUtils {
                 EntityValue productEv = ec.entity.find("mantle.product.Product").condition("productId", detailEntry.productId).one()
                 nombreItem = productEv? productEv.productName : ''
             }
-            Integer qtyItem = detailEntry.quantity
+            Integer quantity = detailEntry.quantity
             String uom = null
             BigDecimal pctDiscount
             if (!detailType in ["ShipmentItem"]) {
@@ -95,7 +84,7 @@ class MoquiDTEUtils {
             }
             String itemAfecto = "true"
             if (detailEntry.productId) {
-                Map<String, Object> afectoOutMap = ec.service.sync().name("mchile.DTEServices.check#Afecto").parameter("productId", detailEntry.productId).call()
+                Map<String, Object> afectoOutMap = ec.service.sync().name("mchile.sii.DTEServices.check#Afecto").parameter("productId", detailEntry.productId).call()
                 itemAfecto = afectoOutMap.afecto
             }
 
@@ -128,27 +117,27 @@ class MoquiDTEUtils {
                             uom = "Mes"
                     }
                 }
-                if (quantityHandled < qtyItem) {
-                    ec.logger.info("pending ${qtyItem - quantityHandled} out of ${qtyItem}")
+                if (quantityHandled < quantity) {
+                    ec.logger.info("pending ${quantity - quantityHandled} out of ${quantity}")
                     EntityValue shipment = ec.entity.find("mantle.shipment.Shipment").condition("shipmentId", shipmentId).one()
                     Timestamp shipmentDate = shipment.estimatedShipDate ?: shipment.shipAfterDate ?: shipment.entryDate ?: ec.user.nowTimestamp
-                    Map<String, Object> priceMap = ec.service.sync().name("mantle.product.PriceServices.get#ProductPrice").parameters([productId: detailEntry.productId, quantity: qtyItem, validDate: shipmentDate]).call()
-                    totalItem = totalItem + (qtyItem - quantityHandled) * priceMap.price
+                    Map<String, Object> priceMap = ec.service.sync().name("mantle.product.PriceServices.get#ProductPrice").parameters([productId: detailEntry.productId, quantity: quantity, validDate: shipmentDate]).call()
+                    totalItem = totalItem + (quantity - quantityHandled) * priceMap.price
                 }
-                priceItem = totalItem / qtyItem as BigDecimal
+                priceItem = totalItem / quantity as BigDecimal
                 totalItem = totalItem.setScale(0, BigDecimal.ROUND_HALF_UP) as Long
             } else if (detailType == "DebitoItem") {
-                if (codRef == 2) {
-                    qtyItem = null
+                if(BigDecimal.valueOf(codRef) == 2) {
+                    quantity = null
                     priceItem = null
                     nombreItem = "CORRIGE TEXTO"
                     totalItem = 0
                 } else {
                     priceItem = detailEntry.amount
-                    totalItem = (qtyItem?:0) * (priceItem?:0)
+                    totalItem = (quantity?:0) * (priceItem?:0)
                 }
             } else if (detailType == "ReturnItem" && codRef == 2) {
-                qtyItem = null
+                quantity = null
                 priceItem = null
                 nombreItem = "CORRIGE GIROS"
                 totalItem = 0
@@ -156,7 +145,7 @@ class MoquiDTEUtils {
                 priceItem = detailEntry.returnPrice
             } else {
                 priceItem = detailEntry.amount
-                totalItem = (qtyItem?:0) * (priceItem?:0)
+                totalItem = (quantity?:0) * (priceItem?:0)
             }
 
             if (itemAfecto == "true")
@@ -165,57 +154,51 @@ class MoquiDTEUtils {
                 numberExentos++
 
             // Agrego detalles
-            det[i] = Detalle.Factory.newInstance()
-            det[i].setNroLinDet(i+1)
-            if (detailEntry.productId) {
-                String codigoInterno = detailEntry.productId
-                cl.sii.siiDte.DTEDefType.Documento.Detalle.CdgItem codigo = det[i].addNewCdgItem()
-                codigo.setTpoCodigo("Interna")
-                codigo.setVlrCodigo(codigoInterno)
-            }
-            det[i].setNmbItem(nombreItem)
+            Map detailMap = [:]
+            detalleList.add(detailMap)
+            detailMap.numeroLinea = i+1
+            if (detailEntry.productId)
+                detailMap.codigoItem = [[tipoCodigo:'Interna', valorCodigo:detailEntry.productId]]
+            detailMap.nombreItem = nombreItem
             if (detailEntry.detailedDescription)
-                det[i].setDscItem(detailEntry.detailedDescription)
-            //det[i].setDscItem(""); // Descripción Item
-            if (qtyItem != null)
-                det[i].setQtyItem(BigDecimal.valueOf(qtyItem))
+                detailMap.descripcionItem(detailEntry.detailedDescription)
+            if (quantity != null)
+                detailMap.quantity = quantity
             if(uom != null)
-                det[i].setUnmdItem(uom)
+                detailMap.uom = uom
             if((pctDiscount != null) && (pctDiscount > 0)) {
                 ec.logger.warn("Aplicando descuento " + pctDiscount+"% a precio "+ priceItem )
                 BigDecimal descuento = totalItem * pctDiscount / 100
                 ec.logger.warn("Descuento:" + descuento)
-                det[i].setDescuentoPct(pctDiscount)
-                det[i].setDescuentoMonto(Math.round(descuento))
+                detailMap.porcentajeDescuento = pctDiscount
+                detailMap.montoDescuento = Math.round(descuento)
                 totalItem = totalItem - descuento
             }
             if (priceItem != null && (detailType != "ShipmentItem" || Math.round(priceItem) > 0))
-                det[i].setPrcItem(BigDecimal.valueOf(priceItem))
-            det[i].setMontoItem(Math.round(totalItem))
+                detailMap.priceItem = priceItem
+            detailMap.montoItem = totalItem
             if(detailType == "ShipmentItem" || itemAfecto.equals("true")) {
                 totalNeto = (totalNeto ?: 0) + totalItem
             } else {
                 totalExento = (totalExento ?: 0) + totalItem
-                det[i].setIndExe(1)
+                detailMap.indicadorExento = 1
             }
             if (detailType == "ReturnItem" && codRef == 2) {
-                Detalle[] singleDet = new Detalle[1];
-                singleDet[0] = det[i]
-                return [detailArray:singleDet, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
+                singleDet = [detailMap]
+                return [detalleList:singleDet, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
             }
             if (detailType == "DebitoItem" && codRef == 2) {
-                Detalle[] singleDet = new Detalle[1];
-                singleDet[0] = det[i]
+                singleDet = [detailMap]
                 return [detailArray:singleDet, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
             }
             i = i + 1
         }
-        return [detailArray:det, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
+        return [detalleList:detalleList, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
     }
 
     public static Map<String, Object> prepareReferences(ExecutionContext ec, List<HashMap> referenciaList, String rutReceptor, Long tipoFactura) {
         int listSize = referenciaList.size()
-        Referencia[] ref = new Referencia[listSize]
+        List referenciaListOut = []
         String anulaBoleta = null
         String folioAnulaBoleta = null
         boolean dteExenta = false
@@ -227,21 +210,21 @@ class MoquiDTEUtils {
             Timestamp fechaRef = referenciaEntry.fecha instanceof java.sql.Date? new Timestamp(referenciaEntry.fecha.time) : referenciaEntry.fecha
 
             // Agrego referencias
-            ref[i] = Referencia.Factory.newInstance()
-            ref[i].setNroLinRef(i+1)
-            ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(fechaRef)))
+            Map referenciaMap = [:]
+            referenciaListOut.add(referenciaMap)
+            referenciaMap.numeroLinea = i+1
+            referenciaMap.fecha = fechaRef
             if(referenciaEntry.razonReferencia != null)
-                ref[i].setRazonRef(referenciaEntry.razonReferencia)
-            ref[i].setFolioRef(folioRef)
+                referenciaMap.razon = referenciaEntry.razonReferencia
+            referenciaMap.folio = folioRef
             if (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('Ftdt-0')) { // Used for Set de Pruebas SII
-                ref[i].setTpoDocRef('SET')
+                referenciaMap.tipoDocumento = 'SET'
             } else {
-                Map<String, Object> codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
+                Map<String, Object> codeOut = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
                 Integer tpoDocRef = codeOut.siiCode
-                //ref[i].setTpoDocRef(referenciaEntry.fiscalTaxDocumentTypeEnumId)
-                ref[i].setTpoDocRef(tpoDocRef as String)
+                referenciaMap.tipoDocumento = tpoDocRef as String
                 if (rutReceptor)
-                    ref[i].setRUTOtr(rutReceptor)
+                    referenciaMap.rutOtro = rutReceptor
                 if(tipoFactura == 61 && (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-39") || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41")) && codRef.equals(1) ) {
                     // Nota de crédito hace referencia a Boletas Electrónicas
                     anulaBoleta = 'true'
@@ -249,7 +232,7 @@ class MoquiDTEUtils {
                 }
             }
             if(codRef != null)
-                ref[i].setCodRef(codRef)
+                referenciaMap.codigo = codRef
             // TODO: ¿Por qué se asume que una Nota de Crédito es exenta al estar generando una nota de débito?
             if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-34") || (tipoFactura == 56 && referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-61")) ) {
                 dteExenta = true
@@ -257,7 +240,7 @@ class MoquiDTEUtils {
 
             i = i + 1
         }
-        return [referenceArray:ref, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, dteExenta:dteExenta]
+        return [referenciaList:referenciaListOut, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, dteExenta:dteExenta]
     }
 
     public static boolean verifySignature(org.w3c.dom.Node doc, String xPathExpression, String dateXPathExpression) throws NoSuchAlgorithmException, InvalidKeyException,
@@ -424,38 +407,32 @@ class MoquiDTEUtils {
     public static byte[] sign(Document doc, String baseUri, PrivateKey pKey, X509Certificate cert, String uri, String tagName) {
         try {
             NodeList nodes = doc.getElementsByTagName(tagName);
-            ((Element) nodes.item(0)).setIdAttributeNS(null, "ID", true);
-
-            javax.xml.parsers.DocumentBuilderFactory dbf = javax.xml.parsers.DocumentBuilderFactory.newInstance();
-            dbf.setNamespaceAware(true);
+            if (tagName != "")
+                ((Element) nodes.item(0)).setIdAttributeNS(null, "ID", true);
 
             String alg = pKey.getAlgorithm();
             if (!alg.equals(cert.getPublicKey().getAlgorithm()))
                 throw (new Exception("ERROR DE ALGORITMO"));
             org.w3c.dom.Element root = doc.getDocumentElement();
-            org.apache.xml.security.signature.XMLSignature sig = null;
+            DOMSignContext dsc = new DOMSignContext(pKey, root);
+            XMLSignatureFactory fac = XMLSignatureFactory.getInstance("DOM");
+            javax.xml.crypto.dsig.Reference ref = fac.newReference(uri, fac.newDigestMethod(DigestMethod.SHA1, null), List.of(fac.newTransform (Transform.ENVELOPED, (TransformParameterSpec) null)), null, null);
+            String signatureAlgorithm = null
             if (alg.equals("RSA")) {
                 if (!((RSAPrivateKey) pKey).getModulus().equals(((RSAPublicKey) cert.getPublicKey()).getModulus()))
                     throw (new Exception("ERROR DE FIRMA RSA"));
-                sig = new org.apache.xml.security.signature.XMLSignature(doc, baseUri, org.apache.xml.security.signature.XMLSignature.ALGO_ID_SIGNATURE_RSA_SHA1);
+                signatureAlgorithm = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
             } else if (alg.equals("DSA")) {
-                if (!(((DSAPrivateKey) pKey).getParams().getG()
-                        .equals(((DSAPublicKey) cert.getPublicKey()).getParams().getG())
-                        && ((DSAPrivateKey) pKey).getParams().getP()
-                        .equals(((DSAPublicKey) cert.getPublicKey()).getParams().getP())
-                        && ((DSAPrivateKey) pKey).getParams().getQ()
-                        .equals(((DSAPublicKey) cert.getPublicKey()).getParams().getQ())))
-                    throw (new Exception("ERROR DE FIRMA DSA"));
-                sig = new org.apache.xml.security.signature.XMLSignature(doc, baseUri, org.apache.xml.security.signature.XMLSignature.ALGO_ID_SIGNATURE_DSA);
+                signatureAlgorithm = "http://www.w3.org/2000/09/xmldsig#dsa-sha1"
             }
+            SignedInfo si = fac.newSignedInfo(fac.newCanonicalizationMethod ("http://www.w3.org/TR/2001/REC-xml-c14n-20010315", (C14NMethodParameterSpec) null), fac.newSignatureMethod(signatureAlgorithm, null), List.of(ref));
+            KeyInfoFactory kif = fac.getKeyInfoFactory();
+            KeyValue kv = kif.newKeyValue(cert.getPublicKey());
+            X509Data certData = kif.newX509Data(Collections.singletonList ( cert ));
+            KeyInfo ki = kif.newKeyInfo(List.of(kv, certData));
+            XMLSignature signature = fac.newXMLSignature(si, ki);
+            signature.sign(dsc);
 
-            root.appendChild(sig.getElement());
-            sig.addDocument(baseUri);
-            org.apache.xml.security.keys.content.X509Data xdata = new org.apache.xml.security.keys.content.X509Data(doc);
-            xdata.addCertificate(cert);
-            sig.getKeyInfo().addKeyValue(cert.getPublicKey());
-            sig.getKeyInfo().add(xdata);
-            sig.sign(pKey);
             return getRawXML(doc);
         } catch (Exception e) {
             e.printStackTrace();
@@ -549,6 +526,57 @@ class MoquiDTEUtils {
         boolean validating = false
         boolean namespaceAware = false
         return new groovy.util.XmlParser(validating, namespaceAware).parseText(xml)
+    }
+
+    public static String firmaTimbre(String datosTed, String privateKeyData) {
+        if (privateKeyData.startsWith('-----BEGIN RSA PRIVATE KEY-----\n')) {
+            //privateKeyData = privateKeyData.replace("-----BEGIN RSA PRIVATE KEY-----\n", "").replace("\n-----END RSA PRIVATE KEY-----", "")
+            try {
+                PEMParser pemParser = new PEMParser(new InputStreamReader(new ByteArrayInputStream(privateKeyData.getBytes())))
+                Object result = pemParser.readObject()
+                if (result == null)
+                    throw new RuntimeException("No object read from data")
+                pemParser.close()
+                if (result instanceof PEMKeyPair) {
+                    PEMKeyPair keyPair = (PEMKeyPair)result
+                    java.security.KeyPair kp = new JcaPEMKeyConverter().getKeyPair(result)
+                    java.security.Signature sig = Signature.getInstance("SHA1WithRSA");
+                    sig.initSign(kp.getPrivate())
+                    sig.update(datosTed.getBytes("ISO-8859-1"))
+                    return Base64.mimeEncoder.encodeToString(sig.sign())
+                } else {
+                    throw new RuntimeException("No se pudo recuperar llave privada")
+                }
+            } catch (Exception ex) {
+                throw new RuntimeException("Unable to recover private key..." + ex.getMessage());
+            }
+        } else {
+            throw new RuntimeException("Unsupported keyType (does not start with '-----BEGIN RSA PRIVATE KEY-----\\n'")
+        }
+    }
+
+    public static String verificaTimbre(String timbreXml, String firma, String publicKeyData) {
+        publicKeyData = publicKeyData.replace("-----BEGIN PUBLIC KEY-----\n", "").replace("\n-----END PUBLIC KEY-----", "")
+        KeyFactory keyFactory = KeyFactory.getInstance("RSA")
+        byte[] keyBytes = Base64.mimeDecoder.decode(publicKeyData)
+        RSAPublicKey publicKey = keyFactory.generatePublic(new X509EncodedKeySpec(keyBytes))
+        List rsaPublicKey = [modulus: publicKey.getModulus(), exponent: publicKey.getPublicExponent()]
+    }
+
+    /**
+     * Obtiene el RUT desde un certificado digital. Busca en la extension
+     * 2.5.29.17
+     *
+     * @param x509
+     * @return
+     */
+    public static String getRutFromCertificate(X509Certificate x509) {
+        String rut = null;
+        Pattern p = Pattern.compile("[\\d]{6,8}-[\\dkK]");
+        Matcher m = p.matcher(new String(x509.getExtensionValue("2.5.29.17")));
+        if (m.find())
+            rut = m.group();
+        return rut;
     }
 
     static {

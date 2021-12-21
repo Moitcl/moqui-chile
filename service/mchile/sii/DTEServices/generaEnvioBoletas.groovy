@@ -13,7 +13,6 @@ import org.w3c.dom.Document
 
 import cl.moit.dte.MoquiDTEUtils
 import cl.nic.dte.util.Utilities
-import cl.nic.dte.util.XMLUtil
 import cl.sii.siiDte.boletas.EnvioBOLETADocument
 import cl.sii.siiDte.boletas.BOLETADefType
 import cl.sii.siiDte.boletas.EnvioBOLETADocument.EnvioBOLETA
@@ -25,11 +24,11 @@ import cl.sii.siiDte.FechaHoraType
 ExecutionContext ec = context.ec
 
 // Recuperacion de parametros de la organizacion -->
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
 idS = "Doc"
 
 Date dNow = new Date()
-SimpleDateFormat ft = new SimpleDateFormat("yyMMddhhmmssMs")
+SimpleDateFormat ft = new SimpleDateFormat("yyyyMMddHHmmssSSS")
 String datetime = ft.format(dNow)
 idS = idS + datetime
 
@@ -49,7 +48,7 @@ if (recepS)
     ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:recepS]).call()
 ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:enviadorS]).call()
 
-ec.context.putAll(ec.service.sync().name("mchile.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
 
 // Construyo Envio
 templateEnvioBoleta = """
@@ -58,8 +57,8 @@ templateEnvioBoleta = """
     <SetDTE>
         <Caratula version="1.0">
             <RutEmisor>${rutEmisor}</RutEmisor>
-            <FchResol>${fchResol}</FchResol>
-            <NroResol>${nroResol}</NroResol>
+            <FchResol>${fechaResolucionSii}</FchResol>
+            <NroResol>${numeroResolucionSii}</NroResol>
         </Caratula>
     </SetDTE>
 </EnvioBOLETA>"""
@@ -103,7 +102,7 @@ cal.set(Calendar.MONTH, Integer.valueOf('09'))
 cal.set(Calendar.DAY_OF_MONTH, Integer.valueOf('24'))
 caratula.setFchResol(cal)
 
-caratula.setNroResol(Integer.valueOf(nroResol))
+caratula.setNroResol(Integer.valueOf(numeroResolucionSii))
 caratula.xsetTmstFirmaEnv(now)
 
 // documentos a enviar

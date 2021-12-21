@@ -42,7 +42,7 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="genera" noun="Factura" type="script" location="component://MoquiChile/service/mchile/DTEServices/generaFactura.groovy">
+    <service verb="genera" noun="Factura" type="script" location="component://MoquiChile/service/mchile/sii/DTEServices/generaFactura.groovy">
         <description>
             Generación de DTE de acuerdo a plantilla
         </description>
@@ -51,12 +51,12 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="issuerPartyId" required="true"/>
             <parameter name="rutReceptor" required="true"/>
             <parameter name="receiverPartyId" required="true"/>
-            <parameter name="rznSocReceptor" required="true"/>
+            <parameter name="razonSocialReceptor" required="true"/>
             <parameter name="giroReceptor" required="true"/>
             <parameter name="contactoReceptor" required="true"/>
-            <parameter name="dirReceptor" required="true"/>
-            <parameter name="cmnaReceptor" required="true"/>
-            <parameter name="ciudadReceptor" default-value="${cmnaReceptor}"/>
+            <parameter name="direccionReceptor" required="true"/>
+            <parameter name="comunaReceptor" required="true"/>
+            <parameter name="ciudadReceptor" default-value="${comunaReceptor}"/>
             <parameter name="detailList" type="List"/>
             <parameter name="invoiceId"/>
             <parameter name="shipmentId"/>
@@ -117,14 +117,14 @@ along with this software (see the LICENSE.md file). If not, see
                 import java.security.KeyStore
                 import java.security.PrivateKey
                 import java.security.cert.X509Certificate
-                import cl.nic.dte.util.Utilities
+                import cl.moit.dte.MoquiDTEUtils
 
                 if (certData && passCert) {
                     KeyStore ks = KeyStore.getInstance("PKCS12")
                     ks.load(new ByteArrayInputStream(certData.decodeBase64()), passCert.toCharArray())
                     String alias = ks.aliases().nextElement()
                     certificate = (X509Certificate) ks.getCertificate(alias)
-                    rutEnvia = Utilities.getRutFromCertificate(certificate)
+                    rutEnvia = MoquiDTEUtils.getRutFromCertificate(certificate)
                     ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEnvia).call()
                     pkey = (PrivateKey) ks.getKey(alias, ((String)passCert).toCharArray())
                 }
@@ -137,14 +137,14 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="pdfTemplateBoleta" from="dteParams.pdfTemplateBoleta"/>
             <set field="pdfTemplateBoletaContinua" from="dteParams.pdfTemplateBoletaContinua"/>
             <set field="logo" from="dteParams.logo ?: ''"/>
-            <set field="fchResol" from="dteParams.fchResol ?: ''"/>
-            <set field="nroResol" from="dteParams.nroResol ?: ''"/>
-            <set field="rznSocEmisor" from="dteParams.rznSocEmisor"/>
-            <set field="cdgSIISucur" from="dteParams.cdgSIISucur"/>
-            <set field="dirOrigen" from="dteParams.dirOrigen"/>
-            <set field="cmnaOrigen" from="dteParams.cmnaOrigen"/>
+            <set field="fechaResolucionSii" from="dteParams.fechaResolucionSii ?: ''"/>
+            <set field="numeroResolucionSii" from="dteParams.numeroResolucionSii ?: ''"/>
+            <set field="razonSocialEmisor" from="dteParams.razonSocialEmisor"/>
+            <set field="codigoSucursalSii" from="dteParams.codigoSucursalSii"/>
+            <set field="direccionOrigen" from="dteParams.direccionOrigen"/>
+            <set field="comunaOrigen" from="dteParams.comunaOrigen"/>
             <set field="ciudadOrigen" from="dteParams.ciudadOrigen"/>
-            <set field="nmbContacto" from="dteParams.nmbContacto"/>
+            <set field="nombreContacto" from="dteParams.nombreContacto"/>
             <set field="mailContacto" from="dteParams.mailContacto ?: ''"/>
             <set field="fonoContacto" from="dteParams.fonoContacto ?: ''"/>
             <set field="oficinaSII" from="dteParams.oficinaSII ?: ''"/>
@@ -159,12 +159,12 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="tableBorderColor" from="dteParams.tableBorderColor ?: '&#35;eaeaea'"/>
             <set field="vendorNameColor" from="dteParams.vendorNameColor ?: 'black'"/>
 
-            <set field="transformParameters" from="[fonoContacto:fonoContacto, mailContacto:mailContacto, oficinaSII:oficinaSII, logo:logo, nroResol:nroResol, fchResol:fchResol, maxItems:'14',
+            <set field="transformParameters" from="[fonoContacto:fonoContacto, mailContacto:mailContacto, oficinaSII:oficinaSII, logo:logo, numeroResolucionSii:numeroResolucionSii, fechaResolucionSii:fechaResolucionSii, maxItems:'14',
                                                     showItemNumber:'N', commentAfterDetalle:commentAfterDetalle, cuentaBancariaMail:cuentaBancariaMail, cuentaBancariaText:cuentaBancariaText,
                                                     detailHeaderBgColor:detailHeaderBgColor, detailHeaderFgColor:detailHeaderFgColor, detailHeaderSepColor:detailHeaderSepColor, tableBorderColor:tableBorderColor,
                                                     vendorNameColor:vendorNameColor]"/>
 
-            <service-call name="mchile.DTEServices.check#ProductionEnvironment" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
             <set field="dteSystemIsProduction" from="isProduction"/>
         </actions>
     </service>
@@ -186,7 +186,7 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
             <!-- Recuperacion de parametros de la organizacion -->
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:issuerPartyId]" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:issuerPartyId]" out-map="context"/>
             <set field="passS" from="passCert"/>
             <set field="template" from="pdfTemplate"/>
             <set field="giro" from="giroEmisor"/>
@@ -200,21 +200,11 @@ along with this software (see the LICENSE.md file). If not, see
                 </if>
             </if>
 
-            <if condition="!pdfTemplate">
+            <if condition="!template">
                 <return error="true" message="Organización emisora no tiene definida plantilla para generar PDF"/>
             </if>
 
             <script>
-                import java.io.File
-                import java.io.FileInputStream
-                import javax.sql.rowset.serial.SerialBlob
-                import java.security.KeyStore
-                import java.security.PrivateKey
-                import java.security.cert.X509Certificate
-
-                import cl.nic.dte.net.ConexionSii
-                import cl.nic.dte.util.Utilities
-                import cl.sii.siiDte.RECEPCIONDTEDocument
                 import javax.xml.transform.stream.StreamSource
 
                 if (invoiceMessage != null) {
@@ -252,17 +242,10 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="partyId" required="true"/>
         </in-parameters>
         <actions>
-            <set field="archivo" from="cafFile.getName()"/>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:partyId]" out-map="context"/>
-            <set field="contentLocation" value="dbresource://moit/erp/dte/caf/${partyId}/${archivo}"/>
-
-            <set field="docRr" from="ec.resource.getLocationReference(contentLocation)"/>
-            <script>
-                fileStream = cafFile.getInputStream()
-                try { docRr.putStream(fileStream) } finally { fileStream.close() }
-            </script>
-
-            <service-call name="mchile.DTEServices.load#CafInternal" in-map="context" out-map="context"/>
+            <set field="filename" from="cafFile.getName()"/>
+            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:partyId]" out-map="context"/>
+            <set field="contentByteArray" from="cafFile.get()"/>
+            <service-call name="mchile.sii.DTEServices.load#CafInternal" in-map="context" out-map="context"/>
         </actions>
     </service>
 
@@ -271,7 +254,9 @@ along with this software (see the LICENSE.md file). If not, see
             Carga CAF en Sistema
         </description>
         <in-parameters>
-            <parameter name="contentLocation" required="true"/>
+            <parameter name="contentLocation"/>
+            <parameter name="contentByteArray" type="Object"/>
+            <parameter name="filename"/>
             <parameter name="partyId" required="true"/>
             <parameter name="activateCaf" type="Boolean" default="false"/>
         </in-parameters>
@@ -279,77 +264,57 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="cafId"/>
         </out-parameters>
         <actions>
+            <if condition="contentLocation != null &amp;&amp; contentLocation.length() > 0 &amp;&amp; contentByteArray != null &amp;&amp; contentByteArray.size() > 0">
+                <return error="true" message="Specified both, contentLocation and contentByteArray, please specify only one"/>
+            </if>
+            <if condition="contentByteArray == null || contentByteArray.size() == 0">
+                <if condition="contentLocation == null || contentLocation.length() == 0">
+                    <return error="true" message="One of contentByteArray or contentLocation is required"/>
+                </if>
+                <set field="contentRr" from="ec.resource.getLocationReference(contentLocation)"/>
+                <set field="contentByteArray" from="contentRr.openStream().readAllBytes()"/>
+                <set field="filename" from="contentRr.fileName"/>
+            </if>
+            <set field="cafDataString" from="new String(contentByteArray, 'ISO-8859-1')"/>
+            <set field="autorizacion" from="new groovy.util.XmlParser(false, false).parseText(cafDataString)"/>
+            <set field="privateKey" from="autorizacion.RSASK.text()"/>
+            <if condition="privateKey == null || privateKey.length() == 0"><then>
+                <set field="privateKey" from="autorizacion.DSASK.text()"/>
+                <set field="publicKey" from="autorizacion.DSAPUBK.text()"/>
+                <set field="keyType" value="DSA"/>
+            </then><else>
+                <set field="publicKey" from="autorizacion.RSAPUBK.text()"/>
+                <set field="keyType" value="RSA"/>
+            </else></if>
+            <script><![CDATA[
+                StringWriter writer = new StringWriter()
+                nodePrinter = new groovy.util.XmlNodePrinter(new PrintWriter(writer))
+                nodePrinter.setPreserveWhitespace(true)
+                nodePrinter.print(autorizacion.CAF[0])
+                writer.close()
+                cafFragment = writer.toString()
+            ]]></script>
+            <set field="datosAutorizacion" from="autorizacion.CAF.DA"/>
+            <set field="rango" from="datosAutorizacion.RNG"/>
+            <set field="desde" from="rango.D.text()"/>
+            <set field="hasta" from="rango.H.text()"/>
+            <set field="fechaAutorizacion" from="ec.l10n.parseDate(datosAutorizacion.FA.text(), 'yyyy-MM-dd')"/>
+            <set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${datosAutorizacion.TD.text()}"/>
+            <set field="rutCaf" from="datosAutorizacion.RE.text()"/>
+
             <!-- Carga de RUT de empresa -->
             <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:partyId]" out-map="salidaRut"/>
             <set field="rut" from="salidaRut.rutSinFormato"/>
             <set field="rutNoDv" from="salidaRut.rutSinDv"/>
 
-            <set field="desde" value=""/>
-            <set field="hasta" value=""/>
-            <set field="fechaAutorizacion" value=""/>
-            <set field="fiscalTaxDocumentTypeEnumId" value=""/>
-            <set field="rutCaf" value=""/>
-
-            <script>
-                import java.io.ByteArrayOutputStream
-                import java.io.File
-                import java.io.FileInputStream
-                import java.math.BigDecimal
-                import java.math.BigInteger
-                import java.security.KeyStore
-                import java.security.PrivateKey
-                import java.security.cert.X509Certificate
-                import java.util.Calendar
-                import java.util.Date
-                import java.util.HashMap
-                import java.text.ParseException
-                import java.text.SimpleDateFormat
-                import java.util.Date
-
-                import org.apache.xmlbeans.XmlOptions
-                import org.w3c.dom.Document
-
-                import cl.nic.dte.util.Signer
-                import cl.nic.dte.util.Utilities
-                import cl.nic.dte.util.XMLUtil
-                import cl.sii.siiDte.AUTORIZACIONDocument
-                import cl.sii.siiDte.AutorizacionType
-                import cl.sii.siiDte.DTEDefType.Documento.Detalle
-                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.IdDoc
-                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Receptor
-                import cl.sii.siiDte.DTEDefType.Documento.Encabezado.Totales
-                import cl.sii.siiDte.DTEDefType.Documento.Referencia
-                import cl.sii.siiDte.DTEDocument
-                import cl.sii.siiDte.FechaHoraType
-                import cl.sii.siiDte.FechaType
-                import cl.sii.siiDte.MedioPagoType
-
-                // Debo meter el namespace porque SII no lo genera
-                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;()
-                namespaces.put("", "http://www.sii.cl/SiiDte")
-                namespaces.put("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
-                XmlOptions opts = new XmlOptions()
-                opts.setLoadSubstituteNamespaces(namespaces)
-
-                AutorizacionType caf
-                docRr = ec.resource.getLocationReference(contentLocation)
-                caf = AUTORIZACIONDocument.Factory.parse(docRr.openStream(), opts).getAUTORIZACION()
-                desde = caf.getCAF().getDA().getRNG().getD().toString()
-                hasta = caf.getCAF().getDA().getRNG().getH().toString()
-                fechaAutorizacion = caf.getCAF().getDA().getFA().toString()
-                fiscalTaxDocumentTypeEnumId = "Ftdt-${caf.getCAF().getDA().getTD().toString()}"
-                rutCaf = caf.getCAF().getDA().getRE()
-                logger.warn("===>" + caf.toString())
-
-            </script>
-
             <if condition="!rutCaf.equals(rut.trim())">
                 <return error="true" message="RUT de archivo CAF no corresponde al registrado en el sistema como emisor: $rutCaf :: $rut"/>
             </if>
 
-            <set field="updateMap"
-                 from="[filename:docRr.fileName,desde:desde, hasta:hasta, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, ultimoFolio:desde, issuerPartyId:partyId, cafData:docRr.getText()]"/>
-            <service-call name="create#mchile.dte.Caf" out-map="context" in-map="updateMap"/>
+            <set field="createMap"
+                 from="[filename:filename, desde:desde, hasta:hasta, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, issuerPartyId:partyId,
+                  cafData:cafDataString, publicKey:publicKey, privateKey:privateKey, keyType:keyType, cafFragment:cafFragment]"/>
+            <service-call name="create#mchile.dte.Caf" out-map="context" in-map="createMap"/>
 
             <!-- Creación de registros para reservar folios -->
             <script><![CDATA[
@@ -362,7 +327,7 @@ along with this software (see the LICENSE.md file). If not, see
                     context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call())
                 }
             ]]></script>
-            <if condition="activateCaf"><service-call name="mchile.DTEServices.activar#Caf" in-map="context"/></if>
+            <if condition="activateCaf"><service-call name="mchile.sii.DTEServices.activar#Caf" in-map="context"/></if>
 
         </actions>
     </service>
@@ -378,8 +343,9 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <out-parameters>
             <parameter name="folio" type="Integer"/>
-            <parameter name="caf"/>
-            <parameter name="cafData"/>
+            <parameter name="cafFragment"/>
+            <parameter name="keyType"/>
+            <parameter name="privateKey"/>
         </out-parameters>
         <actions>
 
@@ -407,7 +373,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="No existe CAF activo para DTE tipo ${fiscalTaxDocumentTypeEnumId}"/>
             </if>
 
-            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="reservedList">
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="reservedList" for-update="true">
                 <econdition field-name="fiscalTaxDocumentTypeEnumId" value="${fiscalTaxDocumentTypeEnumId}"/>
                 <econdition field-name="issuerPartyId" from="partyId"/>
                 <econdition field-name="fiscalTaxDocumentNumber" operator="greater-equals" from="cafEntry.desde"/>
@@ -422,8 +388,17 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="folio" from="reservedList.first().fiscalTaxDocumentNumber"/>
 
-            <set field="caf" from="cafEntry.filename"/>
-            <set field="cafData" from="cafEntry.cafData"/>
+            <set field="cafFragment" from="cafEntry.cafFragment"/>
+            <set field="privateKey" from="cafEntry.privateKey"/>
+            <set field="keyType" from="cafEntry.keyType"/>
+            <set field="rut" from="cafEntry.rut"/>
+            <set field="razonSocial" from="cafEntry.razonSocial"/>
+            <set field="desde" from="cafEntry.desde"/>
+            <set field="hasta" from="cafEntry.hasta"/>
+            <set field="fechaAutorizacion" from="cafEntry.fechaAutorizacion"/>
+
+            <set field="cafEntry.siguienteFolio" from="folio"/>
+            <entity-update value-field="cafEntry"/>
 
         </actions>
     </service>
@@ -576,13 +551,13 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="!contactPostalAddressField">
                 <return message="Receptor ${partyId} no tiene dirección postal para impuestos" error="true"/>
             </if>
-            <set field="dirReceptor" value="${contactPostalAddressField.address1?:''}${contactPostalAddressField.unitNumber? (' ' + contactPostalAddressField.unitNumber) : ''}${contactPostalAddressField.address2? (', ' + contactPostalAddressField.address2) : ''}"/>
+            <set field="direccionReceptor" value="${contactPostalAddressField.address1?:''}${contactPostalAddressField.unitNumber? (' ' + contactPostalAddressField.unitNumber) : ''}${contactPostalAddressField.address2? (', ' + contactPostalAddressField.address2) : ''}"/>
             <!-- Comuna -->
             <entity-find-one entity-name="moqui.basic.Geo" value-field="geoField">
                 <field-map field-name="geoId" from="contactPostalAddressField.stateProvinceGeoId"/>
             </entity-find-one>
 
-            <set field="cmnaReceptor" from="geoField.geoName"/>
+            <set field="comunaReceptor" from="geoField.geoName"/>
 
             <set field="ciudadReceptor" from="contactPostalAddressField.city?:''"/>
             <!-- ID Contacto receptor -->
@@ -590,7 +565,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <entity-find-one entity-name="mantle.party.Party" value-field="partyEv"/>
             <set field="partyTypeEnumId" from="partyEv.partyTypeEnumId"/>
-            <set field="rznSocReceptor" value=""/>
+            <set field="razonSocialReceptor" value=""/>
             <set field="giroReceptor" value="Sin Giro"/>
             <if condition="partyTypeEnumId == 'PtyOrganization'">
                 <!-- email -->
@@ -608,9 +583,9 @@ along with this software (see the LICENSE.md file). If not, see
 
                 <!-- Organizacion -->
                 <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField"/>
-                <set field="rznSocReceptor" from="organizationField.taxOrganizationName ?: organizationField.organizationName"/>
+                <set field="razonSocialReceptor" from="organizationField.taxOrganizationName ?: organizationField.organizationName"/>
 
-                <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:toPartyId]" out-map="giroOutMap"/>
+                <service-call name="mchile.sii.DTEServices.get#GiroPrimario" in-map="[partyId:toPartyId]" out-map="giroOutMap"/>
                 <set field="giroReceptor" from="giroOutMap.description"/>
 
                 <!-- Obtención de contacto para impuestos en organización -->
@@ -642,11 +617,8 @@ along with this software (see the LICENSE.md file). If not, see
                     <return error="true" message="No existe persona para facturar"/>
                 </if>
 
-                <set field="rznSocReceptor" from="personField.firstName"/>
-                <script>
-                    rznSocReceptor = rznSocReceptor + " " + personField.lastName
-                </script>
-                <set field="contactoReceptor" from="rznSocReceptor"/>
+                <set field="razonSocialReceptor" value="${personField.firstName} ${personField.lastName}"/>
+                <set field="contactoReceptor" from="razonSocialReceptor"/>
             </if>
 
             <!-- Recuperación de referencias -->
@@ -657,17 +629,17 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="(fiscalTaxDocumentTypeEnumId == 'Ftdt-39') || (fiscalTaxDocumentTypeEnumId == 'Ftdt-41')">
                 <then>
                     <!-- Generacion de boletas -->
-                    <service-call name="mchile.DTEServices.genera#Boleta" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId,
-                                        rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor, contactoReceptor:contactoReceptor,
-                                        dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
+                    <service-call name="mchile.sii.DTEServices.genera#Boleta" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId,
+                                        rutReceptor:rutReceptor, razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor, contactoReceptor:contactoReceptor,
+                                        direccionReceptor:direccionReceptor, comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
                                         invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId]"
                                   out-map="context"/>
                 </then>
                 <else>
                     <!-- Generacion de factura -->
-                    <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId,
-                                        rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor, contactoReceptor:contactoReceptor,
-                                        dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
+                    <service-call name="mchile.sii.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId,
+                                        rutReceptor:rutReceptor, razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor, contactoReceptor:contactoReceptor,
+                                        direccionReceptor:direccionReceptor, comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
                                         invoiceMessage:invoice.invoiceMessage, invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList,
                                         receiverPartyId:toPartyId, globalDiscount:globalDiscount, glosaDr:glosaDr, glosaPagos:glosaPagos, settlementTermId:settlementTermId,
                                         fechaEmision:fechaEmision, fechaVencimiento:fechaVencimiento]" out-map="context"/>
@@ -820,13 +792,13 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="!contactPostalAddressField">
                 <log level="warn" message="Receptor no tiene dirección postal"/>
             </if>
-            <set field="dirReceptor"/>
+            <set field="direccionReceptor"/>
             <if condition="contactPostalAddressField">
-                <set field="dirReceptor" value="${contactPostalAddressField.address1?:''}${contactPostalAddressField.unitNumber? (' ' + contactPostalAddressField.unitNumber) : ''}${contactPostalAddressField.address2? (', ' + contactPostalAddressField.address2) : ''}"/>
+                <set field="direccionReceptor" value="${contactPostalAddressField.address1?:''}${contactPostalAddressField.unitNumber? (' ' + contactPostalAddressField.unitNumber) : ''}${contactPostalAddressField.address2? (', ' + contactPostalAddressField.address2) : ''}"/>
             </if>
 
 
-            <set field="cmnaReceptor"/>
+            <set field="comunaReceptor"/>
             <set field="ciudadReceptor"/>
             <set field="receptorContactId"/>
             <!-- Comuna -->
@@ -835,7 +807,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <field-map field-name="geoId" from="contactPostalAddressField.stateProvinceGeoId"/>
                 </entity-find-one>
 
-                <set field="cmnaReceptor" from="geoField.geoName"/>
+                <set field="comunaReceptor" from="geoField.geoName"/>
                 <set field="ciudadReceptor" from="contactPostalAddressField.city"/>
                 <set field="receptorContactId" from="contactPostalAddressField.telecomContactMechId"/>
             </if>
@@ -845,7 +817,7 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find-one entity-name="mantle.party.Party" value-field="partyEv"/>
             <set field="partyTypeEnumId" from="partyEv.partyTypeEnumId"/>
 
-            <set field="rznSocReceptor" value=""/>
+            <set field="razonSocialReceptor" value=""/>
             <set field="giroReceptor" value="Sin Giro"/>
 
             <if condition="partyTypeEnumId == 'PtyOrganization'">
@@ -865,7 +837,7 @@ along with this software (see the LICENSE.md file). If not, see
 
                 <!-- Organizacion -->
                 <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField"/>
-                <set field="rznSocReceptor" from="organizationField.organizationName"/>
+                <set field="razonSocialReceptor" from="organizationField.organizationName"/>
                 <!-- Giro no es necesario en boleta -->
                 <set field="giroReceptor" value=""/>
                 <!-- Obtención de contacto para impuestos en organización -->
@@ -896,11 +868,11 @@ along with this software (see the LICENSE.md file). If not, see
                     <return error="true" message="No existe persona para facturar"/>
                 </if>
 
-                <set field="rznSocReceptor" from="personField.firstName"/>
+                <set field="razonSocialReceptor" from="personField.firstName"/>
                 <script>
-                    rznSocReceptor = rznSocReceptor + " " + personField.lastName
+                    razonSocialReceptor = razonSocialReceptor + " " + personField.lastName
                 </script>
-                <set field="contactoReceptor" from="rznSocReceptor"/>
+                <set field="contactoReceptor" from="razonSocialReceptor"/>
             </if>
             <!-- Recuperación de referencias -->
             <entity-find entity-name="mchile.dte.ReferenciaDteAndFiscalCode" list="referenciaList">
@@ -910,8 +882,8 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- TODO: Generación de Boletas -->
             <!-- Generacion de boletas -->
-            <service-call name="mchile.DTEServices.genera#Boleta" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
-                          contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
+            <service-call name="mchile.sii.DTEServices.genera#Boleta" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId, rutReceptor:rutReceptor, razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor,
+                          contactoReceptor:contactoReceptor, direccionReceptor:direccionReceptor, comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
                           invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId, continua:continua]" out-map="context"/>
         </actions>
     </service>
@@ -979,21 +951,22 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="context"/>
             <if condition="!(issuerPartyId in userOrgIds)"><return error="true" message="Usuario no tiene autorización para enviar DTEs a nombre de partyId ${issuerPartyId}"/></if>
 
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:issuerPartyId]" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:issuerPartyId]" out-map="context"/>
 
             <if condition="!libro &amp;&amp; !boleta"><then>
-                <service-call name="mchile.DTECommServices.generaEnvio#Documentos" in-map="[organizationPartyId:issuerPartyId, documentIdList:documentIds]" out-map="context"/>
-                <log message="generaEnvio OK, now enviaSII#Documento"/>
-                <service-call name="mchile.DTECommServices.enviaSII#Documento" in-map="[rutOrganizacion:rutEmisor, documentLocation:xmlContentLocation, organizationPartyId:issuerPartyId]" out-map="context"/>
+                <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[organizationPartyId:issuerPartyId, documentIdList:documentIds]" out-map="envio"/>
+                <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="dteEnvio" auto-field-map="[envioId:envio.envioId]"/>
+                <log message="generaEnvio OK, now enviaSII#Envio"/>
+                <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:dteEnvio.envioId, organizationPartyId:issuerPartyId]" out-map="context"/>
                 <if condition="trackId">
-                    <service-call name="mchile.DTECommServices.marcarEnviados#Documentos" in-map="[trackId:trackId, documentIdList:documentIds]"/>
+                    <service-call name="mchile.sii.DTECommServices.marcarEnviados#Documentos" in-map="[trackId:trackId, documentIdList:documentIds]"/>
                 </if>
             </then><else-if condition="boleta">
-                <service-call name="mchile.DTECommServices.generaEnvio#Boletas" in-map="[recepS:recepS, organizationPartyId:issuerPartyId, enviadorS:rutEnvia, documentIdList:documentIdList ]" out-map="context"/>
+                <service-call name="mchile.sii.DTECommServices.generaEnvio#Boletas" in-map="[recepS:recepS, organizationPartyId:issuerPartyId, enviadorS:rutEnvia, documentIdList:documentIdList ]" out-map="context"/>
                 <set field="documentoS" from="archivoEnvio"/>
-                <service-call name="mchile.DTECommServices.enviaSII#Boleta" in-map="[rutOrganizacion:rutEnvia, rutEnviador:rutEnvia , documentoS:documentoS, organizationPartyId:issuerPartyId]" out-map="context"/>
+                <service-call name="mchile.sii.DTECommServices.enviaSII#Boleta" in-map="[rutOrganizacion:rutEnvia, rutEnviador:rutEnvia , documentoS:documentoS, organizationPartyId:issuerPartyId]" out-map="context"/>
                 <if condition="trackId">
-                    <service-call name="mchile.DTEServices.marcarEnviados#Boletas" in-map="[trackId:trackId, documentIdList:documentIdList]"/>
+                    <service-call name="mchile.sii.DTEServices.marcarEnviados#Boletas" in-map="[trackId:trackId, documentIdList:documentIdList]"/>
                 </if>
             </else-if></if>
 
@@ -1007,10 +980,10 @@ along with this software (see the LICENSE.md file). If not, see
                     </entity-find-one>
                     <set field="xml" from="libroField.xml"/>
 
-                    <service-call name="mchile.DTEServices.generaEnvio#Libro" in-map="[enviadorS:rutEnvia, organizationPartyId:issuerPartyId, idS:'ID178', xml:xml ]" out-map="context"/>
+                    <service-call name="mchile.sii.DTEServices.genera#EnvioLibro" in-map="[enviadorS:rutEnvia, organizationPartyId:issuerPartyId, idS:'ID178', xml:xml ]" out-map="context"/>
                     <set field="documentoS" from="archivoEnvio"/>
 
-                    <service-call name="mchile.DTECommServices.enviaSII#Documento" in-map="[documentoS:xml, organizationPartyId:issuerPartyId]" out-map="context"/>
+                    <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:envioId, organizationPartyId:issuerPartyId]" out-map="context"/>
                 </iterate>
             </if>
         </actions>
@@ -1032,16 +1005,16 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <if condition="fiscalTaxDocumentAggrEnumId == 'Ftdt-Boletas'">
                 <then>
-                    <service-call name="mchile.DTEServices.load#Boleta" in-map="[xml:xml, pdf:pdf, organizationPartyId:organizationPartyId, productMatch:productMatch, organizationPartyId:organizationPartyId]"/>
+                    <service-call name="mchile.sii.DTEServices.load#Boleta" in-map="[xml:xml, pdf:pdf, organizationPartyId:organizationPartyId, productMatch:productMatch, organizationPartyId:organizationPartyId]"/>
                 </then>
                 <else>
-                    <service-call name="mchile.DTEServices.load#Dte" in-map="[xml:xml, pdf:pdf, organizationPartyId:organizationPartyId, productMatch:productMatch, organizationPartyId:organizationPartyId, invoiceId:invoiceId]"/>
+                    <service-call name="mchile.sii.DTEServices.load#Dte" in-map="[xml:xml, pdf:pdf, organizationPartyId:organizationPartyId, productMatch:productMatch, organizationPartyId:organizationPartyId, invoiceId:invoiceId]"/>
                 </else>
             </if>
         </actions>
     </service>
 
-    <service verb="load" noun="Boleta" type="script" location="component://MoquiChile/service/mchile/DTEServices/loadBoleta.groovy">
+    <service verb="load" noun="Boleta" type="script" location="component://MoquiChile/service/mchile/sii/DTEServices/loadBoleta.groovy">
         <description>
             Carga boleta en XML recibida por la organización
         </description>
@@ -1055,7 +1028,7 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
     </service>
 
-    <service verb="load" noun="DteFromDom" type="script" location="component://MoquiChile/service/mchile/DTEServices/loadDteFromDom.groovy">
+    <service verb="load" noun="DteFromDom" type="script" location="component://MoquiChile/service/mchile/sii/DTEServices/loadDteFromDom.groovy">
         <in-parameters>
             <parameter name="createUnknownIssuer" default="true" type="Boolean"/>
             <parameter name="requireIssuerInternalOrg" default="false" type="Boolean"/>
@@ -1108,20 +1081,20 @@ along with this software (see the LICENSE.md file). If not, see
                         pdfFileName = pdfFile.name
                     }
                     if (doc.getNodeName() == "DTE") {
-                        ec.service.sync().name("mchile.DTEServices.load#DteFromDom").parameters(context + [domNode: doc])
+                        ec.service.sync().name("mchile.sii.DTEServices.load#DteFromDom").parameters(context + [domNode: doc])
                     } else if (doc.getNodeName() == "SetDTE") {
                         XPath xpath = XPathFactory.newInstance().newXPath()
                         xpath.setNamespaceContext(new MoquiDTEUtils.DefaultNamespaceContext().addNamespace("sii", "http://www.sii.cl/SiiDte"))
                         XPathExpression expression = xpath.compile("/sii:SetDTE/sii:DTE")
                         org.w3c.dom.NodeList dteNodeList = (org.w3c.dom.NodeList) expression.evaluate(doc.getDocumentElement(), XPathConstants.NODESET)
                         dteNodeList.each { org.w3c.dom.Node domNode ->
-                            ec.service.sync().name("mchile.DTEServices.load#DteFromDom").parameters(context + [domNode: domNode])
+                            ec.service.sync().name("mchile.sii.DTEServices.load#DteFromDom").parameters(context + [domNode: domNode])
                         }
                         ec.message.addMessage("Procesados ${dteNodeList.size()} DTEs")
                     } else if (doc.getNodeName() == "EnvioDTE") {
                         if (!MoquiDTEUtils.verifySignature(doc, "/sii:EnvioDTE/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()"))
                             ec.message.addError("Firma del envío inválida")
-                        ec.service.sync().name("mchile.DTECommServices.store#ReceivedEnvio").parameters(context + [contentBytes:xmlBytes, receivedFileName:xmlFile.getName() ])
+                        ec.service.sync().name("mchile.sii.DTECommServices.store#ReceivedEnvio").parameters(context + [contentBytes:xmlBytes, fileName:xmlFile.getName() ])
                     } else {
                         ec.message.addError("Unknown document ${doc.getNodeName()}")
                     }
@@ -1236,7 +1209,7 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
             <set field="archivoPdf" from="pdf.getName()"/>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:receiverPartyId]" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:receiverPartyId]" out-map="context"/>
 
             <script>
                 import java.io.ByteArrayOutputStream
@@ -1569,13 +1542,13 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Datos de contacto -->
             <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressField"/>
-            <set field="dirReceptor" value="${contactPostalAddressField.address1?:''}${contactPostalAddressField.unitNumber? (' ' + contactPostalAddressField.unitNumber) : ''}${contactPostalAddressField.address2? (', ' + contactPostalAddressField.address2) : ''}"/>
+            <set field="direccionReceptor" value="${contactPostalAddressField.address1?:''}${contactPostalAddressField.unitNumber? (' ' + contactPostalAddressField.unitNumber) : ''}${contactPostalAddressField.address2? (', ' + contactPostalAddressField.address2) : ''}"/>
 
             <service-call name="mchile.GeoServices.get#ComunaFromGeoId" in-map="[stateProvinceGeoId:contactPostalAddressField.stateProvinceGeoId]" out-map="comunaOut"/>
 
-            <set field="cmnaReceptor" from="comunaOut.comuna"/>
+            <set field="comunaReceptor" from="comunaOut.comuna"/>
 
-            <if condition="!cmnaReceptor">
+            <if condition="!comunaReceptor">
                 <return error="true" message="Receptor no tiene comuna/ciudad definida $contactMechId"/>
             </if>
             <!-- ID Contacto receptor -->
@@ -1588,16 +1561,16 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="partyTypeEnumId" from="partyEv.partyTypeEnumId"/>
 
-            <set field="rznSocReceptor" value=""/>
+            <set field="razonSocialReceptor" value=""/>
             <set field="contactoReceptor" value=""/>
             <set field="giroReceptor" value="Sin Giro"/>
 
             <if condition="partyTypeEnumId == 'PtyOrganization'">
                 <!-- Organizacion -->
                 <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField" auto-field-map="[partyId:receiverPartyId]"/>
-                <set field="rznSocReceptor" from="organizationField.organizationName"/>
+                <set field="razonSocialReceptor" from="organizationField.organizationName"/>
 
-                <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:receiverPartyId]" out-map="giroOutMap"/>
+                <service-call name="mchile.sii.DTEServices.get#GiroPrimario" in-map="[partyId:receiverPartyId]" out-map="giroOutMap"/>
                 <set field="giroReceptor" from="giroOutMap.description"/>
                 <!--set field="giroReceptor" from="organizationField.giro"/-->
 
@@ -1625,14 +1598,14 @@ along with this software (see the LICENSE.md file). If not, see
                     <return error="true" message="No existe persona para facturar"/>
                 </if>
 
-                <set field="rznSocReceptor" from="personField.firstName"/>
-                <script>rznSocReceptor = rznSocReceptor + " " + personField.lastName</script>
-                <set field="contactoReceptor" from="rznSocReceptor"/>
+                <set field="razonSocialReceptor" from="personField.firstName"/>
+                <script>razonSocialReceptor = razonSocialReceptor + " " + personField.lastName</script>
+                <set field="contactoReceptor" from="razonSocialReceptor"/>
             </if>
 
             <!-- Generacion de nota de crédito -->
-            <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-61', rutEmisor:rutEmisor, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
-                          contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:items,
+            <service-call name="mchile.sii.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-61', rutEmisor:rutEmisor, rutReceptor:rutReceptor, razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor,
+                          contactoReceptor:contactoReceptor, direccionReceptor:direccionReceptor, comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:items,
                           invoiceId:invoiceId, returnId:returnId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId, receiverPartyId:receiverPartyId]" out-map="factMapOut"/>
             <set field="fiscalTaxDocumentId" from="factMapOut.fiscalTaxDocumentId"/>
         </actions>
@@ -1723,7 +1696,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Datos de contacto -->
             <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressField"/>
-            <set field="dirReceptor" value="${contactPostalAddressField.address1?:''}${contactPostalAddressField.unitNumber? (' ' + contactPostalAddressField.unitNumber) : ''}${contactPostalAddressField.address2? (', ' + contactPostalAddressField.address2) : ''}"/>
+            <set field="direccionReceptor" value="${contactPostalAddressField.address1?:''}${contactPostalAddressField.unitNumber? (' ' + contactPostalAddressField.unitNumber) : ''}${contactPostalAddressField.address2? (', ' + contactPostalAddressField.address2) : ''}"/>
             <!-- Comuna -->
             <entity-find-one entity-name="moqui.basic.Geo" value-field="geoField">
                 <field-map field-name="geoId" from="contactPostalAddressField.stateProvinceGeoId"/>
@@ -1733,7 +1706,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="No existe comuna"/>
             </if>
 
-            <set field="cmnaReceptor" from="geoField.geoName"/>
+            <set field="comunaReceptor" from="geoField.geoName"/>
             <!-- Ciudad -->
             <set field="ciudadReceptor" from="contactPostalAddressField.city"/>
             <!-- ID Contacto receptor -->
@@ -1747,18 +1720,18 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="partyTypeEnumId" from="partyEv.partyTypeEnumId"/>
 
-            <set field="rznSocReceptor" value=""/>
+            <set field="razonSocialReceptor" value=""/>
             <set field="giroReceptor" value="Sin Giro"/>
 
             <if condition="partyTypeEnumId == 'PtyOrganization'">
                 <!-- Organizacion -->
                 <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField"/>
-                <set field="rznSocReceptor" from="organizationField.organizationName"/>
+                <set field="razonSocialReceptor" from="organizationField.organizationName"/>
                 <!--if condition="!organizationField.giro">
                     <return error="true" message="Receptor no tiene giro"/>
                 </if-->
                 <!--set field="giroReceptor" from="organizationField.giro"/-->
-                <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:partyId]" out-map="giroOutMap"/>
+                <service-call name="mchile.sii.DTEServices.get#GiroPrimario" in-map="[partyId:partyId]" out-map="giroOutMap"/>
                 <set field="giroReceptor" from="giroOutMap.description"/>
                 <!-- Obtención de contacto para impuestos en organización -->
                 <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
@@ -1785,11 +1758,11 @@ along with this software (see the LICENSE.md file). If not, see
                     <return error="true" message="No existe persona para facturar"/>
                 </if>
 
-                <set field="rznSocReceptor" from="personField.firstName"/>
+                <set field="razonSocialReceptor" from="personField.firstName"/>
                 <script>
-                    rznSocReceptor = rznSocReceptor + " " + personField.lastName
+                    razonSocialReceptor = razonSocialReceptor + " " + personField.lastName
                 </script>
-                <set field="contactoReceptor" from="rznSocReceptor"/>
+                <set field="contactoReceptor" from="razonSocialReceptor"/>
             </if>
 
             <!-- Recuperación de referencias -->
@@ -1807,8 +1780,8 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
 
             <!-- Generacion de nota de débito -->
-            <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-56', rutEmisor:rutEmisor, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
-                          contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:itemList,
+            <service-call name="mchile.sii.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-56', rutEmisor:rutEmisor, rutReceptor:rutReceptor, razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor,
+                          contactoReceptor:contactoReceptor, direccionReceptor:direccionReceptor, comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:itemList,
                           invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId, receiverPartyId:partyId]" out-map="factMapOut"/>
 
             <set field="fiscalTaxDocumentIdNotaDebito" from="factMapOut.fiscalTaxDocumentId"/>
@@ -1927,7 +1900,7 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="enviar" noun="Aceptacion" type="script" location="component://MoquiChile/service/mchile/DTEServices/enviarAceptacion.groovy">
+    <service verb="enviar" noun="Aceptacion" type="script" location="component://MoquiChile/service/mchile/sii/DTEServices/enviarAceptacion.groovy">
         <description>
             Envío de respuesta a emisor DTE.
 
@@ -1941,7 +1914,7 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
     </service>
 
-    <service verb="recibir" noun="Mercaderia" type="script" location="component://MoquiChile/service/mchile/DTEServices/recibirMercaderia.groovy">
+    <service verb="recibir" noun="Mercaderia" type="script" location="component://MoquiChile/service/mchile/sii/DTEServices/recibirMercaderia.groovy">
         <description>
             Envío de recepción mercaderia DTE.
 
@@ -1955,7 +1928,7 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
     </service>
 
-    <service verb="enviar" noun="ResultadoAprobacionComercial" type="script" location="component://MoquiChile/service/mchile/DTEServices/enviarResultadoAceptacionComercial.groovy">
+    <service verb="enviar" noun="ResultadoAprobacionComercial" type="script" location="component://MoquiChile/service/mchile/sii/DTEServices/enviarResultadoAceptacionComercial.groovy">
         <description>
             Envío de respuesta a emisor DTE.
 
@@ -2046,7 +2019,7 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="genera" noun="Boleta" type="script" location="component://MoquiChile/service/mchile/DTEServices/generaBoleta.groovy">
+    <service verb="genera" noun="Boleta" type="script" location="component://MoquiChile/service/mchile/sii/DTEServices/generaBoleta.groovy">
         <description>
             Generación de Boleta acuerdo a plantilla
         </description>
@@ -2055,12 +2028,12 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="issuerPartyId" required="true"/>
             <parameter name="rutReceptor"/>
             <parameter name="receiverPartyId" required="true"/>
-            <parameter name="rznSocReceptor"/>
+            <parameter name="razonSocialReceptor"/>
             <parameter name="giroReceptor"/>
             <parameter name="contactoReceptor"/>
-            <parameter name="dirReceptor"/>
-            <parameter name="cmnaReceptor"/>
-            <parameter name="ciudadReceptor" default-value="${cmnaReceptor}"/>
+            <parameter name="direccionReceptor"/>
+            <parameter name="comunaReceptor"/>
+            <parameter name="ciudadReceptor" default-value="${comunaReceptor}"/>
             <parameter name="detailList" type="List"/>
             <parameter name="invoiceId" required="true"/>
             <parameter name="medioPago"/>
@@ -2074,7 +2047,7 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
     </service>
 
-    <service verb="genera" noun="RCOF" type="script" location="component://MoquiChile/service/mchile/DTEServices/generaRCOF.groovy">
+    <service verb="genera" noun="RCOF" type="script" location="component://MoquiChile/service/mchile/sii/DTEServices/generaRCOF.groovy">
         <description>Generación de Registro de Consumo de Folios</description>
         <in-parameters>
             <parameter name="organizationPartyId" required="true"/>
@@ -2218,8 +2191,8 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="Receptor no tiene dirección postal"/>
             </if>
 
-            <set field="dirReceptor" value="${contactPostalAddressField.address1?:''}${contactPostalAddressField.unitNumber? (' ' + contactPostalAddressField.unitNumber) : ''}${contactPostalAddressField.address2? (', ' + contactPostalAddressField.address2) : ''}"/>
-            <set field="cmnaReceptor" from="contactPostalAddressField.city"/>
+            <set field="direccionReceptor" value="${contactPostalAddressField.address1?:''}${contactPostalAddressField.unitNumber? (' ' + contactPostalAddressField.unitNumber) : ''}${contactPostalAddressField.address2? (', ' + contactPostalAddressField.address2) : ''}"/>
+            <set field="comunaReceptor" from="contactPostalAddressField.city"/>
 
             <!-- Obtención de contacto para impuestos en organización -->
             <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
@@ -2230,11 +2203,11 @@ along with this software (see the LICENSE.md file). If not, see
                 <field-map field-name="contactMechId" from="contactOut.postalContactMechId"/>
             </entity-find-one>
 
-            <set field="cmnaReceptor" from="postalAddressField.stateProvinceGeoId"/>
+            <set field="comunaReceptor" from="postalAddressField.stateProvinceGeoId"/>
 
             <service-call name="mchile.GeoServices.get#ComunaFromGeoId" in-map="[stateProvinceGeoId:postalAddressField.stateProvinceGeoId]" out-map="comunaOut"/>
 
-            <set field="cmnaReceptor" from="comunaOut.comuna"/>
+            <set field="comunaReceptor" from="comunaOut.comuna"/>
             <!-- ID Contacto receptor -->
             <set field="receptorContactId" from="contactPostalAddressField.telecomContactMechId"/>
 
@@ -2244,19 +2217,19 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
 
             <set field="partyTypeEnumId" from="partyEv.partyTypeEnumId"/>
-            <set field="rznSocReceptor" value=""/>
+            <set field="razonSocialReceptor" value=""/>
             <set field="contactoReceptor" value=""/>
             <set field="giroReceptor" value="Sin Giro"/>
 
             <if condition="partyTypeEnumId == 'PtyOrganization'">
                 <!-- Organizacion -->
                 <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField"/>
-                <set field="rznSocReceptor" from="organizationField.organizationName"/>
+                <set field="razonSocialReceptor" from="organizationField.organizationName"/>
                 <!--set field="giroReceptor" from="organizationField.giro"/!>
                 <if condition="!giroReceptor">
                     <return error="true" message="Organización no tiene giro ingresado"/>
                 </if-->
-                <service-call name="mchile.DTEServices.get#GiroPrimario" in-map="[partyId:partyId]" out-map="giroOutMap"/>
+                <service-call name="mchile.sii.DTEServices.get#GiroPrimario" in-map="[partyId:partyId]" out-map="giroOutMap"/>
                 <set field="giroReceptor" from="giroOutMap.description"/>
                 <!-- Obtención de contacto para impuestos en organización -->
                 <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
@@ -2282,18 +2255,18 @@ along with this software (see the LICENSE.md file). If not, see
                     <return error="true" message="No existe persona para facturar"/>
                 </if>
 
-                <set field="rznSocReceptor" from="personField.firstName"/>
+                <set field="razonSocialReceptor" from="personField.firstName"/>
                 <script>
-                    rznSocReceptor = rznSocReceptor + " " + personField.lastName
+                    razonSocialReceptor = razonSocialReceptor + " " + personField.lastName
                 </script>
-                <set field="contactoReceptor" from="rznSocReceptor"/>
+                <set field="contactoReceptor" from="razonSocialReceptor"/>
             </if>
 
-            <service-call name="mchile.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:indTrasladoEnumId, enumTypeId:'IndTraslado']" out-map="codeOut"/>
+            <service-call name="mchile.sii.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:indTrasladoEnumId, enumTypeId:'IndTraslado']" out-map="codeOut"/>
             <set field="indTraslado" from="codeOut.siiCode"/>
 
             <if condition="tipoDespachoEnumId">
-                <service-call name="mchile.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:tipoDespachoEnumId, enumTypeId:'TipoDespacho']" out-map="codeOut"/>
+                <service-call name="mchile.sii.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:tipoDespachoEnumId, enumTypeId:'TipoDespacho']" out-map="codeOut"/>
                 <set field="tipoDespacho" from="codeOut.siiCode"/>
             </if>
 
@@ -2301,8 +2274,8 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="formaPago" value="2"/>
 
             <!-- Generacion de guía de despacho -->
-            <service-call name="mchile.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-52', rutEmisor:rutEmisor, rutReceptor:rutReceptor, rznSocReceptor:rznSocReceptor, giroReceptor:giroReceptor,
-                          contactoReceptor:contactoReceptor, dirReceptor:dirReceptor, cmnaReceptor:cmnaReceptor, ciudadReceptor:ciudadReceptor, detailList:shipmentItemDetailList,
+            <service-call name="mchile.sii.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-52', rutEmisor:rutEmisor, rutReceptor:rutReceptor, razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor,
+                          contactoReceptor:contactoReceptor, direccionReceptor:direccionReceptor, comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:shipmentItemDetailList,
                           invoiceId:invoiceId, returnId:returnId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId, receiverPartyId:partyId,
                           indTraslado:indTraslado, tipoDespacho:tipoDespacho, shipmentId:shipmentId, glosaPagos:glosaPagos, settlementTermId:settlementTermId]" out-map="factMapOut"/>
             <set field="fiscalTaxDocumentId" from="factMapOut.fiscalTaxDocumentId"/>
@@ -2749,9 +2722,9 @@ along with this software (see the LICENSE.md file). If not, see
                 <service-call name="update#mchile.dte.PartyDteParams" in-map="context"/>
             </then><else>
                 <service-call name="create#mchile.dte.PartyDteParams" in-map="[partyId:partyId, templatePdf:templatePdf, templatePdfBoleta:templatePdfBoleta,
-                                  templatePdfBoletaContinua:templatePdfBoletaContinua, logo:logo, fchResol:fechResol, nroResol:nroResol, rutEmisor:rutEmisor,
-                                  rutEnvia:rutEnvia, rznSocEmisor:rznSocEmisor, cdgSIISucur:cdgSIISucur, dirOrigen:dirOrigen, cmnaOrigen:cmnaOrigen, ciudadOrigen:ciudadOrigen,
-                                  passCert:passCert, nmbContacto:nmbContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]"/>
+                                  templatePdfBoletaContinua:templatePdfBoletaContinua, logo:logo, fechaResolucionSii:fechResol, numeroResolucionSii:numeroResolucionSii, rutEmisor:rutEmisor,
+                                  rutEnvia:rutEnvia, razonSocialEmisor:razonSocialEmisor, codigoSucursalSii:codigoSucursalSii, direccionOrigen:direccionOrigen, comunaOrigen:comunaOrigen, ciudadOrigen:ciudadOrigen,
+                                  passCert:passCert, nombreContacto:nombreContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]"/>
             </else></if>
         </actions>
     </service>
@@ -2950,9 +2923,9 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <set field="ftd" from="ftdList.first"/>
             <if condition="!ftd"><return error="true" message="Could not find FiscalTaxDocument for invoice ${invoiceId}"/></if>
-            <service-call name="mchile.DTEServices.revert#FiscalTaxDocumentGeneration" in-map="[issuerPartyId:issuerPartyId, fiscalTaxDocumentNumber:ftd.fiscalTaxDocumentNumber,
+            <service-call name="mchile.sii.DTEServices.revert#FiscalTaxDocumentGeneration" in-map="[issuerPartyId:issuerPartyId, fiscalTaxDocumentNumber:ftd.fiscalTaxDocumentNumber,
                                 fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"/>
-            <service-call name="mchile.DTEServices.facturar#Invoice" in-map="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"/>
+            <service-call name="mchile.sii.DTEServices.facturar#Invoice" in-map="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"/>
         </actions>
     </service>
 
@@ -2972,7 +2945,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="returnInvoiceId"/>
         </out-parameters>
         <actions>
-            <service-call name="mchile.DTEServices.create#EmptyCreditMemo" in-map="context" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.create#EmptyCreditMemo" in-map="context" out-map="context"/>
             <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="itemList">
                 <econdition field-name="invoiceId" from="originalInvoiceId"/>
             </entity-find>
@@ -3022,7 +2995,7 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:dte.receiverPartyId]" out-map="receiverRut"/>
             <set field="referenceMap" from="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId, folio:dte.fiscalTaxDocumentNumber, fecha:fecha,
                  rutOtroContribuyente:receiverRut.rutSinFormato, codigoReferenciaEnumId:'MCHRefDteCodeAnula', razonReferencia:razonReferencia, referenceTypeEnumId:'RefDteTypeInvoice']"/>
-            <service-call name="mchile.DTEServices.agregar#Referencia" in-map="referenceMap"/>
+            <service-call name="mchile.sii.DTEServices.agregar#Referencia" in-map="referenceMap"/>
         </actions>
     </service>
 
@@ -3040,7 +3013,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="creditMemo.statusId" value="InvoiceApproved"/>
             <entity-update value-field="creditMemo"/>
-            <service-call name="mchile.DTEServices.generar#NotaCredito" in-map="context" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.generar#NotaCredito" in-map="context" out-map="context"/>
 
         </actions>
     </service>
