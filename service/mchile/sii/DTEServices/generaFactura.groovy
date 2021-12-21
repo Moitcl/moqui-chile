@@ -382,7 +382,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                 if (referencia.fecha)
                     FchRef(ec.l10n.format(referencia.fecha, "yyyy-MM-dd"))
                 if (referencia.codigo)
-                    CodRef(codigo)
+                    CodRef(referencia.codigo)
                 if (referencia.razon)
                     RazonRef(referencia.razon)
             }
