@@ -315,7 +315,7 @@ Date dateFechaEmision = new Date()
 fechaEmision = formatterFechaEmision.format(dateFechaEmision)
 
 ResourceReference xmlContentResource
-int i = 0
+i = 0
 do {
     i++
     xmlContentResource = "dbresource://moit/erp/dte/${rutEmisor}/RCOF-${uri}-firmado-${i}.xml"
