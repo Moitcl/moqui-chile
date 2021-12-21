@@ -2,7 +2,7 @@
 
 <xsl:stylesheet version="1.1" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
                 xmlns:fo="http://www.w3.org/1999/XSL/Format"
-                xmlns:tedbarcode="cl.nic.dte.fop.TedBarcodeExtension" extension-element-prefixes="tedbarcode"
+                xmlns:tedbarcode="cl.moit.dte.TedBarcodeExtension" extension-element-prefixes="tedbarcode"
                 xmlns:fox="http://xmlgraphics.apache.org/fop/extensions"
                 xmlns:str="http://exslt.org/strings"
                 xmlns:siidte="http://www.sii.cl/SiiDte">
