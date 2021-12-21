@@ -374,7 +374,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
         referenciaList.each { referencia ->
             Referencia {
                 NroLinRef(referencia.numeroLinea)
-                TpoDocRef()
+                TpoDocRef(referencia.tipoDocumento)
                 //IndGlobal()
                 FolioRef(referencia.folio)
                 if (referencia.rutOtro)
@@ -384,7 +384,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                 if (referencia.codigo)
                     CodRef(codigo)
                 if (referencia.razon)
-                    RazonRef(razon)
+                    RazonRef(referencia.razon)
             }
         }
         //Comisiones{}
