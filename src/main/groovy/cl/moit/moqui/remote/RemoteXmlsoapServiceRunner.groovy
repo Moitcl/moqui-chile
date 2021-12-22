@@ -62,6 +62,7 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
         if (debug)
             logger.info("Debug mode is ON")
         String soapAction = serviceParams.get("soapAction")
+        String parameterOrder = serviceParams.get("parameterOrder")
 
         String methodNamespace = serviceParams?.methodNamespace
         String methodNamespacePrefix = serviceParams?.methodNamespacePrefix
@@ -102,6 +103,17 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
         message.getMimeHeaders().addHeader("SOAPAction", soapAction);
 
         SOAPBodyElement bodyElement = body.addBodyElement(bodyName);
+        if (parameterOrder) {
+            Map newParameters = [:]
+            parameterOrder.split(" ").each {
+                if (parameters.containsKey(it)) {
+                    newParameters.put(it, parameters[it])
+                    parameters.remove(it)
+                }
+            }
+            newParameters.putAll(parameters)
+            parameters = newParameters
+        }
         addToBodyElement(bodyElement, parameters)
 
         URL endpoint = new URL(location);
