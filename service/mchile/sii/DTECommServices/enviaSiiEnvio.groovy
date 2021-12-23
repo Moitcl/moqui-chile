@@ -3,7 +3,6 @@ import org.moqui.util.RestClient
 import org.moqui.util.RestClient.RestResponse
 import org.eclipse.jetty.http.HttpField
 import org.eclipse.jetty.http.HttpHeader
-import org.eclipse.jetty.http.HttpFields
 import org.eclipse.jetty.client.util.ByteBufferContentProvider
 import java.nio.ByteBuffer
 
@@ -37,7 +36,6 @@ restClient.getDefaultRequestFactory().getHttpClient().setUserAgentField(new Http
 restClient.addHeader("Host", uploadUrl.getHost())
 restClient.addHeader("Cookie", "TOKEN=${token}").acceptContentType("*/*").contentType("multipart/form-data")
 
-HttpFields httpFields = new HttpFields()
 restClient.addFieldPart("rutSender", rutEnvia.substring(0, rutEnvia.length() - 2))
 restClient.addFieldPart("dvSender", rutEnvia.substring(rutEnvia.length() - 1, rutEnvia.length()))
 restClient.addFieldPart("rutCompany", rutEmisor.substring(0, rutEmisor.length() - 2))
@@ -59,7 +57,7 @@ if (status == '0') {
     errorDescriptionMap = ['0':'Upload OK', '1':'El Sender no tiene permiso para enviar', '2':'Error en tamaño del archivo (muy grande o muy chico)', '3':'Archivo cortado (tamaño != al parámetro size)',
                            '5':'No está auten†icado', '6':'Empresa no autorizada a enviar archivos', '7':'Esquema Inválido', '8':'Firma del Documento', '9':'Sistema Bloqueado', '0':'Error Interno']
     ec.message.addMessage("Error "+ status + " al enviar DTE (${errorDescriptionMap[status]})", "danger")
-    //ec.logger.info("response: ${response.text()}")
+    ec.logger.info("response: ${response.text()}")
 }
 
 return

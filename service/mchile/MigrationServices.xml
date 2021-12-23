@@ -69,4 +69,32 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="add" noun="AmountToFtd">
+        <actions>
+            <script><![CDATA[
+                import java.lang.NumberFormatException
+            ]]></script>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocumentAndContent" list="ftdList">
+                <econdition field-name="amount" operator="is-null"/>
+                <econdition field-name="statusId" value="Ftd-Issued"/>
+                <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
+            </entity-find>
+            <iterate list="ftdList" entry="ftd">
+                <script><![CDATA[
+                    if (ftd.contentLocation) {
+                        docRr = ec.resource.getLocationReference(ftd.contentLocation)
+                        ftdDoc = new groovy.util.XmlParser(false, false).parse(docRr.openStream())
+                        BigDecimal amount = null
+                        try {
+                            amount = new BigDecimal(ftdDoc.Documento.Encabezado.Totales.MntTotal.text())
+                            ec.service.sync().name("update#mchile.dte.FiscalTaxDocument").parameters([fiscalTaxDocumentId: ftd.fiscalTaxDocumentId, amount: amount]).call()
+                        } catch (NumberFormatException e) {
+                            ec.message.addError("Error obtaining Total from Ftd ${ftd.fiscalTaxDocumentId}, fiscalTaxDocumentContentId ${ftd.fiscalTaxDocumentContentId}")
+                        }
+                    }
+                    ]]></script>
+            </iterate>
+        </actions>
+    </service>
+
 </services>
