@@ -127,7 +127,8 @@ if (tipoDte == 33) {
     referenciaList = refMap.referenciaList
     anulaBoleta = refMap.anulaBoleta
     folioAnulaBoleta = refMap.folioAnulaBoleta
-    BigInteger codRef = ref[ref.length()-1].getCodRef()
+    codRef = refMap.codigo
+
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
@@ -151,8 +152,7 @@ if (tipoDte == 33) {
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
     dteExenta = refMap.dteExenta
-    // codRef = refMap.codRef
-    codRef = 1
+    codRef = refMap.codigo
 
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "DebitoItem", codRef)
     detalleList = detMap.detalleList
@@ -172,7 +172,7 @@ if (tipoDte == 33) {
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
     dteExenta = refMap.dteExenta
-    codRef = refMap.codRef
+    codRef = refMap.codigo
 
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "ShipmentItem", codRef)
     detalleList = detMap.detalleList
