@@ -13,6 +13,9 @@
  */
 package cl.moit.moqui.remote
 
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
 import javax.xml.namespace.QName
 import javax.xml.soap.Name
 import javax.xml.soap.SOAPBody
@@ -68,12 +71,14 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
         String methodNamespacePrefix = serviceParams?.methodNamespacePrefix
 
         boolean proxy = serviceParams?.proxy
+        URL endpoint = new URL(location);
+
         if (proxy) {
             logger.info("Proxy mode is ON ")
-            logger.error("Proxy mode unsupported")
-            def proxyhost = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(serviceParams?.proxyhost, serviceParams?.proxyport))
-        }
-        else if (debug) logger.info("Proxy mode is OFF")
+            Proxy proxyhost = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(serviceParams?.proxyhost, serviceParams?.proxyport))
+            endpoint = new URL(null, location, new ProxyUrlStreamHandler(proxyhost));
+        } else if (debug)
+            logger.info("Proxy mode is OFF")
 
         Map<String, Object> basicAuthAttributes = (Map<String, Object>)parameters.get("xmlRpcBasicAuthentication")
         if (basicAuthAttributes) {
@@ -115,8 +120,6 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
             parameters = newParameters
         }
         addToBodyElement(bodyElement, parameters)
-
-        URL endpoint = new URL(location);
 
         if (debug) logger.info("Parameters: ${parameters}")
         //if (debug) logger.info("ContentType: ${message.version}; ${msg.encoding}")
