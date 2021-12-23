@@ -2955,6 +2955,93 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="create" noun="PrefilledDebitMemo">
+        <description>
+            Crea un invoice que se usa para generar Nota de Débito, y lo pre-rellena con los contenidos de DTE especificado.
+        </description>
+        <in-parameters>
+            <parameter name="issuerPartyId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" required="true" type="Integer"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="razonReferencia" default-value="Error de Facturación"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="returnInvoiceId"/>
+        </out-parameters>
+        <actions>
+            <if condition="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-39','Ftdt-61'])">
+                <return error="true" message="Debit Memos are not supported for the provided document type."/>
+            </if>
+
+            <service-call name="mchile.sii.DTEServices.create#EmptyDebitMemo" in-map="context" out-map="context"/>
+            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="itemList">
+                <econdition field-name="invoiceId" from="originalInvoiceId"/>
+            </entity-find>
+            <iterate list="itemList" entry="item">
+                <service-call name="create#mantle.account.invoice.InvoiceItem" in-map="item.getMap()+[invoiceId:invoiceId]"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="create" noun="EmptyDebitMemo">
+        <description>
+            Crea un invoice que se usa para generar Nota de Débito.
+        </description>
+        <in-parameters>
+            <parameter name="issuerPartyId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" required="true" type="Integer"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="razonReferencia" default-value="Error de Facturación"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="originalInvoiceId"/>
+            <parameter name="invoiceId"/>
+        </out-parameters>
+        <actions>
+            <if condition="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-39','Ftdt-61'])">
+                <return error="true" message="Debit Memos are not supported for the provided document type."/>
+            </if>
+
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte">
+                <field-map field-name="issuerPartyId"/>
+                <field-map field-name="fiscalTaxDocumentNumber"/>
+                <field-map field-name="fiscalTaxDocumentTypeEnumId"/>
+                <field-map field-name="statusId" value="Ftd-Issued"/>
+                <field-map field-name="sentAuthStatusId" value="Ftd-SentAuthAccepted"/>
+            </entity-find-one>
+
+            <if condition="!dte">
+                <return error="true" message="Could not find FiscalTaxDocument"/>
+            </if>
+
+            <if condition="dte.invoiceId == null">
+                <return error="true" message="FiscalTaxDocument has no invoice associated"/>
+            </if>
+
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="originalInvoice">
+                <field-map field-name="invoiceId" from="dte.invoiceId"/>
+            </entity-find-one>
+
+            <if condition="!originalInvoice">
+                <return error="true" message="Could not find invoice ${dte.invoiceId}"/>
+            </if>
+
+            <set field="originalInvoiceId" from="originalInvoice.invoiceId"/>
+            <service-call name="mantle.account.InvoiceServices.create#Invoice" out-map="context"
+                          in-map="[originalInvoiceId:originalInvoice.invoiceId, invoiceTypeEnumId:'InvoiceDebitMemo', fromPartyId:originalInvoice.toPartyId,
+                            toPartyId:originalInvoice.fromPartyId, invoiceDate:ec.user.nowTimestamp, currencyUomId:originalInvoice.currencyUomId, otherPartyOrderId:originalInvoice.otherPartyOrderId,
+                            productStoreId:originalInvoice.productStoreId, systemMessageRemoteId:originalInvoice.systemMessageRemoteId, referenceNumber:originalInvoiceId]"/>
+            <script><![CDATA[
+                java.text.SimpleDateFormat formatDate = new java.text.SimpleDateFormat("yyyy-MM-dd")
+                fecha = formatDate.format(dte.date)
+            ]]></script>
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:dte.receiverPartyId]" out-map="receiverRut"/>
+            <set field="referenceMap" from="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId, folio:dte.fiscalTaxDocumentNumber, fecha:fecha,
+                 rutOtroContribuyente:receiverRut.rutSinFormato, codigoReferenciaEnumId:'MCHRefDteCodeAnula', razonReferencia:razonReferencia, referenceTypeEnumId:'RefDteTypeInvoice']"/>
+            <service-call name="mchile.sii.DTEServices.agregar#Referencia" in-map="referenceMap"/>
+        </actions>
+    </service>
+
     <service verb="create" noun="CreditNoteFromCreditMemo">
         <in-parameters>
             <parameter name="invoiceId"/>
