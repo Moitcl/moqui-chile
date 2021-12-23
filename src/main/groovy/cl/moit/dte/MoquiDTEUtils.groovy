@@ -57,7 +57,7 @@ class MoquiDTEUtils {
         return prepareDetails(ec, detailList, detailType, null)
     }
 
-    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType, BigInteger codRef) throws BaseArtifactException {
+    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType, Integer codRef) throws BaseArtifactException {
         int i = 0
         List detalleList = []
         Long totalNeto = null
