@@ -366,9 +366,11 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
             <set field="maxDaysWithoutChecking" from="3"/>
+            <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
             <entity-find entity-name="mantle.party.contact.PartyContactMech" list="pcmList">
                 <econdition field-name="partyId"/>
-                <econdition field-name="contactMechPurposeId" value="EmailDteXmlRec"/>
+                <econdition field-name="contactMechPurposeId" value="EmailDteXmlRec" ignore="!isProduction"/>
+                <econdition field-name="contactMechPurposeId" operator="in" value="EmailDteXmlRec,EmailPrimary,EmailBilling" ignore="isProduction"/>
                 <date-filter/>
                 <order-by field-name="-fromDate"/>
             </entity-find>
@@ -376,7 +378,12 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="cm" from="pcm?.contactMech"/>
             <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:partyId]" out-map="rut"/>
             <if condition="rut.rutSinFormato == null || rut.rutSinFormato != partyIdValue"><return error="true" message="Rut mismatch, received ${partyIdValue}, found in DB ${rut.rutSinFormato}"/></if>
-            <if condition="pcm == null || pcm.verifyCodeDate == null || (ec.user.nowTimestamp.time - pcm.verifyCodeDate.time) > 3*24*60*60*1000"><then>
+            <if condition="isProduction"><then>
+                <set field="refreshContact" type="Boolean" from="pcm == null || pcm.verifyCodeDate == null || (ec.user.nowTimestamp.time - pcm.verifyCodeDate.time) > 3*24*60*60*1000"/>
+            </then><else>
+                <set field="refreshContact" type="Boolean" from="false"/>
+            </else></if>
+            <if condition="refreshContact"><then>
                 <service-call name="mchile.sii.SIIServices.consulta#ContribuyentesAutorizadosContacto" in-map="[rut:rut.rutSinDv, dv:rut.dv, dtePartyId:dtePartyId]" out-map="cac"/>
                 <if condition="cac.mailContacto == null || cac.mailContacto.length() &lt; 5">
                     <return error="true" message="Error obteniendo mailContacto del SII, recibido: ${cac.mailContaco}"/>

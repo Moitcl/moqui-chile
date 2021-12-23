@@ -13,9 +13,6 @@
  */
 package cl.moit.moqui.remote
 
-import javax.net.ssl.HttpsURLConnection
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
 import javax.xml.namespace.QName
 import javax.xml.soap.Name
 import javax.xml.soap.SOAPBody

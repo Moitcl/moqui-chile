@@ -40,6 +40,7 @@ along with this software (see the LICENSE.md file). If not, see
             <log message="Sending email for fiscalTaxDocumentId: ${fiscalTaxDocumentId}"/>
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" for-update="true"/>
             <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument with id ${fiscalTaxDocumentId}"/></if>
+            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="tipoDteEv" auto-field-map="[enumId:dte.fiscalTaxDocumentTypeEnumId]"/>
             <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="contentList">
                 <econdition field-name="fiscalTaxDocumentId"/>
                 <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
@@ -51,11 +52,13 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="envioContent" from="ec.resource.getLocationReference(dteEnvio.documentLocation)"/>
             <set field="xmlAttachment" from="[attachmentLocation:envioContent.location, fileName:envioContent.fileName, contentType:envioContent.contentType]"/>
             <service-call name="mchile.sii.SIIServices.get#XmlReceptionEmail" in-map="[partyId:dte.receiverPartyId, partyIdValue:dte.receiverPartyIdValue, dtePartyId:dte.issuerPartyId]" out-map="context"/>
+            <if condition="!xmlReceptionEmailAddress">
+                <return error="true" message="No se encuentra dirección de mail para envío de ${tipoDteEv.description} ${dte.fiscalTaxDocumentNumber}"/>
+            </if>
             <service-call name="mchile.sii.DTEServices.get#DteInfo" in-map="context" out-map="bodyParameters"/>
             <entity-find-one entity-name="moqui.basic.email.EmailTemplate" value-field="emailTemplate" auto-field-map="[emailTemplateId:'MchDteSendXmlReceiver']"/>
-            <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" in-map="[toAddresses:xmlReceptionEmailAddress, bccAddresses:'jhp@moit.cl', emailTemplateId:'MchDteSendXmlReceiver',
-                    attachments:[xmlAttachment], bodyParameters:bodyParameters+[fiscalTaxDocumentId:fiscalTaxDocumentId, subject:emailTemplate.subject]]"
-                    out-map="context"/>
+            <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" in-map="[toAddresses:xmlReceptionEmailAddress, emailTemplateId:'MchDteSendXmlReceiver',
+                    attachments:[xmlAttachment], bodyParameters:bodyParameters+[fiscalTaxDocumentId:fiscalTaxDocumentId, subject:emailTemplate.subject]]" out-map="context"/>
             <if condition="emailMessageId">
                 <set field="dte.sentRecStatusId" value="Ftd-SentRec"/>
                 <service-call name="create#mchile.dte.FiscalTaxDocumentEmailMessage" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, emailMessageId:emailMessageId]"/>
