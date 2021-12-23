@@ -1,6 +1,5 @@
 package cl.moit.dte
 
-import org.apache.xml.security.exceptions.XMLSecurityException
 import org.bouncycastle.openssl.PEMKeyPair
 import org.bouncycastle.openssl.PEMParser
 import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter
@@ -242,7 +241,7 @@ class MoquiDTEUtils {
     }
 
     public static boolean verifySignature(org.w3c.dom.Node doc, String xPathExpression, String dateXPathExpression) throws NoSuchAlgorithmException, InvalidKeyException,
-            IOException, ParserConfigurationException, SAXException, XMLSecurityException {
+            IOException, ParserConfigurationException, SAXException {
         XPath xpath = XPathFactory.newInstance().newXPath()
         xpath.setNamespaceContext(new DefaultNamespaceContext().addNamespace("sii", "http://www.sii.cl/SiiDte"))
         XPathExpression expression
@@ -575,10 +574,6 @@ class MoquiDTEUtils {
         if (m.find())
             rut = m.group();
         return rut;
-    }
-
-    static {
-        org.apache.xml.security.Init.init();
     }
 
 }
