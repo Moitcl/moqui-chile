@@ -18,15 +18,16 @@ if (isProduction) {
 
 envio = ec.entity.find("mchile.dte.DteEnvio").condition("envioId", envioId).one()
 rutEmisorEnvio = envio.rutEmisor
+partyIdEmisor = ec.entity.find("mantle.party.PartyIdentification").condition([partyIdTypeEnumId:'PtidNationalTaxId', idValue:rutEmisorEnvio]).list().first?.partyId
 // Validación rut -->
-ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameter("partyId", organizationPartyId).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameter("partyId", partyIdEmisor).call())
 if (rutEmisorEnvio != rutEmisor) {
     ec.message.addError("Rut Emisor del envío (${rutEmisorEnvio}) no coincide con Rut de organización que envía (${rutEmisor})")
     return
 }
 
 // Get token
-String token = ec.service.sync().name("mchile.sii.DTECommServices.get#Token").parameter("isProduction", isProduction).parameter("partyId", organizationPartyId).call().token
+String token = ec.service.sync().name("mchile.sii.DTECommServices.get#Token").parameter("isProduction", isProduction).parameter("partyId", partyIdEmisor).call().token
 
 locationReference = ec.resource.getLocationReference(envio.documentLocation)
 
