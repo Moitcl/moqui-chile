@@ -740,7 +740,7 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="verifica" noun="EnvioEnSii">
         <in-parameters>
-            <parameter name="envioId"/>
+            <parameter name="envioId" required="true"/>
             <parameter name="issuerPartyId"/>
         </in-parameters>
         <out-parameters>
@@ -810,14 +810,29 @@ along with this software (see the LICENSE.md file). If not, see
                 documentosInformados = body.INFORMADOS.text()
                 documentosAceptados = body.ACEPTADOS.text()
                 documentosRechazados = body.RECHAZADOS.text()
+                if (errorCode == '0') {
+                    if (documentosAceptados == documentosInformados) {
+                        dteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("trackId", envio.trackId).forUpdate(true).list()
+                        if (dteList.size() != documentosAceptados) {
+                            ec.message.addError("Documentos informados y aceptados en envío ${envioId} no calza con encontrados en BD por trackId ${envio.trackId}: ${documentosAceptados} vs ${dteList.size()}")
+                            return;
+                        }
+                        // Se pueden asignar todos como aceptados
+                        dteList.each { dte ->
+                            if (dte.statusId in ['Ftd-SentAuthUnverified', 'Ftd-SendAuthFailed']) {
+                                dte.statusId = 'Ftd-SentAuthAccepted'
+                                dte.update()
+                            }
+                        }
+                    } else {
+                        // Se tienen que revisar caso a caso
+                        dteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("trackId", trackId).list()
+                        dteList.each { dte ->
+                            ec.service.async().name("mchile.sii.DTECommServices.verifica#DocumentoEnSii").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).call()
+                        }
+                    }
+                }
             ]]></script>
-            <if condition="errCode == '0'">
-                <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" for-update="true"/>
-                <if condition="dte.sentAuthStatusId == 'Ftd-SentAuthUnverified'">
-                    <set field="dte.sentAuthStatusId" value="Ftd-SentAuthAccepted"/>
-                    <entity-update value-field="dte"/>
-                </if>
-            </if>
         </actions>
     </service>
 
