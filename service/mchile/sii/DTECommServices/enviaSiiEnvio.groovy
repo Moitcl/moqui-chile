@@ -18,6 +18,10 @@ if (isProduction) {
 
 envio = ec.entity.find("mchile.dte.DteEnvio").condition("envioId", envioId).one()
 rutEmisorEnvio = envio.rutEmisor
+if (envio.rutReceptor != '60803000-K') {
+    ec.message.addError("Envío ${envioId} tiene Rut de Receptor distinto al SII: ${envio.rutReceptor}, no se puede enviar")
+    return
+}
 partyIdEmisor = ec.entity.find("mantle.party.PartyIdentification").condition([partyIdTypeEnumId:'PtidNationalTaxId', idValue:rutEmisorEnvio]).list().first?.partyId
 // Validación rut -->
 ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameter("partyId", partyIdEmisor).call())
@@ -53,7 +57,11 @@ trackId = null
 if (status == '0') {
     trackId = xmlDoc.TRACKID.text()
     ec.logger.warn("DTE Enviada correctamente con trackId " + trackId)
-    ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioId, trackId:trackId]).call()
+    ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioId, trackId:trackId, statusId:'Ftde-Sent']).call()
+    ec.service.job('sii_dte_CheckEnviosEnviadosSii').parameters([checkDelaySeconds:30, checkAttempts:4, envioId:envioId, minSecondsBetweenAttempts:0]).run()
+    envioFtdList = ec.entity.find("mchile.dte.DteEnvioFiscalTaxDocument").condition("envioId", envioId).list()
+    if (envioFtdList)
+        ec.service.sync().name("mchile.sii.DTECommServices.marcarEnviados#Documentos").parameters([trackId:trackId, documentIdList:envioFtdList.fiscalTaxDocumentId]).call()
 } else {
     errorDescriptionMap = ['0':'Upload OK', '1':'El Sender no tiene permiso para enviar', '2':'Error en tamaño del archivo (muy grande o muy chico)', '3':'Archivo cortado (tamaño != al parámetro size)',
                            '5':'No está auten†icado', '6':'Empresa no autorizada a enviar archivos', '7':'Esquema Inválido', '8':'Firma del Documento', '9':'Sistema Bloqueado', '0':'Error Interno']

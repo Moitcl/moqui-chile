@@ -544,6 +544,44 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
     </service>
 
+    <service verb="check" noun="EnviosEnviadosSii" authenticate="anonymous-all">
+        <in-parameters>
+            <parameter name="initialDelaySeconds" type="Integer" default="0"/>
+            <parameter name="checkDelaySeconds" type="Integer" default="0"/>
+            <parameter name="checkAttempts" type="Integer" default="1"/>
+            <parameter name="envioId"/>
+            <parameter name="minSecondsBetweenAttempts" type="Integer" default="1800"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.DteEnvio" list="envioList">
+                <econdition field-name="rutReceptor" value="60803000-K"/>
+                <econdition field-name="statusId" value="Ftde-Sent"/>
+                <econdition field-name="envioId" ignore-if-empty="true"/>
+                <econdition field-name="lastAttempt" operator="less" from="ec.user.nowTimestamp.time - (minSecondsBetweenAttempts*1000)" or-null="true"/>
+            </entity-find>
+            <if condition="envioList.size() == 0">
+                <log message="No envios found."/>
+                <return/>
+            </if>
+            <set field="retryList" from="1..checkAttempts"/>
+            <iterate list="retryList" entry="attempt">
+                <set field="reattemptList" from="[]"/>
+                <script>Thread.sleep(initialDelaySeconds*1000L)</script>
+                <log message="Starting attempt ${attempt}"/>
+                <iterate list="envioList" entry="envio">
+                    <service-call name="mchile.sii.DTECommServices.verifica#EnvioEnSii" in-map="[envioId:envio.envioId]" transaction="force-new" out-map="checkMap"/>
+                    <if condition="checkMap.stillProcessing">
+                        <script>reattemptList.add(envio)</script>
+                    </if>
+                </iterate>
+                <set field="envioList" from="reattemptList"/>
+                <log message="Finishing attempt ${attempt}"/>
+                <log message="Waiting ${checkDelaySeconts} before next attempt"/>
+                <script>Thread.sleep(checkDelaySeconds*1000L)</script>
+            </iterate>
+        </actions>
+    </service>
+
     <service verb="enviarDirecto" noun="SII">
         <description>
             Servicio para enviar boleta de forma directa al SII, sin armar un envio nuevo
@@ -757,9 +795,11 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="documentosInformados"/>
             <parameter name="documentosAceptados"/>
             <parameter name="documentosRechazados"/>
+            <parameter name="stillProcessing" type="Boolean"/>
         </out-parameters>
         <actions>
-            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
+            <set field="stillProcessing" from="false" type="Boolean"/>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:envio.rutEmisor]" out-map="rutMap"/>
             <set field="RutCompania" from="rutMap.rut"/>
             <set field="DvCompania" from="rutMap.dv"/>
@@ -769,8 +809,8 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
             </entity-find>
             <set field="dbIssuerPartyId" from="idList.first?.partyId"/>
-            <if condition="issuerPartyId == null"><set field="issuerPartyId" from="dbIssuerPartyId"/></if>
-            <if condition="issuerPartyId != null &amp;&amp; issuerPartyId != dbIssuerPartyId">
+            <if condition="issuerPartyId == null || issuerPartyId == ''"><set field="issuerPartyId" from="dbIssuerPartyId"/></if>
+            <if condition="issuerPartyId != null &amp;&amp; issuerPartyId != '' &amp;&amp; issuerPartyId != dbIssuerPartyId">
                 <return error="true" message="No conincide Rut indicado en servicio (${issuerPartyId}) con el obtenido por el rut (${dbIssuerPartyId})"/>
             </if>
             <if condition="issuerPartyId == null"><return error="true" message="No se encuentra partyId para el rut ${envio.rutEmisor}"/></if>
@@ -810,10 +850,22 @@ along with this software (see the LICENSE.md file). If not, see
                 documentosInformados = body.INFORMADOS.text()
                 documentosAceptados = body.ACEPTADOS.text()
                 documentosRechazados = body.RECHAZADOS.text()
-                if (errorCode == '0') {
+                if (estado in ['PDR', 'FOK', 'CRT', 'SOK']) {
+                    envio.attemptCount = envio.attemptCount + 1
+                    envio.lastAttempt = ec.user.nowTimestamp
+                    envio.update()
+                    ec.logger.info("Envío en proceso")
+                    stillProcessing = true
+                } else if (estado == 'EPR') {
+                    // Envío procesado
+                    envio.statusId = 'Ftde-Processed'
+                    ec.logger.info("Envío procesado")
+                    envio.update()
                     if (documentosAceptados == documentosInformados) {
-                        dteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("trackId", envio.trackId).forUpdate(true).list()
-                        if (dteList.size() != documentosAceptados) {
+                        dteIdList = ec.entity.find("mchile.dte.DteEnvioFiscalTaxDocument").condition("envioId", envioId).list().fiscalTaxDocumentId
+                        dteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("fiscalTaxDocumentId", dteIdList).forUpdate(true).list()
+                        docsAcInt = documentosAceptados as Integer
+                        if (dteList.size() != docsAcInt) {
                             ec.message.addError("Documentos informados y aceptados en envío ${envioId} no calza con encontrados en BD por trackId ${envio.trackId}: ${documentosAceptados} vs ${dteList.size()}")
                             return;
                         }
@@ -830,6 +882,24 @@ along with this software (see the LICENSE.md file). If not, see
                         dteList.each { dte ->
                             ec.service.async().name("mchile.sii.DTECommServices.verifica#DocumentoEnSii").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).call()
                         }
+                    }
+                } else if (estado == 'RSC') {
+                    ec.logger.info("Envío rechazado por Schema")
+                    envio.statusId = 'Ftde-ProcessRejectedSchema'
+                    envio.update()
+                } else if (estado == 'RFR') {
+                    ec.logger.info("Envío rechazado por Firma")
+                    envio.statusId = 'Ftde-ProcessRejectedSignature'
+                    envio.update()
+                } else if (estado == 'RCT') {
+                    ec.logger.info("Envío rechazado por Carátula")
+                    envio.statusId = 'Ftde-ProcessRejectedEnvelope'
+                    envio.update()
+                } else {
+                    ec.logger.info("Estado no reconocido: ${estado}")
+                    if (errorEnvio != null && errorEnvio != '') {
+                        envio.statusId = 'Ftd-SentAuthRejected'
+                        envio.update()
                     }
                 }
             ]]></script>

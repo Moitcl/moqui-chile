@@ -411,6 +411,7 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="invoiceId" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="sendToSii" type="Boolean" default="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
@@ -644,6 +645,11 @@ along with this software (see the LICENSE.md file). If not, see
                                         invoiceMessage:invoice.invoiceMessage, invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList,
                                         receiverPartyId:toPartyId, globalDiscount:globalDiscount, glosaDr:glosaDr, glosaPagos:glosaPagos, settlementTermId:settlementTermId,
                                         fechaEmision:fechaEmision, fechaVencimiento:fechaVencimiento]" out-map="context"/>
+                    <if condition="sendToSii">
+                        <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[rutReceptor:'60803000-K', organizationPartyId:issuerPartyId, documentIdList:[fiscalTaxDocumentId]]"
+                                      out-map="context"/>
+                        <script>ec.service.job("sii_dte_EnviaDteEnvio").parameter("envioId", envioId).run()</script>
+                    </if>
                 </else>
             </if>
         </actions>
@@ -959,9 +965,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="dteEnvio" auto-field-map="[envioId:envio.envioId]"/>
                 <log message="generaEnvio OK, now enviaSII#Envio"/>
                 <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:dteEnvio.envioId, organizationPartyId:issuerPartyId]" out-map="context"/>
-                <if condition="trackId">
-                    <service-call name="mchile.sii.DTECommServices.marcarEnviados#Documentos" in-map="[trackId:trackId, documentIdList:documentIds]"/>
-                </if>
             </then><else-if condition="boleta">
                 <service-call name="mchile.sii.DTECommServices.generaEnvio#Boletas" in-map="[recepS:recepS, organizationPartyId:issuerPartyId, enviadorS:rutEnvia, documentIdList:documentIdList ]" out-map="context"/>
                 <set field="documentoS" from="archivoEnvio"/>
@@ -1417,6 +1420,7 @@ along with this software (see the LICENSE.md file). If not, see
         <description>Obtiene datos para llamar a método generar#Factura para Nota de Crédito</description>
         <in-parameters>
             <parameter name="invoiceId" required="true"/>
+            <parameter name="sendToSii" type="Boolean" default="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
