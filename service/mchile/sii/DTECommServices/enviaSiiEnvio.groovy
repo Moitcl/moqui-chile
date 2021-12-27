@@ -36,6 +36,7 @@ String token = ec.service.sync().name("mchile.sii.DTECommServices.get#Token").pa
 locationReference = ec.resource.getLocationReference(envio.documentLocation)
 
 // Prepare restClient
+ec.logger.info("Enviando envío ${envioId} a uri ${uploadUrl}")
 RestClient restClient = new RestClient().uri(uploadUrl).method("POST")
 restClient.getDefaultRequestFactory().getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 (compatible; PROG 1.0; Windows NT 5.0; YComp 5.0.2.4)"))
 restClient.addHeader("Host", uploadUrl.getHost())
@@ -65,7 +66,7 @@ if (status == '0') {
 } else {
     errorDescriptionMap = ['0':'Upload OK', '1':'El Sender no tiene permiso para enviar', '2':'Error en tamaño del archivo (muy grande o muy chico)', '3':'Archivo cortado (tamaño != al parámetro size)',
                            '5':'No está auten†icado', '6':'Empresa no autorizada a enviar archivos', '7':'Esquema Inválido', '8':'Firma del Documento', '9':'Sistema Bloqueado', '0':'Error Interno']
-    ec.message.addMessage("Error "+ status + " al enviar DTE (${errorDescriptionMap[status]})", "danger")
+    ec.message.addMessage("Error "+ status + " al enviar DTE (${errorDescriptionMap[status]?:'Sin descripción'})", "danger")
     ec.logger.info("response: ${response.text()}")
 }
 
