@@ -619,7 +619,7 @@ class MoquiDTEUtils {
             String schemaLocation = "${schemaPrefixLocation}${fileName}"
             rr = ec.resource.getLocationReference(schemaLocation)
             if (rr == null || !rr.exists)
-                throw new RuntimeException("Unknown schema: ${schemaUri} (attempted to find it at ${schemaLocation}")
+                throw new RuntimeException("Unknown schema: ${schemaUri} (attempted to find it at ${schemaLocation})")
 
         } else
             throw new RuntimeException("Unknown schema: ${schemaUri}")
