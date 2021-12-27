@@ -160,7 +160,7 @@ class MoquiDTEUtils {
                 detailMap.codigoItem = [[tipoCodigo:'Interna', valorCodigo:detailEntry.productId]]
             detailMap.nombreItem = nombreItem
             if (detailEntry.detailedDescription)
-                detailMap.descripcionItem(detailEntry.detailedDescription)
+                detailMap.descripcionItem = detailEntry.detailedDescription
             if (quantity != null)
                 detailMap.quantity = quantity
             if(uom != null)
