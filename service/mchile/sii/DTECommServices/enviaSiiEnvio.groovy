@@ -2,9 +2,15 @@ import org.moqui.context.ExecutionContext
 import org.moqui.util.RestClient
 import org.moqui.util.RestClient.RestResponse
 import org.eclipse.jetty.http.HttpField
+import org.eclipse.jetty.http.HttpFields
 import org.eclipse.jetty.http.HttpHeader
 import org.eclipse.jetty.client.util.ByteBufferContentProvider
 import java.nio.ByteBuffer
+
+import cl.nic.dte.net.ConexionSii
+import cl.sii.siiDte.RECEPCIONDTEDocument
+
+//cl.moit.proxy.debug.TrustAllTrustManager.init()
 
 ExecutionContext ec = context.ec
 
@@ -35,27 +41,83 @@ String token = ec.service.sync().name("mchile.sii.DTECommServices.get#Token").pa
 
 locationReference = ec.resource.getLocationReference(envio.documentLocation)
 
-// Prepare restClient
-RestClient restClient = new RestClient().uri(uploadUrl).method("POST")
-restClient.getDefaultRequestFactory().getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 (compatible; PROG 1.0; Windows NT 5.0; YComp 5.0.2.4)"))
-restClient.addHeader("Host", uploadUrl.getHost())
-restClient.addHeader("Cookie", "TOKEN=${token}").acceptContentType("*/*").contentType("multipart/form-data")
+proxyHost = null
+proxyPort = 0
 
-restClient.addFieldPart("rutSender", rutEnvia.substring(0, rutEnvia.length() - 2))
-restClient.addFieldPart("dvSender", rutEnvia.substring(rutEnvia.length() - 1, rutEnvia.length()))
-restClient.addFieldPart("rutCompany", rutEmisor.substring(0, rutEmisor.length() - 2))
-restClient.addFieldPart("dvCompany", rutEmisor.substring(rutEmisor.length() - 1, rutEmisor.length()))
-ByteBuffer fileByteBuffer = ByteBuffer.wrap(locationReference.openStream().readAllBytes())
-ByteBufferContentProvider bbcp = new ByteBufferContentProvider("text/xml", fileByteBuffer)
-restClient.addFilePart("archivo", locationReference.getFileName(), bbcp, null)
+if (useLib) {
+    java.io.File tempFile = File.createTempFile("envioSii", ".xml");
+    org.moqui.resource.ResourceReference tmpRr = ec.resource.getLocationReference(tempFile.getAbsolutePath())
+    tmpRr.putStream(locationReference.openStream())
+    ConexionSii con = new ConexionSii()
 
-RestResponse response = restClient.call()
-xmlDoc = new groovy.util.XmlParser(false, true).parseText(response.text())
+    RECEPCIONDTEDocument recp
+    ec.logger.warn("Enviando con DTELib, rutEnvia ${rutEnvia}, rutEmisor ${rutEmisor}")
+    if (dteSystemIsProduction) {
+        //String token = con.getToken(pkey, certificate)
+        if (proxyHost != null && proxyPort != 0)
+            recp = con.uploadEnvioProduccion(rutEnvia, rutEmisor, tempFile, token, proxyHost, proxyPort)
+        else
+            recp = con.uploadEnvioProduccion(rutEnvia, rutEmisor, tempFile, token)
+    } else {
+        //String token = con.getTokenCert(pkey, certificate)
+        if (proxyHost != null && proxyPort != 0)
+            recp = con.uploadEnvioCertificacion(rutEnvia, rutEmisor, tempFile, token, proxyHost, proxyPort)
+        else
+            recp = con.uploadEnvioCertificacion(rutEnvia, rutEmisor, tempFile, token)
+    }
+    tempFile.delete()
+    xmlResponse = recp.xmlText()
+} else {
+    // Prepare restClient
+    ec.logger.info("Enviando directo, envío ${envioId} a uri ${uploadUrl}")
+    RestClient restClient = new RestClient().uri(uploadUrl).method("POST")
+    restClient.getDefaultRequestFactory().getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 (compatible; PROG 1.0; Windows NT 5.0; YComp 5.0.2.4)"))
+    restClient.addHeader("Host", uploadUrl.getHost())
+    if (proxyHost != null && proxyPort != 0) {
+        restClient.withRequestFactory(new cl.moit.net.ProxyRequestFactory(proxyHost, proxyPort))
+    }
+    restClient.addHeader("Cookie", "TOKEN=${token}").acceptContentType("*/*").contentType("multipart/form-data")
+
+    HttpFields httpFields = new HttpFields()
+    httpFields.put("Content-Disposition", "form-data; name=\"rutSender\"")
+    httpFields.put("Content-Type", "text/plain; charset=US-ASCII")
+    httpFields.put("Content-Transfer-Encoding", "8Bit")
+    restClient.addFieldPart("rutSender", rutEnvia.substring(0, rutEnvia.length() - 2), httpFields)
+    httpFields = new HttpFields()
+    httpFields.put("Content-Disposition", "form-data; name=\"dvSender\"")
+    httpFields.put("Content-Type", "text/plain; charset=US-ASCII")
+    httpFields.put("Content-Transfer-Encoding", "8Bit")
+    restClient.addFieldPart("dvSender", rutEnvia.substring(rutEnvia.length() - 1, rutEnvia.length()), httpFields)
+    httpFields = new HttpFields()
+    httpFields.put("Content-Disposition", "form-data; name=\"rutCompany\"")
+    httpFields.put("Content-Type", "text/plain; charset=US-ASCII")
+    httpFields.put("Content-Transfer-Encoding", "8Bit")
+    restClient.addFieldPart("rutCompany", rutEmisor.substring(0, rutEmisor.length() - 2), httpFields)
+    httpFields = new HttpFields()
+    httpFields.put("Content-Disposition", "form-data; name=\"dvCompany\"")
+    httpFields.put("Content-Type", "text/plain; charset=US-ASCII")
+    httpFields.put("Content-Transfer-Encoding", "8Bit")
+    restClient.addFieldPart("dvCompany", rutEmisor.substring(rutEmisor.length() - 1, rutEmisor.length()), httpFields)
+    ByteBuffer fileByteBuffer = ByteBuffer.wrap(locationReference.openStream().readAllBytes())
+    ByteBufferContentProvider bbcp = new ByteBufferContentProvider("text/xml", fileByteBuffer)
+    restClient.addFilePart("archivo", locationReference.getFileName(), bbcp, null)
+
+    RestResponse response = restClient.call()
+    xmlResponse = response.text()
+
+}
+
+XmlParser parser = new groovy.util.XmlParser(false, true)
+xmlDoc = parser.parseText(xmlResponse)
 status = xmlDoc.STATUS.text()
+if (status == null || status == '')
+    status = xmlDoc.'siid:STATUS'.text()
 
 trackId = null
 if (status == '0') {
     trackId = xmlDoc.TRACKID.text()
+    if (trackId == null || trackId == '')
+        trackId = xmlDoc.'siid:TRACKID'.text()
     ec.logger.warn("DTE Enviada correctamente con trackId " + trackId)
     ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioId, trackId:trackId, statusId:'Ftde-Sent']).call()
     ec.service.job('sii_dte_CheckEnviosEnviadosSii').parameters([checkDelaySeconds:30, checkAttempts:4, envioId:envioId, minSecondsBetweenAttempts:0]).run()
@@ -65,8 +127,8 @@ if (status == '0') {
 } else {
     errorDescriptionMap = ['0':'Upload OK', '1':'El Sender no tiene permiso para enviar', '2':'Error en tamaño del archivo (muy grande o muy chico)', '3':'Archivo cortado (tamaño != al parámetro size)',
                            '5':'No está auten†icado', '6':'Empresa no autorizada a enviar archivos', '7':'Esquema Inválido', '8':'Firma del Documento', '9':'Sistema Bloqueado', '0':'Error Interno']
-    ec.message.addMessage("Error "+ status + " al enviar DTE (${errorDescriptionMap[status]})", "danger")
-    ec.logger.info("response: ${response.text()}")
+    ec.message.addMessage("Error "+ status + " al enviar DTE (${errorDescriptionMap[status]?:'Sin descripción'})", "danger")
+    ec.logger.info("response: ${xmlResponse}")
 }
 
 return

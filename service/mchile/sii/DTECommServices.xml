@@ -532,12 +532,11 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="enviaSII" noun="Envio"  type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/enviaSiiEnvio.groovy">
         <description>
             Envio al SII envio ya generado
-            rutOrganizacion: rut de compañía que envía
-            rutEnviador: rut de persona que envía
-            documentoS: nombre de documento a enviar (que puede contener varios)
+            envioId: ID de envío
         </description>
         <in-parameters>
             <parameter name="envioId" required="true"/>
+            <parameter name="useLib" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
             <parameter name="trackId"/>
@@ -576,7 +575,11 @@ along with this software (see the LICENSE.md file). If not, see
                 </iterate>
                 <set field="envioList" from="reattemptList"/>
                 <log message="Finishing attempt ${attempt}"/>
-                <log message="Waiting ${checkDelaySeconts} before next attempt"/>
+                <if condition="!envioList">
+                    <log message="No more DteEnvio to process, ending"/>
+                    <return/>
+                </if>
+                <log message="Waiting ${checkDelaySeconds} before next attempt"/>
                 <script>Thread.sleep(checkDelaySeconds*1000L)</script>
             </iterate>
         </actions>
@@ -817,7 +820,7 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:issuerPartyId]" out-map="context"/>
             <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[isProduction:isProduction, partyId:issuerPartyId]" out-map="tokenMap"/>
             <set field="Token" from="tokenMap.token"/>
-            <set field="TrackId" from="envio.trackId"/>
+            <set field="trackId" from="envio.trackId"/>
             <if condition="isProduction"><then>
                 <service-call name="mchile.sii.DTECommServices.verifica#EnvioEnSiiProduction" in-map="context" out-map="context"/>
             </then><else>
@@ -895,8 +898,20 @@ along with this software (see the LICENSE.md file). If not, see
                     ec.logger.info("Envío rechazado por Carátula")
                     envio.statusId = 'Ftde-ProcessRejectedEnvelope'
                     envio.update()
+                } else if (estado == '001') {
+                    ec.logger.info("Error con token: ${glosaEstado}")
+                    stillProcessing = true
+                } else if (errorCodeGlosa != null) {
+                    ec.logger.info("Consulta con error: ${errorCodeGlosa}")
+                    stillProcessing = true
+                } else if (sqlCodeGlosa != null) {
+                    ec.logger.info("Consulta con error: ${errorCodeGlosa}")
+                    stillProcessing = true
+                } else if (serverCodeGlosa != null) {
+                    ec.logger.info("Consulta con error: ${errorCodeGlosa}")
+                    stillProcessing = true
                 } else {
-                    ec.logger.info("Estado no reconocido: ${estado}")
+                    ec.logger.info("Estado no reconocido: ${estado}, errorCode ${errorCode} (${errorCodeGlosa}), sqlCode ${sqlCode} (${sqlCodeGlosa}), serverCode ${serverCode} (${serverCodeGlosa})")
                     if (errorEnvio != null && errorEnvio != '') {
                         envio.statusId = 'Ftd-SentAuthRejected'
                         envio.update()

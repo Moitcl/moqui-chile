@@ -50,7 +50,8 @@ String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:
 StringWriter xmlWriter = new StringWriter()
 MarkupBuilder xmlBuilder = new MarkupBuilder(xmlWriter)
 
-xmlBuilder.EnvioDTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': 'http://www.sii.cl/SiiDte EnvioDTE_v10.xsd') {
+String schemaLocation = 'http://www.sii.cl/SiiDte EnvioDTE_v10.xsd'
+xmlBuilder.EnvioDTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation) {
     SetDTE(ID: idEnvio) {
         Caratula(version: '1.0') {
             RutEmisor(rutEmisor)
@@ -82,6 +83,12 @@ Document doc = MoquiDTEUtils.parseDocument(xmlWriter.toString().getBytes())
 
 byte[] salida = MoquiDTEUtils.sign(doc, "#" + idEnvio, pkey, certificate, "#" + idEnvio, "SetDTE")
 doc = MoquiDTEUtils.parseDocument(salida)
+
+try {
+    MoquiDTEUtils.validateDocumentSii(ec, salida, schemaLocation)
+} catch (Exception e) {
+    ec.message.addError("Failed validation: " + e.getMessage())
+}
 
 ts = ec.user.nowTimestamp
 if (MoquiDTEUtils.verifySignature(doc, "/sii:EnvioDTE/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()")) {

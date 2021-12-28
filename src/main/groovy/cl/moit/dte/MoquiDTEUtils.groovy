@@ -1,21 +1,38 @@
 package cl.moit.dte
 
+import org.apache.fop.apps.io.ResourceResolverFactory
+import org.apache.xmlgraphics.io.Resource
 import org.bouncycastle.openssl.PEMKeyPair
 import org.bouncycastle.openssl.PEMParser
 import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter
 import org.moqui.BaseArtifactException
 import org.moqui.context.ExecutionContext
 import org.moqui.entity.EntityValue
+import org.moqui.resource.ResourceReference
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.w3c.dom.Document
 import org.w3c.dom.Element
 import org.w3c.dom.NodeList
+import org.w3c.dom.ls.LSInput
+import org.w3c.dom.ls.LSResourceResolver
 import org.xml.sax.SAXException
 import sun.security.x509.X509CertImpl
+import org.apache.xmlgraphics.io.ResourceResolver
 
-import javax.xml.crypto.*
-import javax.xml.crypto.dsig.*
+import javax.xml.XMLConstants
+import javax.xml.crypto.AlgorithmMethod
+import javax.xml.crypto.KeySelector
+import javax.xml.crypto.KeySelectorException
+import javax.xml.crypto.KeySelectorResult
+import javax.xml.crypto.XMLCryptoContext
+import javax.xml.crypto.XMLStructure
+import javax.xml.crypto.dsig.DigestMethod
+import javax.xml.crypto.dsig.SignatureMethod
+import javax.xml.crypto.dsig.SignedInfo
+import javax.xml.crypto.dsig.Transform
+import javax.xml.crypto.dsig.XMLSignature
+import javax.xml.crypto.dsig.XMLSignatureFactory
 import javax.xml.crypto.dsig.dom.DOMSignContext
 import javax.xml.crypto.dsig.dom.DOMValidateContext
 import javax.xml.crypto.dsig.keyinfo.KeyInfo
@@ -28,14 +45,29 @@ import javax.xml.namespace.NamespaceContext
 import javax.xml.parsers.DocumentBuilder
 import javax.xml.parsers.DocumentBuilderFactory
 import javax.xml.parsers.ParserConfigurationException
-import javax.xml.transform.*
+import javax.xml.transform.OutputKeys
+import javax.xml.transform.Source
+import javax.xml.transform.Transformer
+import javax.xml.transform.TransformerConfigurationException
+import javax.xml.transform.TransformerException
+import javax.xml.transform.TransformerFactory
 import javax.xml.transform.dom.DOMSource
 import javax.xml.transform.stream.StreamResult
+import javax.xml.transform.stream.StreamSource
+import javax.xml.validation.Schema
+import javax.xml.validation.SchemaFactory
+import javax.xml.validation.Validator
 import javax.xml.xpath.XPath
 import javax.xml.xpath.XPathConstants
 import javax.xml.xpath.XPathExpression
 import javax.xml.xpath.XPathFactory
-import java.security.*
+import java.security.InvalidKeyException
+import java.security.Key
+import java.security.KeyFactory
+import java.security.NoSuchAlgorithmException
+import java.security.PrivateKey
+import java.security.PublicKey
+import java.security.Signature
 import java.security.cert.CertificateExpiredException
 import java.security.cert.CertificateNotYetValidException
 import java.security.cert.X509CRL
@@ -576,6 +608,167 @@ class MoquiDTEUtils {
         if (m.find())
             rut = m.group();
         return rut;
+    }
+
+    public static void validateDocumentSii(ExecutionContext ec, byte[] docBytes, String schemaUri) throws SAXException {
+        String schemaPrefix = "http://www.sii.cl/SiiDte "
+        String schemaPrefixLocation = "component://MoquiChile/DTE/schemas/"
+        ResourceReference rr = null
+        if (schemaUri.startsWith(schemaPrefix)) {
+            if (schemaUri.length() <= schemaPrefix.length())
+                throw new RuntimeException("Unknown schema: ${schemaUri}")
+            String fileName = schemaUri.substring(schemaPrefix.length())
+            String schemaLocation = "${schemaPrefixLocation}${fileName}"
+            rr = ec.resource.getLocationReference(schemaLocation)
+            if (rr == null || !rr.exists)
+                throw new RuntimeException("Unknown schema: ${schemaUri} (attempted to find it at ${schemaLocation})")
+
+        } else
+            throw new RuntimeException("Unknown schema: ${schemaUri}")
+        SchemaFactory factory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
+        ResourceResolver resolver = new LocalResourceResolver(ec, schemaPrefix, schemaPrefixLocation, ResourceResolverFactory.createDefaultResourceResolver())
+        factory.setResourceResolver(resolver)
+        StreamSource schemaSource = new StreamSource(rr.openStream())
+        Schema schema = factory.newSchema(schemaSource)
+        Validator validator = schema.newValidator()
+        validator.setResourceResolver(resolver)
+        Source docSource = new StreamSource(new ByteArrayInputStream(docBytes))
+        validator.validate(docSource)
+    }
+
+    static class LocalResourceResolver implements ResourceResolver, LSResourceResolver{
+        protected ExecutionContext ec
+        protected String prefix
+        protected String prefixLocation
+        protected ResourceResolver defaultResolver
+
+        LocalResourceResolver(ExecutionContext ec, String prefix, String prefixLocation, ResourceResolver defaultResolver) {
+            this.ec = ec
+            this.prefix = prefix
+            this.prefixLocation = prefixLocation
+            this.defaultResolver = defaultResolver
+        }
+
+        OutputStream getOutputStream(URI uri) throws IOException {
+            String uriString = uri.toString()
+            logger.info("Resolving for outputStream ${uriString}")
+            return defaultResolver?.getOutputStream(uri)
+        }
+
+        Resource getResource(URI uri) throws IOException {
+            String uriString = uri.toString()
+            logger.info("Resolving ${uriString}")
+            if (uriString.startsWith(prefix) && uriString.length() > prefix.length()) {
+                String fileName = uriString.substring(prefix.length())
+                String schemaLocation = "${prefixLocation}${fileName}"
+                ResourceReference rr = ec.resource.getLocationReference(schemaLocation)
+                if (rr?.exists)
+                    return new Resource(rr.openStream())
+            }
+            return defaultResolver?.getResource(uri)
+        }
+
+        @Override
+        LSInput resolveResource(String type, String namespaceURI, String publicId, String systemId, String baseURI) {
+            logger.info("resolving type=${type}, namespaceURI=${namespaceURI}, publicId=${publicId}, sytemId=${systemId}, baseURI=${baseURI}")
+            ResourceReference rr = null
+            if (type != "http://www.w3.org/2001/XMLSchema")
+                return null
+            if (namespaceURI == "http://www.sii.cl/SiiDte" || namespaceURI == "http://www.w3.org/2000/09/xmldsig#") {
+                rr = ec.resource.getLocationReference(prefixLocation + systemId)
+            }
+
+            if (rr?.exists)
+                return new LocalLSInput(rr.openStream())
+            return null
+        }
+    }
+
+    static class LocalLSInput implements LSInput {
+
+        InputStream is
+
+        LocalLSInput(InputStream is) {
+            this.is = is
+        }
+
+        @Override
+        Reader getCharacterStream() {
+            return null
+        }
+
+        @Override
+        void setCharacterStream(Reader characterStream) {
+        }
+
+        @Override
+        InputStream getByteStream() {
+            return is
+        }
+
+        @Override
+        void setByteStream(InputStream byteStream) {
+        }
+
+        @Override
+        String getStringData() {
+            return null
+        }
+
+        @Override
+        void setStringData(String stringData) {
+
+        }
+
+        @Override
+        String getSystemId() {
+            return null
+        }
+
+        @Override
+        void setSystemId(String systemId) {
+
+        }
+
+        @Override
+        String getPublicId() {
+            return null
+        }
+
+        @Override
+        void setPublicId(String publicId) {
+
+        }
+
+        @Override
+        String getBaseURI() {
+            return null
+        }
+
+        @Override
+        void setBaseURI(String baseURI) {
+
+        }
+
+        @Override
+        String getEncoding() {
+            return null
+        }
+
+        @Override
+        void setEncoding(String encoding) {
+
+        }
+
+        @Override
+        boolean getCertifiedText() {
+            return false
+        }
+
+        @Override
+        void setCertifiedText(boolean certifiedText) {
+
+        }
     }
 
 }

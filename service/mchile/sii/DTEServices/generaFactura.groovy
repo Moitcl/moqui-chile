@@ -220,9 +220,13 @@ if (giroReceptor.length() > 39)
     giroReceptor = giroReceptor.substring(0,39)
 
 // Timbre
-datosTed = "<DD><RE>${rutEmisor}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptor}</RSR><MNT>${totalInvoice}</MNT><IT1>${detalleList.get(0).nombreItem}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
+String detalleIt1 = detalleList.get(0).nombreItem
+if (detalleIt1.length() > 40)
+    detalleIt1 = detalleIt1.substring(0, 40)
+datosTed = "<DD><RE>${rutEmisor}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptor}</RSR><MNT>${totalInvoice}</MNT><IT1>${detalleIt1}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
 
-xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': 'http://www.sii.cl/SiiDte DTE_v10.xsd') {
+String schemaLocation = 'http://www.sii.cl/SiiDte DTE_v10.xsd'
+xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation) {
     Documento(ID: idDocumento) {
         Encabezado {
             IdDoc {
@@ -403,8 +407,13 @@ xmlWriter.close()
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
 
-doc2 = MoquiDTEUtils.parseDocument(facturaXml)
+try {
+    MoquiDTEUtils.validateDocumentSii(ec, facturaXml, schemaLocation)
+} catch (Exception e) {
+    ec.message.addError("Failed validation: " + e.getMessage())
+}
 
+doc2 = MoquiDTEUtils.parseDocument(facturaXml)
 if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
     ec.logger.warn("DTE folio ${folio} generada OK")
 } else
