@@ -2,6 +2,7 @@ import org.moqui.context.ExecutionContext
 import org.moqui.util.RestClient
 import org.moqui.util.RestClient.RestResponse
 import org.eclipse.jetty.http.HttpField
+import org.eclipse.jetty.http.HttpFields
 import org.eclipse.jetty.http.HttpHeader
 import org.eclipse.jetty.client.util.ByteBufferContentProvider
 import java.nio.ByteBuffer
@@ -77,10 +78,26 @@ if (useLib) {
     }
     restClient.addHeader("Cookie", "TOKEN=${token}").acceptContentType("*/*").contentType("multipart/form-data")
 
-    restClient.addFieldPart("rutSender", rutEnvia.substring(0, rutEnvia.length() - 2))
-    restClient.addFieldPart("dvSender", rutEnvia.substring(rutEnvia.length() - 1, rutEnvia.length()))
-    restClient.addFieldPart("rutCompany", rutEmisor.substring(0, rutEmisor.length() - 2))
-    restClient.addFieldPart("dvCompany", rutEmisor.substring(rutEmisor.length() - 1, rutEmisor.length()))
+    HttpFields httpFields = new HttpFields()
+    httpFields.put("Content-Disposition", "form-data; name=\"rutSender\"")
+    httpFields.put("Content-Type", "text/plain; charset=US-ASCII")
+    httpFields.put("Content-Transfer-Encoding", "8Bit")
+    restClient.addFieldPart("rutSender", rutEnvia.substring(0, rutEnvia.length() - 2), httpFields)
+    httpFields = new HttpFields()
+    httpFields.put("Content-Disposition", "form-data; name=\"dvSender\"")
+    httpFields.put("Content-Type", "text/plain; charset=US-ASCII")
+    httpFields.put("Content-Transfer-Encoding", "8Bit")
+    restClient.addFieldPart("dvSender", rutEnvia.substring(rutEnvia.length() - 1, rutEnvia.length()), httpFields)
+    httpFields = new HttpFields()
+    httpFields.put("Content-Disposition", "form-data; name=\"rutCompany\"")
+    httpFields.put("Content-Type", "text/plain; charset=US-ASCII")
+    httpFields.put("Content-Transfer-Encoding", "8Bit")
+    restClient.addFieldPart("rutCompany", rutEmisor.substring(0, rutEmisor.length() - 2), httpFields)
+    httpFields = new HttpFields()
+    httpFields.put("Content-Disposition", "form-data; name=\"dvCompany\"")
+    httpFields.put("Content-Type", "text/plain; charset=US-ASCII")
+    httpFields.put("Content-Transfer-Encoding", "8Bit")
+    restClient.addFieldPart("dvCompany", rutEmisor.substring(rutEmisor.length() - 1, rutEmisor.length()), httpFields)
     ByteBuffer fileByteBuffer = ByteBuffer.wrap(locationReference.openStream().readAllBytes())
     ByteBufferContentProvider bbcp = new ByteBufferContentProvider("text/xml", fileByteBuffer)
     restClient.addFilePart("archivo", locationReference.getFileName(), bbcp, null)
