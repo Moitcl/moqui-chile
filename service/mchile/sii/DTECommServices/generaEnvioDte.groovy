@@ -111,3 +111,5 @@ documentIdList.each { documentId ->
     ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters([fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Envio', contentLocation:xmlContentLocation, contentDate:ts]).call()
     ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([fiscalTaxDocumentId:documentId, envioId:envioId]).call()
 }
+
+return
