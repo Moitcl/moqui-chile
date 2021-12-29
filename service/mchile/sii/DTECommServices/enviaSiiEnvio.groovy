@@ -72,7 +72,7 @@ if (proxyHost != null && proxyPort != 0) {
     restClient.withRequestFactory(new cl.moit.net.ProxyRequestFactory(proxyHost, proxyPort))
 }
 restClient.addHeader("Cookie", "TOKEN=${token}").acceptContentType("*/*").contentType("multipart/form-data; boundary=${boundary}")
-restClient.text(body)
+restClient.text(body).encoding("ISO-8859-1")
 
 RestResponse response = restClient.call()
 xmlResponse = response.text()
