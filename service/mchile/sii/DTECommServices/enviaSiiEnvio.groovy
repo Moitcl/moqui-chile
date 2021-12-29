@@ -5,9 +5,6 @@ import org.eclipse.jetty.http.HttpField
 import org.eclipse.jetty.http.HttpHeader
 import org.moqui.util.StringUtilities
 
-import cl.nic.dte.net.ConexionSii
-import cl.sii.siiDte.RECEPCIONDTEDocument
-
 ExecutionContext ec = context.ec
 
 Boolean isProduction = ec.service.sync().name("mchile.sii.DTEServices.check#ProductionEnvironment").call().isProduction
@@ -17,9 +14,6 @@ if (isProduction) {
 } else {
     uploadUrl = new URI("https://maullin.sii.cl/cgi_dte/UPL/DTEUpload")
 }
-
-//uploadUrl = new URI('https://postman-echo.com/post')
-//uploadUrl = new URI('https://echo.moit.cl/cgi_dte/UPL/DTEUpload')
 
 envio = ec.entity.find("mchile.dte.DteEnvio").condition("envioId", envioId).one()
 rutEmisorEnvio = envio.rutEmisor
@@ -40,39 +34,15 @@ String token = ec.service.sync().name("mchile.sii.DTECommServices.get#Token").pa
 
 locationReference = ec.resource.getLocationReference(envio.documentLocation)
 
-if (useLib) {
-    java.io.File tempFile = File.createTempFile("envioSii", ".xml");
-    org.moqui.resource.ResourceReference tmpRr = ec.resource.getLocationReference(tempFile.getAbsolutePath())
-    tmpRr.putStream(locationReference.openStream())
-    ConexionSii con = new ConexionSii()
+// Prepare restClient
+ec.logger.info("Enviando directo, envío ${envioId} a uri ${uploadUrl}")
+boundary = "MoitCl-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-DTE"
 
-    RECEPCIONDTEDocument recp
-    ec.logger.warn("Enviando con DTELib, rutEnvia ${rutEnvia}, rutEmisor ${rutEmisor}")
-    if (dteSystemIsProduction) {
-        //String token = con.getToken(pkey, certificate)
-        if (proxyHost != null && proxyPort != 0)
-            recp = con.uploadEnvioProduccion(rutEnvia, rutEmisor, tempFile, token, proxyHost, proxyPort)
-        else
-            recp = con.uploadEnvioProduccion(rutEnvia, rutEmisor, tempFile, token)
-    } else {
-        //String token = con.getTokenCert(pkey, certificate)
-        if (proxyHost != null && proxyPort != 0)
-            recp = con.uploadEnvioCertificacion(rutEnvia, rutEmisor, tempFile, token, proxyHost, proxyPort)
-        else
-            recp = con.uploadEnvioCertificacion(rutEnvia, rutEmisor, tempFile, token)
-    }
-    tempFile.delete()
-    xmlResponse = recp.xmlText()
-} else {
-    // Prepare restClient
-    ec.logger.info("Enviando directo, envío ${envioId} a uri ${uploadUrl}")
-    boundary = "MoitCl-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-DTE"
-
-    rutEnviaMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEnvia).call()
-    rutEmisorMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEmisor).call()
-    fileBytes = locationReference.openStream().readAllBytes()
-    fileName = locationReference.getFileName()
-    body = """--${boundary}\r
+rutEnviaMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEnvia).call()
+rutEmisorMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEmisor).call()
+fileBytes = locationReference.openStream().readAllBytes()
+fileName = locationReference.getFileName()
+body = """--${boundary}\r
 Content-Disposition: form-data; name="rutSender"\r
 \r
 ${rutEnviaMap.rut}\r
@@ -95,23 +65,17 @@ ${new String(fileBytes, "ISO-8859-1")}\r
 --${boundary}--\r
 """
 
-    ec.logger.info("body: ${body}")
-
-    RestClient restClient = new RestClient().uri(uploadUrl).method("POST")
-    restClient.getDefaultRequestFactory().getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 (compatible; PROG 1.0; Windows NT 5.0; YComp 5.0.2.4)"))
-    restClient.addHeader("Host", uploadUrl.getHost())
-    if (proxyHost != null && proxyPort != 0) {
-        restClient.withRequestFactory(new cl.moit.net.ProxyRequestFactory(proxyHost, proxyPort))
-    }
-    restClient.addHeader("Cookie", "TOKEN=${token}").acceptContentType("*/*").contentType("multipart/form-data; boundary=${boundary}")
-    restClient.text(body)
-
-    RestResponse response = restClient.call()
-    xmlResponse = response.text()
-
+RestClient restClient = new RestClient().uri(uploadUrl).method("POST")
+restClient.getDefaultRequestFactory().getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 (compatible; PROG 1.0; Windows NT 5.0; YComp 5.0.2.4)"))
+restClient.addHeader("Host", uploadUrl.getHost())
+if (proxyHost != null && proxyPort != 0) {
+    restClient.withRequestFactory(new cl.moit.net.ProxyRequestFactory(proxyHost, proxyPort))
 }
+restClient.addHeader("Cookie", "TOKEN=${token}").acceptContentType("*/*").contentType("multipart/form-data; boundary=${boundary}")
+restClient.text(body)
 
-ec.logger.info("response: ${xmlResponse}")
+RestResponse response = restClient.call()
+xmlResponse = response.text()
 
 XmlParser parser = new groovy.util.XmlParser(false, true)
 xmlDoc = parser.parseText(xmlResponse)
