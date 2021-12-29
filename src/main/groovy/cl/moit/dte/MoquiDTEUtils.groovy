@@ -2,6 +2,7 @@ package cl.moit.dte
 
 import org.apache.fop.apps.io.ResourceResolverFactory
 import org.apache.xmlgraphics.io.Resource
+import org.apache.xmlgraphics.io.ResourceResolver
 import org.bouncycastle.openssl.PEMKeyPair
 import org.bouncycastle.openssl.PEMParser
 import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter
@@ -18,21 +19,10 @@ import org.w3c.dom.ls.LSInput
 import org.w3c.dom.ls.LSResourceResolver
 import org.xml.sax.SAXException
 import sun.security.x509.X509CertImpl
-import org.apache.xmlgraphics.io.ResourceResolver
 
 import javax.xml.XMLConstants
-import javax.xml.crypto.AlgorithmMethod
-import javax.xml.crypto.KeySelector
-import javax.xml.crypto.KeySelectorException
-import javax.xml.crypto.KeySelectorResult
-import javax.xml.crypto.XMLCryptoContext
-import javax.xml.crypto.XMLStructure
-import javax.xml.crypto.dsig.DigestMethod
-import javax.xml.crypto.dsig.SignatureMethod
-import javax.xml.crypto.dsig.SignedInfo
-import javax.xml.crypto.dsig.Transform
-import javax.xml.crypto.dsig.XMLSignature
-import javax.xml.crypto.dsig.XMLSignatureFactory
+import javax.xml.crypto.*
+import javax.xml.crypto.dsig.*
 import javax.xml.crypto.dsig.dom.DOMSignContext
 import javax.xml.crypto.dsig.dom.DOMValidateContext
 import javax.xml.crypto.dsig.keyinfo.KeyInfo
@@ -45,12 +35,7 @@ import javax.xml.namespace.NamespaceContext
 import javax.xml.parsers.DocumentBuilder
 import javax.xml.parsers.DocumentBuilderFactory
 import javax.xml.parsers.ParserConfigurationException
-import javax.xml.transform.OutputKeys
-import javax.xml.transform.Source
-import javax.xml.transform.Transformer
-import javax.xml.transform.TransformerConfigurationException
-import javax.xml.transform.TransformerException
-import javax.xml.transform.TransformerFactory
+import javax.xml.transform.*
 import javax.xml.transform.dom.DOMSource
 import javax.xml.transform.stream.StreamResult
 import javax.xml.transform.stream.StreamSource
@@ -61,13 +46,7 @@ import javax.xml.xpath.XPath
 import javax.xml.xpath.XPathConstants
 import javax.xml.xpath.XPathExpression
 import javax.xml.xpath.XPathFactory
-import java.security.InvalidKeyException
-import java.security.Key
-import java.security.KeyFactory
-import java.security.NoSuchAlgorithmException
-import java.security.PrivateKey
-import java.security.PublicKey
-import java.security.Signature
+import java.security.*
 import java.security.cert.CertificateExpiredException
 import java.security.cert.CertificateNotYetValidException
 import java.security.cert.X509CRL
@@ -127,7 +106,6 @@ class MoquiDTEUtils {
                 List<EntityValue> sisList = ec.entity.find("mantle.shipment.ShipmentItemSource").condition([shipmentId:detailEntry.shipmentId, productId: detailEntry.productId]).list()
                 if (sisList) {
                     sisList.each { sis ->
-                        ec.logger.info("processing sis ${sis}")
                         EntityValue item
                         if (sis.invoiceId) {
                             item = ec.entity.find("mantle.account.invoice.InvoiceItem").condition([invoiceId: sis.invoiceId, invoiceItemSeqId: sis.invoiceItemSeqId]).one()
