@@ -416,8 +416,12 @@ try {
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
 if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
     ec.logger.warn("DTE folio ${folio} generada OK")
-} else
-    ec.message.addError("Error al generar DTE folio ${folio}")
+} else {
+    ec.message.addError("Error al generar DTE folio ${folio}: firma inválida")
+}
+
+if (ec.message.hasError())
+    return
 
 // Registry de DTE en base de datos y generación de PDF -->
 fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoDte}"
