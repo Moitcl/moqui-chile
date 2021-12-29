@@ -2,15 +2,11 @@ import org.moqui.context.ExecutionContext
 import org.moqui.util.RestClient
 import org.moqui.util.RestClient.RestResponse
 import org.eclipse.jetty.http.HttpField
-import org.eclipse.jetty.http.HttpFields
 import org.eclipse.jetty.http.HttpHeader
-import org.eclipse.jetty.client.util.ByteBufferContentProvider
-import java.nio.ByteBuffer
+import org.moqui.util.StringUtilities
 
 import cl.nic.dte.net.ConexionSii
 import cl.sii.siiDte.RECEPCIONDTEDocument
-
-//cl.moit.proxy.debug.TrustAllTrustManager.init()
 
 ExecutionContext ec = context.ec
 
@@ -21,6 +17,9 @@ if (isProduction) {
 } else {
     uploadUrl = new URI("https://maullin.sii.cl/cgi_dte/UPL/DTEUpload")
 }
+
+//uploadUrl = new URI('https://postman-echo.com/post')
+//uploadUrl = new URI('https://echo.moit.cl/cgi_dte/UPL/DTEUpload')
 
 envio = ec.entity.find("mchile.dte.DteEnvio").condition("envioId", envioId).one()
 rutEmisorEnvio = envio.rutEmisor
@@ -40,9 +39,6 @@ if (rutEmisorEnvio != rutEmisor) {
 String token = ec.service.sync().name("mchile.sii.DTECommServices.get#Token").parameter("isProduction", isProduction).parameter("partyId", partyIdEmisor).call().token
 
 locationReference = ec.resource.getLocationReference(envio.documentLocation)
-
-proxyHost = null
-proxyPort = 0
 
 if (useLib) {
     java.io.File tempFile = File.createTempFile("envioSii", ".xml");
@@ -70,42 +66,52 @@ if (useLib) {
 } else {
     // Prepare restClient
     ec.logger.info("Enviando directo, envío ${envioId} a uri ${uploadUrl}")
+    boundary = "MoitCl-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-DTE"
+
+    rutEnviaMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEnvia).call()
+    rutEmisorMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEmisor).call()
+    fileBytes = locationReference.openStream().readAllBytes()
+    fileName = locationReference.getFileName()
+    body = """--${boundary}\r
+Content-Disposition: form-data; name="rutSender"\r
+\r
+${rutEnviaMap.rut}\r
+--${boundary}\r
+Content-Disposition: form-data; name="dvSender"\r
+\r
+${rutEnviaMap.dv}\r
+--${boundary}\r
+Content-Disposition: form-data; name="rutCompany"\r
+\r
+${rutEmisorMap.rut}\r
+--${boundary}\r
+Content-Disposition: form-data; name="dvCompany"\r
+\r
+${rutEmisorMap.dv}\r
+--${boundary}\r
+Content-Disposition: form-data; name="archivo"; filename="${fileName}"\r
+\r
+${new String(fileBytes, "ISO-8859-1")}\r
+--${boundary}--\r
+"""
+
+    ec.logger.info("body: ${body}")
+
     RestClient restClient = new RestClient().uri(uploadUrl).method("POST")
     restClient.getDefaultRequestFactory().getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 (compatible; PROG 1.0; Windows NT 5.0; YComp 5.0.2.4)"))
     restClient.addHeader("Host", uploadUrl.getHost())
     if (proxyHost != null && proxyPort != 0) {
         restClient.withRequestFactory(new cl.moit.net.ProxyRequestFactory(proxyHost, proxyPort))
     }
-    restClient.addHeader("Cookie", "TOKEN=${token}").acceptContentType("*/*").contentType("multipart/form-data")
-
-    HttpFields httpFields = new HttpFields()
-    httpFields.put("Content-Disposition", "form-data; name=\"rutSender\"")
-    httpFields.put("Content-Type", "text/plain; charset=US-ASCII")
-    httpFields.put("Content-Transfer-Encoding", "8Bit")
-    restClient.addFieldPart("rutSender", rutEnvia.substring(0, rutEnvia.length() - 2), httpFields)
-    httpFields = new HttpFields()
-    httpFields.put("Content-Disposition", "form-data; name=\"dvSender\"")
-    httpFields.put("Content-Type", "text/plain; charset=US-ASCII")
-    httpFields.put("Content-Transfer-Encoding", "8Bit")
-    restClient.addFieldPart("dvSender", rutEnvia.substring(rutEnvia.length() - 1, rutEnvia.length()), httpFields)
-    httpFields = new HttpFields()
-    httpFields.put("Content-Disposition", "form-data; name=\"rutCompany\"")
-    httpFields.put("Content-Type", "text/plain; charset=US-ASCII")
-    httpFields.put("Content-Transfer-Encoding", "8Bit")
-    restClient.addFieldPart("rutCompany", rutEmisor.substring(0, rutEmisor.length() - 2), httpFields)
-    httpFields = new HttpFields()
-    httpFields.put("Content-Disposition", "form-data; name=\"dvCompany\"")
-    httpFields.put("Content-Type", "text/plain; charset=US-ASCII")
-    httpFields.put("Content-Transfer-Encoding", "8Bit")
-    restClient.addFieldPart("dvCompany", rutEmisor.substring(rutEmisor.length() - 1, rutEmisor.length()), httpFields)
-    ByteBuffer fileByteBuffer = ByteBuffer.wrap(locationReference.openStream().readAllBytes())
-    ByteBufferContentProvider bbcp = new ByteBufferContentProvider("text/xml", fileByteBuffer)
-    restClient.addFilePart("archivo", locationReference.getFileName(), bbcp, null)
+    restClient.addHeader("Cookie", "TOKEN=${token}").acceptContentType("*/*").contentType("multipart/form-data; boundary=${boundary}")
+    restClient.text(body)
 
     RestResponse response = restClient.call()
     xmlResponse = response.text()
 
 }
+
+ec.logger.info("response: ${xmlResponse}")
 
 XmlParser parser = new groovy.util.XmlParser(false, true)
 xmlDoc = parser.parseText(xmlResponse)
