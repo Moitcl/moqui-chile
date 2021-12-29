@@ -646,7 +646,6 @@ class MoquiDTEUtils {
 
         @Override
         LSInput resolveResource(String type, String namespaceURI, String publicId, String systemId, String baseURI) {
-            logger.info("resolving type=${type}, namespaceURI=${namespaceURI}, publicId=${publicId}, sytemId=${systemId}, baseURI=${baseURI}")
             ResourceReference rr = null
             if (type != "http://www.w3.org/2001/XMLSchema")
                 return null
