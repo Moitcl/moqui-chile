@@ -76,7 +76,7 @@ xmlBuilder.EnvioDTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.
 xml = xmlWriter.toString()
 
 if (saveSinFirma) {
-    ResourceReference xmlContentReference = ec.resource.getLocationReference("dbresource://moit/erp/dte/EnvioDte-sinfirma/${rutEmisor}/EnvDte-${idEnvio}-sinfirma.xml")
+    ResourceReference xmlContentReference = ec.resource.getLocationReference("dbresource://moit/erp/dte/EnvioDte-sinfirma/${rutEmisor}/${idEnvio}-sinfirma.xml")
     //envioBoletaDocument.save(xmlContentReference.outputStream, opts)
 }
 Document doc = MoquiDTEUtils.parseDocument(xmlWriter.toString().getBytes())
@@ -92,13 +92,13 @@ try {
 
 ts = ec.user.nowTimestamp
 if (MoquiDTEUtils.verifySignature(doc, "/sii:EnvioDTE/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()")) {
-    xmlContentLocation = "dbresource://moit/erp/dte/EnvioDte/${rutEmisor}/EnvDte-${idEnvio}.xml"
+    xmlContentLocation = "dbresource://moit/erp/dte/EnvioDte/${rutEmisor}/${idEnvio}.xml"
     envioRr = ec.resource.getLocationReference(xmlContentLocation)
     envioRr.putBytes(salida)
     fileName = envioRr.fileName
     ec.logger.warn("Envio generado OK")
 } else {
-    xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/ENV-${idEnvio}-mala.xml"
+    xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/${idEnvio}-mala.xml"
     envioRr = ec.resource.getLocationReference(xmlContentLocation)
     envioRr.putBytes(salida)
     fileName = envioRr.fileName
@@ -111,3 +111,5 @@ documentIdList.each { documentId ->
     ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters([fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Envio', contentLocation:xmlContentLocation, contentDate:ts]).call()
     ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([fiscalTaxDocumentId:documentId, envioId:envioId]).call()
 }
+
+return

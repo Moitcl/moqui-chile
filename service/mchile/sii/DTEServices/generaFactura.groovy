@@ -218,12 +218,13 @@ MarkupBuilder xmlBuilder = new MarkupBuilder(xmlWriter)
 
 if (giroReceptor.length() > 39)
     giroReceptor = giroReceptor.substring(0,39)
+razonSocialReceptorTimbre = razonSocialReceptor.length() > 39? razonSocialReceptor.substring(0,39): razonSocialReceptor
 
 // Timbre
 String detalleIt1 = detalleList.get(0).nombreItem
 if (detalleIt1.length() > 40)
     detalleIt1 = detalleIt1.substring(0, 40)
-datosTed = "<DD><RE>${rutEmisor}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptor}</RSR><MNT>${totalInvoice}</MNT><IT1>${detalleIt1}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
+datosTed = "<DD><RE>${rutEmisor}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptorTimbre}</RSR><MNT>${totalInvoice}</MNT><IT1>${detalleIt1}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
 
 String schemaLocation = 'http://www.sii.cl/SiiDte DTE_v10.xsd'
 xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation) {
@@ -416,8 +417,12 @@ try {
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
 if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
     ec.logger.warn("DTE folio ${folio} generada OK")
-} else
-    ec.message.addError("Error al generar DTE folio ${folio}")
+} else {
+    ec.message.addError("Error al generar DTE folio ${folio}: firma inválida")
+}
+
+if (ec.message.hasError())
+    return
 
 // Registry de DTE en base de datos y generación de PDF -->
 fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoDte}"
