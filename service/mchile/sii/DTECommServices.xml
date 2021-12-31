@@ -115,7 +115,11 @@ along with this software (see the LICENSE.md file). If not, see
                         <continue/>
                     </if>
                     <set field="contentBytes" from="bodyPart.contentBytes ?: bodyPart.contentText.getBytes('ISO-8859-1')"/>
-                    <service-call name="mchile.sii.DTECommServices.store#ReceivedEnvio" in-map="context + [contentBytes:contentBytes, fileName:bodyPart.filename ]"/>
+                    <service-call name="mchile.sii.DTECommServices.store#ReceivedEnvio" in-map="context + [contentBytes:contentBytes, fileName:bodyPart.filename ]" out-map="storeResult"/>
+                    <script>
+                        if (storeResult.envioId)
+                            ec.service.special().name("mchile.sii.DTECommServices.process#PendingDteEnvio").parameter("envioId", envioId).registerOnCommit()
+                    </script>
                 </else-if><else>
                     <log level="error" message="Ignoring bodyPart of type ${bodyPart.contentType} and filename ${bodyPart.filename}, disposition ${bodyPart.disposition} for mail ${messageId}"/>
                 </else></if>
@@ -134,6 +138,9 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="createUnknownReceiver" default="false" type="Boolean"/>
             <parameter name="requireReceiverInternalOrg" default="false" type="Boolean"/>
         </in-parameters>
+        <out-parameters>
+            <parameter name="envioId"/>
+        </out-parameters>
         <actions>
             <script><![CDATA[
                 import cl.moit.dte.MoquiDTEUtils
@@ -214,13 +221,13 @@ along with this software (see the LICENSE.md file). If not, see
                     if (!MoquiDTEUtils.verifySignature(doc, internalSignedXPath, internalDateXPath))
                         ec.message.addError("No se verifica firma en ${internalSignedXPath}")
                  */
-                envioDteId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:envioTypeEnumId, emailMessageId:emailMessageId, statusId:'Ftde-Received',
+                envioId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:envioTypeEnumId, emailMessageId:emailMessageId, statusId:'Ftde-Received',
                                                 rutEmisor:rutEmisorCaratula, rutReceptor:rutReceptorCaratula, fechaEnvio:fechaEnvio, fechaRegistro:ec.user.nowTimestamp,
                                                 internalId:internalId, processingParameters:processingParameters]).call().envioId
                 envEv = ec.entity.find("moqui.basic.Enumeration").condition("enumId", envioTypeEnumId).one()
-                documentLocation ="dbresource://moit/erp/dte/${envEv.enumCode}/${rutEmisorCaratula}/${rutEmisorCaratula}-${envioDteId}.xml"
+                documentLocation ="dbresource://moit/erp/dte/${envEv.enumCode}/${rutEmisorCaratula}/${rutEmisorCaratula}-${envioId}.xml"
                 ec.resource.getLocationReference(documentLocation).putBytes(contentBytes)
-                ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioDteId, documentLocation:documentLocation, fileName:fileName]).call().envioId
+                ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioId, documentLocation:documentLocation, fileName:fileName]).call().envioId
             ]]></script>
         </actions>
     </service>
