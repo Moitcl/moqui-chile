@@ -140,16 +140,14 @@ if (tipoDte == 33) {
 
     // Si la razon es modifica texto (2) no van los montos
     ec.logger.warn("Codref: " + codRef + ", dteExenta: " + dteExenta)
-    if(codRef == 2) {
+    if (codRef == 2) {
         totalNeto = 0
         totalExento = 0
     }
 } else if (tipoDte == 56) {
     // Nota de Débito Electrónica
     ec.logger.warn("Creando DTE tipo 56")
-
-    int i = 0
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, null, tipoDte)
     referenciaList = refMap.referenciaList
     dteExenta = refMap.dteExenta
     codRef = refMap.codigo
@@ -165,7 +163,7 @@ if (tipoDte == 33) {
 
     // Si la razon es modifica texto (2) no van los montos
     // Notas de débito son siempre afectas
-    if(codRef == 2) {
+    if (codRef == 2) {
         totalNeto = 0
         totalExento = 0
     }
