@@ -133,8 +133,8 @@ if (tipoDte == 33) {
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
 
-    if (codRef == 2 && det.length() > 1) {
-        ec.message.addError("codRef = 2 && det.length() = ${det.length()}")
+    if (codRef == 2 && detalleList.length() > 1) {
+        ec.message.addError("codRef = 2 && detalleList.length() = ${detalleList.length()}")
         return
     }
 
@@ -157,6 +157,11 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "DebitoItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+
+    if (codRef == 2 && detalleList.length() > 1) {
+        ec.message.addError("codRef = 2 && detalleList.length() = ${detalleList.length()}")
+        return
+    }
 
     // Si la razon es modifica texto (2) no van los montos
     // Notas de débito son siempre afectas
