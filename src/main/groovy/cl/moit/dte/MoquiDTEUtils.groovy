@@ -3,9 +3,6 @@ package cl.moit.dte
 import org.apache.fop.apps.io.ResourceResolverFactory
 import org.apache.xmlgraphics.io.Resource
 import org.apache.xmlgraphics.io.ResourceResolver
-import org.bouncycastle.openssl.PEMKeyPair
-import org.bouncycastle.openssl.PEMParser
-import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter
 import org.moqui.BaseArtifactException
 import org.moqui.context.ExecutionContext
 import org.moqui.entity.EntityValue
@@ -536,29 +533,15 @@ class MoquiDTEUtils {
     }
 
     public static String firmaTimbre(String datosTed, String privateKeyData) {
-        if (privateKeyData.startsWith('-----BEGIN RSA PRIVATE KEY-----\n')) {
-            //privateKeyData = privateKeyData.replace("-----BEGIN RSA PRIVATE KEY-----\n", "").replace("\n-----END RSA PRIVATE KEY-----", "")
-            try {
-                PEMParser pemParser = new PEMParser(new InputStreamReader(new ByteArrayInputStream(privateKeyData.getBytes())))
-                Object result = pemParser.readObject()
-                if (result == null)
-                    throw new RuntimeException("No object read from data")
-                pemParser.close()
-                if (result instanceof PEMKeyPair) {
-                    PEMKeyPair keyPair = (PEMKeyPair)result
-                    java.security.KeyPair kp = new JcaPEMKeyConverter().getKeyPair(result)
-                    java.security.Signature sig = Signature.getInstance("SHA1WithRSA");
-                    sig.initSign(kp.getPrivate())
-                    sig.update(datosTed.getBytes("ISO-8859-1"))
-                    return Base64.mimeEncoder.encodeToString(sig.sign())
-                } else {
-                    throw new RuntimeException("No se pudo recuperar llave privada")
-                }
-            } catch (Exception ex) {
-                throw new RuntimeException("Unable to recover private key..." + ex.getMessage());
-            }
-        } else {
-            throw new RuntimeException("Unsupported keyType (does not start with '-----BEGIN RSA PRIVATE KEY-----\\n'")
+        //privateKeyData = privateKeyData.replace("-----BEGIN RSA PRIVATE KEY-----\n", "").replace("\n-----END RSA PRIVATE KEY-----", "")
+        try {
+            PrivateKey key = cl.moit.dte.KeyHelper.parseKey(privateKeyData)
+            java.security.Signature sig = Signature.getInstance("SHA1WithRSA");
+            sig.initSign(key)
+            sig.update(datosTed.getBytes("ISO-8859-1"))
+            return Base64.mimeEncoder.encodeToString(sig.sign())
+        } catch (Exception ex) {
+            throw new RuntimeException("Unable to recover private key..." + ex.getMessage());
         }
     }
 
