@@ -133,7 +133,7 @@ class MoquiDTEUtils {
                 priceItem = totalItem / quantity as BigDecimal
                 totalItem = totalItem.setScale(0, BigDecimal.ROUND_HALF_UP) as Long
             } else if (detailType == "DebitoItem") {
-                if(BigDecimal.valueOf(codRef) == 2) {
+                if(codRef == 2) {
                     quantity = null
                     priceItem = null
                     nombreItem = "CORRIGE TEXTO"
