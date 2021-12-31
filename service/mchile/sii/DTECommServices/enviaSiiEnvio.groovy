@@ -16,6 +16,10 @@ if (isProduction) {
 }
 
 envio = ec.entity.find("mchile.dte.DteEnvio").condition("envioId", envioId).one()
+if (envio == null) {
+    ec.message.addMessage("No se encuentra envío ${envioId}", "warning")
+    return
+}
 rutEmisorEnvio = envio.rutEmisor
 if (envio.rutReceptor != '60803000-K') {
     ec.message.addError("Envío ${envioId} tiene Rut de Receptor distinto al SII: ${envio.rutReceptor}, no se puede enviar")
