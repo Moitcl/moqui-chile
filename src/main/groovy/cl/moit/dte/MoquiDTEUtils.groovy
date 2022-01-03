@@ -64,7 +64,7 @@ class MoquiDTEUtils {
         return prepareDetails(ec, detailList, detailType, null)
     }
 
-    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType, BigInteger codRef) throws BaseArtifactException {
+    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType, Integer codRef) throws BaseArtifactException {
         int i = 0
         List detalleList = []
         Long totalNeto = null
@@ -133,13 +133,15 @@ class MoquiDTEUtils {
                 priceItem = totalItem / quantity as BigDecimal
                 totalItem = totalItem.setScale(0, BigDecimal.ROUND_HALF_UP) as Long
             } else if (detailType == "DebitoItem") {
-                if(BigDecimal.valueOf(codRef) == 2 || BigDecimal.valueOf(codRef) == 1) {
+                if(codRef == 2) {
                     quantity = null
                     priceItem = null
-                    nombreItem = "ANULA DOCUMENTO DE REFERENCIA"
+                    nombreItem = "CORRIGE TEXTO"
                     totalItem = 0
-                } else
+                } else {
                     priceItem = detailEntry.amount
+                    totalItem = (quantity?:0) * (priceItem?:0)
+                }
             } else if (detailType == "ReturnItem" && codRef == 2) {
                 quantity = null
                 priceItem = null
@@ -191,7 +193,7 @@ class MoquiDTEUtils {
                 singleDet = [detailMap]
                 return [detalleList:singleDet, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
             }
-            if (detailType == "DebitoItem" && codRef == 1) {
+            if (detailType == "DebitoItem" && codRef == 2) {
                 singleDet = [detailMap]
                 return [detailArray:singleDet, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
             }
@@ -210,7 +212,7 @@ class MoquiDTEUtils {
         int i = 0
         referenciaList.each { referenciaEntry ->
             String folioRef = referenciaEntry.folio
-            Integer codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.referenciaTypeEnumId).one().enumCode as Integer
+            Integer codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as Integer
             Timestamp fechaRef = referenciaEntry.fecha instanceof java.sql.Date? new Timestamp(referenciaEntry.fecha.time) : referenciaEntry.fecha
 
             // Agrego referencias
