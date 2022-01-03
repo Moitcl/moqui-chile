@@ -22,7 +22,7 @@
                         } else { break }
                     }
             ]]></script>
-            <service-call name="mchile.DTEServices.preparaEnvio#Documentos" in-map="context + [boleta:true]"/>
+            <service-call name="mchile.sii.DTEServices.preparaEnvio#Documentos" in-map="context + [boleta:true]"/>
         </actions>
         <default-response url="."/>
     </transition>
@@ -32,7 +32,7 @@
         <parameter name="fiscalTaxDocumentTypeEnumId"/>
         <parameter name="activeOrgId" from="activeOrgId"/>
         <actions>
-            <service-call name="mchile.DTEServices.verificaEnSII#Boleta"
+            <service-call name="mchile.sii.DTECommServices.verificaEnSII#Boleta"
                           in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, organizationPartyId:activeOrgId]" out-map="verifyOut"/>
             <log message="-> ${verifyOut.statusSii}" level="warn"/>
             <if condition="verifyOut.statusSii == '0'">
@@ -49,7 +49,7 @@
         <parameter name="fiscalTaxDocumentId"/>
         <parameter name="activeOrgId"/>
         <actions>
-            <service-call name="mchile.DTEServices.enviarDirecto#SII" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, organizationPartyId:activeOrgId]"/>
+            <service-call name="mchile.sii.DTECommServices.enviarDirecto#SII" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, organizationPartyId:activeOrgId]"/>
         </actions>
         <default-response url="."/>
     </transition>
@@ -58,7 +58,7 @@
         <parameter name="fiscalTaxDocumentId"/>
         <parameter name="activeOrgId"/>
         <actions>
-            <service-call name="mchile.DTEServices.eliminar#DTE" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, organizationPartyId:activeOrgId]"/>
+            <service-call name="mchile.sii.DTEServices.eliminar#DTE" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, organizationPartyId:activeOrgId]"/>
         </actions>
         <default-response url="."/>
     </transition>
@@ -67,7 +67,7 @@
         <parameter name="fiscalTaxDocumentId"/>
         <parameter name="activeOrgId"/>
         <actions>
-            <service-call name="mchile.DTEServices.anular#DTE" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, organizationPartyId:activeOrgId]"/>
+            <service-call name="mchile.sii.DTEServices.anular#DTE" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, organizationPartyId:activeOrgId]"/>
         </actions>
         <default-response url="."/>
     </transition>
@@ -126,11 +126,8 @@
             <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in"
                         from="['Ftdt-39','Ftdt-41']"/>
             <econdition field-name="issuerPartyId" operator="equals" value="${activeOrgId}"/>
-            <econditions combine="or">
-                <econdition field-name="fiscalTaxDocumentStatusEnumId" operator="equals" value="Ftdt-Issued"/>
-                <econdition field-name="fiscalTaxDocumentStatusEnumId" operator="equals" value="Ftdt-Cancelled"/>
-            </econditions>
-            <econdition field-name="fiscalTaxDocumentSentStatusEnumId" operator="equals" value="Ftdt-NotSent"/>
+            <econdition field-name="statusId" operator="in" value="Ftd-Issued,Ftd-Cancelled"/>
+            <econdition field-name="sentAuthStatusId" value="Ftd-NotSentAuth"/>
             <order-by field-name="-lastUpdatedStamp"/>
         </entity-find>
     </actions>
@@ -141,11 +138,11 @@
         <form-list name="DteForm" list="dteList" show-pdf-button="true" show-csv-button="true" header-dialog="true" saved-finds="true" multi="true" transition="envioSII">
             <row-actions>
                 <!-- Se busca ubicación de XML y PDF -->
-                <service-call name="mchile.DTEServices.get#DteContent"
+                <service-call name="mchile.sii.DTEServices.get#DteContent"
                               in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
                 <set field="xmlFilename" from="content"/>
 
-                <service-call name="mchile.DTEServices.get#DteContent"
+                <service-call name="mchile.sii.DTEServices.get#DteContent"
                               in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf']" out-map="context"/>
                 <set field="pdfFilename" from="content"/>
 
@@ -197,12 +194,12 @@
                     <display/>
                 </default-field>
             </field>
-            <field name="fiscalTaxDocumentStatusEnumId">
+            <field name="statusId">
                 <header-field title="Estado" show-order-by="true">
                     <drop-down allow-empty="true" allow-multiple="true">
-                        <entity-options key="${enumId}">
-                            <entity-find entity-name="moqui.basic.Enumeration">
-                                <econdition field-name="enumTypeId" value="FiscalTaxDocumentStatus"/>
+                        <entity-options key="${statusId}">
+                            <entity-find entity-name="moqui.basic.StatusItem">
+                                <econdition field-name="statusTypeId" value="FiscalTaxDocumentStatus"/>
                             </entity-find>
                         </entity-options>
                     </drop-down>

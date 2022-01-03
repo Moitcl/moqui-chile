@@ -1,16 +1,64 @@
 package cl.moit.dte
 
-import cl.nic.dte.util.Utilities
-import cl.sii.siiDte.DTEDefType.Documento.Detalle
-import cl.sii.siiDte.DTEDefType.Documento.Referencia
-import cl.sii.siiDte.FechaType
+import org.apache.fop.apps.io.ResourceResolverFactory
+import org.apache.xmlgraphics.io.Resource
+import org.apache.xmlgraphics.io.ResourceResolver
 import org.moqui.BaseArtifactException
 import org.moqui.context.ExecutionContext
 import org.moqui.entity.EntityValue
+import org.moqui.resource.ResourceReference
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+import org.w3c.dom.Document
+import org.w3c.dom.Element
+import org.w3c.dom.NodeList
+import org.w3c.dom.ls.LSInput
+import org.w3c.dom.ls.LSResourceResolver
+import org.xml.sax.SAXException
+import sun.security.x509.X509CertImpl
 
+import javax.xml.XMLConstants
+import javax.xml.crypto.*
+import javax.xml.crypto.dsig.*
+import javax.xml.crypto.dsig.dom.DOMSignContext
+import javax.xml.crypto.dsig.dom.DOMValidateContext
+import javax.xml.crypto.dsig.keyinfo.KeyInfo
+import javax.xml.crypto.dsig.keyinfo.KeyInfoFactory
+import javax.xml.crypto.dsig.keyinfo.KeyValue
+import javax.xml.crypto.dsig.keyinfo.X509Data
+import javax.xml.crypto.dsig.spec.C14NMethodParameterSpec
+import javax.xml.crypto.dsig.spec.TransformParameterSpec
+import javax.xml.namespace.NamespaceContext
+import javax.xml.parsers.DocumentBuilder
+import javax.xml.parsers.DocumentBuilderFactory
+import javax.xml.parsers.ParserConfigurationException
+import javax.xml.transform.*
+import javax.xml.transform.dom.DOMSource
+import javax.xml.transform.stream.StreamResult
+import javax.xml.transform.stream.StreamSource
+import javax.xml.validation.Schema
+import javax.xml.validation.SchemaFactory
+import javax.xml.validation.Validator
+import javax.xml.xpath.XPath
+import javax.xml.xpath.XPathConstants
+import javax.xml.xpath.XPathExpression
+import javax.xml.xpath.XPathFactory
+import java.security.*
+import java.security.cert.CertificateExpiredException
+import java.security.cert.CertificateNotYetValidException
+import java.security.cert.X509CRL
+import java.security.cert.X509Certificate
+import java.security.interfaces.RSAPrivateKey
+import java.security.interfaces.RSAPublicKey
+import java.security.spec.X509EncodedKeySpec
 import java.sql.Timestamp
+import java.text.SimpleDateFormat
+import java.util.regex.Matcher
+import java.util.regex.Pattern
 
 class MoquiDTEUtils {
+
+    protected final static Logger logger = LoggerFactory.getLogger(MoquiDTEUtils.class)
 
     public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType) throws BaseArtifactException {
         return prepareDetails(ec, detailList, detailType, null)
@@ -18,8 +66,7 @@ class MoquiDTEUtils {
 
     public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType, BigInteger codRef) throws BaseArtifactException {
         int i = 0
-        int listSize = detailList.size()
-        Detalle[] det = new Detalle[listSize]
+        List detalleList = []
         Long totalNeto = null
         Long totalExento = null
         int numberAfectos = 0
@@ -32,7 +79,7 @@ class MoquiDTEUtils {
                 EntityValue productEv = ec.entity.find("mantle.product.Product").condition("productId", detailEntry.productId).one()
                 nombreItem = productEv? productEv.productName : ''
             }
-            Integer qtyItem = detailEntry.quantity
+            Integer quantity = detailEntry.quantity
             String uom = null
             BigDecimal pctDiscount
             if (!detailType in ["ShipmentItem"]) {
@@ -44,7 +91,7 @@ class MoquiDTEUtils {
             }
             String itemAfecto = "true"
             if (detailEntry.productId) {
-                Map<String, Object> afectoOutMap = ec.service.sync().name("mchile.DTEServices.check#Afecto").parameter("productId", detailEntry.productId).call()
+                Map<String, Object> afectoOutMap = ec.service.sync().name("mchile.sii.DTEServices.check#Afecto").parameter("productId", detailEntry.productId).call()
                 itemAfecto = afectoOutMap.afecto
             }
 
@@ -56,7 +103,6 @@ class MoquiDTEUtils {
                 List<EntityValue> sisList = ec.entity.find("mantle.shipment.ShipmentItemSource").condition([shipmentId:detailEntry.shipmentId, productId: detailEntry.productId]).list()
                 if (sisList) {
                     sisList.each { sis ->
-                        ec.logger.info("processing sis ${sis}")
                         EntityValue item
                         if (sis.invoiceId) {
                             item = ec.entity.find("mantle.account.invoice.InvoiceItem").condition([invoiceId: sis.invoiceId, invoiceItemSeqId: sis.invoiceItemSeqId]).one()
@@ -77,25 +123,25 @@ class MoquiDTEUtils {
                             uom = "Mes"
                     }
                 }
-                if (quantityHandled < qtyItem) {
-                    ec.logger.info("pending ${qtyItem - quantityHandled} out of ${qtyItem}")
+                if (quantityHandled < quantity) {
+                    ec.logger.info("pending ${quantity - quantityHandled} out of ${quantity}")
                     EntityValue shipment = ec.entity.find("mantle.shipment.Shipment").condition("shipmentId", shipmentId).one()
                     Timestamp shipmentDate = shipment.estimatedShipDate ?: shipment.shipAfterDate ?: shipment.entryDate ?: ec.user.nowTimestamp
-                    Map<String, Object> priceMap = ec.service.sync().name("mantle.product.PriceServices.get#ProductPrice").parameters([productId: detailEntry.productId, quantity: qtyItem, validDate: shipmentDate]).call()
-                    totalItem = totalItem + (qtyItem - quantityHandled) * priceMap.price
+                    Map<String, Object> priceMap = ec.service.sync().name("mantle.product.PriceServices.get#ProductPrice").parameters([productId: detailEntry.productId, quantity: quantity, validDate: shipmentDate]).call()
+                    totalItem = totalItem + (quantity - quantityHandled) * priceMap.price
                 }
-                priceItem = totalItem / qtyItem as BigDecimal
+                priceItem = totalItem / quantity as BigDecimal
                 totalItem = totalItem.setScale(0, BigDecimal.ROUND_HALF_UP) as Long
             } else if (detailType == "DebitoItem") {
                 if(BigDecimal.valueOf(codRef) == 2 || BigDecimal.valueOf(codRef) == 1) {
-                    qtyItem = null
+                    quantity = null
                     priceItem = null
                     nombreItem = "ANULA DOCUMENTO DE REFERENCIA"
                     totalItem = 0
                 } else
                     priceItem = detailEntry.amount
             } else if (detailType == "ReturnItem" && codRef == 2) {
-                qtyItem = null
+                quantity = null
                 priceItem = null
                 nombreItem = "CORRIGE GIROS"
                 totalItem = 0
@@ -103,7 +149,7 @@ class MoquiDTEUtils {
                 priceItem = detailEntry.returnPrice
             } else {
                 priceItem = detailEntry.amount
-                totalItem = qtyItem * priceItem
+                totalItem = (quantity?:0) * (priceItem?:0)
             }
 
             if (itemAfecto == "true")
@@ -112,57 +158,51 @@ class MoquiDTEUtils {
                 numberExentos++
 
             // Agrego detalles
-            det[i] = Detalle.Factory.newInstance()
-            det[i].setNroLinDet(i+1)
-            if (detailEntry.productId) {
-                String codigoInterno = detailEntry.productId
-                cl.sii.siiDte.DTEDefType.Documento.Detalle.CdgItem codigo = det[i].addNewCdgItem()
-                codigo.setTpoCodigo("Interna")
-                codigo.setVlrCodigo(codigoInterno)
-            }
-            det[i].setNmbItem(nombreItem)
+            Map detailMap = [:]
+            detalleList.add(detailMap)
+            detailMap.numeroLinea = i+1
+            if (detailEntry.productId)
+                detailMap.codigoItem = [[tipoCodigo:'Interna', valorCodigo:detailEntry.productId]]
+            detailMap.nombreItem = nombreItem
             if (detailEntry.detailedDescription)
-                det[i].setDscItem(detailEntry.detailedDescription)
-            //det[i].setDscItem(""); // Descripción Item
-            if (qtyItem != null)
-                det[i].setQtyItem(BigDecimal.valueOf(qtyItem))
+                detailMap.descripcionItem = detailEntry.detailedDescription
+            if (quantity != null)
+                detailMap.quantity = quantity
             if(uom != null)
-                det[i].setUnmdItem(uom)
+                detailMap.uom = uom
             if((pctDiscount != null) && (pctDiscount > 0)) {
                 ec.logger.warn("Aplicando descuento " + pctDiscount+"% a precio "+ priceItem )
                 BigDecimal descuento = totalItem * pctDiscount / 100
                 ec.logger.warn("Descuento:" + descuento)
-                det[i].setDescuentoPct(pctDiscount)
-                det[i].setDescuentoMonto(Math.round(descuento))
+                detailMap.porcentajeDescuento = pctDiscount
+                detailMap.montoDescuento = Math.round(descuento)
                 totalItem = totalItem - descuento
             }
             if (priceItem != null && (detailType != "ShipmentItem" || Math.round(priceItem) > 0))
-                det[i].setPrcItem(BigDecimal.valueOf(priceItem))
-            det[i].setMontoItem(Math.round(totalItem))
+                detailMap.priceItem = priceItem
+            detailMap.montoItem = totalItem
             if(detailType == "ShipmentItem" || itemAfecto.equals("true")) {
                 totalNeto = (totalNeto ?: 0) + totalItem
             } else {
                 totalExento = (totalExento ?: 0) + totalItem
-                det[i].setIndExe(1)
+                detailMap.indicadorExento = 1
             }
             if (detailType == "ReturnItem" && codRef == 2) {
-                Detalle[] singleDet = new Detalle[1];
-                singleDet[0] = det[i]
-                return [detailArray:singleDet, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
+                singleDet = [detailMap]
+                return [detalleList:singleDet, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
             }
             if (detailType == "DebitoItem" && codRef == 1) {
-                Detalle[] singleDet = new Detalle[1];
-                singleDet[0] = det[i]
+                singleDet = [detailMap]
                 return [detailArray:singleDet, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
             }
             i = i + 1
         }
-        return [detailArray:det, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
+        return [detalleList:detalleList, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
     }
 
     public static Map<String, Object> prepareReferences(ExecutionContext ec, List<HashMap> referenciaList, String rutReceptor, Long tipoFactura) {
         int listSize = referenciaList.size()
-        Referencia[] ref = new Referencia[listSize]
+        List referenciaListOut = []
         String anulaBoleta = null
         String folioAnulaBoleta = null
         boolean dteExenta = false
@@ -170,24 +210,25 @@ class MoquiDTEUtils {
         int i = 0
         referenciaList.each { referenciaEntry ->
             String folioRef = referenciaEntry.folio
-            Integer codRef = referenciaEntry.codigoReferenciaEnumId
+            Integer codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.referenciaTypeEnumId).one().enumCode as Integer
             Timestamp fechaRef = referenciaEntry.fecha instanceof java.sql.Date? new Timestamp(referenciaEntry.fecha.time) : referenciaEntry.fecha
 
             // Agrego referencias
-            ref[i] = Referencia.Factory.newInstance()
-            ref[i].setNroLinRef(i+1)
-            ref[i].xsetFchRef(FechaType.Factory.newValue(Utilities.fechaFormat.format(fechaRef)))
+            Map referenciaMap = [:]
+            referenciaListOut.add(referenciaMap)
+            referenciaMap.numeroLinea = i+1
+            referenciaMap.fecha = fechaRef
             if(referenciaEntry.razonReferencia != null)
-                ref[i].setRazonRef(referenciaEntry.razonReferencia)
-            ref[i].setFolioRef(folioRef)
+                referenciaMap.razon = referenciaEntry.razonReferencia
+            referenciaMap.folio = folioRef
             if (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('Ftdt-0')) { // Used for Set de Pruebas SII
-                ref[i].setTpoDocRef('SET')
+                referenciaMap.tipoDocumento = 'SET'
             } else {
-                Map<String, Object> codeOut = ec.service.sync().name("mchile.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
+                Map<String, Object> codeOut = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
                 Integer tpoDocRef = codeOut.siiCode
-                //ref[i].setTpoDocRef(referenciaEntry.fiscalTaxDocumentTypeEnumId)
-                ref[i].setTpoDocRef(tpoDocRef as String)
-                ref[i].setRUTOtr(rutReceptor)
+                referenciaMap.tipoDocumento = tpoDocRef as String
+                if (rutReceptor)
+                    referenciaMap.rutOtro = rutReceptor
                 if(tipoFactura == 61 && (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-39") || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41")) && codRef.equals(1) ) {
                     // Nota de crédito hace referencia a Boletas Electrónicas
                     anulaBoleta = 'true'
@@ -195,7 +236,7 @@ class MoquiDTEUtils {
                 }
             }
             if(codRef != null)
-                ref[i].setCodRef(codRef)
+                referenciaMap.codigo = codRef
             // TODO: ¿Por qué se asume que una Nota de Crédito es exenta al estar generando una nota de débito?
             if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-34") || (tipoFactura == 56 && referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-61")) ) {
                 dteExenta = true
@@ -203,7 +244,489 @@ class MoquiDTEUtils {
 
             i = i + 1
         }
-        return [referenceArray:ref, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, dteExenta:dteExenta]
+        return [referenciaList:referenciaListOut, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, dteExenta:dteExenta]
+    }
+
+    public static boolean verifySignature(org.w3c.dom.Node doc, String xPathExpression, String dateXPathExpression) throws NoSuchAlgorithmException, InvalidKeyException,
+            IOException, ParserConfigurationException, SAXException {
+        XPath xpath = XPathFactory.newInstance().newXPath()
+        xpath.setNamespaceContext(new DefaultNamespaceContext().addNamespace("sii", "http://www.sii.cl/SiiDte"))
+        XPathExpression expression
+        Date signatureDate = null
+        List<String> verifiedIdList = new LinkedList<String>()
+        List<String> failedIdList = new LinkedList<String>()
+        expression = xpath.compile(xPathExpression)
+        NodeList nodes = (NodeList) expression.evaluate(doc, XPathConstants.NODESET)
+        if (nodes == null || nodes.length < 1)
+            throw new RuntimeException("Could not find any node using XPath expression ${xPathExpression}")
+
+        nodes.each { org.w3c.dom.Node node ->
+            if (dateXPathExpression != null) {
+                expression = xpath.compile(dateXPathExpression)
+                String signatureTimestamp = expression.evaluate(node, XPathConstants.STRING)
+                SimpleDateFormat dateFormat = new SimpleDateFormat(signatureTimestamp.size() == 10 ? "yyyy-MM-dd": "yyyy-MM-dd'T'HH:mm:ss")
+                signatureDate = dateFormat.parse(signatureTimestamp)
+                logger.debug("got signatureTimestamp: ${signatureTimestamp}")
+            }
+            String signedElementId = ((Element)node).getAttribute("ID")
+            ((Element)node).setIdAttributeNS(null, "ID", true)
+            NodeList signatureNodeList = ((Element)node.getParentNode()).getElementsByTagNameNS("http://www.w3.org/2000/09/xmldsig#", "Signature");
+            if (signatureNodeList == null || signatureNodeList.length < 1)
+                throw (new SAXException("No se encuentra firma para verificacion"));
+            org.w3c.dom.Element signatureElem = (org.w3c.dom.Element) signatureNodeList.item(signatureNodeList.length - 1);
+            if (signatureElem == null) {
+                throw (new SAXException("No se encuentra firma para verificacion"));
+            }
+            DOMValidateContext valContext = new DOMValidateContext(new X509KeySelector(), signatureElem)
+
+            // Unmarshal the XMLSignature.
+            XMLSignatureFactory fac = XMLSignatureFactory.getInstance("DOM");
+            XMLSignature signature = fac.unmarshalXMLSignature(valContext);
+
+            X509CertImpl certificate = null;
+            signature.keyInfo.content.each {
+                if (it instanceof X509Data) {
+                    X509Data xd = (X509Data) it;
+                    Object[] entries = xd.getContent().toArray();
+                    X509CRL crl = null;
+                    for (int i = 0; ( i < entries.length); i++) {
+                        if (entries[i] instanceof X509CRL) {
+                            crl = (X509CRL) entries[i];
+                        }
+                        if (entries[i] instanceof X509CertImpl) {
+                            certificate = (X509CertImpl) entries[i];
+                            try {
+                                certificate.checkValidity(signatureDate ?: new Date());
+                            } catch (CertificateExpiredException expiredEx) {
+                                logger.error("CERTIFICATE EXPIRED!");
+                                return false;
+                            } catch (CertificateNotYetValidException notYetValidEx) {
+                                logger.error("CERTIFICATE NOT VALID YET!");
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (certificate == null) {
+                logger.error("No Certificate found")
+                failedIdList.add(signedElementId)
+                return
+            }
+
+            // Validate the XMLSignature.
+            if (!signature.validate(valContext)) {
+                failedIdList.add(signedElementId)
+                return
+            }
+
+            verifiedIdList.add(signedElementId)
+        }
+        int verifyCount = verifiedIdList.size()
+        int failCount = failedIdList.size()
+        int totalCount = verifyCount + failCount
+        if (failCount == 0)
+            logger.info("Checked ${verifyCount} signature${verifyCount > 1? 's': ''} successfully, ID${verifyCount > 1? ('s ' + verifiedIdList): ' ' + verifiedIdList.get(0)}")
+        else
+            logger.info("Checked ${totalCount} signature${totalCount > 1? 's': ''} , ${verifyCount} successful, ${failCount} failed: ID${failCount > 1? ('s ' + failedIdList): ' ' + failedIdList.get(0)}")
+        return (failCount == 0);
+    }
+
+    public static class DefaultNamespaceContext implements NamespaceContext {
+        private HashMap<String,String> keyMap = new HashMap<String,String>()
+
+        public DefaultNamespaceContext addNamespace(String prefix, String uri) {
+            keyMap.put(prefix, uri)
+            return this
+        }
+
+        @Override
+        String getNamespaceURI(String prefix) {
+            return keyMap.get(prefix)
+        }
+
+        @Override
+        String getPrefix(String namespaceURI) {
+            keyMap.keySet().each { key, value ->
+                if (value == namespaceURI)
+                    return key
+            }
+            return null
+        }
+
+        @Override
+        Iterator<String> getPrefixes(String namespaceURI) {
+            LinkedList<String> prefixList = new LinkedList<String>()
+            keyMap.keySet().each { key, value ->
+                if (value == namespaceURI)
+                    prefixList.add(key)
+            }
+            return prefixList
+        }
+    }
+
+    public static class X509KeySelector extends KeySelector {
+        public KeySelectorResult select(KeyInfo keyInfo,
+                                        KeySelector.Purpose purpose,
+                                        AlgorithmMethod method,
+                                        XMLCryptoContext context)
+                throws KeySelectorException {
+            Iterator ki = keyInfo.getContent().iterator();
+            while (ki.hasNext()) {
+                XMLStructure info = (XMLStructure) ki.next();
+                if (!(info instanceof X509Data))
+                    continue;
+                X509Data x509Data = (X509Data) info;
+                Iterator xi = x509Data.getContent().iterator();
+                while (xi.hasNext()) {
+                    Object o = xi.next();
+                    if (!(o instanceof X509Certificate))
+                        continue;
+                    final PublicKey key = ((X509Certificate)o).getPublicKey();
+                    // Make sure the algorithm is compatible
+                    // with the method.
+                    if (algEquals(method.getAlgorithm(), key.getAlgorithm())) {
+                        return new KeySelectorResult() {
+                            public Key getKey() { return key; }
+                        };
+                    }
+                }
+            }
+            throw new KeySelectorException("No key found!");
+        }
+
+        static boolean algEquals(String algURI, String algName) {
+            if ((algName.equalsIgnoreCase("DSA") &&
+                    algURI.equalsIgnoreCase(SignatureMethod.DSA_SHA1)) ||
+                    (algName.equalsIgnoreCase("RSA") &&
+                            algURI.equalsIgnoreCase(SignatureMethod.RSA_SHA1))) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
+
+    public static byte[] sign(Document doc, String baseUri, PrivateKey pKey, X509Certificate cert, String uri, String tagName) {
+        try {
+            NodeList nodes = doc.getElementsByTagName(tagName);
+            if (tagName != "")
+                ((Element) nodes.item(0)).setIdAttributeNS(null, "ID", true);
+
+            String alg = pKey.getAlgorithm();
+            if (!alg.equals(cert.getPublicKey().getAlgorithm()))
+                throw (new Exception("ERROR DE ALGORITMO"));
+            org.w3c.dom.Element root = doc.getDocumentElement();
+            DOMSignContext dsc = new DOMSignContext(pKey, root);
+            XMLSignatureFactory fac = XMLSignatureFactory.getInstance("DOM");
+            javax.xml.crypto.dsig.Reference ref = fac.newReference(uri, fac.newDigestMethod(DigestMethod.SHA1, null), List.of(fac.newTransform (Transform.ENVELOPED, (TransformParameterSpec) null)), null, null);
+            String signatureAlgorithm = null
+            if (alg.equals("RSA")) {
+                if (!((RSAPrivateKey) pKey).getModulus().equals(((RSAPublicKey) cert.getPublicKey()).getModulus()))
+                    throw (new Exception("ERROR DE FIRMA RSA"));
+                signatureAlgorithm = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
+            } else if (alg.equals("DSA")) {
+                signatureAlgorithm = "http://www.w3.org/2000/09/xmldsig#dsa-sha1"
+            }
+            SignedInfo si = fac.newSignedInfo(fac.newCanonicalizationMethod ("http://www.w3.org/TR/2001/REC-xml-c14n-20010315", (C14NMethodParameterSpec) null), fac.newSignatureMethod(signatureAlgorithm, null), List.of(ref));
+            KeyInfoFactory kif = fac.getKeyInfoFactory();
+            KeyValue kv = kif.newKeyValue(cert.getPublicKey());
+            X509Data certData = kif.newX509Data(Collections.singletonList ( cert ));
+            KeyInfo ki = kif.newKeyInfo(List.of(kv, certData));
+            XMLSignature signature = fac.newXMLSignature(si, ki);
+            signature.sign(dsc);
+
+            return getRawXML(doc);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public static byte[] getRawXML(org.w3c.dom.Node doc) {
+        return getRawXML(doc, "ISO-8859-1")
+    }
+    public static String getStringXML(org.w3c.dom.Node doc) {
+        TransformerFactory transformerFactory = TransformerFactory.newInstance();
+        Transformer transformer;
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            baos.write("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n".getBytes("UTF-8"));
+            transformer = transformerFactory.newTransformer();
+            transformer.setOutputProperty(OutputKeys.INDENT, "no");
+            transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+            transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
+            transformer.setOutputProperty(OutputKeys.METHOD, "xml");
+            transformer.transform(new DOMSource(doc), new StreamResult(baos));
+
+            return new String(baos.toByteArray(), "UTF-8");
+        } catch (TransformerConfigurationException e) {
+            e.printStackTrace();
+        } catch (TransformerException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null
+    }
+    public static byte[] getRawXML(org.w3c.dom.Node doc, String encoding) {
+        try {
+            String outAux = getStringXML(doc)
+            return outAux?.getBytes(encoding)
+        } catch (TransformerConfigurationException e) {
+            e.printStackTrace();
+        } catch (TransformerException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null
+    }
+
+    public static org.w3c.dom.Document parseDocument(byte[] entrada) {
+        return parseDocument(new ByteArrayInputStream(entrada));
+    }
+
+    public static org.w3c.dom.Document parseDocument(InputStream inputStream) {
+        return parseDocument(inputStream, false)
+    }
+    public static org.w3c.dom.Document parseDocument(InputStream inputStream, boolean validating) {
+        String JAXP_SCHEMA_LANGUAGE = "http://java.sun.com/xml/jaxp/properties/schemaLanguage"
+        String W3C_XML_SCHEMA = "http://www.w3.org/2001/XMLSchema"
+        String JAXP_SCHEMA_SOURCE = "http://java.sun.com/xml/jaxp/properties/schemaSource"
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+        factory.setIgnoringElementContentWhitespace(false);
+        factory.setValidating(validating)
+        if (validating) {
+            factory.setAttribute(JAXP_SCHEMA_LANGUAGE, W3C_XML_SCHEMA);
+        }
+
+        DocumentBuilder builder;
+        String errorMessage = ""
+        try {
+            builder = factory.newDocumentBuilder();
+            Document doc = builder.parse(inputStream);
+            return doc;
+        } catch (ParserConfigurationException e) {
+            e.printStackTrace();
+            errorMessage = e.toString()
+        } catch (SAXException e) {
+            e.printStackTrace();
+            errorMessage = e.toString()
+        } catch (IOException e) {
+            e.printStackTrace();
+            errorMessage = e.toString()
+        }
+        throw new RuntimeException("Error al parsear: ${errorMessage}");
+    }
+
+    public static groovy.util.Node dom2GroovyNode(org.w3c.dom.Node node) {
+        String xml = getStringXML(node)
+        return dom2GroovyNode(xml)
+    }
+    public static groovy.util.Node dom2GroovyNode(String xml) {
+        boolean validating = false
+        boolean namespaceAware = false
+        return new groovy.util.XmlParser(validating, namespaceAware).parseText(xml)
+    }
+
+    public static String firmaTimbre(String datosTed, String privateKeyData) {
+        //privateKeyData = privateKeyData.replace("-----BEGIN RSA PRIVATE KEY-----\n", "").replace("\n-----END RSA PRIVATE KEY-----", "")
+        try {
+            PrivateKey key = cl.moit.dte.KeyHelper.parseKey(privateKeyData)
+            java.security.Signature sig = Signature.getInstance("SHA1WithRSA");
+            sig.initSign(key)
+            sig.update(datosTed.getBytes("ISO-8859-1"))
+            return Base64.mimeEncoder.encodeToString(sig.sign())
+        } catch (Exception ex) {
+            throw new RuntimeException("Unable to recover private key..." + ex.getMessage());
+        }
+    }
+
+    public static String verificaTimbre(String timbreXml, String firma, String publicKeyData) {
+        publicKeyData = publicKeyData.replace("-----BEGIN PUBLIC KEY-----\n", "").replace("\n-----END PUBLIC KEY-----", "")
+        KeyFactory keyFactory = KeyFactory.getInstance("RSA")
+        byte[] keyBytes = Base64.mimeDecoder.decode(publicKeyData)
+        RSAPublicKey publicKey = keyFactory.generatePublic(new X509EncodedKeySpec(keyBytes))
+        List rsaPublicKey = [modulus: publicKey.getModulus(), exponent: publicKey.getPublicExponent()]
+    }
+
+    /**
+     * Obtiene el RUT desde un certificado digital. Busca en la extension
+     * 2.5.29.17
+     *
+     * @param x509
+     * @return
+     */
+    public static String getRutFromCertificate(X509Certificate x509) {
+        String rut = null;
+        Pattern p = Pattern.compile("[\\d]{6,8}-[\\dkK]");
+        Matcher m = p.matcher(new String(x509.getExtensionValue("2.5.29.17")));
+        if (m.find())
+            rut = m.group();
+        return rut;
+    }
+
+    public static void validateDocumentSii(ExecutionContext ec, byte[] docBytes, String schemaUri) throws SAXException {
+        String schemaPrefix = "http://www.sii.cl/SiiDte "
+        String schemaPrefixLocation = "component://MoquiChile/DTE/schemas/"
+        ResourceReference rr = null
+        if (schemaUri.startsWith(schemaPrefix)) {
+            if (schemaUri.length() <= schemaPrefix.length())
+                throw new RuntimeException("Unknown schema: ${schemaUri}")
+            String fileName = schemaUri.substring(schemaPrefix.length())
+            String schemaLocation = "${schemaPrefixLocation}${fileName}"
+            rr = ec.resource.getLocationReference(schemaLocation)
+            if (rr == null || !rr.exists)
+                throw new RuntimeException("Unknown schema: ${schemaUri} (attempted to find it at ${schemaLocation})")
+
+        } else
+            throw new RuntimeException("Unknown schema: ${schemaUri}")
+        SchemaFactory factory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
+        ResourceResolver resolver = new LocalResourceResolver(ec, schemaPrefix, schemaPrefixLocation, ResourceResolverFactory.createDefaultResourceResolver())
+        factory.setResourceResolver(resolver)
+        StreamSource schemaSource = new StreamSource(rr.openStream())
+        Schema schema = factory.newSchema(schemaSource)
+        Validator validator = schema.newValidator()
+        validator.setResourceResolver(resolver)
+        Source docSource = new StreamSource(new ByteArrayInputStream(docBytes))
+        validator.validate(docSource)
+    }
+
+    static class LocalResourceResolver implements ResourceResolver, LSResourceResolver{
+        protected ExecutionContext ec
+        protected String prefix
+        protected String prefixLocation
+        protected ResourceResolver defaultResolver
+
+        LocalResourceResolver(ExecutionContext ec, String prefix, String prefixLocation, ResourceResolver defaultResolver) {
+            this.ec = ec
+            this.prefix = prefix
+            this.prefixLocation = prefixLocation
+            this.defaultResolver = defaultResolver
+        }
+
+        OutputStream getOutputStream(URI uri) throws IOException {
+            String uriString = uri.toString()
+            logger.info("Resolving for outputStream ${uriString}")
+            return defaultResolver?.getOutputStream(uri)
+        }
+
+        Resource getResource(URI uri) throws IOException {
+            String uriString = uri.toString()
+            logger.info("Resolving ${uriString}")
+            if (uriString.startsWith(prefix) && uriString.length() > prefix.length()) {
+                String fileName = uriString.substring(prefix.length())
+                String schemaLocation = "${prefixLocation}${fileName}"
+                ResourceReference rr = ec.resource.getLocationReference(schemaLocation)
+                if (rr?.exists)
+                    return new Resource(rr.openStream())
+            }
+            return defaultResolver?.getResource(uri)
+        }
+
+        @Override
+        LSInput resolveResource(String type, String namespaceURI, String publicId, String systemId, String baseURI) {
+            ResourceReference rr = null
+            if (type != "http://www.w3.org/2001/XMLSchema")
+                return null
+            if (namespaceURI == "http://www.sii.cl/SiiDte" || namespaceURI == "http://www.w3.org/2000/09/xmldsig#") {
+                rr = ec.resource.getLocationReference(prefixLocation + systemId)
+            }
+
+            if (rr?.exists)
+                return new LocalLSInput(rr.openStream())
+            return null
+        }
+    }
+
+    static class LocalLSInput implements LSInput {
+
+        InputStream is
+
+        LocalLSInput(InputStream is) {
+            this.is = is
+        }
+
+        @Override
+        Reader getCharacterStream() {
+            return null
+        }
+
+        @Override
+        void setCharacterStream(Reader characterStream) {
+        }
+
+        @Override
+        InputStream getByteStream() {
+            return is
+        }
+
+        @Override
+        void setByteStream(InputStream byteStream) {
+        }
+
+        @Override
+        String getStringData() {
+            return null
+        }
+
+        @Override
+        void setStringData(String stringData) {
+
+        }
+
+        @Override
+        String getSystemId() {
+            return null
+        }
+
+        @Override
+        void setSystemId(String systemId) {
+
+        }
+
+        @Override
+        String getPublicId() {
+            return null
+        }
+
+        @Override
+        void setPublicId(String publicId) {
+
+        }
+
+        @Override
+        String getBaseURI() {
+            return null
+        }
+
+        @Override
+        void setBaseURI(String baseURI) {
+
+        }
+
+        @Override
+        String getEncoding() {
+            return null
+        }
+
+        @Override
+        void setEncoding(String encoding) {
+
+        }
+
+        @Override
+        boolean getCertifiedText() {
+            return false
+        }
+
+        @Override
+        void setCertifiedText(boolean certifiedText) {
+
+        }
     }
 
 }
