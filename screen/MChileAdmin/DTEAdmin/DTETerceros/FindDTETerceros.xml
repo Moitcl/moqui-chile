@@ -5,8 +5,6 @@
         default-menu-index="2">
 
     <transition-include name="searchPartyList" location="component://SimpleScreens/template/party/PartyForms.xml"/>
-    <transition-include name="getGlAccountListPaginated"
-                        location="component://SimpleScreens/template/account/AccountTransitions.xml"/>
 
     <transition name="shipShipment">
         <service-call name="mantle.shipment.ShipmentServices.ship#Shipment"/>
@@ -36,26 +34,13 @@
         <default-response url="."/>
     </transition>
 
-    <transition name="enviarAceptacion">
-        <parameter name="fiscalTaxDocumentId"/>
-        <parameter name="fiscalTaxDocumentTypeEnumId"/>
-        <parameter name="fiscalTaxDocumentNumber"/>
-        <parameter name="coworkPartyId"/>
-        <actions>
-            <service-call name="mchile.sii.DeprecatedDTEServices.enviar#Aceptacion"
-                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, activeOrgId:coworkPartyId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber ]"/>
-        </actions>
-        <default-response url="."/>
-    </transition>
-
     <transition name="resultadoAprobacionComercial">
         <parameter name="fiscalTaxDocumentId"/>
         <parameter name="fiscalTaxDocumentTypeEnumId"/>
         <parameter name="fiscalTaxDocumentNumber"/>
-        <parameter name="coworkPartyId"/>
         <actions>
             <service-call name="mchile.sii.DTEServices.enviar#ResultadoAprobacionComercial"
-                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, activeOrgId:coworkPartyId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber ]"/>
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber ]"/>
         </actions>
         <default-response url="."/>
     </transition>
@@ -64,20 +49,17 @@
         <parameter name="fiscalTaxDocumentId"/>
         <parameter name="fiscalTaxDocumentTypeEnumId"/>
         <parameter name="fiscalTaxDocumentNumber"/>
-        <parameter name="coworkPartyId"/>
         <actions>
             <service-call name="mchile.sii.DeprecatedDTEServices.recibir#Mercaderia"
-                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, activeOrgId:coworkPartyId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber ]"/>
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber ]"/>
         </actions>
         <default-response url="."/>
     </transition>
 
-    <transition name="eliminarDTETercero">
+    <transition name="rechazarDTETercero">
         <parameter name="fiscalTaxDocumentId"/>
-        <parameter name="coworkPartyId"/>
         <actions>
-            <service-call name="mchile.sii.DTEServices.eliminar#DTE"
-                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, activeOrgId:coworkPartyId]"/>
+            <service-call name="mchile.sii.DTEServices.rechazar#DTE" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]"/>
         </actions>
         <default-response url="."/>
     </transition>
@@ -113,7 +95,6 @@
         <actions>
             <set field="extraPathNameList" from="sri.screenUrlInfo.extraPathNameList"/>
 
-
             <if condition="extraPathNameList &amp;&amp; !fiscalTaxDocumentId">
                 <set field="fiscalTaxDocumentId" from="extraPathNameList[0]"/>
             </if>
@@ -121,15 +102,12 @@
                 <field-map field-name="fiscalTaxDocumentId"/>
                 <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
             </entity-find-one>
-            <if condition="document == null">
-                <then>
+            <if condition="document == null"><then>
                     <!-- NOTE: consider returning a default image instead of 404 -->
                     <script>ec.web.sendError(404, null, null)</script>
-                </then>
-                <else>
-                    <script>ec.web.sendResourceResponse(document.contentLocation, true)</script>
-                </else>
-            </if>
+            </then><else>
+                <script>ec.web.sendResourceResponse(document.contentLocation, true)</script>
+            </else></if>
         </actions>
         <default-response type="none"/>
     </transition>
@@ -141,9 +119,9 @@
             <search-form-inputs/>
             <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in"
                         from="['Ftdt-30','Ftdt-32','Ftdt-33','Ftdt-34','Ftdt-60','Ftdt-61','Ftdt-56','Ftdt-52','Ftdt-39','PvtBoleta', 'PvtFactEl']"/>
-            <econdition field-name="receiverPartyId" operator="equals" from="coworkPartyId"/>
+            <econdition field-name="receiverPartyId" operator="in" from="filterOrgIds"/>
+            <econdition field-name="receiverPartyId" operator="is-not-null"/>
             <order-by field-name="-date"/>
-            <!--econdition field-name="statusId" operator="not-equals" value="InvoiceCancelled"/-->
         </entity-find>
     </actions>
     <widgets>
@@ -151,8 +129,7 @@
         <label text="Carga y Listado de Documentos Tributarios recibidos de terceros (proveedores)" type="h4"/>
 
 
-        <form-list name="DteForm" list="dteList" show-pdf-button="true" show-csv-button="true" header-dialog="true"
-                   saved-finds="true" multi="true">
+        <form-list name="DteForm" list="dteList" show-pdf-button="true" show-csv-button="true" header-dialog="true" saved-finds="true" multi="true">
             <row-actions>
                 <service-call name="mchile.sii.DTEServices.get#DteContent"
                               in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']"
@@ -166,24 +143,19 @@
 
                 <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoiceField"/>
                 <!--log message="Leyendo: $invoiceField.invoiceId" level="warn"/-->
-                <set field="statusId"/>
+                <set field="invoiceStatusId"/>
                 <if condition="invoiceField">
-                    <set field="statusId" from="invoiceField.statusId"/>
+                    <set field="invoiceStatusId" from="invoiceField.statusId"/>
                 </if>
 
 
                 <!-- Datos de Invoice -->
                 <set field="shipment"/>
                 <if condition="invoiceId">
-                    <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo"
-                                  in-map="[invoiceId:invoiceId]" out-map="invoiceMap"/>
-                    <log level="warn" message="detalle: $invoiceId - $invoiceMap.shipmentIdSet"/>
+                    <service-call name="mantle.account.InvoiceServices.get#InvoiceDisplayInfo" in-map="[invoiceId:invoiceId]" out-map="invoiceMap"/>
                     <set field="shipmentId" from="invoiceMap.shipmentIdSet[0]"/>
-                    <log level="warn" message="shipment: $shipmentId"/>
                     <if condition="shipmentId">
-                        <service-call name="mantle.shipment.ShipmentInfoServices.get#ShipmentDisplayInfo"
-                                      in-map="[shipmentId:shipmentId]" out-map="context"/>
-                        <log level="warn" message="ssssss: $shipment"/>
+                        <service-call name="mantle.shipment.ShipmentInfoServices.get#ShipmentDisplayInfo" in-map="[shipmentId:shipmentId]" out-map="context"/>
                     </if>
                     <!--section-iterate name="ShipmentLinks" list="shipmentIdSet" entry="shipmentId"><widgets>
                         <link url="shipmentDetail" text="Shipment ${shipmentId}" link-type="anchor-button"/>
@@ -191,67 +163,42 @@
                 </if>
 
             </row-actions>
-            <field name="_useRowSubmit">
-                <default-field>
-                    <hidden default-value="true"/>
-                </default-field>
-            </field>
-            <field name="fiscalTaxDocumentId">
-                <default-field>
-                    <hidden default-value="true"/>
-                </default-field>
-            </field>
-            <field name="idEnvio">
-                <header-field title="ID Envío" show-order-by="true">
-                    <text-line size="6"/>
-                </header-field>
-                <default-field>
-                    <display format="########"/>
-                </default-field>
-            </field>
+            <field name="_useRowSubmit"><default-field><hidden default-value="true"/></default-field></field>
+            <field name="fiscalTaxDocumentId"><default-field><hidden default-value="true"/></default-field></field>
             <field name="fiscalTaxDocumentNumber">
-                <header-field title="Folio" show-order-by="true">
-                    <text-line size="6"/>
-                </header-field>
-                <default-field>
-                    <display format="########"/>
-                </default-field>
+                <header-field title="Folio" show-order-by="true"><text-line size="6"/></header-field>
+                <default-field><display format="########"/></default-field>
             </field>
             <field name="fiscalTaxDocumentTypeEnumId">
-                <header-field title="Type" show-order-by="true">
-                    <drop-down allow-empty="true" allow-multiple="true">
-                        <entity-options key="${enumId}">
-                            <entity-find entity-name="moqui.basic.Enumeration">
-                                <econdition field-name="enumTypeId" value="FiscalTaxDocumentType"/>
-                            </entity-find>
-                        </entity-options>
-                    </drop-down>
-                </header-field>
-                <default-field>
-                    <display-entity entity-name="moqui.basic.Enumeration"/>
-                </default-field>
+                <header-field title="Type" show-order-by="true"><drop-down allow-empty="true" allow-multiple="true"><entity-options key="${enumId}">
+                    <entity-find entity-name="moqui.basic.Enumeration">
+                        <econdition field-name="enumTypeId" value="FiscalTaxDocumentType"/>
+                    </entity-find>
+                </entity-options></drop-down></header-field>
+                <default-field><display-entity entity-name="moqui.basic.Enumeration"/></default-field>
             </field>
 
             <field name="issuerPartyId">
-                <header-field title="Emisor">
-                    <drop-down allow-empty="true">
-                        <dynamic-options transition="searchPartyList" server-search="true" min-length="2"
-                                         parameter-map="[roleTypeId:'Customer,OrgInternal']"/>
-                    </drop-down>
-                </header-field>
+                <header-field title="Emisor"><drop-down allow-empty="true">
+                    <dynamic-options transition="searchPartyList" server-search="true" min-length="2" parameter-map="[roleTypeId:'Customer,OrgInternal']"/>
+                </drop-down></header-field>
+                <default-field><link url="editParty" entity-name="mantle.party.PartyDetail" text="PartyNameTemplate" link-type="anchor"/></default-field>
+            </field>
+            
+            <field name="receiverPartyId">
+                <header-field title="Receptor"><drop-down allow-empty="true" allow-multiple="true">
+                    <entity-options key="${partyId}" text="PartyNameTemplate">
+                        <entity-find entity-name="mantle.party.PartyDetail"><econdition field-name="partyId" operator="in" from="filterOrgIds"/></entity-find></entity-options>
+                </drop-down></header-field>
                 <default-field>
-                    <link url="editParty" entity-name="mantle.party.PartyDetail" text="PartyNameTemplate"
-                          link-type="anchor"/>
+                    <display-entity entity-name="mantle.party.PartyDetail" key-field-name="partyId" text="PartyNameTemplate"/>
                 </default-field>
             </field>
 
             <field name="invoiceId">
-                <header-field title="Invoice" show-order-by="true">
-                    <text-find/>
-                </header-field>
+                <header-field title="Invoice" show-order-by="true"><text-find/></header-field>
                 <default-field>
-                    <link url="editInvoice" text="${invoiceId}" link-type="anchor"
-                          parameter-map="[invoiceId:invoiceId]"/>
+                    <link url="editInvoice" text="${invoiceId}" link-type="anchor" parameter-map="[invoiceId:invoiceId]"/>
                     <!--section name="ShipPackedSection" condition="shipment &amp;&amp; shipment.statusId == 'ShipPacked'"><widgets-->
                     <section name="ShipInputSection" condition="shipment &amp;&amp; shipment.statusId == 'ShipInput'">
                         <widgets>
@@ -290,33 +237,27 @@
                                 <widgets>
                                     <link url="shipShipment" text="Set Shipped" btn-type="success"/>
                                     <link url="deliverShipment" text="Set Delivered" condition="isOutgoing"/>
-                                    <link url="deliverShipment" text="Set Delivered"
-                                          confirmation="Set to Delivered? No additional items may be received once Delivered"
+                                    <link url="deliverShipment" text="Set Delivered" confirmation="Set to Delivered? No additional items may be received once Delivered"
                                           condition="isTransfer"/>
                                 </widgets>
                             </section>
                         </widgets>
                     </section>
-                    <section name="ShipShippedSection"
-                             condition="shipment &amp;&amp; shipment.statusId == 'ShipShipped'">
+                    <section name="ShipShippedSection" condition="shipment &amp;&amp; shipment.statusId == 'ShipShipped'">
                         <widgets>
                             <section name="ShipShippedInOutSection" condition="isIncoming">
                                 <widgets>
-                                    <link url="deliverShipment" text="Set Delivered" btn-type="success"
-                                          condition="anyReceived"
+                                    <link url="deliverShipment" text="Set Delivered" btn-type="success" condition="anyReceived"
                                           confirmation="Set as Delivered and generate invoice for order items as needed?"/>
                                     <!--link url="unshipShipment" text="Set Packed (Un-Ship)"><parameter name="shipmentId"/></link-->
-                                    <link url="receiveEntireShipment" text="Receive Entire Shipment"
-                                          confirmation="Receive full quantity of all items with defaults?">
+                                    <link url="receiveEntireShipment" text="Receive Entire Shipment" confirmation="Receive full quantity of all items with defaults?">
                                         <parameter name="shipmentId"/>
                                     </link>
                                 </widgets>
                                 <fail-widgets>
-                                    <link url="unshipShipment" text="Set Packed (Un-Ship)"
-                                          confirmation="Set shipment status back to Packed?"/>
+                                    <link url="unshipShipment" text="Set Packed (Un-Ship)" confirmation="Set shipment status back to Packed?"/>
                                     <link url="deliverShipment" text="Set Delivered" condition="isOutgoing"/>
-                                    <link url="deliverShipment" text="Set Delivered"
-                                          confirmation="Set to Delivered? No additional items may be received once Delivered"
+                                    <link url="deliverShipment" text="Set Delivered" confirmation="Set to Delivered? No additional items may be received once Delivered"
                                           condition="isTransfer"/>
                                 </fail-widgets>
                             </section>
@@ -325,57 +266,34 @@
                 </default-field>
             </field>
 
-            <field name="statusId">
-                <header-field title="Estado Orden"/>
-                <default-field>
-                    <display/>
-                </default-field>
+            <field name="invoiceStatusId">
+                <header-field title="Estado Nota de Cobro"/>
+                <default-field><display-entity entity-name="moqui.basic.StatusItem"/></default-field>
             </field>
 
             <field name="date">
-                <header-field show-order-by="true" title="Fecha Emisión">
-                    <text-find/>
-                </header-field>
-                <default-field>
-                    <display/>
-                </default-field>
+                <header-field show-order-by="true" title="Fecha Emisión"><text-find/></header-field>
+                <default-field><display/></default-field>
             </field>
             <field name="xml">
-                <default-field title=" ">
-                    <link url="downloadDocument"
-                          parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fileType:'Ftdct-Xml']" text="XML"
-                          link-type="anchor"/>
-                </default-field>
+                <conditional-field title=" " condition="xmlFilename">
+                    <link url="downloadDocument" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fileType:'Ftdct-Xml']" text="XML" link-type="anchor"/>
+                </conditional-field>
+                <default-field><ignored/></default-field>
             </field>
             <field name="pdf">
-                <default-field title=" ">
-                    <link url="downloadDocument"
-                          parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fileType:'Ftdct-Pdf']" text="PDF"
-                          link-type="anchor"/>
-                </default-field>
+                <conditional-field title=" " condition="pdfFilename">
+                    <link url="downloadDocument" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fileType:'Ftdct-Pdf']" text="PDF" link-type="anchor"/>
+                </conditional-field>
+                <default-field><ignored/></default-field>
             </field>
-            <field name="eliminarDTETercero">
+            <field name="rechazarDTETercero">
                 <default-field title=" ">
-                    <link url="eliminarDTETercero" tooltip="Eliminar"
-                          parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="Eliminar/Rechazar"
-                          confirmation="El documento será eliminado del sistema .¿Desea continuar?"/>
+                    <link url="rechazarDTETercero" tooltip="Eliminar" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="Rechazar"
+                          confirmation="El documento será rechazado. ¿Desea continuar?"/>
                 </default-field>
             </field>
 
-            <field name="enviarAceptacion">
-                <default-field title=" ">
-                    <link url="enviarAceptacion" tooltip="Recepcionar"
-                          parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, emisor:emisor, xml:xml]"
-                          text="Recepcionar"
-                          condition="xmlFilename != null"/>
-                </default-field>
-            </field>
-            <!--field name="enviarRechazo">
-                <default-field title=" ">
-                    <link url="enviarAceptacion" tooltip="Rechazar"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, emisor:emisor, xml:xml]" text="Rechazar"
-                          condition="xmlFilename != null"/>
-                </default-field>
-            </field-->
             <field name="recibirMercaderia">
                 <default-field title=" ">
                     <link url="recibirMercaderia" tooltip="Recibir Mercadería"
@@ -393,6 +311,14 @@
                 </default-field>
             </field>
 
+            <columns>
+                <column><field-ref name="fiscalTaxDocumentNumber"/><field-ref name="fiscalTaxDocumentTypeEnumId"/></column>
+                <column><field-ref name="issuerPartyId"/><field-ref name="receiverPartyId"/></column>
+                <column><field-ref name="invoiceId"/><field-ref name="invoiceStatusId"/></column>
+                <column><field-ref name="date"/></column>
+                <column><field-ref name="xml"/><field-ref name="pdf"/></column>
+                <column><field-ref name="rechazarDTETercero"/></column>
+            </columns>
         </form-list>
     </widgets>
 </screen>
