@@ -4,6 +4,7 @@ import org.moqui.util.RestClient.RestResponse
 import org.eclipse.jetty.http.HttpField
 import org.eclipse.jetty.http.HttpHeader
 import org.moqui.util.StringUtilities
+import org.xml.sax.SAXParseException
 
 ExecutionContext ec = context.ec
 
@@ -82,10 +83,16 @@ RestResponse response = restClient.call()
 xmlResponse = response.text()
 
 XmlParser parser = new groovy.util.XmlParser(false, true)
-xmlDoc = parser.parseText(xmlResponse)
-status = xmlDoc.STATUS.text()
-if (status == null || status == '')
-    status = xmlDoc.'siid:STATUS'.text()
+xmlDoc = null
+status = null
+try {
+    xmlDoc = parser.parseText(xmlResponse)
+    status = xmlDoc.STATUS.text()
+    if (status == null || status == '')
+        status = xmlDoc.'siid:STATUS'.text()
+} catch (SAXParseException e) {
+    ec.logger.warn("Error parsing response: ${e.toString()}")
+}
 
 trackId = null
 if (status == '0') {
