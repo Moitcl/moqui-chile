@@ -171,6 +171,7 @@ along with this software (see the LICENSE.md file). If not, see
                 </else></if>
             </if>
             <log level="warn" message="Processing email ${messageId}"/>
+            <set field="envioIdsToProcess" from="[]"/>
             <iterate list="bodyPartList" entry="bodyPart">
                 <if condition="(bodyPart.contentType.contains('text/plain') || bodyPart.contentType.contains('text/html')) &amp;&amp; bodyPart.filename == null"><then>
                     <if condition="body == null"><then>
@@ -195,12 +196,16 @@ along with this software (see the LICENSE.md file). If not, see
                     <service-call name="mchile.sii.DTECommServices.store#ReceivedEnvio" in-map="context + [contentBytes:contentBytes, fileName:bodyPart.filename ]" out-map="storeResult"/>
                     <script>
                         if (storeResult.envioId)
-                            ec.service.special().name("mchile.sii.DTECommServices.process#PendingDteEnvio").parameter("envioId", envioId).registerOnCommit()
+                            envioIdsToProcess.add(storeResult.envioId)
                     </script>
                 </else-if><else>
                     <log level="error" message="Ignoring bodyPart of type ${bodyPart.contentType} and filename ${bodyPart.filename}, disposition ${bodyPart.disposition} for mail ${messageId}"/>
                 </else></if>
             </iterate>
+            <script>
+                if (envioIdsToProcess)
+                    ec.service.special().name("mchile.sii.DTECommServices.process#PendingDteEnvio").registerOnCommit()
+            </script>
         </actions>
     </service>
 
@@ -315,9 +320,15 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="ignoreLastAttempt" type="Boolean" default="false"/>
         </in-parameters>
         <actions>
+            <if condition="context.DTECommServices_processingPendingDteEnvio == 'yes'">
+                <!-- was already triggered -->
+                <log message="Returning without running from process#PendingDteEnvio"/>
+                <return/>
+            </if>
+            <set field="context.DTECommServices_processingPendingDteEnvio" value="yes"/>
             <set field="maxAttemptThreshold" from="3"/>
             <set field="minutesBeforeRetry" from="120"/>
-            <entity-find entity-name="mchile.dte.DteEnvio" list="envioList">
+            <entity-find entity-name="mchile.dte.DteEnvio" list="envioList" for-update="true">
                 <econditions combine="or">
                     <econdition field-name="statusId" value="Ftde-Received"/>
                     <econditions>
@@ -331,16 +342,14 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <iterate list="envioList" entry="envio">
                 <entity-find-one entity-name="moqui.basic.Enumeration" value-field="envEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
-                <service-call name="mchile.sii.DTECommServices.process#${envEv.enumCode}" transaction="force-new" in-map="[envioId:envio.envioId]" out-map="processOut"/>
-                <script>ec.message.clearErrors()</script>
+                <service-call name="mchile.sii.DTECommServices.process#${envEv.enumCode}" in-map="[envioId:envio.envioId]" out-map="processOut" ignore-error="true"/>
                 <if condition="processOut.processed"><then>
-                    <service-call name="update#mchile.dte.DteEnvio" transaction="force-new" in-map="[envioId:envio.envioId, statusId:'Ftde-Processed']"/>
-                </then><else-if condition="envio.attemptCount &gt;= maxAttemptCount">
+                    <service-call name="update#mchile.dte.DteEnvio" in-map="[envioId:envio.envioId, statusId:'Ftde-Processed']"/>
+                </then><else>
                     <set field="newAttemptCount" from="(envio.attemptCount?:0) + 1"/>
                     <set field="newStatusId" from="newAttemptCount >= maxAttemptThreshold ? 'Ftde-ProcessFailed': envio.statusId"/>
-                    <service-call name="update#mchile.dte.DteEnvio" transaction="force-new"
-                                  in-map="[envioId:envio.envioId, attemptCount:newAttemptCount, lastAttempt:ec.user.nowTimestamp, statusId:newStatusId]"/>
-                </else-if></if>
+                    <service-call name="update#mchile.dte.DteEnvio" in-map="[envioId:envio.envioId, attemptCount:newAttemptCount, lastAttempt:ec.user.nowTimestamp, statusId:newStatusId]"/>
+                </else></if>
             </iterate>
         </actions>
     </service>
@@ -411,6 +420,7 @@ along with this software (see the LICENSE.md file). If not, see
                     </if>
                     <if condition="envioDteList.size() == 0">
                         <log level="error" message="No se encuentra envío al cual hace referencia RespuestaDte ${envioId}: ${envioDteId}"/>
+                        <return/>
                     </if>
                     <set field="envioDteEnvioId" from="envioDteList.first.envioId"/>
                     <entity-find entity-name="mchile.dte.DteEnvioFiscalTaxDocument" list="envioFtdList">
