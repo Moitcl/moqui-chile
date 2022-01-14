@@ -163,10 +163,10 @@ try {
 doc2 = MoquiDTEUtils.parseDocument(salida)
 
 if (MoquiDTEUtils.verifySignature(doc2, "/sii:RespuestaDTE/sii:Resultado", "./sii:Caratula/sii:TmstFirmaResp/text()")) {
-    xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDTE/${rutReceptorCaratula}/${idAcuseRecibo}.xml"
+    xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDte/${rutReceptorCaratula}/${idAcuseRecibo}.xml"
     ec.logger.warn("Envio generado OK")
 } else {
-    xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDTE/${rutEmisor}/${idAcuseRecibo}-mala.xml"
+    xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDte/${rutEmisor}/${idAcuseRecibo}-mala.xml"
     ec.logger.warn("Error al generar envio")
 }
 xmlContentRr = ec.resource.getLocationReference(xmlContentLocation)
