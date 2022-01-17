@@ -345,7 +345,8 @@ along with this software (see the LICENSE.md file). If not, see
                 <entity-find-one entity-name="moqui.basic.Enumeration" value-field="envEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
                 <service-call name="mchile.sii.DTECommServices.process#${envEv.enumCode}" in-map="[envioId:envio.envioId]" out-map="processOut" ignore-error="true"/>
                 <if condition="processOut.processed"><then>
-                    <service-call name="update#mchile.dte.DteEnvio" in-map="[envioId:envio.envioId, statusId:'Ftde-Processed']"/>
+                    <set field="newStatusId" from="processOut.withError ? 'Ftde-ProcessFailed' : 'Ftde-Processed'"/>
+                    <service-call name="update#mchile.dte.DteEnvio" in-map="[envioId:envio.envioId, statusId:newStatusId]"/>
                 </then><else>
                     <set field="newAttemptCount" from="(envio.attemptCount?:0) + 1"/>
                     <set field="newStatusId" from="newAttemptCount >= maxAttemptThreshold ? 'Ftde-ProcessFailed': envio.statusId"/>
@@ -363,6 +364,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="totalItems" type="Integer"/>
             <parameter name="processedItems" type="Integer"/>
             <parameter name="processed" type="Boolean"/>
+            <parameter name="withError" type="Boolean"/>
         </out-parameters>
     </service>
     <service verb="process" noun="EnvioDte" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/processEnvioDte.groovy">
@@ -375,7 +377,7 @@ along with this software (see the LICENSE.md file). If not, see
         <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
         <actions>
             <set field="processed" from="false"/>
-            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>
             <set field="envioRr" from="ec.resource.getLocationReference(envio.documentLocation)"/>
             <set field="respuesta" from=" new groovy.util.XmlParser(false, false).parse(envioRr.openStream())"/>
             <set field="caratula" from="respuesta.Resultado.Caratula"/>
@@ -383,6 +385,8 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="resultadoDteList" from="respuesta.Resultado.ResultadoDTE"/>
             <if condition="recepcionEnvioList.size() > 0 &amp;&amp; resultadoDteList.size() > 0">
                 <log level="error" message="Error: RespuestaDte incluye tanto RecepcionEnvio como ResultadoDTE, ignorando."/>
+                <set field="processed" from="true"/>
+                <set field="withError" from="true"/>
                 <return/>
             </if>
             <set field="rutResponde" from="caratula.RutResponde.text()"/>
@@ -398,29 +402,25 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="codEnvio" from="recepcionEnvio.CodEnvio.text()"/>
                     <set field="envioDteId" from="recepcionEnvio.EnvioDTEID.text()"/>
                     <set field="digest" from="recepcionEnvio.Digest.text()"/>
-                    <set field="rutEmisorEnvio" from="recepcionEnvio.RutEmisor.text()"/>
-                    <set field="rutReceptorEnvio" from="recepcionEnvio.RutReceptor.text()"/>
                     <set field="estadoRecepEnvio" from="recepcionEnvio.EstadoRecepEnv.text()"/>
                     <set field="recepEnvioGlosa" from="recepcionEnvio.RecepEnvGlosa.text()"/>
                     <set field="nroDte" from="recepcionEnvio.NroDTE.text()" type="Integer"/>
                     <set field="dteList" from="recepcionEnvio.RecepcionDTE"/>
                     <entity-find entity-name="mchile.dte.DteEnvio" list="envioDteList">
-                        <econdition field-name="rutEmisor" from="rutEmisorEnvio"/>
-                        <econdition field-name="rutReceptor" from="rutReceptorEnvio"/>
                         <econdition field-name="envioTypeEnumId" value="Ftde-EnvioDte"/>
                         <econdition field-name="internalId" from="envioDteId"/>
                     </entity-find>
                     <if condition="envioDteList.size() > 1">
                         <entity-find entity-name="mchile.dte.DteEnvio" list="envioDteList">
-                            <econdition field-name="rutEmisor" from="rutReceptorEnvio"/>
-                            <econdition field-name="rutReceptor" from="rutEmisorEnvio"/>
                             <econdition field-name="fileName" from="nmbEnvio"/>
                             <econdition field-name="envioTypeEnumId" value="Ftde-EnvioDte"/>
                             <econdition field-name="internalId" from="envioDteId" ignore-if-empty="true"/>
                         </entity-find>
                     </if>
                     <if condition="envioDteList.size() == 0">
-                        <log level="error" message="No se encuentra envío al cual hace referencia RespuestaDte ${envioId}: ${envioDteId}"/>
+                        <log level="error" message="No se encuentra envío al cual hace referencia RespuestaDte ${envioId}: ${envioDteId} (nmbEnvio: ${nmbEnvio})"/>
+                        <set field="processed" from="true"/>
+                        <set field="withError" from="true"/>
                         <return/>
                     </if>
                     <set field="envioDteEnvioId" from="envioDteList.first.envioId"/>
