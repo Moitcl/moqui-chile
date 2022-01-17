@@ -212,7 +212,9 @@ class MoquiDTEUtils {
         int i = 0
         referenciaList.each { referenciaEntry ->
             String folioRef = referenciaEntry.folio
-            Integer codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as Integer
+            Integer codRef = null
+            if (referenciaEntry.codigoReferenciaEnumId != null)
+                codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as Integer
             Timestamp fechaRef = referenciaEntry.fecha instanceof java.sql.Date? new Timestamp(referenciaEntry.fecha.time) : referenciaEntry.fecha
 
             // Agrego referencias
@@ -231,7 +233,7 @@ class MoquiDTEUtils {
                 referenciaMap.tipoDocumento = tpoDocRef as String
                 if (rutReceptor)
                     referenciaMap.rutOtro = rutReceptor
-                if(tipoFactura == 61 && (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-39") || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41")) && codRef.equals(1) ) {
+                if(tipoFactura == 61 && (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-39") || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41")) && codRef?.equals(1) ) {
                     // Nota de crédito hace referencia a Boletas Electrónicas
                     anulaBoleta = 'true'
                     folioAnulaBoleta = referenciaEntry.folio.toString()
