@@ -527,7 +527,6 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <if condition="process">
                 <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="context"/>
-                <log message="looking for DTE: ${fiscalTaxDocumentTypeEnumId}/${folio} date=${fchEmis}, issuerPartyIdValue=${rutEmisor}, receiverPartyIdValue=${rutReceptor}, invoiceTotal=${mntTotal}"/>
                 <entity-find entity-name="mchile.dte.InvoiceAndFiscalTaxDocument" list="dbDteList" for-update="true">
                     <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
                     <econdition field-name="fiscalTaxDocumentNumber" from="folio"/>
@@ -557,7 +556,50 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
     <service verb="process" noun="EnvioRecibo">
         <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
-        <actions></actions>
+        <actions>
+            <set field="processed" from="false"/>
+            <set field="withError" from="false"/>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>
+            <set field="envioRr" from="ec.resource.getLocationReference(envio.documentLocation)"/>
+            <set field="envioRecibos" from=" new groovy.util.XmlParser(false, false).parse(envioRr.openStream())"/>
+            <set field="caratula" from="envioRecibos.SetRecibos.Caratula"/>
+            <set field="reciboList" from="envioRecibos.SetRecibos.Recibo.DocumentoRecibo"/>
+            <set field="rutEmisor" from="caratula.RutRecibe.text()"/>
+            <iterate list="reciboList" entry="recibo">
+                <set field="tipoDte" from="recibo.TipoDoc.text()"/>
+                <set field="folio" from="recibo.Folio.text()" type="Integer"/>
+                <set field="fechaEmision" from="ec.l10n.parseTimestamp(recibo.FchEmis.text(), 'yyyy-MM-dd')"/>
+                <set field="rutReceptor" from="recibo.RUTRecep.text()"/>
+                <set field="montoTotal" from="recibo.MntTotal.text()" type="BigDecimal"/>
+                <set field="recinto" from="recibo.Recinto.text()"/>
+                <set field="rutFirma" from="recibo.RutFirma.text()"/>
+                <set field="declaracion" from="recibo.Declaracion.text()"/>
+                <set field="timestampFirma" from="recibo.TmstFirmaRecibo.text()"/>
+                <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="context"/>
+                <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList" for-update="true">
+                    <econdition field-name="issuerPartyIdValue" from="rutEmisor"/>
+                    <econdition field-name="receiverPartyIdValue" from="rutReceptor"/>
+                    <econdition field-name="fiscalTaxDocumentNumber" from="folio"/>
+                    <econdition field-name="date" operator="greater-equals" from="fechaEmision"/>
+                    <econdition field-name="date" operator="less" from="fechaEmision+1"/>
+                    <econdition field-name="statusId" value="Ftd-Issued"/>
+                    <econdition field-name="sentRecStatusId" operator="in" value="Ftd-SentRec,Ftd-ReceiverAck"/>
+                </entity-find>
+                <if condition="dteList"><then>
+                    <set field="dte" from="dteList.first"/>
+                    <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAttributes" value-field="attributes" auto-field-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId]"/>
+                    <if condition="attributes.amount == montoTotal"><then>
+                        <set field="dte.sentRecStatusId" value="Ftd-ReceiverAccept"/>
+                        <entity-update value-field="dte"/>
+                    </then><else>
+                        <set field="withError" from="true"/>
+                    </else></if>
+                </then><else>
+                    <set field="withError" from="true"/>
+                </else></if>
+            </iterate>
+            <set field="processed" from="true"/>
+        </actions>
     </service>
     <service verb="process" noun="ResultadoEnvio">
         <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
