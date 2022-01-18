@@ -407,6 +407,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
 uri = "#" + idDocumento
 
 String facturaXmlString = xmlWriter.toString()
+facturaXmlString = facturaXmlString.replaceAll("[^\\x00-\\xFF]", "")
 xmlWriter.close()
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
