@@ -967,6 +967,144 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="validate" noun="InvoiceAndExistingDTE">
+        <description>
+            Validates invoice type and status, and that no previous DTE of the same type exists
+        </description>
+        <in-parameters>
+            <parameter name="invoiceId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+        </in-parameters>
+        <actions>
+            <if condition="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-56','Ftdt-61'])">
+                <return/>
+            </if>
+
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
+
+            <if condition="fiscalTaxDocumentTypeEnumId == 'Ftdt-61'"><then>
+                <if condition="!(invoice.invoiceTypeEnumId in ['InvoiceReturn', 'InvoiceCreditMemo'])">
+                    <return error="true" message="Invalid invoice type (${invoice.invoiceTypeEnumId}) for DTE type ${fiscalTaxDocumentTypeEnumId}, invoiceId ${invoiceId}"/>
+                </if>
+
+                <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="existingFtdList">
+                    <econdition field-name="issuerPartyId" from="invoice.toPartyId"/>
+                    <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" value="Ftdt-60,Ftdt-61"/>
+                    <econdition field-name="invoiceId"/>
+                </entity-find>
+                <if condition="existingFtdList">
+                    <return error="true" message="There is already a ${fiscalTaxDocumentTypeEnumId} DTE for invoice ${invoiceId}"/>
+                </if>
+
+                <if condition="!(invoice.statusId in ['InvoiceIncoming','InvoiceApproved','InvoicePmtSent','InvoiceReceived','InvoiceBilledThrough'])">
+                    <return error="true" message="Invalid statusId for ${invoiceTypeEnumId} invoice: ${invoice.statusId}"/>
+                </if>
+            </then><else-if condition="fiscalTaxDocumentTypeEnumId == 'Ftdt-56'">
+                <if condition="invoice.invoiceTypeEnumId != 'InvoiceDebitMemo'">
+                    <return error="true" message="Invalid invoice type (${invoice.invoiceTypeEnumId}) for DTE type ${fiscalTaxDocumentTypeEnumId}, invoiceId ${invoiceId}"/>
+                </if>
+
+                <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="existingFtdList">
+                    <econdition field-name="issuerPartyId" from="invoice.toPartyId"/>
+                    <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" value="Ftdt-55,Ftdt-56"/>
+                    <econdition field-name="invoiceId"/>
+                </entity-find>
+                <if condition="existingFtdList">
+                    <return error="true" message="There is already a ${fiscalTaxDocumentTypeEnumId} DTE for invoice ${invoiceId}"/>
+                </if>
+
+                <if condition="!(invoice.statusId in ['InvoiceInProcess','InvoiceIncoming','InvoiceApproved','InvoicePmtSent','InvoiceReceived','InvoiceBilledThrough'])">
+                    <return error="true" message="Invalid statusId for ${invoiceTypeEnumId} invoice: ${invoice.statusId}"/>
+                </if>
+            </else-if></if>
+        </actions>
+    </service>
+
+    <service verb="validate" noun="InvoiceItems">
+        <description>
+            Validates that the invoice has at least one item
+        </description>
+        <in-parameters>
+            <parameter name="invoiceId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+        </in-parameters>
+        <actions>
+            <if condition="fiscalTaxDocumentTypeEnumId != 'Ftdt-61'">
+                <return/>
+            </if>
+            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="items">
+                <econdition field-name="invoiceId"/>
+                <econdition field-name="itemTypeEnumId" operator="not-in" value="ItemSalesTax,ItemVatTax"/>
+                <order-by field-name="invoiceItemSeqId"/>
+            </entity-find>
+            <if condition="!items || items.size() == 0">
+                <return error="true" message="invoiceId ${invoiceId} must have at least one item"/>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="get" noun="Reference">
+        <description>
+            Obtains Reference DTE for Credit or Debit Notes
+        </description>
+        <in-parameters>
+            <parameter name="invoiceId" required="true"/>
+            <parameter name="issuerPartyId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+        </in-parameters>
+        <actions>
+            <if condition="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-56','Ftdt-61'])">
+                <return/>
+            </if>
+
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
+
+            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="items">
+                <econdition field-name="invoiceId"/>
+                <econdition field-name="itemTypeEnumId" operator="not-in" value="ItemSalesTax,ItemVatTax"/>
+                <order-by field-name="invoiceItemSeqId"/>
+            </entity-find>
+
+            <entity-find entity-name="mchile.dte.ReferenciaDte" list="referenciaList">
+                <econdition field-name="invoiceId" from="invoiceId"/>
+                <econdition field-name="referenciaTypeEnumId" value="RefDteTypeInvoice"/>
+                <order-by field-name="fiscalTaxDocumentTypeEnumId"/>
+            </entity-find>
+            <if condition="referenciaList.size() == 0">
+                <return error="true" message="No reference for DTE type ${fiscalTaxDocumentTypeEnumId}, invoiceId ${invoiceId}"/>
+            </if>
+            <if condition="referenciaList.size() > 1">
+                <return error="true" message="More than one reference for DTE type ${fiscalTaxDocumentTypeEnumId}, invoiceId ${invoiceId}"/>
+            </if>
+            <set field="referencia" from="referenciaList.first"/>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteReferenciaList" for-update="true">
+                <econdition field-name="issuerPartyId" from="issuerPartyId"/>
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="referencia.fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="fiscalTaxDocumentNumber" from="referencia.folio as Integer"/>
+            </entity-find>
+            <if condition="!dteReferenciaList">
+                <return error="true" message="Could not find reference FiscalTaxDocumentId for DTE type ${fiscalTaxDocumentTypeEnumId} with invoiceId ${invoiceId}"/>
+            </if>
+            <if condition="!dteReferenciaList.first.invoiceId">
+                <return error="true" message="Reference has no invoiceId associated (reference ${dteReferenciaList.first.referenciaId})"/>
+            </if>
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoiceReferencia" auto-field-map="[invoiceId:dteReferenciaList.first.invoiceId]"/>
+            <if condition="invoice.invoiceTotal != null &amp;&amp; invoice.invoiceTotal != 0 &amp;&amp; invoice.invoiceTotal == invoiceReferencia.invoiceTotal"><then>
+                <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeAnula"/>
+            </then><else-if condition="invoice.invoiceTotal == 0">
+                <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeCorrigeTexto"/>
+            </else-if><else>
+                <!-- Invoice must have at least one item when creating an amount correction DTE -->
+                <service-call name="mchile.sii.DTEServices.validate#InvoiceItems" in-map="context"/>
+
+                <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeCorrigeMonto"/>
+            </else></if>
+            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="codRefEnum" auto-field-map="[enumId:referencia.codigoReferenciaEnumId]"/>
+            <set field="referencia.razonReferencia" from="codRefEnum.description"/>
+            <entity-update value-field="referencia"/>
+        </actions>
+    </service>
+
     <service verb="boletear" noun="Invoice">
         <description>
             Obtiene datos para llamar a método generar#Factura
