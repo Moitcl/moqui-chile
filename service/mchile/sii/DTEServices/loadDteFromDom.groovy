@@ -163,7 +163,7 @@ if (tipoDteEnumId == 'Ftdt-61') {
 if (ec.message.hasError())
     return
 
-invoiceCreateMap =  [fromPartyId:fromPartyId, toPartyId:toPartyId, invoiceTypeEnumId:invoiceTypeEnumId, invoiceDate:issuedTimestamp, currencyUomId:'CLP']
+invoiceCreateMap =  [fromPartyId:fromPartyId, toPartyId:toPartyId, invoiceTypeEnumId:invoiceTypeEnumId, invoiceDate:issuedTimestamp, currencyUomId:'CLP', statusId:invoiceStatusId]
 if (dueTimestamp)
     invoiceCreateMap.dueDate = dueTimestamp
 invoiceMap = ec.service.sync().name("mantle.account.InvoiceServices.create#Invoice").parameters(invoiceCreateMap).disableAuthz().call()
