@@ -21,7 +21,7 @@ Integer tipoDoc = codeOut.siiCode
 
 if (dte.sentRecStatusId == 'Ftd-ReceiverAccept') {
     ec.message.addError("Ya está aceptado el DTE")
-} else if (! (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-SentRec'])) {
+} else if (dte.sentRecStatusId != null && ! (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-SentRec'])) {
     ec.message.addError("Estado inválido para aceptación: ${dte.sentRecStatusId}")
 }
 
@@ -34,9 +34,14 @@ rutResponde = dte.receiverPartyIdValue
 if (dte.invoiceId == null)
     ec.message.addError("No se encuentra invoice para el DTE especificado")
 
-invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", dte.invoiceId).one()
+EntityValue invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", dte.invoiceId).forUpdate(true).one()
 if (invoice == null)
     ec.message.addError("No se encuentra invoice para el DTE especificado invoiceId: ${invoiceId}")
+
+if (!(invoice.statusId in ['InvoiceIncoming', 'InvoiceReceived']))
+    ec.message.addError("Estado inválido para nota de cobro: ${invoice.statusId}")
+
+ec.service.sync().name("update#mantle.account.invoice.Invoice").parameters([invoiceId:invoice.invoiceId, statusId:'InvoiceApproved']).call()
 
 // Recuperacion de parametros de la organizacion
 ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameter("partyId", dte.receiverPartyId).call())

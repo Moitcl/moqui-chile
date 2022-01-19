@@ -19,6 +19,11 @@
     <transition name="editInvoice">
         <default-response url="/vapps/PopcAdmin/Accounting/Invoice/EditInvoice"/>
     </transition>
+    
+    <transition name="aprobarInternamente">
+        <service-call name="update#mantle.account.invoice.Invoice" in-map="[invoiceId:invoiceId, statusId:'InvoiceApproved']"/>
+        <default-response url="."/>
+    </transition>
 
     <transition name="verificarEnSII">
         <parameter name="fiscalTaxDocumentId"/>
@@ -115,8 +120,10 @@
     <transition-include name="downloadDocument" location="component://MoquiChile/template/dte/DteTransitions.xml"/>
 
     <actions>
-        <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
-            <search-form-inputs/>
+        <entity-find entity-name="mchile.dte.FiscalTaxDocumentAndInvoice" list="dteList">
+            <search-form-inputs>
+                <default-parameters invoiceStatusId="InvoiceIncoming,InvoiceReceived" invoiceStatusId_op="in"/>
+            </search-form-inputs>
             <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in"
                         from="['Ftdt-30','Ftdt-32','Ftdt-33','Ftdt-34','Ftdt-60','Ftdt-61','Ftdt-56','Ftdt-52','Ftdt-39','PvtBoleta', 'PvtFactEl']"/>
             <econdition field-name="receiverPartyId" operator="in" from="filterOrgIds"/>
@@ -140,14 +147,6 @@
                               in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf']"
                               out-map="pdfContext"/>
                 <set field="pdfFilename" from="pdfContext.content"/>
-
-                <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoiceField"/>
-                <!--log message="Leyendo: $invoiceField.invoiceId" level="warn"/-->
-                <set field="invoiceStatusId"/>
-                <if condition="invoiceField">
-                    <set field="invoiceStatusId" from="invoiceField.statusId"/>
-                </if>
-
 
                 <!-- Datos de Invoice -->
                 <set field="shipment"/>
@@ -267,7 +266,9 @@
             </field>
 
             <field name="invoiceStatusId">
-                <header-field title="Estado Nota de Cobro"/>
+                <header-field title="Estado Nota de Cobro"><drop-down allow-multiple="true" allow-empty="true"><entity-options>
+                    <entity-find entity-name="moqui.basic.StatusItem"><econdition field-name="statusTypeId" value="Invoice"/></entity-find>
+                </entity-options></drop-down></header-field>
                 <default-field><display-entity entity-name="moqui.basic.StatusItem"/></default-field>
             </field>
 
@@ -295,20 +296,20 @@
                 </default-field>
             </field>
 
-            <field name="recibirMercaderia">
+            <field name="actions">
                 <default-field title=" ">
                     <link url="recibirMercaderia" tooltip="Recibir Mercadería"
                           parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, emisor:emisor, xml:xml]"
                           text="Recibir Mercadería"
                           condition="xmlFilename != null"/>
-                </default-field>
-            </field>
-            <field name="aceptarComercialmente">
-                <default-field title=" ">
                     <link url="aceptarComercialmente" tooltip="Aceptar Comercialmente"
                           parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, emisor:emisor, xml:xml]"
-                          text="Aceptación Comercial" confirmation="El documento será aceptado comercialmente. ¿Desea continuar?"
-                          condition="xmlFilename != null &amp;&amp; fiscalTaxDocumentTypeEnumId in ['Ftdt-33', 'Ftdt-34', 'Ftdt-43', 'Ftdt-46', 'Ftdt-52']"/>
+                          text="Aceptación Comercial" confirmation="Se aceptará y enviará Aceptación Comercial que faculta Cobro Ejecutivo por parte del emisor. ¿Desea continuar?"
+                          condition="xmlFilename != null &amp;&amp; fiscalTaxDocumentTypeEnumId in ['Ftdt-33', 'Ftdt-34', 'Ftdt-43', 'Ftdt-46', 'Ftdt-52'] &amp;&amp; invoiceStatusId in ['InvoiceIncoming', 'InvoiceReceived', 'InvoiceInProcess']"/>
+                    <link url="aprobarInternamente" tooltip="Aprobación Interna"
+                          parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, emisor:emisor, xml:xml]"
+                          text="Aprobación Interna" confirmation="Se aceptará sin avisar al emisor. ¿Desea continuar?"
+                          condition="xmlFilename != null &amp;&amp; invoiceStatusId in ['InvoiceIncoming', 'InvoiceReceived', 'InvoiceInProcess']"/>
                 </default-field>
             </field>
 
@@ -318,7 +319,7 @@
                 <column><field-ref name="invoiceId"/><field-ref name="invoiceStatusId"/></column>
                 <column><field-ref name="date"/></column>
                 <column><field-ref name="xml"/><field-ref name="pdf"/></column>
-                <column><field-ref name="rechazarDTETercero"/><field-ref name="aceptarComercialmente"/></column>
+                <column><field-ref name="actions"/></column>
             </columns>
         </form-list>
     </widgets>
