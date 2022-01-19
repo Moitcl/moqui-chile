@@ -158,7 +158,7 @@ if (tipoDteEnumId == 'Ftdt-61') {
 } else {
     fromPartyId = issuerPartyId
     toPartyId = receiverPartyId
-    invoiceTypeEnumId = 'InvoiceFiscalTaxDocumentReception'
+    invoiceTypeEnumId = 'InvoiceSales'
 }
 if (ec.message.hasError())
     return
