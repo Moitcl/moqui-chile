@@ -707,7 +707,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <service-call name="mchile.sii.DTEServices.get#PaymentMethodInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
 
-            <!-- Glosa para pago a crédito -->
+            <!-- Get notes for credit payment (glosa) -->
             <set field="glosaPagos" value=""/>
             <if condition="invoice.settlementTermId">
                 <entity-find-one entity-name="mantle.account.invoice.SettlementTerm" value-field="settlementField">
@@ -715,13 +715,12 @@ along with this software (see the LICENSE.md file). If not, see
                     <select-field field-name="description"/>
                 </entity-find-one>
                 <if condition="!settlementField">
-                    <return error="true" message="Términos de crédito no existente"/>
+                    <return error="true" message="Credit terms do not exist"/>
                 </if>
                 <set field="glosaPagos" from="settlementField.description"/>
             </if>
 
-            <set field="toPartyId" from="invoice.toPartyId"/>
-
+            <!-- If discount is > 0, it needs to be applied -->
             <service-call name="mchile.sii.DTEServices.apply#DiscountToInvoiceItems" in-map="[invoiceId:invoiceId]" out-map="context"/>
 
             <!-- Calculate Sales Tax for Credit and Debit Notes -->
@@ -731,19 +730,26 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Get issuer's RUT id -->
             <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
-            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyIdentificationEv">
-                <field-map field-name="partyId" from="toPartyId"/>
-            </entity-find-one>
 
-            <!-- Si el rut no existe y el DTE corresponde a una boleta, se usa un RUT genérico. -->
-            <if condition="partyIdentificationEv"><then>
-                <set field="rutReceptor" from="partyIdentificationEv.idValue"/>
+            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="issuerPartyIdentification" auto-field-map="[partyId:issuerPartyId]"/>
+
+            <if condition="!issuerPartyIdentification">
+                <return error="true" message="Emisor no tiene RUT definido"/>
+            </if>
+            <set field="rutEmisor" from="issuerPartyIdentification.idValue"/>
+
+            <!-- Get receiver's RUT id -->
+            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="receiverPartyIdentification" auto-field-map="[partyId:receiverPartyId]"/>
+
+            <!-- If RUT does not exist, a generic id value is used -->
+            <if condition="receiverPartyIdentification"><then>
+                <set field="rutReceptor" from="receiverPartyIdentification.idValue"/>
             </then><else>
-                <if condition="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41'])">
-                    <return error="true" message="Receptor no tiene RUT"/>
+                <if condition="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-39','Ftdt-41','Ftdt-56','Ftdt-61'])">
+                    <return error="true" message="Receiver has no RUT id value"/>
                 </if>
                 <set field="rutReceptor" value="66666666-6"/>
-                <log level="warn" message="Receptor de boleta para invoice $invoiceId sin RUT"/>
+                <log level="warn" message="Receiver for DTE type ${fiscalTaxDocumentTypeEnumId}, invoice ${invoiceId}, has no RUT id value"/>
             </else></if>
 
             <!-- Get DTE references -->
@@ -752,18 +758,18 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Validar que el receptor tenga dirección postal tributaria -->
             <entity-find entity-name="mantle.party.contact.PartyContactMech" list="postalPcmList">
                 <date-filter/>
-                <econdition field-name="partyId" from="toPartyId"/>
+                <econdition field-name="partyId" from="receiverPartyId"/>
                 <econdition field-name="contactMechPurposeId" value="PostalTax"/>
                 <econdition field-name="fromDate" operator="less-equals" from="ec.user.nowTimestamp"/>
                 <econdition field-name="thruDate" from="null"/>
             </entity-find>
 
             <if condition="!postalPcmList">
-                <return error="true" message="Receptor ${partyId} no tiene dirección postal tributaria"/>
+                <return error="true" message="Receiver ${partyId} has no active postal tax address"/>
             </if>
             <set field="contactMechId" from="postalPcmList[0].contactMechId"/>
 
-            <!-- Si el DTE no corresponde a una boleta, validar que el receptor tenga dirección postal -->
+            <!-- Validate receiver's postal address -->
             <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressField"/>
             <set field="direccionReceptor" value=""/>
             <set field="comunaReceptor" value=""/>
@@ -771,10 +777,10 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="receptorContactId" value=""/>
             <if condition="!contactPostalAddressField"><then>
                 <if condition="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41'])">
-                    <return message="Receptor ${toPartyId} no tiene dirección postal tributaria" error="true"/>
+                    <return message="Receptor ${receiverPartyId} no tiene dirección postal tributaria" error="true"/>
                 </if>
             </then><else>
-                <!-- Obtener los datos de la dirección postal del receptor -->
+                <!-- Get receiver's postal address info -->
                 <set field="direccionReceptor" value="${contactPostalAddressField.address1?:''}${contactPostalAddressField.unitNumber? (' ' + contactPostalAddressField.unitNumber) : ''}${contactPostalAddressField.address2? (', ' + contactPostalAddressField.address2) : ''}"/>
 
                 <!-- Comuna -->
@@ -802,32 +808,32 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="receptorContactId" from="contactPostalAddressField.telecomContactMechId"/>
             </else></if>
 
-            <!-- Obtener razón social, giro y contacto del receptor -->
+            <!-- Get receiver info for DTE -->
             <entity-find-one entity-name="mantle.party.Party" value-field="partyEv">
-                <field-map field-name="partyId" from="toPartyId"/>
+                <field-map field-name="partyId" from="receiverPartyId"/>
             </entity-find-one>
             <set field="partyTypeEnumId" from="partyEv.partyTypeEnumId"/>
             <set field="razonSocialReceptor" value=""/>
             <set field="giroReceptor" value="Sin Giro"/>
 
-            <!-- Caso en que receptor es Organización -->
+            <!-- Case when DTE receiver is an Organization -->
             <if condition="partyTypeEnumId == 'PtyOrganization'"><then>
                 <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField">
-                    <field-map field-name="partyId" from="toPartyId"/>
+                    <field-map field-name="partyId" from="receiverPartyId"/>
                 </entity-find-one>
                 <set field="razonSocialReceptor" from="organizationField.taxOrganizationName ?: organizationField.organizationName"/>
 
                 <!-- Giro no es necesario en boleta - ¡CONFIRMAR! -->
                 <if condition="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41'])">
-                    <service-call name="mchile.sii.DTEServices.get#GiroPrimario" in-map="[partyId:toPartyId]" out-map="giroOutMap"/>
+                    <service-call name="mchile.sii.DTEServices.get#GiroPrimario" in-map="[partyId:receiverPartyId]" out-map="giroOutMap"/>
                     <set field="giroReceptor" from="giroOutMap.description"/>
                 </if>
 
-                <!-- Obtener contacto tributario y su dirección postal, y validar que existan -->
+                <!-- Get tax contact and their postal address, and validate that they exist -->
                 <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
-                              in-map="[partyId:toPartyId, postalContactMechPurposeId:'PostalTax']"/>
+                              in-map="[partyId:receiverPartyId, postalContactMechPurposeId:'PostalTax']"/>
                 <if condition="!contactOut.postalContactMechId">
-                    <return error="true" message="Receptor no tiene contacto tributario asignado"/>
+                    <return error="true" message="Receiver has no postal tax contact"/>
                 </if>
 
                 <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="postalAddressField">
@@ -839,10 +845,8 @@ along with this software (see the LICENSE.md file). If not, see
 
                 <set field="contactoReceptor" from="postalAddressField.toName"/>
             </then><else-if condition="partyTypeEnumId == 'PtyPerson'">
-                <!-- Caso en que receptor es Persona Natural -->
-                <entity-find-one entity-name="mantle.party.Person" value-field="personField">
-                    <field-map field-name="partyId" from="toPartyId"/>
-                </entity-find-one>
+                <!-- Case when DTE receiver is a Person -->
+                <entity-find-one entity-name="mantle.party.Person" value-field="personField" auto-field-map="[partyId:receiverPartyId]"/>
                 <if condition="!personField">
                     <return error="true" message="No existe persona para facturar"/>
                 </if>
@@ -851,18 +855,18 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="contactoReceptor" from="razonSocialReceptor"/>
             </else-if></if>
 
-            <!-- Obtener referencias -->
+            <!-- Get DTE references -->
             <entity-find entity-name="mchile.dte.ReferenciaDteAndFiscalCode" list="referenciaList">
                 <econdition field-name="invoiceId" from="invoiceId"/>
                 <order-by field-name="fiscalTaxDocumentTypeEnumId"/>
             </entity-find>
 
-            <if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41']"><then>
-                <!-- Crear Boleta -->
+            <if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41']">
+                <!-- Create Boleta -->
                 <service-call name="mchile.sii.DTEServices.genera#Boleta" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId,
                                     rutReceptor:rutReceptor, razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor, contactoReceptor:contactoReceptor,
                                     direccionReceptor:direccionReceptor, comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
-                                    invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:toPartyId]"
+                                    invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:receiverPartyId]"
                               out-map="context"/>
                 <return/>
             </if>
@@ -873,7 +877,7 @@ along with this software (see the LICENSE.md file). If not, see
                                     rutReceptor:rutReceptor, razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor, contactoReceptor:contactoReceptor,
                                     direccionReceptor:direccionReceptor, comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
                                     invoiceMessage:invoice.invoiceMessage, invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList,
-                                    receiverPartyId:toPartyId, globalDiscount:globalDiscount, glosaDr:glosaDr, glosaPagos:glosaPagos, settlementTermId:settlementTermId,
+                                    receiverPartyId:receiverPartyId, globalDiscount:globalDiscount, glosaDr:glosaDr, glosaPagos:glosaPagos, settlementTermId:settlementTermId,
                                     fechaEmision:fechaEmision, fechaVencimiento:fechaVencimiento]" out-map="context"/>
             </then><else-if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-56', 'Ftdt-61']">
                 <!-- Create Credit or Debit Note -->
@@ -893,7 +897,7 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="get" noun="PaymentMethodInfo">
         <description>
-            Obtiene medio y forma de pago a partir del invoiceId
+            Obtains payment method and means for an invoice
         </description>
         <in-parameters>
             <parameter name="invoiceId" required="true"/>
@@ -952,8 +956,7 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="apply" noun="DiscountToInvoiceItems">
         <description>
-            Itera sobre los items de un invoice.
-            Si algun item tiene un sub-item de descuento, se le aplica
+            Obtains a list of discounted price items for an invoice
         </description>
         <in-parameters>
             <parameter name="invoiceId" required="true"/>
