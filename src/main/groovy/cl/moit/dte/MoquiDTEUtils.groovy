@@ -413,6 +413,9 @@ class MoquiDTEUtils {
     }
 
     public static byte[] sign(Document doc, String baseUri, PrivateKey pKey, X509Certificate cert, String uri, String tagName) {
+        return sign(doc, baseUri, pKey, cert, uri, tagName, true)
+    }
+    public static byte[] sign(Document doc, String baseUri, PrivateKey pKey, X509Certificate cert, String uri, String tagName, boolean addPreamble) {
         try {
             NodeList nodes = doc.getElementsByTagName(tagName);
             if (tagName != "")
@@ -441,7 +444,7 @@ class MoquiDTEUtils {
             XMLSignature signature = fac.newXMLSignature(si, ki);
             signature.sign(dsc);
 
-            return getRawXML(doc);
+            return getRawXML(doc, addPreamble);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -449,14 +452,21 @@ class MoquiDTEUtils {
     }
 
     public static byte[] getRawXML(org.w3c.dom.Node doc) {
-        return getRawXML(doc, "ISO-8859-1")
+        return getRawXml(doc, true)
+    }
+    public static byte[] getRawXML(org.w3c.dom.Node doc, boolean addPreamble) {
+        return getRawXML(doc, "ISO-8859-1", addPreamble)
     }
     public static String getStringXML(org.w3c.dom.Node doc) {
+        return getStringXml(doc, true)
+    }
+    public static String getStringXML(org.w3c.dom.Node doc, boolean addPreamble) {
         TransformerFactory transformerFactory = TransformerFactory.newInstance();
         Transformer transformer;
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            baos.write("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n".getBytes("UTF-8"));
+            if (addPreamble)
+                baos.write("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n".getBytes("UTF-8"));
             transformer = transformerFactory.newTransformer();
             transformer.setOutputProperty(OutputKeys.INDENT, "no");
             transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
@@ -475,8 +485,11 @@ class MoquiDTEUtils {
         return null
     }
     public static byte[] getRawXML(org.w3c.dom.Node doc, String encoding) {
+        return getRawXml(doc, encoding, true)
+    }
+    public static byte[] getRawXML(org.w3c.dom.Node doc, String encoding, boolean addPreamble) {
         try {
-            String outAux = getStringXML(doc)
+            String outAux = getStringXML(doc, addPreamble)
             return outAux?.getBytes(encoding)
         } catch (TransformerConfigurationException e) {
             e.printStackTrace();
