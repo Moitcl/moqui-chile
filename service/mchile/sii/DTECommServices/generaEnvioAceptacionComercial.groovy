@@ -40,8 +40,8 @@ if (invoice == null)
 
 if (!(invoice.statusId in ['InvoiceIncoming', 'InvoiceReceived']))
     ec.message.addError("Estado inválido para nota de cobro: ${invoice.statusId}")
-invoice.statusId = 'InvoiceApproved'
-invoice.update()
+
+ec.service.sync().name("update#mantle.account.invoice.Invoice").parameters([invoiceId:invoice.invoiceId, statusId:'InvoiceApproved']).call()
 
 // Recuperacion de parametros de la organizacion
 ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameter("partyId", dte.receiverPartyId).call())
