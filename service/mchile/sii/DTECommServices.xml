@@ -96,15 +96,16 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="subject" value="${dteInfo.doctypeName} ${folio} emitida${dteList.size() > 1? 's':''} por ${dteInfo.issuerName} (Rut ${rutEmisor})"/>
                     <set field="emailTypeEnumId" value="Ftdemt-SendXmlReceiverMandatory"/>
                 </then><else-if condition="envio.envioTypeEnumId == 'Ftde-RespuestaDte'">
-                    <set field="envioMessageText" value="Adjunto encontrará el el resultado del proceso de revision y validación de un envío de Documentos Tributarios Electrónicos que Usted realizó."/>
+                    <set field="envioMessageText" value="Adjunto encontrará el resultado del proceso de revision y validación de un envío de Documentos Tributarios Electrónicos que Usted realizó."/>
                     <set field="subject" value="Acuse de Recibo Nro. ${envio.internalId} - Receptor: ${envio.rutEmisor}"/>
                     <set field="emailTypeEnumId" value="Ftdemt-XmlReceptionResponse"/>
                 </else-if><else-if condition="envio.envioTypeEnumId == 'Ftde-EnvioRecibos'">
                     <!-- Aceptación / Acuse de Recibo que da pie a título ejecutivo de factura -->
                     <set field="emailTypeEnumId" value="Ftdemt-XmlCommercialAcceptance"/>
-                    <return error="true" message="Unsupported envioTypeEnumId ${envioTypeEnumId}"/>
+                    <set field="envioMessageText" value="Adjunto encontrará la Aceptación del Documento Tributario Electrónico que Usted envió."/>
+                    <set field="subject" value="Aceptación Nro. ${envio.internalId} - Receptor: ${envio.rutEmisor}"/>
                 </else-if><else>
-                    <return error="true" message="Unsupported envioTypeEnumId ${envioTypeEnumId}"/>
+                    <return error="true" message="Unsupported envioTypeEnumId ${envio.envioTypeEnumId}"/>
                 </else></if>
                 <set field="envioContent" from="ec.resource.getLocationReference(envio.documentLocation)"/>
                 <set field="xmlAttachment" from="[attachmentLocation:envioContent.location, fileName:envioContent.fileName, contentType:envioContent.contentType]"/>
@@ -527,7 +528,6 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <if condition="process">
                 <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="context"/>
-                <log message="looking for DTE: ${fiscalTaxDocumentTypeEnumId}/${folio} date=${fchEmis}, issuerPartyIdValue=${rutEmisor}, receiverPartyIdValue=${rutReceptor}, invoiceTotal=${mntTotal}"/>
                 <entity-find entity-name="mchile.dte.InvoiceAndFiscalTaxDocument" list="dbDteList" for-update="true">
                     <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
                     <econdition field-name="fiscalTaxDocumentNumber" from="folio"/>
@@ -557,7 +557,50 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
     <service verb="process" noun="EnvioRecibo">
         <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
-        <actions></actions>
+        <actions>
+            <set field="processed" from="false"/>
+            <set field="withError" from="false"/>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>
+            <set field="envioRr" from="ec.resource.getLocationReference(envio.documentLocation)"/>
+            <set field="envioRecibos" from=" new groovy.util.XmlParser(false, false).parse(envioRr.openStream())"/>
+            <set field="caratula" from="envioRecibos.SetRecibos.Caratula"/>
+            <set field="reciboList" from="envioRecibos.SetRecibos.Recibo.DocumentoRecibo"/>
+            <set field="rutEmisor" from="caratula.RutRecibe.text()"/>
+            <iterate list="reciboList" entry="recibo">
+                <set field="tipoDte" from="recibo.TipoDoc.text()"/>
+                <set field="folio" from="recibo.Folio.text()" type="Integer"/>
+                <set field="fechaEmision" from="ec.l10n.parseTimestamp(recibo.FchEmis.text(), 'yyyy-MM-dd')"/>
+                <set field="rutReceptor" from="recibo.RUTRecep.text()"/>
+                <set field="montoTotal" from="recibo.MntTotal.text()" type="BigDecimal"/>
+                <set field="recinto" from="recibo.Recinto.text()"/>
+                <set field="rutFirma" from="recibo.RutFirma.text()"/>
+                <set field="declaracion" from="recibo.Declaracion.text()"/>
+                <set field="timestampFirma" from="recibo.TmstFirmaRecibo.text()"/>
+                <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="context"/>
+                <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList" for-update="true">
+                    <econdition field-name="issuerPartyIdValue" from="rutEmisor"/>
+                    <econdition field-name="receiverPartyIdValue" from="rutReceptor"/>
+                    <econdition field-name="fiscalTaxDocumentNumber" from="folio"/>
+                    <econdition field-name="date" operator="greater-equals" from="fechaEmision"/>
+                    <econdition field-name="date" operator="less" from="fechaEmision+1"/>
+                    <econdition field-name="statusId" value="Ftd-Issued"/>
+                    <econdition field-name="sentRecStatusId" operator="in" value="Ftd-SentRec,Ftd-ReceiverAck"/>
+                </entity-find>
+                <if condition="dteList"><then>
+                    <set field="dte" from="dteList.first"/>
+                    <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAttributes" value-field="attributes" auto-field-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId]"/>
+                    <if condition="attributes.amount == montoTotal"><then>
+                        <set field="dte.sentRecStatusId" value="Ftd-ReceiverAccept"/>
+                        <entity-update value-field="dte"/>
+                    </then><else>
+                        <set field="withError" from="true"/>
+                    </else></if>
+                </then><else>
+                    <set field="withError" from="true"/>
+                </else></if>
+            </iterate>
+            <set field="processed" from="true"/>
+        </actions>
     </service>
     <service verb="process" noun="ResultadoEnvio">
         <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
@@ -1581,6 +1624,37 @@ TrackId Token']" type="Map"/>
                 <parameter name="getTokenReturn"/>
             </parameter>
         </out-parameters>
+    </service>
+
+    <service verb="enviar" noun="AceptacionComercial">
+        <description>Envío de respuesta con aprobación comercial a emisor DTE, chequeando que el usuario pueda representar al receptor.</description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" required="true" type="Integer"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="context"/>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="fiscalTaxDocumentNumber"/>
+                <econdition field-name="receiverPartyId" operator="in" from="userOrgIds"/>
+            </entity-find>
+            <if condition="!dteList">
+                <return error="true" message="No se encuentra el DTE especificado para aprobación"/>
+            </if>
+            <service-call name="mchile.sii.DteCommServices.enviar#AceptacionComercialInterna" in-map="context" out-map="context"/>
+        </actions>
+    </service>
+
+    <service verb="enviar" noun="AceptacionComercialInterna" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/enviarAceptacionComercial.groovy">
+        <description>Envío de respuesta con aprobación comercial a emisor DTE.</description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" required="true" type="Integer"/>
+        </in-parameters>
     </service>
 
 </services>
