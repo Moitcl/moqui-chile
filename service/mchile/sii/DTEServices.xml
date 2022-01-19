@@ -687,15 +687,23 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="Invoice not found with ID ${invoiceId}"/>
             </if>
 
-            <!-- Obtains the global discount and applies it if > 0 -->
-            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoiceEv">
-                <field-map field-name="invoiceId"/>
-            </entity-find-one>
-            <set field="issuerPartyId" from="invoiceEv.fromPartyId"/>
-            <set field="globalDiscount" from="invoiceEv.globalDiscount"/>
-            <set field="glosaDr" from="invoiceEv.glosaDr"/>
-            <set field="fechaVencimiento" from="invoiceEv.dueDate"/>
-            <set field="fechaEmision" from="invoiceEv.invoiceDate"/>
+            <!-- Validate invoice type and status -->
+            <service-call name="mchile.sii.DTEServices.validate#InvoiceAndExistingDTE" in-map="context"/>
+
+            <!-- Get DTE issuer and receiver from invoice -->
+            <!-- For credit notes, fromPartyId and toPartyId are swapped (customer charges the vendor) -->
+            <set field="issuerPartyId" from="invoice.fromPartyId"/>
+            <set field="receiverPartyId" from="invoice.toPartyId"/>
+
+            <if condition="fiscalTaxDocumentTypeEnumId == 'Ftdt-61'">
+                <set field="issuerPartyId" from="invoice.toPartyId"/>
+                <set field="receiverPartyId" from="invoice.fromPartyId"/>
+            </if>
+
+            <set field="globalDiscount" from="invoice.globalDiscount"/>
+            <set field="glosaDr" from="invoice.glosaDr"/>
+            <set field="fechaVencimiento" from="invoice.dueDate"/>
+            <set field="fechaEmision" from="invoice.invoiceDate"/>
 
             <service-call name="mchile.sii.DTEServices.get#PaymentMethodInfo" in-map="[invoiceId:invoiceId]" out-map="context"/>
 
