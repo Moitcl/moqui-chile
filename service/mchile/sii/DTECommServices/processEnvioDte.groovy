@@ -100,7 +100,8 @@ dteNodeList.each { org.w3c.dom.Node domNode ->
     recepcion = ec.service.sync().name("mchile.sii.DTEServices.load#DteFromDom").parameters(context+[domNode:domNode]).call()
     recepcionList.add(recepcion)
     ec.message.clearErrors()
-    processedItems++
+    if (recepcion.internalErrors == null || recepcion.internalErrors.size() == 0)
+        processedItems++
 }
 
 estadoGlosaMap = [0:'Envio Recibido Conforme', 1:'Envio Rechazado - Error de Schema', 2:'Envio Rechazado - Error de Firma', 3:'Envio Rechazado - RUT Receptor No Corresponde', 90:'Envio Rechazado - Archivo Repetido',

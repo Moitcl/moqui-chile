@@ -451,9 +451,6 @@ class MoquiDTEUtils {
         return null;
     }
 
-    public static byte[] getRawXML(org.w3c.dom.Node doc) {
-        return getRawXml(doc, true)
-    }
     public static byte[] getRawXML(org.w3c.dom.Node doc, boolean addPreamble) {
         return getRawXML(doc, "ISO-8859-1", addPreamble)
     }
