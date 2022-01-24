@@ -133,8 +133,8 @@ if (tipoDte == 33) {
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
 
-    if (codRef == 2 && detalleList.length() > 1) {
-        ec.message.addError("codRef = 2 && detalleList.length() = ${detalleList.length()}")
+    if (codRef == 2 && detalleList.size() > 1) {
+        ec.message.addError("codRef = 2 && detalleList.size() = ${detalleList.size()}")
         return
     }
 
@@ -156,8 +156,8 @@ if (tipoDte == 33) {
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
 
-    if (codRef == 2 && detalleList.length() > 1) {
-        ec.message.addError("codRef = 2 && detalleList.length() = ${detalleList.length()}")
+    if (codRef == 2 && detalleList.size() > 1) {
+        ec.message.addError("codRef = 2 && detalleList.size() = ${detalleList.size()}")
         return
     }
 
