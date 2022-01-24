@@ -104,7 +104,6 @@ encabezado.Totales.ImptoReten.each { it ->
 }
 
 if ((montoNeto + montoExento + iva + impuestos) != montoTotal) errorMessages.add("Total inválido (montoTotal no coincide con suma de monto neto, monto exento, iva e impuestos)")
-errorMessages.add("Test")
 if (montoNeto > 0 && tasaIva / 100 != vatTaxRate) errorMessages.add("Tasa IVA no coincide: esperada: ${vatTaxRate*100}%, recibida: ${tasaIva}%")
 
 // Datos receptor
