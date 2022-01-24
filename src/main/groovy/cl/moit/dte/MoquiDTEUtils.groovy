@@ -451,14 +451,8 @@ class MoquiDTEUtils {
         return null;
     }
 
-    public static byte[] getRawXML(org.w3c.dom.Node doc) {
-        return getRawXml(doc, true)
-    }
     public static byte[] getRawXML(org.w3c.dom.Node doc, boolean addPreamble) {
         return getRawXML(doc, "ISO-8859-1", addPreamble)
-    }
-    public static String getStringXML(org.w3c.dom.Node doc) {
-        return getStringXml(doc, true)
     }
     public static String getStringXML(org.w3c.dom.Node doc, boolean addPreamble) {
         TransformerFactory transformerFactory = TransformerFactory.newInstance();
@@ -540,7 +534,7 @@ class MoquiDTEUtils {
     }
 
     public static groovy.util.Node dom2GroovyNode(org.w3c.dom.Node node) {
-        String xml = getStringXML(node)
+        String xml = getStringXML(node, true)
         return dom2GroovyNode(xml)
     }
     public static groovy.util.Node dom2GroovyNode(String xml) {

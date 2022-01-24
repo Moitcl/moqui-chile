@@ -19,6 +19,7 @@ groovy.util.Node documento = MoquiDTEUtils.dom2GroovyNode(domNode)
 errorMessages = []
 discrepancyMessages = []
 warningMessages = []
+internalErrors = []
 
 if (domNode.getAttributes().getNamedItem("xmlns")?.getTextContent() == "http://www.sii.cl/SiiDte") {
     documentPath = "/sii:DTE/sii:Documento"
@@ -26,7 +27,7 @@ if (domNode.getAttributes().getNamedItem("xmlns")?.getTextContent() == "http://w
     domNode.setAttribute("xmlns", null)
     documentPath = "/DTE/Documento"
 }
-byte[] dteXml = MoquiDTEUtils.getRawXML(domNode)
+byte[] dteXml = MoquiDTEUtils.getRawXML(domNode, true)
 Document doc2 = MoquiDTEUtils.parseDocument(dteXml)
 if (!MoquiDTEUtils.verifySignature(doc2, documentPath, null)) {
     errorMessages.add("Signature mismatch for document ${documento.Documento.'@ID'.text()}")
@@ -83,9 +84,26 @@ BigDecimal montoTotal = (encabezado.Totales.MntTotal.text() ?: 0) as BigDecimal
 BigDecimal montoExento = (encabezado.Totales.MntExe.text() ?: 0) as BigDecimal
 BigDecimal tasaIva = (encabezado.Totales.TasaIVA.text() ?: 0) as BigDecimal
 BigDecimal iva = (encabezado.Totales.IVA.text() ?: 0) as BigDecimal
+BigDecimal impuestos = 0
 mntTotal = montoTotal as BigDecimal
 
-if ((montoNeto + montoExento + iva) != montoTotal) errorMessages.add("Total inválido (montoTotal no coincide con suma de monto neto, monto exento e iva.")
+impuestosMap = [:]
+encabezado.Totales.ImptoReten.each { it ->
+    tipoImpuesto = it.TipoImp.text()
+    tasaImpuesto = it.TasaImp.text() as BigDecimal
+    montoImpuesto = it.MontoImp.text() as BigDecimal
+    impuestos += montoImpuesto
+    if (impuestosMap[tipoImpuesto] == null) {
+        impuesto = [tipo:tipoImpuesto, tasa:tasaImpuesto, monto:montoImpuesto]
+        impuestosMap[tipoImpuesto] = impuesto
+    } else {
+        if (impuesto.tasa != tasa)
+            ec.message.addError("Tasa impuesto mismatch para impuesto ${tipoImpuesto}")
+        impuesto.monto = impuesto.monto + montoImpuesto
+    }
+}
+
+if ((montoNeto + montoExento + iva + impuestos) != montoTotal) errorMessages.add("Total inválido (montoTotal no coincide con suma de monto neto, monto exento, iva e impuestos)")
 if (montoNeto > 0 && tasaIva / 100 != vatTaxRate) errorMessages.add("Tasa IVA no coincide: esperada: ${vatTaxRate*100}%, recibida: ${tasaIva}%")
 
 // Datos receptor
@@ -273,6 +291,15 @@ detalleList.each { detalle ->
 
 }
 
+impuestosMap.each { impuestoCode, impuestoMap ->
+    impuestoEnum = ec.entity.find("moqui.basic.Enumeration").condition([parentEnumId: "ItemTCChlDte", enumCode:impuestoCode]).one()
+    if (impuestoEnum == null)
+        internalErrors.add("Did not find impuesto for code ${impuestoCode}")
+    else
+        ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:impuestoEnum.enumId,
+                                                                                            description: impuestoEnum.description, quantity: 1, amount: impuestoMap.monto]).call()
+}
+
 globalList = documento.Documento.DscRcgGlobal
 Integer globalItemCount = 0
 globalList.each { globalItem ->
@@ -326,11 +353,15 @@ if (errorMessages.size() > 0) {
     estadoRecepDte = 2
     recepDteGlosa = 'RECHAZADO: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', ' + discrepancyMessages.join(', ')) : '')
     ec.logger.error(recepDteGlosa)
+    if (recepDteGlosa.length() > 256)
+        recepDteGlosa = recepDteGlosa.substring(0, 256)
     return
 } else if (discrepancyMessages.size() > 0) {
     estadoRecepDte = 1
     recepDteGlosa = 'ACEPTADO CON DISCREPANCIAS: ' + discrepancyMessages.join(', ')
     ec.logger.warn(recepDteGlosa)
+    if (recepDteGlosa.length() > 256)
+        recepDteGlosa = recepDteGlosa.substring(0, 256)
     return
 } else {
     estadoRecepDte = 0
