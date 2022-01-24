@@ -70,7 +70,10 @@ if (rutReceptorCaratula != receptor.RUTRecep.text()) {
     estadoRecepEnv = 2
 }
 receiverPartyId = ec.service.sync().name("mchile.sii.DTECommServices.get#PartyIdByRut").parameters([idValue:rutReceptorCaratula, createUnknown:createUnknownReceiver, razonSocial:receptor.RznSocRecep.text(), roleTypeId:'Customer',
-                                                                                              giro:emisor.GiroRecep.text(), direccion:emisor.DirRecep.text(), comuna:emisor.CmnaRecep.text(), ciudad:emisor.CiudadRecep.text()]).call().partyId
+                                                                                              giro:emisor.GiroRecep.text(), direccion:emisor.DirRecep.text(), comuna:emisor.CmnaRecep.text(), ciudad:emisor.CiudadRecep.text()]).call()?.partyId
+if (!receiverPartyId) {
+    return
+}
 
 envioRespuestaId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-RespuestaDte', statusId:'Ftde-Created', rutEmisor:rutReceptorCaratula, rutReceptor:rutEmisorCaratula, fechaEnvio:ec.user.nowTimestamp, internalId:idRecepcionDte]).call().envioId
 
