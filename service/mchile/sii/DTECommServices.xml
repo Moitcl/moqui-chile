@@ -330,7 +330,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="context.DTECommServices_processingPendingDteEnvio" value="yes"/>
             <set field="maxAttemptThreshold" from="3"/>
             <set field="minutesBeforeRetry" from="120"/>
-            <entity-find entity-name="mchile.dte.DteEnvio" list="envioList" for-update="true">
+            <entity-find entity-name="mchile.dte.DteEnvio" list="envioList">
                 <econditions combine="or">
                     <econdition field-name="statusId" value="Ftde-Received"/>
                     <econditions>
@@ -344,14 +344,14 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <iterate list="envioList" entry="envio">
                 <entity-find-one entity-name="moqui.basic.Enumeration" value-field="envEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
-                <service-call name="mchile.sii.DTECommServices.process#${envEv.enumCode}" in-map="[envioId:envio.envioId]" out-map="processOut" ignore-error="true"/>
+                <service-call name="mchile.sii.DTECommServices.process#${envEv.enumCode}" in-map="[envioId:envio.envioId]" out-map="processOut" ignore-error="true" transaction="force-new"/>
                 <if condition="processOut.processed"><then>
                     <set field="newStatusId" from="processOut.withError ? 'Ftde-ProcessFailed' : 'Ftde-Processed'"/>
-                    <service-call name="update#mchile.dte.DteEnvio" in-map="[envioId:envio.envioId, statusId:newStatusId]"/>
+                    <service-call name="update#mchile.dte.DteEnvio" in-map="[envioId:envio.envioId, statusId:newStatusId]" transaction="force-new"/>
                 </then><else>
                     <set field="newAttemptCount" from="(envio.attemptCount?:0) + 1"/>
                     <set field="newStatusId" from="newAttemptCount >= maxAttemptThreshold ? 'Ftde-ProcessFailed': envio.statusId"/>
-                    <service-call name="update#mchile.dte.DteEnvio" in-map="[envioId:envio.envioId, attemptCount:newAttemptCount, lastAttempt:ec.user.nowTimestamp, statusId:newStatusId]"/>
+                    <service-call name="update#mchile.dte.DteEnvio" in-map="[envioId:envio.envioId, attemptCount:newAttemptCount, lastAttempt:ec.user.nowTimestamp, statusId:newStatusId]" transaction="force-new"/>
                 </else></if>
             </iterate>
         </actions>
