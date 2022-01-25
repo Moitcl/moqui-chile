@@ -425,7 +425,7 @@
                             <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:CiudadRecep | CiudadRecep"/></fo:block></fo:table-cell>
                         </fo:table-row>
                         <fo:table-row>
-                            <xsl:choose><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=61) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=61)">
+                            <xsl:choose><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=61) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=61) or (/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=56) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=56)">
                                 <fo:table-cell><fo:block margin-top="4pt"/></fo:table-cell>
                                 <fo:table-cell><fo:block margin-top="4pt"/></fo:table-cell>
                             </xsl:when><xsl:otherwise>
@@ -440,7 +440,7 @@
                             <xsl:choose><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=52) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=52)">
                                 <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Contacto</fo:inline></fo:block></fo:table-cell>
                                 <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Receptor/siidte:Contacto | /DTE/Documento/Encabezado/Receptor/Contacto"/></fo:inline></fo:block></fo:table-cell>
-                            </xsl:when><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=61) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=61)">
+                            </xsl:when><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=61) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=61) or (/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=56) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=56)">
                                 <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold"></fo:inline></fo:block></fo:table-cell>
                                 <fo:table-cell><fo:block margin-top="4pt"><fo:inline></fo:inline></fo:block></fo:table-cell>
                             </xsl:when><xsl:otherwise>
