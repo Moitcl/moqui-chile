@@ -65,8 +65,22 @@ class MoquiDTEUtils {
     }
 
     public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType, Integer codRef) throws BaseArtifactException {
-        int i = 0
         List detalleList = []
+
+        // Text Correction DTEs have no detail list
+        if (detailList.size() == 0 && codRef == 2) {
+            if (detailType == "InvoiceItem" || detailType == "DebitoItem") {
+                Map detailMap = [:]
+                detailMap.numeroLinea = 1
+                detailMap.nombreItem = "Corrige Dato Receptor"
+                detailMap.priceItem = 0.000001
+                detailMap.montoItem = 0
+                detalleList.add(detailMap)
+                return [detalleList:detalleList, totalNeto:0, totalExento:0, numberExentos:0, numberAfectos:0]
+            }
+        }
+
+        int i = 0
         Long totalNeto = null
         Long totalExento = null
         int numberAfectos = 0
@@ -136,19 +150,21 @@ class MoquiDTEUtils {
                 if(codRef == 2) {
                     quantity = null
                     priceItem = null
-                    nombreItem = "CORRIGE TEXTO"
+                    nombreItem = "Corrige Dato Receptor"
                     totalItem = 0
                 } else {
                     priceItem = detailEntry.amount
                     totalItem = (quantity?:0) * (priceItem?:0)
                 }
-            } else if (detailType == "ReturnItem" && codRef == 2) {
-                quantity = null
-                priceItem = null
-                nombreItem = "CORRIGE GIROS"
-                totalItem = 0
             } else if (detailType == "ReturnItem") {
-                priceItem = detailEntry.returnPrice
+                if (codRef == 2) {
+                    quantity = null
+                    priceItem = null
+                    nombreItem = "Corrige Dato Receptor"
+                    totalItem = 0
+                } else {
+                    priceItem = detailEntry.returnPrice
+                }
             } else {
                 priceItem = detailEntry.amount
                 totalItem = (quantity?:0) * (priceItem?:0)

@@ -127,14 +127,14 @@ if (tipoDte == 33) {
     referenciaList = refMap.referenciaList
     anulaBoleta = refMap.anulaBoleta
     folioAnulaBoleta = refMap.folioAnulaBoleta
-    codRef = refMap.codigo
+    codRef = referenciaList[0].codigo
 
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
 
-    if (codRef == 2 && detalleList.length() > 1) {
-        ec.message.addError("codRef = 2 && detalleList.length() = ${detalleList.length()}")
+    if (codRef == 2 && detalleList.size() > 1) {
+        ec.message.addError("codRef = 2 && detalleList.size() = ${detalleList.size()}")
         return
     }
 
@@ -150,14 +150,14 @@ if (tipoDte == 33) {
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, null, tipoDte)
     referenciaList = refMap.referenciaList
     dteExenta = refMap.dteExenta
-    codRef = refMap.codigo
+    codRef = referenciaList[0].codigo
 
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "DebitoItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
 
-    if (codRef == 2 && detalleList.length() > 1) {
-        ec.message.addError("codRef = 2 && detalleList.length() = ${detalleList.length()}")
+    if (codRef == 2 && detalleList.size() > 1) {
+        ec.message.addError("codRef = 2 && detalleList.size() = ${detalleList.size()}")
         return
     }
 
