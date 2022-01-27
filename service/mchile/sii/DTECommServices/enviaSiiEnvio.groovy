@@ -101,7 +101,7 @@ if (status == '0') {
         trackId = xmlDoc.'siid:TRACKID'.text()
     ec.logger.warn("DTE Enviada correctamente con trackId " + trackId)
     ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioId, trackId:trackId, statusId:'Ftde-Sent']).call()
-    ec.service.job('sii_dte_CheckEnviosEnviadosSii').parameters([checkDelaySeconds:30, checkAttempts:4, envioId:envioId, minSecondsBetweenAttempts:0]).run()
+    ec.service.job('sii_dte_CheckEnviosEnviadosSii').parameters([initialDelaySeconds:5, checkDelaySeconds:30, checkAttempts:4, envioId:envioId, minSecondsBetweenAttempts:0]).run()
     envioFtdList = ec.entity.find("mchile.dte.DteEnvioFiscalTaxDocument").condition("envioId", envioId).list()
     if (envioFtdList)
         ec.service.sync().name("mchile.sii.DTECommServices.marcarEnviados#Documentos").parameters([trackId:trackId, documentIdList:envioFtdList.fiscalTaxDocumentId]).call()
