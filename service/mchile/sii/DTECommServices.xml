@@ -723,14 +723,18 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <script>if (initialDelaySeconds) Thread.sleep(initialDelaySeconds*1000L)</script>
             <set field="retryList" from="1..checkAttempts"/>
+            <set field="newStatusByEnvioId" from="[:]"/>
             <iterate list="retryList" entry="attempt">
                 <set field="reattemptList" from="[]"/>
                 <script>Thread.sleep(initialDelaySeconds*1000L)</script>
                 <log message="Starting attempt ${attempt}"/>
                 <iterate list="envioList" entry="envio">
                     <service-call name="mchile.sii.DTECommServices.verifica#EnvioEnSii" in-map="[envioId:envio.envioId]" transaction="force-new" out-map="checkMap" ignore-error="true"/>
-                    <if condition="checkMap.stillProcessing">
+                    <if condition="checkMap.hasError">
                         <script>reattemptList.add(envio)</script>
+                    </if>
+                    <if condition="checkMap.newStatusId">
+                        <set field="newStatusByEnvioId[envio.envioId]" from="checkMap.newStatusId"/>
                     </if>
                 </iterate>
                 <set field="envioList" from="reattemptList"/>
@@ -747,9 +751,8 @@ along with this software (see the LICENSE.md file). If not, see
             <iterate list="reattemptList" entry="envio">
                 <set field="attemptCount" from="(envio.attemptCount?:0)+1"/>
                 <set field="updateMap" from="[envioId:envio.envioId, attemptCount:attemptCount, lastAttempt:ec.user.nowTimestamp]"/>
-                <if condition="attemptCount >= maxAttempts">
-                    <set field="updateMap.statusId" value="Ftde-Failed"/>
-                </if>
+                <set field="newStatusId" from="attemptCount >= maxAttempts ? 'Ftde-FailedAtReceiver' : newStatusByEnvioId[envio.envioId]"/>
+                <if condition="newStatusId"><set field="updateMap.statusId" from="newStatusId"/></if>
                 <service-call name="update#mchile.dte.DteEnvio" in-map="updateMap" transaction="force-new" ignore-error="true"/>
             </iterate>
         </actions>
@@ -968,16 +971,16 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="documentosInformados"/>
             <parameter name="documentosAceptados"/>
             <parameter name="documentosRechazados"/>
-            <parameter name="stillProcessing" type="Boolean"/>
+            <parameter name="hasError" type="Boolean"/>
+            <parameter name="newStatusId"/>
         </out-parameters>
         <actions>
-            <set field="stillProcessing" from="false" type="Boolean"/>
+            <set field="hasError" from="false" type="Boolean"/>
             <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>
             <if condition="envio.trackId == null">
-                <set field="envio.statusId" value="Ftde-ProcessFailed"/>
-                <entity-update value-field="envio"/>
-                <message type="danger">No trackId, cannot verify</message>
-                <return/>
+                <set field="hasError" from="true"/>
+                <set field="newStatusId" value="Ftde-FailedAtReceiver"/>
+                <return error="true" message="No trackId, cannot verify"/>
             </if>
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:envio.rutEmisor]" out-map="rutMap"/>
             <set field="RutCompania" from="rutMap.rut"/>
@@ -1032,16 +1035,12 @@ along with this software (see the LICENSE.md file). If not, see
                 documentosAceptados = body.ACEPTADOS.text()
                 documentosRechazados = body.RECHAZADOS.text()
                 if (estado in ['PDR', 'FOK', 'CRT', 'SOK']) {
-                    envio.attemptCount = envio.attemptCount + 1
-                    envio.lastAttempt = ec.user.nowTimestamp
-                    envio.update()
                     ec.logger.info("Envío en proceso")
-                    stillProcessing = true
+                    hasError = true
                 } else if (estado == 'EPR') {
                     // Envío procesado
-                    envio.statusId = 'Ftde-Processed'
+                    newStatusId = 'Ftde-Processed'
                     ec.logger.info("Envío procesado")
-                    envio.update()
                     if (documentosAceptados == documentosInformados) {
                         dteIdList = ec.entity.find("mchile.dte.DteEnvioFiscalTaxDocument").condition("envioId", envioId).list().fiscalTaxDocumentId
                         dteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("fiscalTaxDocumentId", EntityCondition.ComparisonOperator.IN, dteIdList).forUpdate(true).list()
@@ -1066,33 +1065,29 @@ along with this software (see the LICENSE.md file). If not, see
                     }
                 } else if (estado == 'RSC') {
                     ec.logger.info("Envío rechazado por Schema")
-                    envio.statusId = 'Ftde-ProcessRejectedSchema'
-                    envio.update()
+                    newStatusId = 'Ftde-ProcessRejectedSchema'
                 } else if (estado == 'RFR') {
                     ec.logger.info("Envío rechazado por Firma")
-                    envio.statusId = 'Ftde-ProcessRejectedSignature'
-                    envio.update()
+                    newStatusId = 'Ftde-ProcessRejectedSignature'
                 } else if (estado == 'RCT') {
                     ec.logger.info("Envío rechazado por Carátula")
-                    envio.statusId = 'Ftde-ProcessRejectedEnvelope'
-                    envio.update()
+                    newStatusId = 'Ftde-ProcessRejectedEnvelope'
                 } else if (estado == '001') {
                     ec.logger.info("Error con token: ${glosaEstado}")
-                    stillProcessing = true
+                    hasError = true
                 } else if (errorCodeGlosa != null) {
                     ec.logger.info("Consulta con error: ${errorCodeGlosa}")
-                    stillProcessing = true
+                    hasError = true
                 } else if (sqlCodeGlosa != null) {
                     ec.logger.info("Consulta con error: ${errorCodeGlosa}")
-                    stillProcessing = true
+                    hasError = true
                 } else if (serverCodeGlosa != null) {
                     ec.logger.info("Consulta con error: ${errorCodeGlosa}")
-                    stillProcessing = true
+                    hasError = true
                 } else {
                     ec.logger.info("Estado no reconocido: ${estado}, errorCode ${errorCode} (${errorCodeGlosa}), sqlCode ${sqlCode} (${sqlCodeGlosa}), serverCode ${serverCode} (${serverCodeGlosa})")
                     if (errorEnvio != null && errorEnvio != '') {
-                        envio.statusId = 'Ftd-SentAuthRejected'
-                        envio.update()
+                        newStatusId = 'Ftd-SentAuthRejected'
                     }
                 }
                 ]]></script>
