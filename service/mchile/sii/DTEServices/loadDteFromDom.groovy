@@ -230,14 +230,14 @@ detalleList.each { detalle ->
         totalExento += montoItem
 
     productId = null
-    if (quantity*price != montoItem) {
-        if ((quantity*price).setScale(0, RoundingMode.HALF_UP)) {
-            itemDescription = "${itemDescription} (cantidad original: ${quantity})"
-            quantity = 1
-            price = montoItem
-        } else {
-            errorMessages.add("montoItem (${montoItem} no calza con el valor unitario (${price}) multiplicado por cantidad (${quantity})")
-        }
+    if ((quantity*price).setScale(0, RoundingMode.HALF_UP) != montoItem) {
+        errorMessages.add("montoItem (${montoItem} no calza con el valor unitario (${price}) multiplicado por cantidad (${quantity})")
+    }
+    if ((quantity).setScale(0, RoundingMode.HALF_UP) != quantity) {
+        // TODO: change unit if known (e.g. from Kilograms to grams)
+        itemDescription = "${itemDescription} (cantidad original: ${quantity})"
+        price = price * quantity
+        quantity = 1
     }
     if (!attemptProductMatch) {
         ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales',
