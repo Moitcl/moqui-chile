@@ -99,9 +99,13 @@ org.w3c.dom.NodeList dteNodeList = (org.w3c.dom.NodeList) expression.evaluate(do
 
 totalItems = dteNodeList.length
 recepcionList = []
+rejectionCount = 0
+discrepancyCount = 0
 dteNodeList.each { org.w3c.dom.Node domNode ->
     recepcion = ec.service.sync().name("mchile.sii.DTEServices.load#DteFromDom").parameters(context+[domNode:domNode]).call()
     recepcionList.add(recepcion)
+    if (recepcion.estadoRecepDte == 2) rejectionCount++
+    if (recepcion.estadoRecepDte == 1) discrepancyCount++
     ec.message.clearErrors()
     if (recepcion.internalErrors == null || recepcion.internalErrors.size() == 0)
         processedItems++

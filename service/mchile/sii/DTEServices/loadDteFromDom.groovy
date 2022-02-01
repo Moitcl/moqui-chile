@@ -351,7 +351,7 @@ if (invoice.invoiceTotal != mntTotal)
 
 if (errorMessages.size() > 0) {
     estadoRecepDte = 2
-    recepDteGlosa = 'RECHAZADO: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', ' + discrepancyMessages.join(', ')) : '')
+    recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
     ec.logger.error(recepDteGlosa)
     if (recepDteGlosa.length() > 256)
         recepDteGlosa = recepDteGlosa.substring(0, 256)

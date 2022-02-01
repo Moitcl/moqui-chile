@@ -346,9 +346,17 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <iterate list="envioList" entry="envio">
                 <entity-find-one entity-name="moqui.basic.Enumeration" value-field="envEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
-                <service-call name="mchile.sii.DTECommServices.process#${envEv.enumCode}" in-map="[envioId:envio.envioId]" out-map="processOut" ignore-error="true" transaction="force-new"/>
+                <service-call name="mchile.sii.DTECommServices.process#${envEv.enumCode}" in-map="[envioId:envio.envioId]" out-map="processOut" ignore-error="true" transaction="force-new" out-map-add-to-existing="false"/>
                 <if condition="processOut.processed"><then>
-                    <set field="newStatusId" from="processOut.withError ? 'Ftde-ProcessFailed' : 'Ftde-Processed'"/>
+                    <if condition="processOut.withError"><then>
+                        <set field="newStatusId" value="Ftde-ProcessFailed"/>
+                    </then><else-if condition="processOut.rejectionCount != null &amp;&amp; processOut.rejectionCount > 0">
+                        <set field="newStatusId" value="Ftde-ProcessedWithRejection"/>
+                    </else-if><else-if condition="processOut.discrepancyCount != null &amp;&amp; processOut.discrepancyCount > 0">
+                        <set field="newStatusId" value="Ftde-ProcessedWithDiscrepancy"/>
+                    </else-if><else>
+                        <set field="newStatusId" value="Ftde-Processed"/>
+                    </else></if>
                     <service-call name="update#mchile.dte.DteEnvio" in-map="[envioId:envio.envioId, statusId:newStatusId]" transaction="force-new"/>
                 </then><else>
                     <set field="newAttemptCount" from="(envio.attemptCount?:0) + 1"/>
@@ -374,6 +382,8 @@ along with this software (see the LICENSE.md file). If not, see
         <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
         <out-parameters>
             <parameter name="envioRespuestaId"/>
+            <parameter name="rejectionCount" type="Integer"/>
+            <parameter name="discrepancyCount" type="Integer"/>
         </out-parameters>
     </service>
     <service verb="process" noun="RespuestaDte">
