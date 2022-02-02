@@ -85,7 +85,6 @@ BigDecimal montoExento = (encabezado.Totales.MntExe.text() ?: 0) as BigDecimal
 BigDecimal tasaIva = (encabezado.Totales.TasaIVA.text() ?: 0) as BigDecimal
 BigDecimal iva = (encabezado.Totales.IVA.text() ?: 0) as BigDecimal
 BigDecimal impuestos = 0
-mntTotal = montoTotal as BigDecimal
 
 impuestosMap = [:]
 encabezado.Totales.ImptoReten.each { it ->
@@ -350,8 +349,8 @@ if (totalCalculadoIva > 0) {
 }
 
 invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", invoiceId).one()
-if (invoice.invoiceTotal != mntTotal)
-    discrepancyMessages.add("No coinciden totales, DTE indica ${mntTotal}, calculado: ${invoice.invoiceTotal}")
+if (invoice.invoiceTotal != montoTotal)
+    discrepancyMessages.add("No coinciden totales, DTE indica ${montoTotal}, calculado: ${invoice.invoiceTotal}")
 
 if (errorMessages.size() > 0) {
     estadoRecepDte = 2
@@ -381,6 +380,10 @@ createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalT
              sentAuthStatusId:'Ftd-SentAuthAccepted', sentRecStatusId:sentRecStatusId]
 mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call()
 fiscalTaxDocumentId = mapOut.fiscalTaxDocumentId
+
+createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, date:ec.user.nowTimestamp, amount:montoTotal, montoNeto:montoNeto, montoExento:montoExento, tasaImpuesto:tasaIva, tipoImpuesto:1, montoIvaRecuperable:montoIva, montoIvaNoRecuperable:0,
+            fechaEmision:issuedTimestamp]
+mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call()
 
 locationReferenceBase = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folioDte}"
 contentLocationXml = "${locationReferenceBase}.xml"
