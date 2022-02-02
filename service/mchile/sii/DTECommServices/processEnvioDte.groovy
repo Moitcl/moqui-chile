@@ -16,7 +16,9 @@ if (dteEnvioEv.statusId != 'Ftde-Received') {
 }
 
 inputStream = ec.resource.getLocationReference(dteEnvioEv.documentLocation).openStream()
-Map processingParameters = new JsonSlurper().parseText(dteEnvioEv.processingParameters)
+Map processingParameters = [:]
+if (dteEnvioEv.processingParameters != null && dteEnvioEv.processingParameters != '')
+    processingParameters = new JsonSlurper().parseText(dteEnvioEv.processingParameters)
 
 Boolean createUnknownIssuer = processingParameters.createUnknownIssuer ?: true
 Boolean requireIssuerInternalOrg = processingParameters.requireIssuerInternalOrg ?: false
