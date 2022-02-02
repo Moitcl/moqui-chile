@@ -21,14 +21,22 @@ discrepancyMessages = []
 warningMessages = []
 internalErrors = []
 
+byte[] dteXml = null
+Document doc2 = null
 if (domNode.getAttributes().getNamedItem("xmlns")?.getTextContent() == "http://www.sii.cl/SiiDte") {
+    ec.logger.info("namespace is SII")
     documentPath = "/sii:DTE/sii:Documento"
 } else {
-    domNode.setAttribute("xmlns", null)
-    documentPath = "/DTE/Documento"
+    ec.logger.info("No namespace")
+    dteXml = MoquiDTEUtils.getRawXML(domNode, true)
+    doc2 = MoquiDTEUtils.parseDocument(dteXml)
+    new cl.moit.dte.XmlNamespaceTranslator().addTranslation(null, "http://www.sii.cl/SiiDte").addTranslation("", "http://www.sii.cl/SiiDte").translateNamespaces(doc2)
+    doc2 = MoquiDTEUtils.parseDocument(MoquiDTEUtils.getRawXML(doc2, true))
+    domNode = doc2.getDocumentElement()
+    documentPath = "/sii:DTE/sii:Documento"
 }
-byte[] dteXml = MoquiDTEUtils.getRawXML(domNode, true)
-Document doc2 = MoquiDTEUtils.parseDocument(dteXml)
+dteXml = MoquiDTEUtils.getRawXML(domNode, true)
+doc2 = MoquiDTEUtils.parseDocument(dteXml)
 if (!MoquiDTEUtils.verifySignature(doc2, documentPath, null)) {
     errorMessages.add("Signature mismatch for document ${documento.Documento.'@ID'.text()}")
 }
@@ -202,13 +210,13 @@ detalleList.each { detalle ->
     ec.logger.warn("Precio: ${detalle.PrcItem.text()}")
     ec.logger.warn("Monto: ${detalle.MontoItem.text()}")
     itemDescription = detalle.NmbItem?.text()
-    quantity = detalle.QtyItem ? (detalle.QtyItem.text() as BigDecimal) : null
+    BigDecimal quantity = detalle.QtyItem ? (detalle.QtyItem.text() as BigDecimal) : null
     price = detalle.PrcItem ? (detalle.PrcItem.text() as BigDecimal) : null
     montoItem = detalle.MontoItem ? (detalle.MontoItem.text() as BigDecimal) : null
     totalCalculado += montoItem
     if (((price?:0) * (quantity?:0)) == 0 && montoItem != null) {
         if (quantity == null)
-            quantity = 1
+            quantity = 1 as BigDecimal
         price = montoItem / quantity
     } else if ((price * quantity).setScale(0, RoundingMode.HALF_UP) != montoItem) {
         discrepancyMessages.add("En detalle ${nroDetalles} (${itemDescription?:''}), montoItem (${montoItem} no calza con el valor unitario (${price}) multiplicado por cantidad (${quantity}) redondeado")
@@ -373,6 +381,9 @@ if (errorMessages.size() > 0) {
     recepDteGlosa = 'ACEPTADO OK'
     sentRecStatusId = 'Ftd-ReceiverAccept'
 }
+
+if (existingDteList)
+    return
 
 // Se guarda DTE recibido en la base de datos
 createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rutEmisor, fiscalTaxDocumentTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte,

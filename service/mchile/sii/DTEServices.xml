@@ -972,23 +972,26 @@ along with this software (see the LICENSE.md file). If not, see
             Servicio para simplificar carga de Facturas vs Boletas discriminando por los dos grandes tipos antes de parsear el XML
         </description>
         <in-parameters>
-            <parameter name="organizationPartyId" required="true"/>
             <parameter name="invoiceId"/>
             <parameter name="xml" type="org.apache.commons.fileupload.FileItem" required="true"/>
             <parameter name="pdf" type="org.apache.commons.fileupload.FileItem" required="true"/>
             <parameter name="productMatch" default-value="false"/>
             <parameter name="fiscalTaxDocumentAggrEnumId" required="true"/>
-            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="createUnknownIssuer" type="Boolean" default="false"/>
+            <parameter name="requireIssuerInternalOrg" type="Boolean" default="false"/>
+            <parameter name="createUnknownReceiver" type="Boolean" default="false"/>
+            <parameter name="requireReceiverInternalOrg" type="Boolean" default="false"/>
         </in-parameters>
         <actions>
-            <if condition="fiscalTaxDocumentAggrEnumId == 'Ftdt-Boletas'">
-                <then>
-                    <service-call name="mchile.sii.DTEServices.load#Boleta" in-map="[xml:xml, pdf:pdf, organizationPartyId:organizationPartyId, productMatch:productMatch, organizationPartyId:organizationPartyId]"/>
-                </then>
-                <else>
-                    <service-call name="mchile.sii.DTEServices.load#Dte" in-map="[xml:xml, pdf:pdf, organizationPartyId:organizationPartyId, productMatch:productMatch, organizationPartyId:organizationPartyId, invoiceId:invoiceId]"/>
-                </else>
-            </if>
+            <log message="createUnknownReceiver preLoad#Dte: ${createUnknownReceiver}"/>
+            <log message="createUnknownIssuer preLoad#Dte: ${createUnknownIssuer}"/>
+            <log message="requireIssuerInternalOrg preLoad#Dte: ${requireIssuerInternalOrg}"/>
+            <log message="requireReceiverInternalOrg preLoad#Dte: ${requireReceiverInternalOrg}"/>
+            <if condition="fiscalTaxDocumentAggrEnumId == 'Ftdt-Boletas'"><then>
+                <service-call name="mchile.sii.DTEServices.load#Boleta" in-map="context"/>
+            </then><else>
+                <service-call name="mchile.sii.DTEServices.load#DteFromFile" in-map="context"/>
+            </else></if>
         </actions>
     </service>
 
@@ -997,7 +1000,6 @@ along with this software (see the LICENSE.md file). If not, see
             Carga boleta en XML recibida por la organización
         </description>
         <in-parameters>
-            <parameter name="organizationPartyId" required="true"/>
             <parameter name="invoiceId"/>
             <parameter name="xml" type="org.apache.commons.fileupload.FileItem" required="true"/>
             <parameter name="pdf" type="org.apache.commons.fileupload.FileItem" required="true"/>
@@ -1045,41 +1047,71 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="requireIssuerInternalOrg" default="false" type="Boolean"/>
             <parameter name="createUnknownReceiver" default="false" type="Boolean"/>
             <parameter name="requireReceiverInternalOrg" default="false" type="Boolean"/>
-            <parameter name="xmlFile" type="org.apache.commons.fileupload.FileItem" required="true"/>
-            <parameter name="pdfFile" type="org.apache.commons.fileupload.FileItem" required="true"/>
+            <parameter name="xml" type="org.apache.commons.fileupload.FileItem" required="true"/>
+            <parameter name="pdf" type="org.apache.commons.fileupload.FileItem" required="true"/>
             <parameter name="attemptProductMatch" default-value="false"/>
         </in-parameters>
+        <out-parameters>
+            <parameter name="amountImportedOk" type="Integer"/>
+            <parameter name="amountImportedWithDiscrepancies" type="Integer"/>
+            <parameter name="amountRejected" type="Integer"/>
+        </out-parameters>
         <actions>
             <script><![CDATA[
                 import cl.moit.dte.MoquiDTEUtils
+                import javax.xml.xpath.XPath
+                import javax.xml.xpath.XPathConstants
+                import javax.xml.xpath.XPathFactory
+                import javax.xml.xpath.XPathExpression
+                import org.moqui.context.ExecutionContext
 
-                if (xmlFile) {
-                    xmlBytes = xmlFile.get()
+                Integer amountImportedOk = 0
+                Integer amountImportedWithDiscrepancies = 0
+                Integer amountRejected = 0
+
+                if (xml) {
+                    xmlBytes = xml.get()
                     org.w3c.dom.Document doc = MoquiDTEUtils.parseDocument(xmlBytes)
+                    org.w3c.dom.Element docElem = doc.getDocumentElement()
                     if (pdfFile) {
                         pdfBytes = pdfFile.get()
                         pdfFileName = pdfFile.name
                     }
-                    if (doc.getNodeName() == "DTE") {
-                        ec.service.sync().name("mchile.sii.DTEServices.load#DteFromDom").parameters(context + [domNode: doc])
-                    } else if (doc.getNodeName() == "SetDTE") {
+                    if (docElem.getNodeName() == "DTE") {
+                        ec.service.sync().name("mchile.sii.DTEServices.load#DteFromDom").parameters(context + [domNode: docElem])
+                    } else if (docElem.getNodeName() == "SetDTE") {
                         XPath xpath = XPathFactory.newInstance().newXPath()
                         xpath.setNamespaceContext(new MoquiDTEUtils.DefaultNamespaceContext().addNamespace("sii", "http://www.sii.cl/SiiDte"))
                         XPathExpression expression = xpath.compile("/sii:SetDTE/sii:DTE")
-                        org.w3c.dom.NodeList dteNodeList = (org.w3c.dom.NodeList) expression.evaluate(doc.getDocumentElement(), XPathConstants.NODESET)
-                        dteNodeList.each { org.w3c.dom.Node domNode ->
-                            ec.service.sync().name("mchile.sii.DTEServices.load#DteFromDom").parameters(context + [domNode: domNode])
+                        if (docElem.getAttributes().getNamedItem("xmlns")?.getTextContent() != "http://www.sii.cl/SiiDte") {
+                            new cl.moit.dte.XmlNamespaceTranslator().addTranslation(null, "http://www.sii.cl/SiiDte")
+                                    .addTranslation("", "http://www.sii.cl/SiiDte").translateNamespaces(doc)
+                            doc = MoquiDTEUtils.parseDocument(MoquiDTEUtils.getRawXML(doc, true))
+                            docElem = doc.getDocumentElement()
                         }
-                        ec.message.addMessage("Procesados ${dteNodeList.size()} DTEs")
-                    } else if (doc.getNodeName() == "EnvioDTE") {
-                        if (!MoquiDTEUtils.verifySignature(doc, "/sii:EnvioDTE/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()"))
+                        org.w3c.dom.NodeList dteNodeList = (org.w3c.dom.NodeList) expression.evaluate(docElem, XPathConstants.NODESET)
+                        dteNodeList.each { org.w3c.dom.Node domNode ->
+                            outMap = ec.service.sync().name("mchile.sii.DTEServices.load#DteFromDom").parameters(context + [domNode: domNode]).requireNewTransaction(true).call()
+                            if (outMap.estadoRecepDte == 0)
+                                amountImportedOk++
+                            else if (outMap.estadoRecepDte == 2)
+                                amountRejected++
+                            else if (outMap.estadoRecepDte == 1)
+                                amountImportedWithDiscrepancies++
+                            else
+                                ec.message.addError("estadoRecepDte no reconocido: ${estadoRecepDte}")
+                        }
+                        ec.message.addMessage("Procesados ${dteNodeList.length} DTEs")
+                    } else if (docElem.getNodeName() == "EnvioDTE") {
+                        if (!MoquiDTEUtils.verifySignature(docElem, "/sii:EnvioDTE/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()"))
                             ec.message.addError("Firma del envío inválida")
-                        ec.service.sync().name("mchile.sii.DTECommServices.store#ReceivedEnvio").parameters(context + [contentBytes:xmlBytes, fileName:xmlFile.getName() ])
+                        ec.service.sync().name("mchile.sii.DTECommServices.store#ReceivedEnvio").parameters(context + [contentBytes: xmlBytes, fileName: xml.getName()])
                     } else {
-                        ec.message.addError("Unknown document ${doc.getNodeName()}")
+                        ec.message.addError("Unknown document ${docElem.getNodeName()}")
                     }
                 }
-            ]]></script>
+                ec.message.addMessage("Importados: ${amountImportedOk}, Importados con Discrepancias: ${amountImportedWithDiscrepancies}, Rechazados: ${amountRejected}")
+                ]]></script>
         </actions>
     </service>
 
