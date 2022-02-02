@@ -359,23 +359,26 @@ if (errorMessages.size() > 0) {
     ec.logger.error(recepDteGlosa)
     if (recepDteGlosa.length() > 256)
         recepDteGlosa = recepDteGlosa.substring(0, 256)
-    return
+    invoice.statusId = 'InvoiceCancelled'
+    invoice.update()
+    sentRecStatusId = 'Ftd-ReceiverReject'
 } else if (discrepancyMessages.size() > 0) {
     estadoRecepDte = 1
     recepDteGlosa = 'ACEPTADO CON DISCREPANCIAS: ' + discrepancyMessages.join(', ')
     ec.logger.warn(recepDteGlosa)
     if (recepDteGlosa.length() > 256)
         recepDteGlosa = recepDteGlosa.substring(0, 256)
-    return
+    sentRecStatusId = 'Ftd-ReceiverAccept'
 } else {
     estadoRecepDte = 0
     recepDteGlosa = 'ACEPTADO OK'
+    sentRecStatusId = 'Ftd-ReceiverAccept'
 }
 
 // Se guarda DTE recibido en la base de datos
 createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rutEmisor, fiscalTaxDocumentTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte,
              receiverPartyId:receiverPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', receiverPartyIdValue:rutReceptor, date:issuedTimestamp, invoiceId:invoiceId, statusId:'Ftd-Issued',
-             sendAuthStatusId:'Ftd-SentAuthAccepted', sendRecStatusId:'Ftd-SentRec']
+             sentAuthStatusId:'Ftd-SentAuthAccepted', sentRecStatusId:sentRecStatusId]
 mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call()
 fiscalTaxDocumentId = mapOut.fiscalTaxDocumentId
 
