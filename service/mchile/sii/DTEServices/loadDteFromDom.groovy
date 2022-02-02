@@ -207,8 +207,12 @@ detalleList.each { detalle ->
     price = detalle.PrcItem ? (detalle.PrcItem.text() as BigDecimal) : null
     montoItem = detalle.MontoItem ? (detalle.MontoItem.text() as BigDecimal) : null
     totalCalculado += montoItem
-    if (price == null && montoItem != null) {
+    if (((price?:0) * (quantity?:0)) == 0 && montoItem != null) {
+        if (quantity == null)
+            quantity = 1
         price = montoItem / quantity
+    } else if ((price * quantity).setScale(0, RoundingMode.HALF_UP) != montoItem) {
+        discrepancyMessages.add("En detalle ${nroDetalles} (${itemDescription?:''}), montoItem (${montoItem} no calza con el valor unitario (${price}) multiplicado por cantidad (${quantity}) redondeado")
     }
     try {
         indExe = detalle.IndExe?.text() as Integer
@@ -231,7 +235,7 @@ detalleList.each { detalle ->
 
     productId = null
     if ((quantity*price).setScale(0, RoundingMode.HALF_UP) != montoItem) {
-        errorMessages.add("montoItem (${montoItem} no calza con el valor unitario (${price}) multiplicado por cantidad (${quantity})")
+        discrepancyMessages.add("montoItem (${montoItem} no calza con el valor unitario (${price}) multiplicado por cantidad (${quantity})")
     }
     if ((quantity).setScale(0, RoundingMode.HALF_UP) != quantity) {
         // TODO: change unit if known (e.g. from Kilograms to grams)
@@ -275,10 +279,10 @@ detalleList.each { detalle ->
                     .conditionDate("fromDate", "thruDate", issuedTimestamp).list()
             exentoBd = exentoList.size() > 0
             if (exentoBd != itemExento)
-                errorMessages.add("Exento mismatch, XML dice ${itemExento? '' : 'no '} exento, producto en BD dice ${exentoBd? '' : 'no '} exento")
+                discrepancyMessages.add("Exento mismatch, XML dice ${itemExento? '' : 'no '} exento, producto en BD dice ${exentoBd? '' : 'no '} exento")
             product = ec.entity.find("mantle.product.Product").condition("productId", productId).one()
             if (product.productName.toString().trim().toLowerCase() != itemDescription.trim().toLowerCase())
-                errorMessages.add("Description mismatch, XML dice ${itemDescription}, producto en BD dice ${product.productName}")
+                discrepancyMessages.add("Description mismatch, XML dice ${itemDescription}, producto en BD dice ${product.productName}")
             ec.logger.info("Agregando producto preexistente ${productId}, cantidad ${quantity} *************** orderId: ${orderId}")
         } else {
             if (itemExento)
@@ -334,12 +338,12 @@ globalList.each { globalItem ->
     totalCalculado += amount
 }
 
-if (totalCalculado != (montoNeto + montoExento)) errorMessages.add("Monto total (neto + exento) no coincide, calculado: ${totalCalculado}, recibido: ${montoNeto + montoExento}")
+if (totalCalculado != (montoNeto + montoExento)) discrepancyMessages.add("Monto total (neto + exento) no coincide, calculado: ${totalCalculado}, recibido: ${montoNeto + montoExento}")
 
 totalCalculadoIva = (montoNeto * vatTaxRate).setScale(0, RoundingMode.HALF_UP)
 
 if (iva != totalCalculadoIva) {
-    errorMessages.add("No coincide monto IVA, DTE indica ${iva}, calculado: ${totalCalculadoIva}")
+    discrepancyMessages.add("No coincide monto IVA, DTE indica ${iva}, calculado: ${totalCalculadoIva}")
 }
 if (totalCalculadoIva > 0) {
     ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemVatTax', description: 'IVA', quantity: 1, amount: totalCalculadoIva, taxAuthorityId:'CL_SII']).call()
@@ -347,7 +351,7 @@ if (totalCalculadoIva > 0) {
 
 invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", invoiceId).one()
 if (invoice.invoiceTotal != mntTotal)
-    errorMessages.add("No coinciden totales, DTE indica ${mntTotal}, calculado: ${invoice.invoiceTotal}")
+    discrepancyMessages.add("No coinciden totales, DTE indica ${mntTotal}, calculado: ${invoice.invoiceTotal}")
 
 if (errorMessages.size() > 0) {
     estadoRecepDte = 2
