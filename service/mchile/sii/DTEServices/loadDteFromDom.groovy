@@ -263,20 +263,18 @@ detalleList.each { detalle ->
         totalExento += montoItem
 
     productId = null
-    if ((quantity).setScale(0, RoundingMode.HALF_UP) != quantity) {
-        // TODO: change unit if known (e.g. from Kilograms to grams)
-        itemDescription = "${itemDescription} (cantidad original: ${quantity}, precio original: ${price})"
-        price = ((price * quantity)).setScale(0, RoundingMode.HALF_UP)
-        quantity = 1
-    } else if (quantity*price != (quantity*price).setScale(0, RoundingMode.HALF_UP)) {
-        itemDescription = "${itemDescription} (cantidad original: ${quantity}, precio original: ${price})"
+    dteQuantity = null
+    dteAmount = null
+    if (quantity*price != (quantity*price).setScale(0, RoundingMode.HALF_UP)) {
+        dteQuantity = quantity
+        dteAmount = price
         price = (price * quantity).setScale(0, RoundingMode.HALF_UP)
         quantity = 1
     }
 
     Map itemMap = null
     if (!attemptProductMatch) {
-        itemMap = ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales',
+        itemMap = ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales', dteQuantity:dteQuantity, dteAmount:dteAmount,
                                                                                                 productId: (itemExento? 'SRVCEXENTO': null), description: itemDescription, quantity: quantity, amount: price]).call()
     } else {
         ec.logger.warn("Buscando código item")
@@ -321,7 +319,7 @@ detalleList.each { detalle ->
                 productId = 'SRVCEXENTO'
             ec.logger.warn("Producto ${itemDescription} no existe en el sistema, se creará como genérico")
         }
-        itemMap = ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales',
+        itemMap = ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales', dteQuantity:dteQuantity, dteAmount:dteAmount,
                                                                                                 productId: productId, description: itemDescription, quantity: quantity, amount: price]).call()
     }
     if (descuentoMonto) {
