@@ -28,17 +28,25 @@ if (domNode.getAttributes().getNamedItem("xmlns")?.getTextContent() == "http://w
     documentPath = "/sii:DTE/sii:Documento"
 } else {
     ec.logger.info("No namespace")
+    documentPath = "/DTE/Documento"
     dteXml = MoquiDTEUtils.getRawXML(domNode, true)
     doc2 = MoquiDTEUtils.parseDocument(dteXml)
-    new cl.moit.dte.XmlNamespaceTranslator().addTranslation(null, "http://www.sii.cl/SiiDte").addTranslation("", "http://www.sii.cl/SiiDte").translateNamespaces(doc2)
-    doc2 = MoquiDTEUtils.parseDocument(MoquiDTEUtils.getRawXML(doc2, true))
-    domNode = doc2.getDocumentElement()
-    documentPath = "/sii:DTE/sii:Documento"
+    if (!MoquiDTEUtils.verifySignature(doc2, documentPath, null)) {
+        dteXml = MoquiDTEUtils.getRawXML(domNode, true)
+        doc2 = MoquiDTEUtils.parseDocument(dteXml)
+        new cl.moit.dte.XmlNamespaceTranslator().addTranslation(null, "http://www.sii.cl/SiiDte").addTranslation("", "http://www.sii.cl/SiiDte").translateNamespaces(doc2)
+        doc2 = MoquiDTEUtils.parseDocument(MoquiDTEUtils.getRawXML(doc2, true))
+        domNode = doc2.getDocumentElement()
+        documentPath = "/sii:DTE/sii:Documento"
+    }
 }
 dteXml = MoquiDTEUtils.getRawXML(domNode, true)
 doc2 = MoquiDTEUtils.parseDocument(dteXml)
 if (!MoquiDTEUtils.verifySignature(doc2, documentPath, null)) {
-    errorMessages.add("Signature mismatch for document ${documento.Documento.'@ID'.text()}")
+    if (ignoreSignatureErrors)
+        discrepancyMessages.add("Signature mismatch for document ${documento.Documento.'@ID'.text()}")
+    else
+        errorMessages.add("Signature mismatch for document ${documento.Documento.'@ID'.text()}")
 }
 
 vatTaxRate = ec.service.sync().name("mchile.TaxServices.get#VatTaxRate").call().taxRate
@@ -213,13 +221,15 @@ detalleList.each { detalle ->
     BigDecimal quantity = detalle.QtyItem ? (detalle.QtyItem.text() as BigDecimal) : null
     price = detalle.PrcItem ? (detalle.PrcItem.text() as BigDecimal) : null
     montoItem = detalle.MontoItem ? (detalle.MontoItem.text() as BigDecimal) : null
+    descuentoMonto = detalle.DescuentoMonto ? (detalle.DescuentoMonto.text() as BigDecimal) : 0 as BigDecimal
+    descuentoMonto = descuentoMonto.setScale(0, RoundingMode.HALF_UP)
     totalCalculado += montoItem
     if (((price?:0) * (quantity?:0)) == 0 && montoItem != null) {
         if (quantity == null)
             quantity = 1 as BigDecimal
-        price = montoItem / quantity
-    } else if ((price * quantity).setScale(0, RoundingMode.HALF_UP) != montoItem) {
-        discrepancyMessages.add("En detalle ${nroDetalles} (${itemDescription?:''}), montoItem (${montoItem} no calza con el valor unitario (${price}) multiplicado por cantidad (${quantity}) redondeado")
+        price = (montoItem-descuentoMonto) / quantity
+    } else if (((price * quantity) - descuentoMonto).setScale(0, RoundingMode.HALF_UP) != montoItem) {
+        discrepancyMessages.add("En detalle ${nroDetalles} (${itemDescription?:''}), montoItem (${montoItem} no calza con el valor unitario (${price}) multiplicado por cantidad (${quantity}) menos descuento (${descuentoMonto}), redondeado")
     }
     try {
         indExe = detalle.IndExe?.text() as Integer
@@ -241,17 +251,20 @@ detalleList.each { detalle ->
         totalExento += montoItem
 
     productId = null
-    if ((quantity*price).setScale(0, RoundingMode.HALF_UP) != montoItem) {
-        discrepancyMessages.add("montoItem (${montoItem} no calza con el valor unitario (${price}) multiplicado por cantidad (${quantity})")
-    }
     if ((quantity).setScale(0, RoundingMode.HALF_UP) != quantity) {
         // TODO: change unit if known (e.g. from Kilograms to grams)
-        itemDescription = "${itemDescription} (cantidad original: ${quantity})"
-        price = price * quantity
+        itemDescription = "${itemDescription} (cantidad original: ${quantity}, precio original: ${price})"
+        price = ((price * quantity)).setScale(0, RoundingMode.HALF_UP)
+        quantity = 1
+    } else if (quantity*price != (quantity*price).setScale(0, RoundingMode.HALF_UP)) {
+        itemDescription = "${itemDescription} (cantidad original: ${quantity}, precio original: ${price})"
+        price = (price * quantity).setScale(0, RoundingMode.HALF_UP)
         quantity = 1
     }
+
+    Map itemMap = null
     if (!attemptProductMatch) {
-        ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales',
+        itemMap = ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales',
                                                                                                 productId: (itemExento? 'SRVCEXENTO': null), description: itemDescription, quantity: quantity, amount: price]).call()
     } else {
         ec.logger.warn("Buscando código item")
@@ -296,8 +309,13 @@ detalleList.each { detalle ->
                 productId = 'SRVCEXENTO'
             ec.logger.warn("Producto ${itemDescription} no existe en el sistema, se creará como genérico")
         }
-        ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales',
+        itemMap = ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales',
                                                                                                 productId: productId, description: itemDescription, quantity: quantity, amount: price]).call()
+    }
+    if (descuentoMonto) {
+        parentItemSeqId = itemMap.invoiceItemSeqId
+        ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, parentItemSeqId:parentItemSeqId, itemTypeEnumId:'ItemDiscount',
+                                                                                                          description: 'Descuento', quantity: 1, amount:-descuentoMonto]).call()
     }
 
 }

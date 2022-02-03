@@ -973,20 +973,17 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="invoiceId"/>
-            <parameter name="xml" type="org.apache.commons.fileupload.FileItem" required="true"/>
-            <parameter name="pdf" type="org.apache.commons.fileupload.FileItem" required="true"/>
+            <parameter name="xml" type="Object" required="true"/>
+            <parameter name="pdf" type="Object" required="true"/>
             <parameter name="productMatch" default-value="false"/>
             <parameter name="fiscalTaxDocumentAggrEnumId" required="true"/>
             <parameter name="createUnknownIssuer" type="Boolean" default="false"/>
             <parameter name="requireIssuerInternalOrg" type="Boolean" default="false"/>
             <parameter name="createUnknownReceiver" type="Boolean" default="false"/>
             <parameter name="requireReceiverInternalOrg" type="Boolean" default="false"/>
+            <parameter name="ignoreSignatureErrors" type="Boolean" default="false"/>
         </in-parameters>
         <actions>
-            <log message="createUnknownReceiver preLoad#Dte: ${createUnknownReceiver}"/>
-            <log message="createUnknownIssuer preLoad#Dte: ${createUnknownIssuer}"/>
-            <log message="requireIssuerInternalOrg preLoad#Dte: ${requireIssuerInternalOrg}"/>
-            <log message="requireReceiverInternalOrg preLoad#Dte: ${requireReceiverInternalOrg}"/>
             <if condition="fiscalTaxDocumentAggrEnumId == 'Ftdt-Boletas'"><then>
                 <service-call name="mchile.sii.DTEServices.load#Boleta" in-map="context"/>
             </then><else>
@@ -1021,6 +1018,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="envioDteId"><description>Si el DTE forma parte de un EnvioDTE, el ID de envío DTE recibido en la BD para asociar el documento a crear</description></parameter>
             <parameter name="envioRespuestaId"><description>Si el DTE forma parte de un EnvioDTE, el ID de envío Respuesta en la BD para asociar el documento a crear</description></parameter>
             <parameter name="invoiceStatusId" default-value="InvoiceReceived"/>
+            <parameter name="ignoreSignatureErrors" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
             <parameter name="tipoDte" type="Integer" required="true"/>
@@ -1048,8 +1046,9 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="createUnknownReceiver" default="false" type="Boolean"/>
             <parameter name="requireReceiverInternalOrg" default="false" type="Boolean"/>
             <parameter name="xml" type="org.apache.commons.fileupload.FileItem" required="true"/>
-            <parameter name="pdf" type="org.apache.commons.fileupload.FileItem" required="true"/>
-            <parameter name="attemptProductMatch" default-value="false"/>
+            <parameter name="pdf" type="org.apache.commons.fileupload.FileItem"/>
+            <parameter name="attemptProductMatch" default-value="false" type="Boolean"/>
+            <parameter name="ignoreSignatureErrors" default-value="false" type="Boolean"/>
         </in-parameters>
         <out-parameters>
             <parameter name="amountImportedOk" type="Integer"/>
@@ -1069,27 +1068,38 @@ along with this software (see the LICENSE.md file). If not, see
                 Integer amountImportedWithDiscrepancies = 0
                 Integer amountRejected = 0
 
-                if (xml) {
+                xmlBytes = null
+                if (xml instanceof org.apache.commons.fileupload.FileItem) {
                     xmlBytes = xml.get()
+                    xmlFileName = xml.name
+                } else if (xml instanceof String) {
+                    rr = ec.resource.getLocationReference(xml)
+                    xmlBytes = rr.openStream().readAllBytes()
+                    xmlFileName = rr.getFileName()
+                }
+                if (pdf instanceof org.apache.commons.fileupload.FileItem) {
+                    pdfBytes = pdf.get()
+                    pdfFileName = pdf.name
+                } else if (pdf instanceof String) {
+                    rr = ec.resource.getLocationReference(pdf)
+                    pdfBytes = rr.openStream().readAllBytes()
+                    pdfFileName = rr.getFileName()
+                }
+
+                if (xmlBytes) {
                     org.w3c.dom.Document doc = MoquiDTEUtils.parseDocument(xmlBytes)
                     org.w3c.dom.Element docElem = doc.getDocumentElement()
-                    if (pdfFile) {
-                        pdfBytes = pdfFile.get()
-                        pdfFileName = pdfFile.name
-                    }
                     if (docElem.getNodeName() == "DTE") {
                         ec.service.sync().name("mchile.sii.DTEServices.load#DteFromDom").parameters(context + [domNode: docElem])
                     } else if (docElem.getNodeName() == "SetDTE") {
                         XPath xpath = XPathFactory.newInstance().newXPath()
                         xpath.setNamespaceContext(new MoquiDTEUtils.DefaultNamespaceContext().addNamespace("sii", "http://www.sii.cl/SiiDte"))
                         XPathExpression expression = xpath.compile("/sii:SetDTE/sii:DTE")
-                        if (docElem.getAttributes().getNamedItem("xmlns")?.getTextContent() != "http://www.sii.cl/SiiDte") {
-                            new cl.moit.dte.XmlNamespaceTranslator().addTranslation(null, "http://www.sii.cl/SiiDte")
-                                    .addTranslation("", "http://www.sii.cl/SiiDte").translateNamespaces(doc)
-                            doc = MoquiDTEUtils.parseDocument(MoquiDTEUtils.getRawXML(doc, true))
-                            docElem = doc.getDocumentElement()
-                        }
                         org.w3c.dom.NodeList dteNodeList = (org.w3c.dom.NodeList) expression.evaluate(docElem, XPathConstants.NODESET)
+                        if (dteNodeList.length == 0) {
+                            expression = xpath.compile("/SetDTE/DTE")
+                            dteNodeList = (org.w3c.dom.NodeList) expression.evaluate(docElem, XPathConstants.NODESET)
+                        }
                         dteNodeList.each { org.w3c.dom.Node domNode ->
                             outMap = ec.service.sync().name("mchile.sii.DTEServices.load#DteFromDom").parameters(context + [domNode: domNode]).requireNewTransaction(true).call()
                             if (outMap.estadoRecepDte == 0)
