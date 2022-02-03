@@ -65,8 +65,14 @@ tipoDte = encabezado.IdDoc.TipoDTE.text()
 folioDte = encabezado.IdDoc.Folio.text() as Integer
 fchEmis = encabezado.IdDoc.FchEmis.text()
 
+reserved = ec.service.sync().name("mchile.sii.SIIServices.get#RutEspeciales").call()
+
 emisor = encabezado.Emisor
 rutEmisor = emisor.RUTEmisor.text()
+if (rutEmisor in reserved.rutList) {
+    discrepancyMessages.add("Rut de emisor es Rut reservado, no se puede importar automáticamente")
+    return
+}
 
 issuerPartyId = ec.service.sync().name("mchile.sii.DTECommServices.get#PartyIdByRut").parameters([idValue:rutEmisor, createUnknown:createUnknownIssuer, razonSocial:emisor.RznSoc.text(), roleTypeId:'Supplier',
                                                                                               giro:emisor.GiroEmis.text(), direccion:emisor.DirOrigen.text(), comuna:emisor.CmnaOrigen.text(), ciudad:emisor.CiudadOrigen.text()]).call().partyId
@@ -123,7 +129,11 @@ if (montoNeto > 0 && tasaIva / 100 != vatTaxRate) errorMessages.add("Tasa IVA no
 
 // Datos receptor
 rutReceptor = encabezado.Receptor.RUTRecep.text()
-rutRecep = rutReceptor
+if (rutReceptor in reserved.rutList) {
+    discrepancyMessages.add("Rut de receptor es Rut reservado, no se puede importar automáticamente")
+    estadoRecepDte = 2
+    return
+}
 
 if (rutReceptorCaratula != null && rutReceptorCaratula != rutReceptor) {
     discrepancyMessages.add("Rut mismatch: carátula indica Rut receptor ${rutEmisorCaratula}, pero documento indica ${rutEmisor}")
@@ -140,7 +150,7 @@ if (existingDteList) {
             .disableAuthz().list()
     if (contentList) {
     } else {
-        ec.message.addError("No hay contenido local")
+        //ec.message.addError("No hay contenido local")
     }
 }
 
@@ -193,8 +203,10 @@ if (tipoDteEnumId == 'Ftdt-61') {
     toPartyId = receiverPartyId
     invoiceTypeEnumId = 'InvoiceSales'
 }
-if (ec.message.hasError())
+if (ec.message.hasError()) {
+    estadoRecepDte = 2
     return
+}
 
 invoiceCreateMap =  [fromPartyId:fromPartyId, toPartyId:toPartyId, invoiceTypeEnumId:invoiceTypeEnumId, invoiceDate:issuedTimestamp, currencyUomId:'CLP', statusId:invoiceStatusId]
 if (dueTimestamp)
