@@ -211,8 +211,10 @@ if (ec.message.hasError()) {
 invoiceCreateMap =  [fromPartyId:fromPartyId, toPartyId:toPartyId, invoiceTypeEnumId:invoiceTypeEnumId, invoiceDate:issuedTimestamp, currencyUomId:'CLP', statusId:invoiceStatusId]
 if (dueTimestamp)
     invoiceCreateMap.dueDate = dueTimestamp
-invoiceMap = ec.service.sync().name("mantle.account.InvoiceServices.create#Invoice").parameters(invoiceCreateMap).disableAuthz().call()
-invoiceId = invoiceMap.invoiceId
+if (tipoDteEnumId in ['Ftdt-101', 'Ftdt-102', 'Ftdt-109', 'Ftdt-110', 'Ftdt-111', 'Ftdt-112', 'Ftdt-30', 'Ftdt-32', 'Ftdt-33', 'Ftdt-34', 'Ftdt-35', 'Ftdt-38', 'Ftdt-39']) {
+    invoiceMap = ec.service.sync().name("mantle.account.InvoiceServices.create#Invoice").parameters(invoiceCreateMap).disableAuthz().call()
+    invoiceId = invoiceMap.invoiceId
+}
 BigDecimal montoItem = 0 as BigDecimal
 detalleList = documento.Documento.Detalle
 ec.logger.warn("Recorriendo detalles: ${detalleList.size()}")
@@ -273,7 +275,7 @@ detalleList.each { detalle ->
     }
 
     Map itemMap = null
-    if (!attemptProductMatch) {
+    if (!attemptProductMatch && invoiceId) {
         itemMap = ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales', dteQuantity:dteQuantity, dteAmount:dteAmount,
                                                                                                 productId: (itemExento? 'SRVCEXENTO': null), description: itemDescription, quantity: quantity, amount: price]).call()
     } else {
@@ -319,13 +321,14 @@ detalleList.each { detalle ->
                 productId = 'SRVCEXENTO'
             ec.logger.warn("Producto ${itemDescription} no existe en el sistema, se creará como genérico")
         }
-        itemMap = ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales', dteQuantity:dteQuantity, dteAmount:dteAmount,
+        if (invoiceId)
+            itemMap = ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales', dteQuantity:dteQuantity, dteAmount:dteAmount,
                                                                                                 productId: productId, description: itemDescription, quantity: quantity, amount: price]).call()
     }
-    if (descuentoMonto) {
+    if (descuentoMonto && invoiceId) {
         parentItemSeqId = itemMap.invoiceItemSeqId
         ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, parentItemSeqId:parentItemSeqId, itemTypeEnumId:'ItemDiscount',
-                                                                                                          description: 'Descuento', quantity: 1, amount:-descuentoMonto]).call()
+                                                                                                description: 'Descuento', quantity: 1, amount:-descuentoMonto]).call()
     }
 
 }
@@ -334,7 +337,7 @@ impuestosMap.each { impuestoCode, impuestoMap ->
     impuestoEnum = ec.entity.find("moqui.basic.Enumeration").condition([parentEnumId: "ItemTCChlDte", enumCode:impuestoCode]).one()
     if (impuestoEnum == null)
         internalErrors.add("Did not find impuesto for code ${impuestoCode}")
-    else
+    else if (invoiceId)
         ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:impuestoEnum.enumId,
                                                                                             description: impuestoEnum.description, quantity: 1, amount: impuestoMap.monto]).call()
 }
@@ -368,7 +371,8 @@ globalList.each { globalItem ->
     }
     if (itemTypeEnumId == 'ItemDiscount')
         amount = -1 * amount
-    ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:itemTypeEnumId,
+    if (invoiceId)
+        ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:itemTypeEnumId,
                                description: globalItem.GlosaDR.text(), quantity:1, amount: amount]).call()
     totalCalculado += amount
 }
@@ -380,13 +384,15 @@ totalCalculadoIva = (montoNeto * vatTaxRate).setScale(0, RoundingMode.HALF_UP)
 if (iva != totalCalculadoIva) {
     discrepancyMessages.add("No coincide monto IVA, DTE indica ${iva}, calculado: ${totalCalculadoIva}")
 }
-if (totalCalculadoIva > 0) {
+if (totalCalculadoIva > 0 && invoiceId) {
     ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemVatTax', description: 'IVA', quantity: 1, amount: totalCalculadoIva, taxAuthorityId:'CL_SII']).call()
 }
 
-invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", invoiceId).one()
-if (invoice.invoiceTotal != montoTotal)
-    discrepancyMessages.add("No coinciden totales, DTE indica ${montoTotal}, calculado: ${invoice.invoiceTotal}")
+if (invoiceId) {
+    invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", invoiceId).one()
+    if (invoice.invoiceTotal != montoTotal)
+        discrepancyMessages.add("No coinciden totales, DTE indica ${montoTotal}, calculado: ${invoice.invoiceTotal}")
+}
 
 if (errorMessages.size() > 0) {
     estadoRecepDte = 2
@@ -394,8 +400,10 @@ if (errorMessages.size() > 0) {
     ec.logger.error(recepDteGlosa)
     if (recepDteGlosa.length() > 256)
         recepDteGlosa = recepDteGlosa.substring(0, 256)
-    invoice.statusId = 'InvoiceCancelled'
-    invoice.update()
+    if (invoice) {
+        invoice.statusId = 'InvoiceCancelled'
+        invoice.update()
+    }
     sentRecStatusId = 'Ftd-ReceiverReject'
 } else if (discrepancyMessages.size() > 0) {
     estadoRecepDte = 1
@@ -469,7 +477,8 @@ referenciasList.each { groovy.util.Node referencia ->
         errorMessages.add("Valor inválido en referencia ${nroRef}, campo CodRef: ${referencia.CodRef.text()}")
     if (tipoDteEnumId == "Ftdt-801") {
         // Orden de Compra, va en el Invoice y no en mchile.dte.ReferenciaDte
-        ec.service.sync().name("update#mantle.account.invoice.Invoice").parameters([invoiceId:invoiceId, otherPartyOrderId:folio, otherPartyOrderDate:refDate]).call()
+        if (invoiceId)
+            ec.service.sync().name("update#mantle.account.invoice.Invoice").parameters([invoiceId:invoiceId, otherPartyOrderId:folio, otherPartyOrderDate:refDate]).call()
     } else if (tipoDteEnumId && refDate) {
         ec.service.sync().name("create#mchile.dte.ReferenciaDte").parameters([invoiceId:invoiceId, referenciaTypeEnumId:'RefDteTypeInvoice', fiscalTaxDocumentTypeEnumId:tipoDteEnumId,
                                                                               folio:folio, fecha: refDate, codigoReferenciaEnumId:codRefEnumId, razonReferencia:referencia.RazonRef?.text()]).call()
