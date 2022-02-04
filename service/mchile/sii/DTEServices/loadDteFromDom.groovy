@@ -32,12 +32,17 @@ if (domNode.getAttributes().getNamedItem("xmlns")?.getTextContent() == "http://w
     documentPath = "/DTE/Documento"
     dteXml = MoquiDTEUtils.getRawXML(domNode, true)
     doc2 = MoquiDTEUtils.parseDocument(dteXml)
-    if (!MoquiDTEUtils.verifySignature(doc2, documentPath, null)) {
-        dteXml = MoquiDTEUtils.getRawXML(domNode, true)
-        doc2 = MoquiDTEUtils.parseDocument(dteXml)
-        new cl.moit.dte.XmlNamespaceTranslator().addTranslation(null, "http://www.sii.cl/SiiDte").addTranslation("", "http://www.sii.cl/SiiDte").translateNamespaces(doc2)
-        doc2 = MoquiDTEUtils.parseDocument(MoquiDTEUtils.getRawXML(doc2, true))
-        domNode = doc2.getDocumentElement()
+    boolean valid = false
+    try {
+        if (!MoquiDTEUtils.verifySignature(doc2, documentPath, null)) {
+            dteXml = MoquiDTEUtils.getRawXML(domNode, true)
+            doc2 = MoquiDTEUtils.parseDocument(dteXml)
+            new cl.moit.dte.XmlNamespaceTranslator().addTranslation(null, "http://www.sii.cl/SiiDte").addTranslation("", "http://www.sii.cl/SiiDte").translateNamespaces(doc2)
+            doc2 = MoquiDTEUtils.parseDocument(MoquiDTEUtils.getRawXML(doc2, true))
+            domNode = doc2.getDocumentElement()
+            documentPath = "/sii:DTE/sii:Documento"
+        }
+    } catch (Exception e) {
         documentPath = "/sii:DTE/sii:Documento"
     }
 }
