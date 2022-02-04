@@ -24,19 +24,44 @@ warningMessages = []
 internalErrors = []
 Integer invoiceItemCount = 0
 
-byte[] dteXml = null
-Document doc2 = null
+byte[] dteXml = MoquiDTEUtils.getRawXML(domNode, true)
+Document doc2 = MoquiDTEUtils.parseDocument(dteXml)
 namespace = MoquiDTEUtils.getNamespace(domNode)
+boolean verified = false
 if (namespace == "http://www.sii.cl/SiiDte") {
-    ec.logger.info("namespace is SII")
+    ec.logger.info("Namespace is SII")
     documentPath = "/sii:DTE/sii:Documento"
+    try {verified = MoquiDTEUtils.verifySignature(doc2, documentPath, null)} catch (Exception e) {
+        ec.logger.error("Verifying signature: ${e.toString()}")
+    }
+    if (!verified) {
+        ec.logger.info("Verifying without namespace")
+        dteXml = new String(MoquiDTEUtils.getRawXML(doc2, true), "ISO-8859-1").replaceAll(" xmlns=\"http://www.sii.cl/SiiDte\"", "").getBytes("ISO-8859-1")
+        doc2 = MoquiDTEUtils.parseDocument(dteXml)
+        documentPath = "/DTE/Documento"
+        try {verified = MoquiDTEUtils.verifySignature(doc2, documentPath, null)} catch (Exception e) {
+            ec.logger.error("Verifying signature: ${e.toString()}")
+        }
+    }
 } else {
     ec.logger.info("No namespace")
     documentPath = "/DTE/Documento"
+    try {verified = MoquiDTEUtils.verifySignature(doc2, documentPath, null)} catch (Exception e) {
+        ec.logger.error("Verifying signature: ${e.toString()}")
+    }
+    if (!verified) {
+        ec.logger.info("Verifying with namespace")
+        new cl.moit.dte.XmlNamespaceTranslator().addTranslation(null, "http://www.sii.cl/SiiDte").addTranslation("", "http://www.sii.cl/SiiDte").translateNamespaces(doc2)
+        dteXml = MoquiDTEUtils.getRawXML(doc2, true)
+        doc2 = MoquiDTEUtils.parseDocument(dteXml)
+        domNode = doc2.getDocumentElement()
+        documentPath = "/sii:DTE/sii:Documento"
+        try {verified = MoquiDTEUtils.verifySignature(doc2, documentPath, null)} catch (Exception e) {
+            ec.logger.error("Verifying signature: ${e.toString()}")
+        }
+    }
 }
-dteXml = MoquiDTEUtils.getRawXML(domNode, true)
-doc2 = MoquiDTEUtils.parseDocument(dteXml)
-if (!MoquiDTEUtils.verifySignature(doc2, documentPath, null)) {
+if (!verified) {
     if (ignoreSignatureErrors)
         discrepancyMessages.add("Signature mismatch for document ${documento.Documento.'@ID'.text()}")
     else
