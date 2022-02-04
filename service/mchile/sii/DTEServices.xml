@@ -1054,6 +1054,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="amountImportedOk" type="Integer"/>
             <parameter name="amountImportedWithDiscrepancies" type="Integer"/>
             <parameter name="amountRejected" type="Integer"/>
+            <parameter name="importedEnvios" type="Integer"/>
         </out-parameters>
         <actions>
             <script><![CDATA[
@@ -1067,6 +1068,7 @@ along with this software (see the LICENSE.md file). If not, see
                 Integer amountImportedOk = 0
                 Integer amountImportedWithDiscrepancies = 0
                 Integer amountRejected = 0
+                Integer importedEnvios = 0
 
                 xmlBytes = null
                 if (xml instanceof org.apache.commons.fileupload.FileItem) {
@@ -1115,12 +1117,13 @@ along with this software (see the LICENSE.md file). If not, see
                     } else if (docElem.getNodeName() == "EnvioDTE") {
                         if (!MoquiDTEUtils.verifySignature(docElem, "/sii:EnvioDTE/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()"))
                             ec.message.addError("Firma del envío inválida")
-                        ec.service.sync().name("mchile.sii.DTECommServices.store#ReceivedEnvio").parameters(context + [contentBytes: xmlBytes, fileName: xmlFileName])
+                        ec.service.sync().name("mchile.sii.DTECommServices.store#ReceivedEnvio").parameters(context + [contentBytes: xmlBytes, fileName: xmlFileName]).call()
+                        importedEnvios++
                     } else {
                         ec.message.addError("Unknown document ${docElem.getNodeName()}")
                     }
                 }
-                ec.message.addMessage("Importados: ${amountImportedOk}, Importados con Discrepancias: ${amountImportedWithDiscrepancies}, Rechazados: ${amountRejected}")
+                ec.message.addMessage("Importados: ${amountImportedOk}, Importados con Discrepancias: ${amountImportedWithDiscrepancies}, Rechazados: ${amountRejected}, Envios: ${importedEnvios}")
                 ]]></script>
         </actions>
     </service>
@@ -3145,6 +3148,33 @@ along with this software (see the LICENSE.md file). If not, see
             </iterate>
 
             <if condition="rs1.equals(rs2)"><set field="equivalent" from="true"/><return/></if>
+        </actions>
+    </service>
+
+    <service verb="check" noun="DiscrepantInvoices">
+        <actions>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocumentAndInvoice" list="dteList">
+                <econdition field-name="dteAmount" operator="not-equals" to-field-name="invoiceTotal"/>
+            </entity-find>
+            <log message="Found ${dteList.size()} discrepant invoices"/>
+            <set field="betweenItemCountAndQuantity" from="0"/>
+            <iterate list="dteList" entry="dte">
+                <set field="invoiceTotal" from="dte.invoiceTotal" type="BigDecimal"/>
+                <set field="dteAmount" from="dte.dteAmount" type="BigDecimal"/>
+                <!--<log message="processing dte, invoiceTotal ${invoiceTotal}, dteAmount ${dteAmount}"/>-->
+                <set field="difference" from="invoiceTotal-dteAmount"/>
+                <entity-find-count entity-name="mantle.account.invoice.InvoiceItem" count-field="itemCount">
+                    <econdition field-name="invoiceId" from="dte.invoiceId"/>
+                </entity-find-count>
+                <set field="itemCount" from="0" type="Integer"/>
+                <!--
+                <log message="DTE ${dte.fiscalTaxDocumentId}, invoice ${dte.invoiceId}: diff ${difference}, total quantity: ${totalQuantity}"/>
+                -->
+                <if condition="difference &gt; 2*itemCount"><then>
+                    <log message="dte.fiscalTaxDocumentId}, invoice ${dte.invoiceId}: Difference is ${ec.l10n.format(difference/dteAmount, '##.##%')}"/>
+                </then></if>
+            </iterate>
+            <log message="More than itemCount, less than totalQuantity: ${betweenItemCountAndQuantity}"/>
         </actions>
     </service>
 
