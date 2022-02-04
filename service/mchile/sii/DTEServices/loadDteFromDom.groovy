@@ -57,7 +57,6 @@ if (verResult.code != VerifyResult.TED_OK)
  */
 tipoDte = encabezado.IdDoc.TipoDTE.text()
 folioDte = encabezado.IdDoc.Folio.text() as Integer
-fchEmis = encabezado.IdDoc.FchEmis.text()
 
 reserved = ec.service.sync().name("mchile.sii.SIIServices.get#RutEspeciales").call()
 
@@ -96,7 +95,7 @@ ec.logger.warn("folio: ${folioDte}")
 
 // Totales
 BigDecimal montoNeto = (encabezado.Totales.MntNeto.text() ?: 0) as BigDecimal
-BigDecimal montoTotal = (encabezado.Totales.MntTotal.text() ?: 0) as BigDecimal
+montoTotal = (encabezado.Totales.MntTotal.text() ?: 0) as BigDecimal // es retornado, si se especifica clase se considera var local y no retorna
 BigDecimal montoExento = (encabezado.Totales.MntExe.text() ?: 0) as BigDecimal
 BigDecimal tasaIva = (encabezado.Totales.TasaIVA.text() ?: 0) as BigDecimal
 BigDecimal iva = (encabezado.Totales.IVA.text() ?: 0) as BigDecimal
@@ -149,7 +148,7 @@ if (existingDteList) {
 }
 
 DateFormat formatter = new SimpleDateFormat("yyyy-MM-dd")
-String fechaEmision = encabezado.IdDoc.FchEmis.text()
+fechaEmision = encabezado.IdDoc.FchEmis.text() // es retornado, si se especifica clase se considera variable local y no se retorna valor
 String fechaVencimiento = encabezado.IdDoc.FchVenc.text()
 Date date = formatter.parse(fechaEmision)
 Timestamp issuedTimestamp = new Timestamp(date.getTime())

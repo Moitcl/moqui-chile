@@ -147,10 +147,10 @@ acuseRecibo.RespuestaDTE('xmlns': 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http
                 RecepcionDTE {
                     TipoDTE(recepcion.tipoDte)
                     Folio(recepcion.folioDte)
-                    FchEmis(recepcion.fchEmis)
+                    FchEmis(recepcion.fechaEmision)
                     RUTEmisor(recepcion.rutEmisor)
-                    RUTRecep(recepcion.rutRecep)
-                    MntTotal(recepcion.mntTotal)
+                    RUTRecep(recepcion.rutReceptor)
+                    MntTotal(recepcion.montoTotal)
                     EstadoRecepDTE(recepcion.estadoRecepDte)
                     RecepDTEGlosa(recepcion.recepDteGlosa)
                 }
