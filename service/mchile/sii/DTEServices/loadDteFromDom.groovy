@@ -11,8 +11,10 @@ ExecutionContext ec = context.ec
 
 boolean processDocument = true
 
-if (domNode == null)
+if (domNode == null) {
     ec.message.addError("No domNode present")
+    return
+}
 
 groovy.util.Node documento = MoquiDTEUtils.dom2GroovyNode(domNode)
 
@@ -24,27 +26,13 @@ Integer invoiceItemCount = 0
 
 byte[] dteXml = null
 Document doc2 = null
-if (domNode.getAttributes().getNamedItem("xmlns")?.getTextContent() == "http://www.sii.cl/SiiDte") {
+namespace = MoquiDTEUtils.getNamespace(domNode)
+if (namespace == "http://www.sii.cl/SiiDte") {
     ec.logger.info("namespace is SII")
     documentPath = "/sii:DTE/sii:Documento"
 } else {
     ec.logger.info("No namespace")
     documentPath = "/DTE/Documento"
-    dteXml = MoquiDTEUtils.getRawXML(domNode, true)
-    doc2 = MoquiDTEUtils.parseDocument(dteXml)
-    boolean valid = false
-    try {
-        if (!MoquiDTEUtils.verifySignature(doc2, documentPath, null)) {
-            dteXml = MoquiDTEUtils.getRawXML(domNode, true)
-            doc2 = MoquiDTEUtils.parseDocument(dteXml)
-            new cl.moit.dte.XmlNamespaceTranslator().addTranslation(null, "http://www.sii.cl/SiiDte").addTranslation("", "http://www.sii.cl/SiiDte").translateNamespaces(doc2)
-            doc2 = MoquiDTEUtils.parseDocument(MoquiDTEUtils.getRawXML(doc2, true))
-            domNode = doc2.getDocumentElement()
-            documentPath = "/sii:DTE/sii:Documento"
-        }
-    } catch (Exception e) {
-        documentPath = "/sii:DTE/sii:Documento"
-    }
 }
 dteXml = MoquiDTEUtils.getRawXML(domNode, true)
 doc2 = MoquiDTEUtils.parseDocument(dteXml)

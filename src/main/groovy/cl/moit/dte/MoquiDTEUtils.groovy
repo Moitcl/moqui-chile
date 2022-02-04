@@ -11,6 +11,7 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.w3c.dom.Document
 import org.w3c.dom.Element
+import org.w3c.dom.NamedNodeMap
 import org.w3c.dom.NodeList
 import org.w3c.dom.ls.LSInput
 import org.w3c.dom.ls.LSResourceResolver
@@ -754,6 +755,34 @@ class MoquiDTEUtils {
         void setCertifiedText(boolean certifiedText) {
 
         }
+    }
+
+    public static String getNamespace(org.w3c.dom.Node node) {
+        Element root = node.getOwnerDocument().getDocumentElement()
+        HashMap<String, String> namespaces = getAllAttributes(root)
+        String prefix = getPrefix(node.getNodeName())
+
+        if (prefix == null)
+            return namespaces.get("xmlns")
+
+        return namespaces.get("xmlns:" + prefix)
+    }/*w  ww . j av a2  s  .c o m*/
+
+    public static HashMap<String, String> getAllAttributes(org.w3c.dom.Node node) {
+        HashMap<String, String> attributes = new HashMap<String, String>()
+        NamedNodeMap attr = node.getAttributes()
+        for (int j = 0; j < attr.getLength(); j++) {
+            attributes.put(attr.item(j).getNodeName(), attr.item(j).getNodeValue())
+        }
+        return attributes
+    }
+
+    public static String getPrefix(String value) {
+        try {
+            return value.substring(0, value.indexOf(":"))
+        } catch (Exception e) {
+        }
+        return null
     }
 
 }
