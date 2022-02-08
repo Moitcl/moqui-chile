@@ -431,8 +431,12 @@ globalList.each { globalItem ->
     totalCalculado += amount
 }
 
+newInvoiceStatusId = null
 if (totalCalculado != (montoNeto + montoExento)) discrepancyMessages.add("Monto total (neto + exento) no coincide, calculado: ${totalCalculado}, en totales de DTE: ${montoNeto + montoExento}")
-if (totalExento != montoExento) discrepancyMessages.add("Monto exento no coincide, calculado: ${totalExento}, en totales de DTE: ${montoExento}")
+if (totalExento != montoExento) {
+    discrepancyMessages.add("Monto exento no coincide, calculado: ${totalExento}, en totales de DTE: ${montoExento}")
+    newInvoiceStatusId = 'InvoiceRequiresManualIntervention'
+}
 
 totalCalculadoIva = (montoNeto * vatTaxRate).setScale(0, RoundingMode.HALF_UP)
 
@@ -447,7 +451,7 @@ if (invoiceId) {
     invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", invoiceId).one()
     if (invoice.invoiceTotal != montoTotal) {
         diff = invoice.invoiceTotal - montoTotal
-        if (diff == iva) {
+        if (diff == iva && totalExento == montoExento) {
             factor = 1-(diff/invoice.invoiceTotal)
             itemList = ec.entity.find("mantle.account.invoice.InvoiceItem").condition("invoiceId", invoiceId).forUpdate(true).list()
             itemList.each {
@@ -476,7 +480,7 @@ if (invoiceId) {
             diff = invoice.invoiceTotal - montoTotal
         }
         diffAbs = (diff < 0) ? -diff : diff
-        if (diffAbs <= invoiceItemCount) {
+        if (diffAbs <= invoiceItemCount && totalExento == montoExento) {
             itemList = ec.entity.find("mantle.account.invoice.InvoiceItem").condition("invoiceId", invoiceId).forUpdate(true).list()
             for (int i = 0; diff != 0 && i < itemList.size(); i++) {
                 increment = diff > 0 ? -1 : 1
@@ -492,7 +496,8 @@ if (invoiceId) {
                 ec.message.addError("Could not handle diff for document ${documento.Documento.'@ID'.text()}")
         } else {
             // No se puede resolver automáticamente la diferencia, se trata como discrepancia
-            discrepancyMessages.add("No coinciden totales, DTE indica ${montoTotal}, calculado: ${invoice.invoiceTotal}")
+            discrepancyMessages.add("No coinciden totales, DTE indica total ${montoTotal} y exento ${montoExento}, calculado: total ${invoice.invoiceTotal} y exento ${totalExento}")
+            newInvoiceStatusId = 'InvoiceRequiresManualIntervention'
         }
     }
 }
@@ -506,6 +511,7 @@ if (errorMessages.size() > 0) {
         recepDteGlosa = recepDteGlosa.substring(0, 256)
     if (invoice) {
         invoice.statusId = 'InvoiceCancelled'
+        invoice.invoiceMessage = recepDteGlosa
         invoice.update()
     }
 } else if (discrepancyMessages.size() > 0) {
@@ -515,6 +521,13 @@ if (errorMessages.size() > 0) {
     if (recepDteGlosa.length() > 256)
         recepDteGlosa = recepDteGlosa.substring(0, 256)
     sentRecStatusId = 'Ftd-ReceiverAck'
+    if (invoice) {
+        invoice.invoiceMessage = recepDteGlosa
+        if (newInvoiceStatusId && invoice) {
+            invoice.statusId = newInvoiceStatusId
+        }
+        invoice.update()
+    }
 } else {
     estadoRecepDte = 0
     recepDteGlosa = 'ACEPTADO OK'
