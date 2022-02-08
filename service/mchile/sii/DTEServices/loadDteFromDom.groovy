@@ -148,8 +148,10 @@ if (montoNeto > 0 && tasaIva / 100 != vatTaxRate) errorMessages.add("Tasa IVA no
 // Datos receptor
 rutReceptor = encabezado.Receptor.RUTRecep.text()
 if (rutReceptor in reserved.rutList) {
-    discrepancyMessages.add("Rut de receptor es Rut reservado, no se puede importar automáticamente")
+    errorMessages.add("Rut de receptor es Rut reservado, no se puede importar automáticamente")
     estadoRecepDte = 2
+    recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+    sentRecStatusId = 'Ftd-ReceiverReject'
     return
 }
 
@@ -161,6 +163,7 @@ mapOut = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").param
 tipoDteEnumId = mapOut.fiscalTaxDocumentTypeEnumId
 existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([issuerPartyIdValue:rutEmisor, fiscalTaxDocumenTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte])
         .disableAuthz().list()
+isDuplicated = false
 if (existingDteList) {
     dte = existingDteList.first
     if (dte.sentRecStatusId == 'Ftd-ReceiverReject') {
@@ -176,16 +179,22 @@ if (existingDteList) {
         contentList = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml'])
                 .disableAuthz().list()
         if (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-ReceiverAccept'] && contentList) {
+            ec.logger.error("Contenido existe, DTE está aprobado")
             xmlInDb = ec.resource.getLocationReference(contentList.first().contentLocation).openStream().readAllBytes()
             if (xmlInDb == dteXml) {
                 estadoRecepDte = 0
                 recepDteGlosa = 'ACEPTADO OK'
-                sentRecStatusId = dte.sentRecStatusId
+                sentRecStatusId = 'Ftde-DuplicateNotProcessed'
                 fechaEmision = ec.l10n.format(dte.date, 'yyyy-MM-dd')
+                isDuplicated = true
                 return
             }
         }
-        errorMessages.add("Ya existe registrada DTE tipo ${tipoDte} para emisor ${rutEmisor} y folio ${folioDte}")
+        errorMessages.add("Ya existe registrada DTE tipo ${tipoDte} para emisor ${rutEmisor} y folio ${folioDte}, diferente al recibido")
+        estadoRecepDte = 2
+        recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+        isDuplicated = true
+        return
     }
 }
 
@@ -240,6 +249,9 @@ if (tipoDteEnumId == 'Ftdt-61') {
 }
 if (ec.message.hasError()) {
     estadoRecepDte = 2
+    recepDteGlosa = 'RECHAZADO, Errores: ' + ec.message.getErrors().join(', ') + ((errorMessages.size() > 0) ? (', ' + errorMessages.join(', ')) : '')
+        + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+    sentRecStatusId = 'Ftd-ReceiverReject'
     return
 }
 
@@ -488,6 +500,7 @@ if (invoiceId) {
 if (errorMessages.size() > 0) {
     estadoRecepDte = 2
     recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+    sentRecStatusId = 'Ftd-ReceiverReject'
     ec.logger.error(recepDteGlosa)
     if (recepDteGlosa.length() > 256)
         recepDteGlosa = recepDteGlosa.substring(0, 256)
@@ -495,7 +508,6 @@ if (errorMessages.size() > 0) {
         invoice.statusId = 'InvoiceCancelled'
         invoice.update()
     }
-    sentRecStatusId = 'Ftd-ReceiverReject'
 } else if (discrepancyMessages.size() > 0) {
     estadoRecepDte = 1
     recepDteGlosa = 'ACEPTADO CON DISCREPANCIAS: ' + discrepancyMessages.join(', ')
