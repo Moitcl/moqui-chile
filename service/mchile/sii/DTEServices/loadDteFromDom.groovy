@@ -485,11 +485,11 @@ if (errorMessages.size() > 0) {
     ec.logger.warn(recepDteGlosa)
     if (recepDteGlosa.length() > 256)
         recepDteGlosa = recepDteGlosa.substring(0, 256)
-    sentRecStatusId = 'Ftd-ReceiverAccept'
+    sentRecStatusId = 'Ftd-ReceiverAck'
 } else {
     estadoRecepDte = 0
     recepDteGlosa = 'ACEPTADO OK'
-    sentRecStatusId = 'Ftd-ReceiverAccept'
+    sentRecStatusId = 'Ftd-ReceiverAck'
 }
 
 if (existingDteList)
