@@ -162,13 +162,30 @@ tipoDteEnumId = mapOut.fiscalTaxDocumentTypeEnumId
 existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([issuerPartyIdValue:rutEmisor, fiscalTaxDocumenTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte])
         .disableAuthz().list()
 if (existingDteList) {
-    errorMessages.add("Ya existe registrada DTE tipo ${tipoDte} para emisor ${rutEmisor} y folio ${folioDte}")
     dte = existingDteList.first
-    contentList = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml'])
-            .disableAuthz().list()
-    if (contentList) {
+    if (dte.sentRecStatusId == 'Ftd-ReceiverReject') {
+        ec.logger.info("Existente tiene estado rechazado, eliminando para partir de cero")
+        // remove existing DTE and start from scratch
+        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentAttributes").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).call()
+        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentContent").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).parameter("fiscalTaxDocumentContentId", "*").call()
+        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentEmailMessage").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).parameter("fiscalTaxDocumentEmailMessageId", "*").call()
+        ec.service.sync().name("delete#mchile.dte.ReferenciaDte").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).parameter("referenciaId", "*").call()
+        ec.service.sync().name("delete#mchile.dte.DteEnvioFiscalTaxDocument").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).parameter("envioId", "*").call()
+        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocument").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).call()
     } else {
-        //ec.message.addError("No hay contenido local")
+        contentList = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml'])
+                .disableAuthz().list()
+        if (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-ReceiverAccept'] && contentList) {
+            xmlInDb = ec.resource.getLocationReference(contentList.first().contentLocation).openStream().readAllBytes()
+            if (xmlInDb == dteXml) {
+                estadoRecepDte = 0
+                recepDteGlosa = 'ACEPTADO OK'
+                sentRecStatusId = dte.sentRecStatusId
+                fechaEmision = ec.l10n.format(dte.date, 'yyyy-MM-dd')
+                return
+            }
+        }
+        errorMessages.add("Ya existe registrada DTE tipo ${tipoDte} para emisor ${rutEmisor} y folio ${folioDte}")
     }
 }
 
