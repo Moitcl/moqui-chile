@@ -86,7 +86,7 @@ if (issuerTaxName == null || issuerTaxName.size() == 0)
 
 ec.logger.warn("Emisor según carátula: ${rutEmisorCaratula}, issuerTaxName ${issuerTaxName}")
 
-digestValue = envioDte.Signature.SignedInfo.DigestValue.text()
+digestValue = envioDte.Signature.SignedInfo.Reference.DigestValue.text()
 
 /*
 glosaEstadoRecepcionMap = [0:'Envío Recibido Conforme.', 1:'Envío Rechazado – Error de Schema', 2:'Envío Rechazado - Error de Firma', 3:'Envío Rechazado - RUT Receptor No Corresponde',
