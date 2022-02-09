@@ -127,40 +127,43 @@ if (tipoDte == 33) {
     referenciaList = refMap.referenciaList
     anulaBoleta = refMap.anulaBoleta
     folioAnulaBoleta = refMap.folioAnulaBoleta
-    BigInteger codRef = ref[ref.length()-1].getCodRef()
+    codRef = refMap.codigo
+
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
 
-    if (codRef == 2 && det.length() > 1) {
-        ec.message.addError("codRef = 2 && det.length() = ${det.length()}")
+    if (codRef == 2 && detalleList.length() > 1) {
+        ec.message.addError("codRef = 2 && detalleList.length() = ${detalleList.length()}")
         return
     }
 
     // Si la razon es modifica texto (2) no van los montos
     ec.logger.warn("Codref: " + codRef + ", dteExenta: " + dteExenta)
-    if(codRef == 2) {
+    if (codRef == 2) {
         totalNeto = 0
         totalExento = 0
     }
 } else if (tipoDte == 56) {
     // Nota de Débito Electrónica
     ec.logger.warn("Creando DTE tipo 56")
-
-    int i = 0
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, null, tipoDte)
     referenciaList = refMap.referenciaList
     dteExenta = refMap.dteExenta
-    // codRef = refMap.codRef
-    codRef = 1
+    codRef = refMap.codigo
 
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "DebitoItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
 
+    if (codRef == 2 && detalleList.length() > 1) {
+        ec.message.addError("codRef = 2 && detalleList.length() = ${detalleList.length()}")
+        return
+    }
+
     // Si la razon es modifica texto (2) no van los montos
     // Notas de débito son siempre afectas
-    if(codRef == 2) {
+    if (codRef == 2) {
         totalNeto = 0
         totalExento = 0
     }
@@ -172,7 +175,7 @@ if (tipoDte == 33) {
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
     dteExenta = refMap.dteExenta
-    codRef = refMap.codRef
+    codRef = refMap.codigo
 
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "ShipmentItem", codRef)
     detalleList = detMap.detalleList

@@ -72,7 +72,7 @@ if (requireIssuerInternalOrg && !issuerIsInternalOrg) {
 razonSocialEmisor = emisor.RznSoc.text()
 rsResult = ec.service.sync().name("mchile.sii.DTEServices.compare#RazonSocial").parameters([rs1:issuerTaxName, rs2:razonSocialEmisor]).call()
 if (!rsResult.equivalent) {
-    discrepancyMessages.add("Razón Social mismatch, en BD '${issuerTaxName}', en documento ${i} '${razonSocialEmisor}'")
+    discrepancyMessages.add("Razón Social mismatch, en BD '${issuerTaxName}', en documento '${razonSocialEmisor}'")
 }
 
 ec.logger.warn("folio: ${folioDte}")
@@ -93,7 +93,7 @@ rutReceptor = encabezado.Receptor.RUTRecep.text()
 rutRecep = rutReceptor
 
 if (rutReceptorCaratula != null && rutReceptorCaratula != rutReceptor) {
-    discrepancyMessages.add("Rut mismatch: carátula indica Rut receptor ${rutEmisorCaratula}, pero documento ${i} indica ${rutEmisor}")
+    discrepancyMessages.add("Rut mismatch: carátula indica Rut receptor ${rutEmisorCaratula}, pero documento indica ${rutEmisor}")
 }
 
 mapOut = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameter("siiCode", tipoDte).call()

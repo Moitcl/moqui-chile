@@ -14,7 +14,10 @@ along with this software (see the LICENSE.md file). If not, see
 -->
 <services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
 
-    <service verb="send" noun="EmittedDtesToReceivers" authenticate="anonymous-all">
+    <service verb="create" noun="PendingEnvioDteForReceivers" authenticate="anonymous-all">
+        <in-parameters>
+            <parameter name="triggerSend" type="Boolean" default="true"/>
+        </in-parameters>
         <actions>
             <entity-find entity-name="mantle.party.PartyRole" list="internalPartyList">
                 <econdition field-name="roleTypeId" value="OrgInternal"/>
@@ -27,20 +30,20 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="sentRecStatusId" value="Ftd-NotSentRec"/>
             </entity-find>
             <iterate list="ftdList" entry="dte">
-                <service-call name="mchile.sii.DTECommServices.send#DteToReceiver" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId]" out-map="context" transaction="force-new"/>
+                <service-call name="mchile.sii.DTECommServices.create#EnvioDteReceiver" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, triggerSend:triggerSend]" out-map="context" transaction="force-new"/>
             </iterate>
         </actions>
     </service>
 
-    <service verb="send" noun="DteToReceiver">
+    <service verb="create" noun="EnvioDteReceiver">
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="triggerSend" type="Boolean" default="true"/>
         </in-parameters>
         <actions>
-            <log message="Sending email for fiscalTaxDocumentId: ${fiscalTaxDocumentId}"/>
+            <log message="Creating envio for fiscalTaxDocumentId: ${fiscalTaxDocumentId}"/>
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" for-update="true"/>
             <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument with id ${fiscalTaxDocumentId}"/></if>
-            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="tipoDteEv" auto-field-map="[enumId:dte.fiscalTaxDocumentTypeEnumId]"/>
             <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="contentList">
                 <econdition field-name="fiscalTaxDocumentId"/>
                 <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
@@ -48,22 +51,94 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="contentList.size() != 1"><return error="true" message="Found ${contentList.size()} XML content for fiscalTaxDocumentId ${fiscalTaxDocumentId}, expected 1"/></if>
             <set field="content" from="ec.resource.getLocationReference(contentList.first.contentLocation)"/>
             <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[rutReceptor:dte.receiverPartyIdValue, organizationPartyId:dte.issuerPartyId, documentIdList:[dte.fiscalTaxDocumentId]]" out-map="envio"/>
-            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="dteEnvio" auto-field-map="[envioId:envio.envioId]"/>
-            <set field="envioContent" from="ec.resource.getLocationReference(dteEnvio.documentLocation)"/>
-            <set field="xmlAttachment" from="[attachmentLocation:envioContent.location, fileName:envioContent.fileName, contentType:envioContent.contentType]"/>
-            <service-call name="mchile.sii.SIIServices.get#XmlReceptionEmail" in-map="[partyId:dte.receiverPartyId, partyIdValue:dte.receiverPartyIdValue, dtePartyId:dte.issuerPartyId]" out-map="context"/>
-            <if condition="!xmlReceptionEmailAddress">
-                <return error="true" message="No se encuentra dirección de mail para envío de ${tipoDteEv.description} ${dte.fiscalTaxDocumentNumber}"/>
-            </if>
-            <service-call name="mchile.sii.DTEServices.get#DteInfo" in-map="context" out-map="bodyParameters"/>
-            <entity-find-one entity-name="moqui.basic.email.EmailTemplate" value-field="emailTemplate" auto-field-map="[emailTemplateId:'MchDteSendXmlReceiver']"/>
-            <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" in-map="[toAddresses:xmlReceptionEmailAddress, emailTemplateId:'MchDteSendXmlReceiver',
-                    attachments:[xmlAttachment], bodyParameters:bodyParameters+[fiscalTaxDocumentId:fiscalTaxDocumentId, subject:emailTemplate.subject]]" out-map="context"/>
-            <if condition="emailMessageId">
-                <set field="dte.sentRecStatusId" value="Ftd-SentRec"/>
-                <service-call name="create#mchile.dte.FiscalTaxDocumentEmailMessage" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, emailMessageId:emailMessageId]"/>
-            </if>
-            <entity-update value-field="dte"/>
+            <script>
+                if (triggerSend)
+                    ec.service.special().name("mchile.sii.DTECommServices.send#PendingEnvioDteReceiver").parameter("envioIdList", [envio.envioId]).registerOnCommit()
+            </script>
+        </actions>
+    </service>
+
+    <service verb="send" noun="PendingEnvioDteReceiver" authenticate="anonymous-all">
+        <in-parameters>
+            <parameter name="envioIdList" type="List"/>
+            <parameter name="envioTypeEnumIdList" type="List"/>
+            <parameter name="maxFail" type="Integer" default="3"/>
+            <parameter name="secondsBeforeRetry" type="Long" default="3*60*60"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.DteEnvio" list="envioList" for-update="true">
+                <econdition field-name="envioId" operator="in" from="envioIdList" ignore-if-empty="true"/>
+                <econdition field-name="envioTypeEnumId" operator="in" from="envioTypeEnumIdList" ignore-if-empty="true"/>
+                <econdition field-name="statusId" value="Ftde-Created" ignore="envioIdList"/>
+                <econdition field-name="statusId" operator="in" value="Ftde-Created,Ftde-Failed"/>
+                <econdition field-name="lastAttempt" operator="less-equals" from="ec.user.nowTimestamp.time-(secondsBeforeRetry*1000)" ignore="secondsBeforeRetry == null" ignore-if-empty="true" or-null="true"/>
+            </entity-find>
+            <iterate list="envioList" entry="envio">
+                <if condition="envio.envioTypeEnumId == 'Ftde-EnvioDte'"><then>
+                    <entity-find entity-name="mchile.dte.DteEnvioFiscalTaxDocument" list="dteList" for-update="true">
+                        <econdition field-name="envioId" from="envio.envioId"/>
+                    </entity-find>
+                    <set field="rutReceptor" from="null"/>
+                    <set field="rutEmisor" from="null"/>
+                    <set field="folio" value=""/>
+                    <iterate list="dteList" entry="envioDte">
+                        <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" auto-field-map="envioDte"/>
+                        <if condition="rutReceptor == null"><set field="rutReceptor" from="dte.receiverPartyIdValue"/></if>
+                        <if condition="dte.receiverPartyIdValue != rutReceptor"><return error="true" message="No se puede incluir más de un receptor en un envío (envío ${envioId})"/></if>
+                        <if condition="rutEmisor == null"><set field="rutEmisor" from="dte.issuerPartyIdValue"/></if>
+                        <if condition="dte.issuerPartyIdValue != rutEmisor"><return error="true" message="No se puede incluir más de un emisor en un envío (envío ${envioId})"/></if>
+                        <set field="folio" value="${folio.length() > 0? ', ': ''}${dte.fiscalTaxDocumentNumber}"/>
+                        <set field="issuerPartyId" from="dte.issuerPartyId"/>
+                    </iterate>
+                    <service-call name="mchile.sii.DTEServices.get#DteInfo" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId]" out-map="dteInfo"/>
+                    <set field="envioMessageText" value="Adjunto encontrará el documento tributario ${dteInfo.doctypeName} con folio${dteList.size() > 1? 's':''} ${folio} emitido por ${dteInfo.issuerName} (Rut ${rutEmisor})."/>
+                    <set field="subject" value="${dteInfo.doctypeName} ${folio} emitida${dteList.size() > 1? 's':''} por ${dteInfo.issuerName} (Rut ${rutEmisor})"/>
+                    <set field="emailTypeEnumId" value="Ftdemt-SendXmlReceiverMandatory"/>
+                </then><else-if condition="envio.envioTypeEnumId == 'Ftde-RespuestaDte'">
+                    <set field="envioMessageText" value="Adjunto encontrará el el resultado del proceso de revision y validación de un envío de Documentos Tributarios Electrónicos que Usted realizó."/>
+                    <set field="subject" value="Acuse de Recibo Nro. ${envio.internalId} - Receptor: ${envio.rutEmisor}"/>
+                    <set field="emailTypeEnumId" value="Ftdemt-XmlReceptionResponse"/>
+                </else-if><else-if condition="envio.envioTypeEnumId == 'Ftde-EnvioRecibos'">
+                    <!-- Aceptación / Acuse de Recibo que da pie a título ejecutivo de factura -->
+                    <set field="emailTypeEnumId" value="Ftdemt-XmlCommercialAcceptance"/>
+                    <return error="true" message="Unsupported envioTypeEnumId ${envioTypeEnumId}"/>
+                </else-if><else>
+                    <return error="true" message="Unsupported envioTypeEnumId ${envioTypeEnumId}"/>
+                </else></if>
+                <set field="envioContent" from="ec.resource.getLocationReference(envio.documentLocation)"/>
+                <set field="xmlAttachment" from="[attachmentLocation:envioContent.location, fileName:envioContent.fileName, contentType:envioContent.contentType]"/>
+                <service-call name="mchile.sii.DTECommServices.get#PartyIdByRut" in-map="[idValue:envio.rutEmisor]" out-map="emisorMap" out-map-add-to-existing="false"/>
+                <service-call name="mchile.sii.DTECommServices.get#PartyIdByRut" in-map="[idValue:envio.rutReceptor]" out-map="receptorMap" out-map-add-to-existing="false"/>
+                <service-call name="mchile.sii.SIIServices.get#XmlReceptionEmail" in-map="[partyId:receptorMap.partyId, partyIdValue:envio.rutReceptor, dtePartyId:emisorMap.partyId]" out-map="context"/>
+                <entity-find-one entity-name="moqui.basic.Enumeration" value-field="tipoEnvioEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
+                <if condition="!xmlReceptionEmailAddress">
+                    <return error="true" message="No se encuentra dirección de mail para envío tipo ${tipoEnvioEv.description}: ${envio.envioId}"/>
+                </if>
+                <entity-find-one entity-name="mantle.party.PartyDetail" value-field="receiverDetail" auto-field-map="[partyId:receptorMap.partyId]"/>
+                <set field="receiverName" from="ec.resource.expand('PartyNameOnlyTemplate', null, receiverDetail)"/>
+                <set field="bodyParameters" from="[title:subject, subject:subject, receiverName:receiverName, receiverRut:envio.rutReceptor, envioMessageText:envioMessageText]"/>
+                <entity-find-one entity-name="moqui.basic.email.EmailTemplate" value-field="emailTemplate" auto-field-map="[emailTemplateId:'MchDteSendEnvio']"/>
+                <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" in-map="[toAddresses:xmlReceptionEmailAddress, emailTemplateId:'MchDteSendEnvio', emailTypeEnumId:emailTypeEnumId,
+                    attachments:[xmlAttachment], bodyParameters:bodyParameters, subject:subject]" out-map="context"/>
+                <if condition="emailMessageId"><then>
+                    <service-call name="create#mchile.dte.FiscalTaxDocumentEmailMessage" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, emailMessageId:emailMessageId]"/>
+                    <entity-find entity-name="mchile.dte.DteEnvioFiscalTaxDocument" list="envioDteList">
+                        <econdition field-name="envioId" from="envio.envioId"/>
+                    </entity-find>
+                    <iterate list="envioDteList" entry="envioDte">
+                        <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" auto-field-map="envioDte" for-update="true"/>
+                        <set field="dte.sentRecStatusId" value="Ftd-SentRec"/>
+                        <entity-update value-field="dte"/>
+                    </iterate>
+                </then><else>
+                    <set field="envio.attemptCount" from="(envio.attemptCount?:0)+1"/>
+                    <set field="envio.lastAttempt" from="ec.user.nowTimestamp"/>
+                    <if condition="envio.attemptCount >= maxFail">
+                        <set field="envio.statusId" value="Ftde-Failed"/>
+                    </if>
+                    <entity-update value-field="envio"/>
+                </else></if>
+            </iterate>
         </actions>
     </service>
 
@@ -115,7 +190,11 @@ along with this software (see the LICENSE.md file). If not, see
                         <continue/>
                     </if>
                     <set field="contentBytes" from="bodyPart.contentBytes ?: bodyPart.contentText.getBytes('ISO-8859-1')"/>
-                    <service-call name="mchile.sii.DTECommServices.store#ReceivedEnvio" in-map="context + [contentBytes:contentBytes, fileName:bodyPart.filename ]"/>
+                    <service-call name="mchile.sii.DTECommServices.store#ReceivedEnvio" in-map="context + [contentBytes:contentBytes, fileName:bodyPart.filename ]" out-map="storeResult"/>
+                    <script>
+                        if (storeResult.envioId)
+                            ec.service.special().name("mchile.sii.DTECommServices.process#PendingDteEnvio").parameter("envioId", envioId).registerOnCommit()
+                    </script>
                 </else-if><else>
                     <log level="error" message="Ignoring bodyPart of type ${bodyPart.contentType} and filename ${bodyPart.filename}, disposition ${bodyPart.disposition} for mail ${messageId}"/>
                 </else></if>
@@ -134,6 +213,9 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="createUnknownReceiver" default="false" type="Boolean"/>
             <parameter name="requireReceiverInternalOrg" default="false" type="Boolean"/>
         </in-parameters>
+        <out-parameters>
+            <parameter name="envioId"/>
+        </out-parameters>
         <actions>
             <script><![CDATA[
                 import cl.moit.dte.MoquiDTEUtils
@@ -214,13 +296,13 @@ along with this software (see the LICENSE.md file). If not, see
                     if (!MoquiDTEUtils.verifySignature(doc, internalSignedXPath, internalDateXPath))
                         ec.message.addError("No se verifica firma en ${internalSignedXPath}")
                  */
-                envioDteId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:envioTypeEnumId, emailMessageId:emailMessageId, statusId:'Ftde-Received',
+                envioId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:envioTypeEnumId, emailMessageId:emailMessageId, statusId:'Ftde-Received',
                                                 rutEmisor:rutEmisorCaratula, rutReceptor:rutReceptorCaratula, fechaEnvio:fechaEnvio, fechaRegistro:ec.user.nowTimestamp,
                                                 internalId:internalId, processingParameters:processingParameters]).call().envioId
                 envEv = ec.entity.find("moqui.basic.Enumeration").condition("enumId", envioTypeEnumId).one()
-                documentLocation ="dbresource://moit/erp/dte/${envEv.enumCode}/${rutEmisorCaratula}/${rutEmisorCaratula}-${envioDteId}.xml"
+                documentLocation ="dbresource://moit/erp/dte/${envEv.enumCode}/${rutEmisorCaratula}/${rutEmisorCaratula}-${envioId}.xml"
                 ec.resource.getLocationReference(documentLocation).putBytes(contentBytes)
-                ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioDteId, documentLocation:documentLocation, fileName:fileName]).call().envioId
+                ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioId, documentLocation:documentLocation, fileName:fileName]).call().envioId
             ]]></script>
         </actions>
     </service>
@@ -271,7 +353,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="processed" type="Boolean"/>
         </out-parameters>
     </service>
-    <service verb="process" noun="EnvioDte" type="script" location="component://MoquiChile/service/mchile/DTECommServices/processEnvioDte.groovy">
+    <service verb="process" noun="EnvioDte" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/processEnvioDte.groovy">
         <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
         <out-parameters>
             <parameter name="envioRespuestaId"/>
@@ -841,9 +923,11 @@ along with this software (see the LICENSE.md file). If not, see
                 <service-call name="mchile.sii.DTECommServices.verifica#EnvioEnSiiCertification" in-map="context" out-map="context"/>
             </else></if>
             <script><![CDATA[
-                glosasServerCode = ['0':'Todo OK', '1':'Error en Entrada', '2':'Error SQL']
-                glosasSqlCode = ['0':'Schema Validado']
-                glosasErrorCode = ['0':'Se retorna el estado', '1':'El envío no es de la Empresa, faltan parámetros de entrada', '2':'Error de Proceso']
+                import org.moqui.entity.EntityCondition
+
+                glosasServerCode = ['0': 'Todo OK', '1': 'Error en Entrada', '2': 'Error SQL']
+                glosasSqlCode = ['0': 'Schema Validado']
+                glosasErrorCode = ['0': 'Se retorna el estado', '1': 'El envío no es de la Empresa, faltan parámetros de entrada', '2': 'Error de Proceso']
                 salida = getEstUpResponse.getEstUpReturn
                 ec.logger.info("salida: ${salida}")
                 xmlDoc = new groovy.util.XmlParser(false, true).parseText(salida)
@@ -880,7 +964,7 @@ along with this software (see the LICENSE.md file). If not, see
                     envio.update()
                     if (documentosAceptados == documentosInformados) {
                         dteIdList = ec.entity.find("mchile.dte.DteEnvioFiscalTaxDocument").condition("envioId", envioId).list().fiscalTaxDocumentId
-                        dteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("fiscalTaxDocumentId", dteIdList).forUpdate(true).list()
+                        dteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("fiscalTaxDocumentId", EntityCondition.ComparisonOperator.IN, dteIdList).forUpdate(true).list()
                         docsAcInt = documentosAceptados as Integer
                         if (dteList.size() != docsAcInt) {
                             ec.message.addError("Documentos informados y aceptados en envío ${envioId} no calza con encontrados en BD por trackId ${envio.trackId}: ${documentosAceptados} vs ${dteList.size()}")
@@ -888,8 +972,8 @@ along with this software (see the LICENSE.md file). If not, see
                         }
                         // Se pueden asignar todos como aceptados
                         dteList.each { dte ->
-                            if (dte.statusId in ['Ftd-SentAuthUnverified', 'Ftd-SendAuthFailed']) {
-                                dte.statusId = 'Ftd-SentAuthAccepted'
+                            if (dte.sentAuthStatusId in ['Ftd-SentAuthUnverified', 'Ftd-SendAuthFailed']) {
+                                dte.sentAuthStatusId = 'Ftd-SentAuthAccepted'
                                 dte.update()
                             }
                         }
@@ -931,7 +1015,7 @@ along with this software (see the LICENSE.md file). If not, see
                         envio.update()
                     }
                 }
-            ]]></script>
+                ]]></script>
         </actions>
     </service>
 
@@ -1312,6 +1396,23 @@ TrackId Token']" type="Map"/>
                 <econdition field-name="idValue"/>
                 <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
             </entity-find>
+            <if condition="partyIdentificationList.size() &gt; 1">
+                <entity-find entity-name="mantle.party.Party" list="multiplePartyList">
+                    <econdition field-name="partyId" operator="in" from="partyIdentificationList.partyId"/>
+                </entity-find>
+                <set field="excludePartyIds" from="[]"/>
+                <iterate list="multiplePartyList" entry="party">
+                    <script>
+                        if (party.mergedToPartyId)
+                            excludePartyIds.add(party.partyId)
+                    </script>
+                </iterate>
+                <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
+                    <econdition field-name="idValue"/>
+                    <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+                    <econdition field-name="partyId" operator="not-in" from="excludePartyIds"/>
+                </entity-find>
+            </if>
             <if condition="!partyIdentificationList"><then>
                 <if condition="createUnknown"><then>
                     <service-call name="mantle.party.PartyServices.create#Organization" in-map="[organizationName:razonSocial, taxOrganizationName:razonSocial, roleTypeId:'Supplier']"

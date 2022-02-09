@@ -109,12 +109,13 @@ idAcuseRecibo = "EnvAcuseRecibo-" + envioRespuestaId
 StringWriter writer = new StringWriter()
 MarkupBuilder acuseRecibo = new MarkupBuilder(writer)
 String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
-acuseRecibo.RespuestaDTE('xmlns': 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version:'1.0', 'xsi:schemaLocation': 'http://www.sii.cl/SiiDte RespuestaEnvioDTE_v10.xsd') {
+String schemaLocation = 'http://www.sii.cl/SiiDte RespuestaEnvioDTE_v10.xsd'
+acuseRecibo.RespuestaDTE('xmlns': 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version:'1.0', 'xsi:schemaLocation': schemaLocation) {
     Resultado(ID:idAcuseRecibo) {
         Caratula(version:"1.0") {
             RutResponde(rutReceptorCaratula)
             RutRecibe(rutEmisorCaratula)
-            IdRespuesta(idAcuseRecibo)
+            IdRespuesta(envioRespuestaId)
             NroDetalles(processedItems)
             //NmbContacto("")
             //FonoContacto("")
@@ -123,7 +124,7 @@ acuseRecibo.RespuestaDTE('xmlns': 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http
         }
         RecepcionEnvio {
             NmbEnvio(dteEnvioEv.fileName)
-            FchRecep(ec.l10n.format(dteEnvioEv.registerDate, "yyyy-MM-dd HH"))
+            FchRecep(ec.l10n.format(dteEnvioEv.registerDate, "yyyy-MM-dd'T'HH:mm:ss"))
             CodEnvio(envioRespuestaId)
             EnvioDTEID(dteEnvioEv.internalId)
             Digest(digestValue)
@@ -136,11 +137,12 @@ acuseRecibo.RespuestaDTE('xmlns': 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http
                 RecepcionDTE {
                     TipoDTE(recepcion.tipoDte)
                     Folio(recepcion.folioDte)
+                    FchEmis(recepcion.fchEmis)
                     RUTEmisor(recepcion.rutEmisor)
                     RUTRecep(recepcion.rutRecep)
                     MntTotal(recepcion.mntTotal)
-                    EstadoDTE(recepcion.estadoRecepDte)
-                    EstadoDTEGlosa(recepcion.recepDteGlosa)
+                    EstadoRecepDTE(recepcion.estadoRecepDte)
+                    RecepDTEGlosa(recepcion.recepDteGlosa)
                 }
             }
         }
@@ -150,7 +152,13 @@ acuseRecibo.RespuestaDTE('xmlns': 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http
 ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:receiverPartyId]).call())
 xml = writer.toString()
 Document doc2 = MoquiDTEUtils.parseDocument(xml.getBytes())
-byte[] salida = MoquiDTEUtils.sign(doc2, "#" + idAcuseRecibo, pkey, certificate, "#" + idAcuseRecibo,"sii:Resultado")
+byte[] salida = MoquiDTEUtils.sign(doc2, "#" + idAcuseRecibo, pkey, certificate, "#" + idAcuseRecibo,"Resultado")
+
+try {
+    MoquiDTEUtils.validateDocumentSii(ec, salida, schemaLocation)
+} catch (Exception e) {
+    ec.message.addError("Failed validation: " + e.getMessage())
+}
 
 doc2 = MoquiDTEUtils.parseDocument(salida)
 
