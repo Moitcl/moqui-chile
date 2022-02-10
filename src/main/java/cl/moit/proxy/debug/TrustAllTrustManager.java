@@ -6,7 +6,10 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
 public class TrustAllTrustManager {
+    private static boolean initialized = false;
+
     public static void init() {
+        if (initialized) return;
         TrustManager[] trustAllCerts = new TrustManager[]{
                 new X509TrustManager() {
                     public java.security.cert.X509Certificate[] getAcceptedIssuers() {
@@ -27,6 +30,7 @@ public class TrustAllTrustManager {
         } catch (Exception e) {
             throw new RuntimeException("Attempting to set up proxy: " + e.getMessage());
         }
+        initialized = true;
     }
 
 }
