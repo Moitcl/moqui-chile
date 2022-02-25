@@ -162,13 +162,15 @@ datosTed = "<DD><RE>${rutEmisor}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.
 //String schemaLocation = 'http://www.sii.cl/SiiDte EnvioBOLETA_v11.xsd'
 String schemaLocation = ''
 //xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation) {
-xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0') {
+//xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0') {
+xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
     Documento(ID: idDocumento) {
         Encabezado {
             IdDoc {
                 TipoDTE(tipoDte)
                 Folio(folio)
                 FchEmis(ec.l10n.format(fechaEmision, "yyyy-MM-dd"))
+                IndServicio("3")
                 //IndNoRebaja()
                 if (tipoDespacho)
                     TipoDespacho(tipoDespacho)
@@ -176,7 +178,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                     IndTraslado(indTraslado)
                 if (indServicio)
                     IndServicio(indServicio)
-                FmaPago(formaPago)
+                //FmaPago(formaPago)
                 if (fechaCancelacion)
                     FchCancel(ec.l10n.format(fechaCancelacion, 'yyyy-MM-dd'))
                 if (montoCancelacion)
@@ -186,43 +188,45 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                 //MntPagos{}
                 //PeriodoDesde()
                 //PeriodoHasta()
-                MedioPago(medioPago?:'PE')
+                //MedioPago(medioPago?:'PE')
                 //TpoCtaPago()
                 //NumCtaPago()
                 //BcoPago()
                 //TermPagoCdg
-                if (glosaPagos)
-                    TermPagoGlosa(glosaPagos)
+                //if (glosaPagos)
+                //    TermPagoGlosa(glosaPagos)
                 //TermPagoDias
-                if (fechaVencimiento)
-                    FchVenc(ec.l10n.format(fechaVencimiento, "yyyy-MM-dd"))
+                //if (fechaVencimiento)
+                //    FchVenc(ec.l10n.format(fechaVencimiento, "yyyy-MM-dd"))
+
             }
             Emisor {
                 RUTEmisor(rutEmisor)
-                RznSoc(razonSocialEmisor)
-                GiroEmis(giroEmisor)
-                Telefono(fonoContacto)
-                CorreoEmisor(mailContacto)
-                codigosActividadEconomica.split(',').each { codigoActividad ->
-                    Acteco(codigoActividad)
-                }
+                //RznSocEmisor(razonSocialEmisor)
+                RznSocEmisor("Moit SPA")
+                GiroEmisor(giroEmisor)
+                //Telefono(fonoContacto)
+                //CorreoEmisor(mailContacto)
+                //codigosActividadEconomica.split(',').each { codigoActividad ->
+                //    Acteco(codigoActividad)
+                //}
                 //Sucursal(sucursal)
                 if (codigoSucursalSii)
                     CdgSIISucur(codigoSucursalSii)
                 DirOrigen(direccionOrigen)
                 CmnaOrigen(comunaOrigen)
                 CiudadOrigen(ciudadOrigen)
-                if (codigoVendedor)
-                    CdgVendedor(codigoVendedor)
-                if (identificadorAdicionalEmisor)
-                    IdAdicEmisor(identificadorAdicionalEmisor)
+                //if (codigoVendedor)
+                //    CdgVendedor(codigoVendedor)
+                //if (identificadorAdicionalEmisor)
+                //    IdAdicEmisor(identificadorAdicionalEmisor)
             }
             Receptor {
                 RUTRecep(rutReceptor)
                 if (codigoInternoReceptor)
                     CdgIntRecep(codigoInternoReceptor)
                 RznSocRecep(razonSocialReceptor)
-                GiroRecep(giroReceptor)
+                //GiroRecep(giroReceptor)
                 if (contactoReceptor)
                     Contacto(contactoReceptor)
                 if (correoReceptor)
@@ -242,7 +246,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                     MntExe(totalExento)
                 //MntBase()
                 //MntMargenCom()
-                TasaIVA(ec.l10n.format(vatTaxRate*100, "##"))
+                //TasaIVA(ec.l10n.format(vatTaxRate*100, "##"))
                 IVA(Math.round(totalNeto * vatTaxRate))
                 //IVAProp()
                 //IVATerc()
@@ -252,8 +256,8 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                 //GrntDep()
                 //Comisiones{}
                 MntTotal(totalInvoice)
-                if (montoNoFacturable)
-                    MontoNF(montoNoFacturable)
+                //if (montoNoFacturable)
+                //    MontoNF(montoNoFacturable)
                 //MontoPeriodo()
                 //SaldoAnterior()
                 //VlrPagar()
@@ -296,7 +300,8 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                 //RecargoMonto()
                 //SubRecargo{}
                 //CodImpAdic()
-                MontoItem(detalle.montoItem)
+                //MontoItem(detalle.montoItem)
+                MontoItem(detalle.montoItem + Math.round(detalle.montoItem * vatTaxRate))
             }
         }
         //SubTotInfo{}
@@ -351,16 +356,16 @@ byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Docum
 //}
 
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
-if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
-    ec.logger.warn("DTE folio ${folio} generada OK")
-} else {
-    ec.message.addError("Error al generar DTE folio ${folio}: firma inválida")
-}
+//if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
+//    ec.logger.warn("Boleta folio ${folio} generada OK")
+//} else {
+//    ec.message.addError("Error al generar Boleta folio ${folio}: firma inválida")
+//}
 
 if (ec.message.hasError())
     return
 
-// Registry de DTE en base de datos y generación de PDF -->
+// Registry de boleta en base de datos y generación de PDF -->
 fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoDte}"
 
 // Creación de registro en FiscalTaxDocument -->
@@ -388,14 +393,15 @@ createMapBase = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, contentDte:ts]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlContentLocation]).call())
 ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
 
-ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.genera#PDF").parameters([xmlLocation:xmlContentLocation, issuerPartyId:issuerPartyId, invoiceMessage:invoiceMessage]).call())
-ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfContentLocation]).call())
-ec.resource.getLocationReference(pdfContentLocation).putBytes(pdfBytes)
-
-if ((fiscalTaxDocumentTypeEnumId as String) in dteConstituyeVentaTypeList) {
-    ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedibleContentLocation]).call())
-    ec.resource.getLocationReference(pdfCedibleContentLocation).putBytes(pdfCedibleBytes)
-}
+// TODO
+//ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.genera#PDF").parameters([xmlLocation:xmlContentLocation, issuerPartyId:issuerPartyId, invoiceMessage:invoiceMessage]).call())
+//ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfContentLocation]).call())
+//ec.resource.getLocationReference(pdfContentLocation).putBytes(pdfBytes)
+// TODO ?
+//if ((fiscalTaxDocumentTypeEnumId as String) in dteConstituyeVentaTypeList) {
+//    ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedibleContentLocation]).call())
+//    ec.resource.getLocationReference(pdfCedibleContentLocation).putBytes(pdfCedibleBytes)
+//}
 
 // Creación de registro en FiscalTaxDocumentAttributes
 fechaEmisionString = ec.l10n.format(fechaEmision, "yyyy-MM-dd")

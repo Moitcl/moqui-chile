@@ -1300,143 +1300,6 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="verificaEnSII" noun="Boleta">
-        <description>
-            Verificación en el SII de boleta usando rut empresa, tipo y folio
-        </description>
-        <in-parameters>
-            <parameter name="fiscalTaxDocumentId" required="true"/>
-            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
-            <parameter name="organizationPartyId" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="salida" required="true"/>
-        </out-parameters>
-        <actions>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-            <set field="certData" from="certData"/>
-            <set field="passS" from="passCert"/>
-
-            <service-call name="mchile.DTEServices.get#DteContent"
-                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
-
-            <if condition="!content">
-                <return error="true" message="DTE no existe"/>
-            </if>
-            <set field="envio" from="content"/>
-
-            <set field="salida" value=""/>
-            <set field="statusXML" value=""/>
-
-            <set field="tipo" value="39"/>
-            <if condition="fiscalTaxDocumentTypeEnumId.equals('Ftdt-41')">
-                <set field="tipo" value="41"/>
-            </if>
-
-            <!-- Recuperar folio -->
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="boletaField">
-                <select-field field-name="fiscalTaxDocumentNumber"/>
-                <select-field field-name="receiverPartyId"/>
-                <select-field field-name="receiverPartyIdTypeEnumId"/>
-            </entity-find-one>
-
-            <set field="folio" from="boletaField.fiscalTaxDocumentNumber" type="String"/>
-            <set field="receiverPartyId" from="boletaField.receiverPartyId"/>
-            <set field="receiverPartyIdTypeEnumId" from="boletaField.receiverPartyIdTypeEnumId"/>
-            <set field="invoiceId" from="boletaField.invoiceId"/>
-
-
-            <!-- Recuperacion de rut receptor -->
-            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                <econdition field-name="partyId" from="receiverPartyId"/>
-                <econdition field-name="partyIdTypeEnumId" from="receiverPartyIdTypeEnumId"/>
-            </entity-find>
-
-            <if condition="!partyIdentificationList.idValue[0]">
-                <return error="true" message="No existe organización receptora definida en el sistema"/>
-            </if>
-            <set field="rutReceptor" from="partyIdentificationList.idValue[0]"/>
-
-            <!-- Obtencion de monto desde invoiceId -->
-            <set field="monto" value="0"/>
-            <set field="fechaEmision" value="23-11-2020"/>
-
-            <!-- Recuperacion de xml para parsear -->
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="contentField">
-                <select-field field-name="contentLocation"/>
-            </entity-find-one>
-            <if condition="!contentField">
-                <return error="true" message="Boleta no tiene XML generado"/>
-            </if>
-            <set field="xmlDataRef" from="ec.resource.getLocationReference(contentField.contentLocation)"/>
-            <script>
-                import javax.xml.parsers.*
-                import org.w3c.dom.*
-                import java.text.DateFormat
-                import java.text.SimpleDateFormat
-                import java.util.Date
-
-                // Correccion de rut
-                rutEmisor = rutEmisor.replace(".","")
-
-                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance()
-                DocumentBuilder builder = null
-                Document document = null
-
-                builder = factory.newDocumentBuilder()
-                document = builder.parse(xmlDataRef.openStream())
-                document.getDocumentElement().normalize()
-                Element root = document.getDocumentElement()
-
-                NodeList nList = document.getElementsByTagName("MntTotal")
-                monto = nList.item(0).getTextContent()
-
-                nList = document.getElementsByTagName("FchEmis")
-                fechaEmision = nList.item(0).getTextContent()
-
-                // Formateo de fecha desde YYYY-MM-DD a DD-MM-YYYY
-                SimpleDateFormat sourceFmt = new SimpleDateFormat("yyyy-MM-dd")
-                SimpleDateFormat targetFmt = new SimpleDateFormat("dd-MM-yyyy")
-
-                Date date1 = sourceFmt.parse(fechaEmision)
-                fechaEmision = targetFmt.format(date1)
-
-            </script>
-
-            <script>
-                import java.io.FileInputStream
-                import java.security.KeyStore
-                import java.security.PrivateKey
-                import java.security.cert.X509Certificate
-                import java.util.HashMap
-                import org.apache.xmlbeans.XmlOptions
-                import cl.nic.dte.net.ConexionSiiBoleta
-                import cl.nic.dte.util.Utilities
-                import org.json.simple.JSONObject
-
-                ConexionSiiBoleta con = new ConexionSiiBoleta()
-
-
-                System.out.println("Folio: " + folio + ", token: " + token)
-
-                // Ejecutar GET https://apicert.sii.cl/boleta.electronica.envio/{rut}-{dv}-{trackid}
-                // Se obtiene objeto JSON
-                JSONObject resp
-                if (dteSystemIsProduction) {
-                    String token = con.getToken(pkey, certificate)
-                    resp = con.getEstadoBOLETAProduccion(rutEmisor, rutReceptor, monto, fechaEmision, ""+folio, tipo, token)
-                } else {
-                    String token = con.getTokenCert(pkey, certificate)
-                    resp = con.getEstadoBOLETACertificacion(rutEmisor, rutReceptor, monto, fechaEmision, ""+folio, tipo, token)
-                }
-
-                //String estado = (String) recp.get("estado")
-
-                salida = resp.toString()
-                logger.warn("Salida JSON: " + salida)
-            </script>
-        </actions>
-    </service>
 
     <service verb="verificaEnvioSII" noun="Boleta">
         <description>
@@ -3231,7 +3094,6 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="organizationPartyId" required="true"/>
             <parameter name="encoding" default-value="UTF-8"/>
             <parameter name="passCert" required="true"/>
-            <parameter name="encoding" default-value="UTF-8"/>
         </in-parameters>
         <actions>
             <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams" for-update="true">
@@ -3242,7 +3104,7 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <set field="dteParams.certData" from="certificateFile.get().encodeBase64()" type="String"/>
             <set field="dteParams.passCert" from="passCert"/>
-            <set field="dteParams.certData" from="certificateFile.getString(encoding)"/>
+            <!--set field="dteParams.certData" from="certificateFile.getString(encoding)"/-->
 
             <entity-update value-field="dteParams"/>
         </actions>

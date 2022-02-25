@@ -7,7 +7,7 @@
         <parameter name="fiscalTaxDocumentId"/>
         <parameter name="fiscalTaxDocumentTypeEnumId"/>
         <actions>
-            <service-call name="mchile.sii.DTECommServices.verificaEnvioSII#Boleta"
+            <service-call name="mchile.sii.DTECommServices.verificaEnSII#EnvioBoleta"
                           in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, organizationPartyId:activeOrgId, trackId:trackId]" out-map="verifyOut"/>
             <!--log message="-> ${verifyOut.statusSii}" level="warn"/>
             <if condition="verifyOut.statusSii == '0'">
@@ -24,16 +24,16 @@
     <transition name="verificarEnSII">
         <parameter name="fiscalTaxDocumentId"/>
         <parameter name="fiscalTaxDocumentTypeEnumId"/>
+        <parameter name="activeOrgId"/>
+        <parameter name="trackId"/>
         <actions>
             <service-call name="mchile.sii.DTECommServices.verificaEnSII#Boleta"
-                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, organizationPartyId:activeOrgId, trackId:trackId]" out-map="verifyOut"/>
-            <log message="-> ${verifyOut.statusSii}" level="warn"/>
-            <if condition="verifyOut.statusSii == '0'">
-                <return error="false" message="${verifyOut.salida}"/>
-            </if>
-            <if condition="verifyOut.statusSii != '0'">
-                <return error="true" message="ERROR: ${verifyOut.salida}"/>
-            </if>
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, organizationPartyId:activeOrgId]" out-map="verifyOut"/>
+            <if condition="verifyOut.errorCode == '0'"><then>
+                <return message="${verifyOut.glosaError}"/>
+            </then><else>
+                <message type="danger">ERROR ${verifyOut.errorCode}: ${verifyOut.glosaError}</message>
+            </else></if>
         </actions>
         <default-response url="."/>
     </transition>
@@ -103,7 +103,8 @@
             <!--econdition-object field="searchMap"/-->
             <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in"
                         from="['Ftdt-39','Ftdt-41']"/>
-            <econdition field-name="sentAuthStatusId" value="Ftd-SentAuthAccepted"/>
+            <!--econdition field-name="sentAuthStatusId" value="Ftd-SentAuthAccepted"/-->
+            <econdition field-name="sentAuthStatusId" value="Ftd-SentAuthUnverified"/>
         </entity-find>
     </actions>
 
@@ -121,6 +122,7 @@
                 <service-call name="mchile.sii.DTEServices.get#DteContent"
                               in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf']" out-map="context"/>
                 <set field="pdfFilename" from="content"/>
+                <log message="tipo: $sentAuthStatusId" level="warn"/>
             </row-actions>
             <field name="_useRowSubmit"><default-field><hidden default-value="true"/></default-field></field>
             <field name="fiscalTaxDocumentId"><default-field><hidden default-value="true"/></default-field></field>
