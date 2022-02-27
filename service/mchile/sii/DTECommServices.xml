@@ -1183,7 +1183,8 @@ TrackId Token']" type="Map"/>
             <parameter name="trackId"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="salida" required="true"/>
+            <parameter name="errorCode" required="true"/>
+            <parameter name="glosaError" required="true"/>
         </out-parameters>
         <actions>
             <set field="statusSii" value=""/>
@@ -1231,12 +1232,16 @@ TrackId Token']" type="Map"/>
                     resp = con.getEstadoEnvioBOLETACertificacion(rutEmisor, trackId, token)
                 }
 
-                //String estado = (String) resp.get("estado")
-                //trackId = String.valueOf(resp.get("trackid"))
+                //Map processingParameters = new JsonSlurper().parseText(dteEnvioEv.processingParameters)
+
+                String estado = (String) resp.get("codigo")
+                String error = (String) resp.get("detalle_rep_rech")
 
                 salida = resp.toString()
                 logger.warn("Salida JSON: " + salida)
             </script>
+            <set field="errorCode" value="0"/>
+            <set field="glosaError" value="$salida"/>
         </actions>
     </service>
 
@@ -1377,9 +1382,8 @@ TrackId Token']" type="Map"/>
                 salida = resp.toString()
                 logger.warn("Salida JSON: " + salida)
             </script>
-            <!--return type="success" message="$estado: $descripcion $salida"/-->
             <set field="errorCode" value="0"/>
-            <set field="glosaError" value="$salida"/>
+            <set field="glosaError" value="$descripcion"/>
         </actions>
     </service>
 
@@ -1610,6 +1614,98 @@ TrackId Token']" type="Map"/>
                 <parameter name="getTokenReturn"/>
             </parameter>
         </out-parameters>
+    </service>
+
+    <service verb="get" noun="TokenBoleta">
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+            <parameter name="isProduction" type="Boolean"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="token"/>
+            <parameter name="estado"/>
+            <parameter name="glosa"/>
+        </out-parameters>
+        <actions>
+            <if condition="isProduction == null">
+                <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+            </if>
+            <service-call name="mchile.sii.DTECommServices.get#SeedBoleta" in-map="context" out-map="seed"/>
+            <if condition="seed.estado != '00'">
+                <return error="true" message="Estado inválido al obtener semilla: ${seed.estado}"/>
+            </if>
+            <script><![CDATA[
+                import groovy.xml.MarkupBuilder
+                import cl.moit.dte.MoquiDTEUtils
+
+                StringWriter xmlWriter = new StringWriter()
+                MarkupBuilder xmlBuilder = new MarkupBuilder(xmlWriter)
+                xmlBuilder.getToken(xmlns: 'http://www.sii.cl/SiiDte') {
+                    item() {
+                        Semilla(seed.semilla)
+                    }
+                }
+                String xmlString = xmlWriter.toString()
+                xmlWriter.close()
+                org.w3c.dom.Document doc = MoquiDTEUtils.parseDocument(xmlString.getBytes())
+                ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameter("partyId", partyId).call())
+                byte[] signedXmlBytes = MoquiDTEUtils.sign(doc, "", pkey, certificate, "", "")
+                String signedXml = new String(signedXmlBytes)
+            ]]></script>
+            <if condition="isProduction"><then>
+                <service-call name="mchile.sii.DTECommServices.get#TokenProduction" in-map="[pszXml:signedXml]" out-map="context"/>
+            </then><else>
+                <service-call name="mchile.sii.DTECommServices.get#TokenCertification" in-map="[pszXml:signedXml]" out-map="context"/>
+            </else></if>
+            <script><![CDATA[
+                tokenReturn = getTokenResponse?.getTokenReturn
+                bais = new ByteArrayInputStream(tokenReturn.getBytes())
+                groovy.util.Node seedReturn = new groovy.util.XmlParser(false, false).parse(bais)
+                bais.close()
+                token = seedReturn.'SII:RESP_BODY'.TOKEN.text()
+                estado = seedReturn.'SII:RESP_HDR'.ESTADO.text()
+                glosa = seedReturn.'SII:RESP_HDR'.GLOSA.text()
+            ]]></script>
+        </actions>
+    </service>
+
+    <service verb="get" noun="SeedBoleta">
+        <in-parameters>
+            <parameter name="isProduction" type="Boolean"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="estado"/>
+            <parameter name="semilla"/>
+        </out-parameters>
+        <actions>
+            <if condition="isProduction == null">
+                <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+            </if>
+            <if condition="isProduction"><then>
+                <service-call name="mchile.sii.DTECommServices.get#SeedProduction" out-map="context"/>
+            </then><else>
+                <service-call name="mchile.sii.DTECommServices.get#SeedCertification" out-map="context"/>
+            </else></if>
+            <script><![CDATA[
+                seedReturn = getSeedResponse?.getSeedReturn
+                bais = new ByteArrayInputStream(seedReturn.getBytes())
+                groovy.util.Node seedReturn = new groovy.util.XmlParser(false, false).parse(bais)
+                bais.close()
+                semilla = seedReturn.'SII:RESP_BODY'.SEMILLA.text()
+                estado = seedReturn.'SII:RESP_HDR'.ESTADO.text()
+            ]]></script>
+        </actions>
+    </service>
+
+    <service verb="get" noun="SeedCertification">
+        <out-parameters>
+            <parameter name="getSeedResponse" type="Map">
+                <parameter name="getSeedReturn"/>
+            </parameter>
+        </out-parameters>
+        <actions>
+
+        </actions>
     </service>
 
 </services>
