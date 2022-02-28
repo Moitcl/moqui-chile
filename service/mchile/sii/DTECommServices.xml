@@ -717,11 +717,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
 
-            <!-- TODO: Remover documentcontent -->
             <service-call name="mchile.sii.DTECommServices.enviaSII#Boleta" in-map="[compaS:rutEmisor, enviadorS:rutEnvia, documentContentLocation:contentLocation, organizationPartyId:organizationPartyId, fiscalTaxDocumentId:fiscalTaxDocumentId]" out-map="context"/>
-            <!-- TODO: Eliminar archivo temporal -->
-            <!-- Marcar boleta como enviada -->
-            <!-- Se marca DTE como enviada -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteEv" for-update="true">
                 <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
             </entity-find-one>
@@ -1165,11 +1161,114 @@ TrackId Token']" type="Map"/>
                     <return message="Error en Firma"/>
                 </else-if>
                 <else>
-                    <return message="Recibo con exito"/>
+                    <return message="Recibido con exito"/>
                 </else>
             </if>
         </actions>
     </service>
+
+    <service verb="enviaSII" noun="EnvioBoleta">
+        <description>
+            Envio boletas en grupo
+        </description>
+        <in-parameters>
+            <parameter name="rutReceptor" default-value="60803000-K"><description>El receptor del envio es el SII</description></parameter>
+            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="saveSinFirma" type="Boolean" default="false"/>
+            <parameter name="envioId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="trackId"/>
+        </out-parameters>
+        <actions>
+            <!-- Validación rut -->
+            <!--service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/-->
+
+            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
+            <set field="certData" from="certData"/>
+            <set field="passS" from="passCert"/>
+
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
+                <econdition field-name="partyId" from="organizationPartyId"/>
+                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+            </entity-find>
+
+            <if condition="!partyIdentificationList.idValue[0]">
+                <return error="true" message="Organización $organizationPartyId no tiene RUT definido"/>
+            </if>
+            <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
+
+            <script>
+                dteEnvioEv = ec.entity.find("mchile.dte.DteEnvio").condition("envioId", envioId).one()
+                //if (dteEnvioEv.statusId != 'Ftde-Received') { // Boletas no se envian
+                if (dteEnvioEv.statusId != 'Ftde-Created') {
+                ec.logger.error("Estado inválido para procesar envío ${envioId}: ${dteEnvioEv.statusId}")
+                return
+                }
+
+                inputStream = ec.resource.getLocationReference(dteEnvioEv.documentLocation).openStream()
+                //Map processingParameters = new JsonSlurper().parseText(dteEnvioEv.processingParameters)
+            </script>
+            <!--return error="true" message="envio: $envio aaaaa $inputStream"/-->
+            <!--message type="warning">$envio aaaaa $inputStream \n ******************************</message-->
+
+            <!--script>
+                ec.service.special().name("mchile.sii.DTECommServices.send#PendingEnvioBoletaReceiver").parameter("envioIdList", [envio.envioId]).registerOnCommit()
+            </script-->
+            <set field="trackId" value=""/>
+
+            <script>
+                import java.io.File
+                import java.io.FileInputStream
+                import java.security.KeyStore
+                import java.security.PrivateKey
+                import java.security.cert.X509Certificate
+                import cl.nic.dte.net.ConexionSiiBoleta
+                import cl.nic.dte.util.Utilities
+                import org.json.simple.JSONObject
+                import org.moqui.resource.ResourceReference
+
+                ConexionSiiBoleta con = new ConexionSiiBoleta()
+                // leo certificado y llave privada del archivo pkcs12
+                KeyStore ks = KeyStore.getInstance("PKCS12")
+                ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
+                String alias = ks.aliases().nextElement()
+                //logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
+
+                X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
+                PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray())
+
+                String enviadorS = Utilities.getRutFromCertificate(x509)
+
+                ResourceReference documentoRr = ec.resource.getLocationReference(dteEnvioEv.documentLocation)
+                //ResourceReference documentoRr = ec.resource.getLocationReference(documentContentLocation)
+                JSONObject recp
+                //if (dteSystemIsProduction) {
+                //    String token = con.getToken(pKey, x509)
+                //    recp = con.uploadEnvioProduccion(enviadorS, compaS, documentoRr.openStream(), token)
+                //} else {
+                String token = con.getTokenCert(pKey, x509)
+                recp = con.uploadEnvioCertificacion("12857517-0", rutEmisor, documentoRr.openStream(), token)
+                //}
+
+                String estado = (String) recp.get("estado")
+                trackId = String.valueOf(recp.get("trackid"))
+
+                if (estado.equals("REC")) {
+                logger.warn("Boleta rechazada: " + recp.toString())
+                } else if (estado.equals("RPR")) {
+                logger.warn("Boleta aceptada con reparos")
+                } else if (estado.equals(RFR)) {
+                logger.warn("Boleta con error en firma")
+                } else {
+                logger.warn("Boleta recibida con trackid" + trackId)
+                }
+
+            </script>
+
+        </actions>
+    </service>
+
 
     <service verb="verificaEnSII" noun="EnvioBoleta">
         <description>
