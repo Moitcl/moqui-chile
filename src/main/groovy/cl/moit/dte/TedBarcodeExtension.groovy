@@ -1,26 +1,26 @@
-package cl.moit.dte;
+package cl.moit.dte
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
+import org.krysalis.barcode4j.xalan.BarcodeExt
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+import org.w3c.dom.Document
+import org.w3c.dom.DocumentFragment
+import org.w3c.dom.NodeList
+import org.xml.sax.SAXException
+import uk.org.okapibarcode.backend.Pdf417
+import uk.org.okapibarcode.output.SvgRenderer
 
-import org.krysalis.barcode4j.xalan.BarcodeExt;
-import org.w3c.dom.Document;
-import org.w3c.dom.DocumentFragment;
-import org.w3c.dom.NodeList;
-import org.xml.sax.SAXException;
-
-import uk.org.okapibarcode.backend.Pdf417;
-import uk.org.okapibarcode.output.SvgRenderer;
-
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
-import java.awt.Color;
+import javax.xml.transform.OutputKeys
+import javax.xml.transform.Transformer
+import javax.xml.transform.TransformerException
+import javax.xml.transform.TransformerFactory
+import javax.xml.transform.dom.DOMSource
+import javax.xml.transform.stream.StreamResult
+import java.awt.*
 
 public class TedBarcodeExtension extends BarcodeExt {
+
+    protected final static Logger logger = LoggerFactory.getLogger(TedBarcodeExtension.class);
 
     public DocumentFragment generate(NodeList tedxml) throws SAXException, IOException {
         try {
@@ -31,6 +31,7 @@ public class TedBarcodeExtension extends BarcodeExt {
             barcode.setPreferredEccLevel(5);
             //barcode.setEncodingMode(1);
             barcode.setContent(msg);
+            logger.info("msg: " + msg);
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
@@ -40,18 +41,20 @@ public class TedBarcodeExtension extends BarcodeExt {
             int width = barcode.getWidth();
             int height = barcode.getHeight();
 
-            javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
-            factory.setNamespaceAware(true);
-            factory.setIgnoringElementContentWhitespace(false);
-            javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
-            Document tedDocument = builder.parse(new java.io.ByteArrayInputStream(baos.toByteArray()));
-
-            //Document tedDocument = (Document) cl.moit.dte.MoquiDTEUtils.parseDocument(baos.toByteArray()).getDomNode();
+            logger.info("Attempting to parse document");
+            Document tedDocument = (Document) cl.moit.dte.MoquiDTEUtils.parseDocument(baos.toByteArray());
+            logger.info("Parsed document: " + tedDocument.toString());
             DocumentFragment tedFragment = tedDocument.createDocumentFragment();
+            tedFragment.appendChild(tedDocument.getDocumentElement());
+
+            /*
             NodeList tedNodeList = tedDocument.getChildNodes();
             for (int i = 0; i < tedNodeList.getLength(); i++) {
+                logger.info("tedNodeList.item(i): " + tedNodeList.item(i).getNodeName());
                 tedFragment.appendChild(tedNodeList.item(i));
             }
+
+             */
 
             return tedFragment;
 

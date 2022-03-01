@@ -527,6 +527,8 @@ class MoquiDTEUtils {
         factory.setNamespaceAware(true);
         factory.setIgnoringElementContentWhitespace(false);
         factory.setValidating(validating)
+        factory.setFeature("http://apache.org/xml/features/nonvalidating/load-dtd-grammar", false);
+        factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
         if (validating) {
             factory.setAttribute(JAXP_SCHEMA_LANGUAGE, W3C_XML_SCHEMA);
         }
