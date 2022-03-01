@@ -40,7 +40,13 @@ public class TedBarcodeExtension extends BarcodeExt {
             int width = barcode.getWidth();
             int height = barcode.getHeight();
 
-            Document tedDocument = (Document) org.apache.xmlbeans.XmlBeans.getContextTypeLoader().parse(baos.toString(), null, null).getDomNode();
+            javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            factory.setIgnoringElementContentWhitespace(false);
+            javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
+            Document tedDocument = builder.parse(new java.io.ByteArrayInputStream(baos.toByteArray()));
+
+            //Document tedDocument = (Document) cl.moit.dte.MoquiDTEUtils.parseDocument(baos.toByteArray()).getDomNode();
             DocumentFragment tedFragment = tedDocument.createDocumentFragment();
             NodeList tedNodeList = tedDocument.getChildNodes();
             for (int i = 0; i < tedNodeList.getLength(); i++) {
