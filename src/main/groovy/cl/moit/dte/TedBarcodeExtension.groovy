@@ -31,7 +31,6 @@ public class TedBarcodeExtension extends BarcodeExt {
             barcode.setPreferredEccLevel(5);
             //barcode.setEncodingMode(1);
             barcode.setContent(msg);
-            logger.info("msg: " + msg);
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
@@ -41,20 +40,9 @@ public class TedBarcodeExtension extends BarcodeExt {
             int width = barcode.getWidth();
             int height = barcode.getHeight();
 
-            logger.info("Attempting to parse document");
             Document tedDocument = (Document) cl.moit.dte.MoquiDTEUtils.parseDocument(baos.toByteArray());
-            logger.info("Parsed document: " + tedDocument.toString());
             DocumentFragment tedFragment = tedDocument.createDocumentFragment();
             tedFragment.appendChild(tedDocument.getDocumentElement());
-
-            /*
-            NodeList tedNodeList = tedDocument.getChildNodes();
-            for (int i = 0; i < tedNodeList.getLength(); i++) {
-                logger.info("tedNodeList.item(i): " + tedNodeList.item(i).getNodeName());
-                tedFragment.appendChild(tedNodeList.item(i));
-            }
-
-             */
 
             return tedFragment;
 
