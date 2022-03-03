@@ -355,12 +355,14 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="processed" type="Boolean"/>
         </out-parameters>
     </service>
+
     <service verb="process" noun="EnvioDte" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/processEnvioDte.groovy">
         <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
         <out-parameters>
             <parameter name="envioRespuestaId"/>
         </out-parameters>
     </service>
+
     <service verb="process" noun="RespuestaDte">
         <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
         <actions>
@@ -538,10 +540,12 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
         </actions>
     </service>
+
     <service verb="process" noun="EnvioRecibo">
         <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
         <actions></actions>
     </service>
+
     <service verb="process" noun="ResultadoEnvio">
         <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
         <actions>
@@ -1272,8 +1276,7 @@ TrackId Token']" type="Map"/>
 
     <service verb="verificaEnSII" noun="EnvioBoleta">
         <description>
-            <!-- TODO -->
-            Verificación en el SII de envio con rut y trackid
+            Verificación en el SII de envioBoleta con rut y trackid
         </description>
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
@@ -1302,6 +1305,7 @@ TrackId Token']" type="Map"/>
 
             <set field="salida" value=""/>
             <set field="statusXML" value=""/>
+            <set field="token" default-value="0"/>
 
             <script>
                 import java.io.FileInputStream
@@ -1324,29 +1328,39 @@ TrackId Token']" type="Map"/>
                 // Se obtiene objeto JSON
                 JSONObject resp
                 if (dteSystemIsProduction) {
-                    String token = con.getToken(pkey, certificate)
+                    //String token = con.getToken(pkey, certificate)
+                    token = con.getToken(pkey, certificate)aaaaaaa
                     resp = con.getEstadoEnvioBOLETAProduccion(rutEmisor, trackId, token)
                 } else {
-                    String token = con.getTokenCert(pkey, certificate)
+                    //String token = con.getTokenCert(pkey, certificate)
+                    token = con.getTokenCert(pkey, certificate)
                     resp = con.getEstadoEnvioBOLETACertificacion(rutEmisor, trackId, token)
                 }
-
-                //Map processingParameters = new JsonSlurper().parseText(dteEnvioEv.processingParameters)
 
                 String estado = (String) resp.get("codigo")
                 String error = (String) resp.get("detalle_rep_rech")
 
                 salida = resp.toString()
                 logger.warn("Salida JSON: " + salida)
+
+                //seedReturn = getSeedResponse?.getSeedReturn
+                //bais = new ByteArrayInputStream(seedReturn.getBytes())
+                //groovy.util.Node seedReturn = new groovy.util.XmlParser(false, false).parse(bais)
+                //bais.close()
+                //semilla = seedReturn.'SII:RESP_BODY'.SEMILLA.text()
+                //estado = seedReturn.'SII:RESP_HDR'.ESTADO.text()
+
             </script>
-            <set field="errorCode" value="0"/>
+            <set field="errorCode" value="0"/><!-- bbbbbb -->
             <set field="glosaError" value="$salida"/>
+            <service-call name="mchile.sii.DTECommServices.get#EstadoEnvioBoletaCertificacion" out-map="respuestaSII"
+                          in-map="[rutCompany:rutEmisor, trackId:trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]"/>
         </actions>
     </service>
 
     <service verb="verificaEnSII" noun="Boleta">
         <description>
-            Verificación en el SII de boleta usando rut empresa, tipo y folio
+            Verificación en el SII de boleta especifica usando rut empresa, tipo y folio
         </description>
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
@@ -1773,7 +1787,6 @@ TrackId Token']" type="Map"/>
             <parameter name="isProduction" type="Boolean"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="estado"/>
             <parameter name="semilla"/>
         </out-parameters>
         <actions>
@@ -1781,19 +1794,31 @@ TrackId Token']" type="Map"/>
                 <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
             </if>
             <if condition="isProduction"><then>
-                <service-call name="mchile.sii.DTECommServices.get#SeedProduction" out-map="context"/>
+                <service-call name="mchile.sii.DTECommServices.get#SeedBoletaProduction" out-map="context"/>
             </then><else>
-                <service-call name="mchile.sii.DTECommServices.get#SeedCertification" out-map="context"/>
+                <service-call name="mchile.sii.DTECommServices.get#SeedBoletaCertification" out-map="context"/>
             </else></if>
-            <script><![CDATA[
-                seedReturn = getSeedResponse?.getSeedReturn
-                bais = new ByteArrayInputStream(seedReturn.getBytes())
-                groovy.util.Node seedReturn = new groovy.util.XmlParser(false, false).parse(bais)
-                bais.close()
-                semilla = seedReturn.'SII:RESP_BODY'.SEMILLA.text()
-                estado = seedReturn.'SII:RESP_HDR'.ESTADO.text()
-            ]]></script>
         </actions>
+    </service>
+
+    <service verb="get" noun="SeedBoletaCertification" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/getSeedBoleta.groovy">
+        <in-parameters>
+            <parameter name="urlSolicitud" required="true" default-value="https://apicert.sii.cl/recursos/v1/boleta.electronica.semilla"/>
+            <parameter name="hostEnvio" required="true" default-value="apicert.sii.cl"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="seed"/>
+        </out-parameters>
+    </service>
+
+    <service verb="get" noun="SeedBoletaProduction" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/getSeedBoleta.groovy">
+        <in-parameters>
+            <parameter name="urlSolicitud" required="true" default-value="https://apicert.sii.cl/recursos/v1/boleta.electronica.semilla"/>
+            <parameter name="hostEnvio" required="true" default-value="apicert.sii.cl"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="seed"/>
+        </out-parameters>
     </service>
 
     <service verb="get" noun="SeedCertification">
@@ -1804,6 +1829,44 @@ TrackId Token']" type="Map"/>
         </out-parameters>
         <actions>
 
+        </actions>
+    </service>
+
+    <service verb="get" noun="EstadoEnvioBoleta" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/getEstadoEnvioBoleta.groovy">
+        <description>Verificacion del estado de un EnvioBoleta</description>
+        <in-parameters>
+            <parameter name="rutCompany" required="true"/>
+            <parameter name="trackId" required="true"/>
+            <parameter name="token" required="true"/>
+            <parameter name="urlSolicitud" required="true"/>
+            <parameter name="hostEnvio" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="respSII"/>
+        </out-parameters>
+    </service>
+
+    <service verb="get" noun="EstadoEnvioBoletaCertificacion">
+        <in-parameters>
+            <parameter name="rutCompany" required="true"/>
+            <parameter name="trackId" required="true"/>
+            <parameter name="token" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="respSII"/>
+        </out-parameters>
+        <actions>
+            <set field="urlSolicitud"/>
+            <set field="hostEnvio"/>
+            <script>
+            urlSolicitud = "https://apicert.sii.cl/recursos/v1/boleta.electronica.envio";
+            hostEnvio = "apicert.sii.cl";
+            //return getEstadoEnvioBOLETA(rutCompany, trackId, token, urlSolicitud, hostEnvio);
+            </script>
+            <service-call name="mchile.sii.DTECommServices.get#EstadoEnvioBoleta" out-map="respuesta"
+                          in-map="[rutCompany:rutCompany, trackId:trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]"/>
+            <set field="respSII" from="respuesta.respSII"/>
+            <return error="true" message="pppp $respuesta"/>
         </actions>
     </service>
 
