@@ -9,8 +9,10 @@ import javax.xml.parsers.*
 import java.io.*
 import java.util.*
 import java.io.InputStream
+import org.xml.sax.SAXException;
 
 seed = "0";
+System.out.println("*******************************************************************");
 System.out.println("Usando url solicitud semilla: " + urlSolicitud);
 try
 {

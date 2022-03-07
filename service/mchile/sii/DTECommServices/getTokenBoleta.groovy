@@ -2,7 +2,7 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.util.EntityUtils;
-import org.apache.http.protocol.*;
+//import org.apache.http.protocol.*;
 import org.w3c.dom.*;
 import javax.xml.parsers.*;
 import java.io.*;
@@ -11,20 +11,34 @@ import javax.xml.crypto.dsig.dom.*;
 import javax.xml.crypto.dsig.spec.*;
 import javax.xml.crypto.dsig.keyinfo.*;
 import java.util.*;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.stream.StreamResult;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.dom.DOMSource;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
+import org.xml.sax.SAXException;
+import org.moqui.context.ExecutionContext
+import java.nio.file.Paths;
+import java.nio.file.Files;
+import org.apache.http.util.EntityUtils;
 
-//ExecutionContext ec = context.ec
+ExecutionContext ec = context.ec
+
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
 
 String now = "-"+System.nanoTime();
-
-String urlSolicitud = Utilities.netLabels.getString("URL_SOLICITUD_TOKEN_BOLETA");
 
 String returnedToken = "0";
 
 System.out.println("Usando url token " + urlSolicitud);
 
-String semilla = getSemilla();
 
-System.out.println("Semilla: " + semilla);
+//String semilla = getSemilla();
+seed = ec.service.sync().name("mchile.sii.DTECommServices.get#SeedBoleta").parameters([isProduction:isProduction]).call().seed
+
+System.out.println("Semilla: " + seed);
 
 // Se arma XML para obtener token
 DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
@@ -39,7 +53,7 @@ rootElement.appendChild(item);
 
 // Se agrega semilla obtenida
 Element semillaDoc = doc.createElement("Semilla");
-semillaDoc.appendChild(doc.createTextNode(semilla));
+semillaDoc.appendChild(doc.createTextNode(seed));
 item.appendChild(semillaDoc);
 
 // Firmar
@@ -52,12 +66,12 @@ SignedInfo si = fac.newSignedInfo (fac.newCanonicalizationMethod (Canonicalizati
 // Create the KeyInfo containing the X509Data.
 KeyInfoFactory kif = fac.getKeyInfoFactory();
 List x509Content = new ArrayList();
-x509Content.add(cert.getSubjectX500Principal().getName());
-x509Content.add(cert);
+x509Content.add(certificate.getSubjectX500Principal().getName());
+x509Content.add(certificate);
 X509Data xd = kif.newX509Data(x509Content);
 KeyInfo ki = kif.newKeyInfo(Collections.singletonList(xd));
 
-DOMSignContext dsc = new DOMSignContext(pKey, doc.getDocumentElement());
+DOMSignContext dsc = new DOMSignContext(pkey, doc.getDocumentElement());
 XMLSignature signature = fac.newXMLSignature(si, ki);
 signature.sign(dsc);
 
@@ -139,6 +153,7 @@ try {
     throw new RuntimeException(e);
 }
 
-token = EntityUtils.toString(resEntity);
+//token = EntityUtils.toString(resEntity);
+token = returnedToken;
 
 return
