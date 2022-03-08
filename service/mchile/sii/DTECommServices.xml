@@ -1315,30 +1315,20 @@ TrackId Token']" type="Map"/>
                 import java.security.cert.X509Certificate
                 import java.util.HashMap
                 import org.apache.xmlbeans.XmlOptions
-                import cl.nic.dte.net.ConexionSiiBoleta
                 import cl.nic.dte.util.Utilities
-                //import org.json.simple.JSONObject
-
-                ConexionSiiBoleta con = new ConexionSiiBoleta()
+                import groovy.json.JsonSlurper;
 
                 String enviadorS = Utilities.getRutFromCertificate(certificate)
 
                 System.out.println("Enviador: " + rutEnvia + ", token: " + token)
 
                 // Ejecutar GET https://apicert.sii.cl/boleta.electronica.envio/{rut}-{dv}-{trackid}
-                // Se obtiene objeto JSON
-                //JSONObject resp
                 if (dteSystemIsProduction) {
                     logger.warn("Consultando envio Boleta en produccion")
                     token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([isProduction:'yes',  organizationPartyId:organizationPartyId]).call().token
-                    //token = con.getToken(pkey, certificate)
-                    //resp = con.getEstadoEnvioBOLETAProduccion(rutEmisor, trackId, token)
                     resp = ec.service.sync().name("mchile.sii.DTECommServices.get#EstadoEnvioBoletaProduccion").parameters([rutCompany:rutEmisor, trackId:trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]).call().respSII
                 } else {
                     logger.warn("Consultando envio en Certificacion")
-                    //String token = con.getTokenCert(pkey, certificate)
-                    //token = con.getTokenCert(pkey, certificate)
-                    //resp = con.getEstadoEnvioBOLETACertificacion(rutEmisor, trackId, token)
                     token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([isProduction:'',  organizationPartyId:organizationPartyId]).call().token
                     resp = ec.service.sync().name("mchile.sii.DTECommServices.get#EstadoEnvioBoletaCertificacion").parameters([rutCompany:rutEmisor, trackId:trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]).call().respSII
                 }
@@ -1355,16 +1345,20 @@ TrackId Token']" type="Map"/>
                 //bais.close()
                 //semilla = seedReturn.'SII:RESP_BODY'.SEMILLA.text()
                 //estado = seedReturn.'SII:RESP_HDR'.ESTADO.text()
+                def jsonSlurper = new JsonSlurper()
+                def object = jsonSlurper.parseText(resp)
+                assert object instanceof Map
+                ppp = object.estadistica
 
             </script>
             <set field="errorCode" value="0"/><!-- aaaaa -->
-            <set field="glosaError" value="$salida"/>
+            <set field="glosaError" value="$ppp **** $salida"/>
             <!--service-call name="mchile.sii.DTECommServices.get#TokenBoleta" out-map="respuestaToken" in-map="[isProduction:isProduction, organizationPartyId:organizationPartyId]"/>
             <set field="token" from="respuestaToken.token"/>
             <service-call name="mchile.sii.DTECommServices.get#EstadoEnvioBoletaCertificacion" out-map="respuestaSII"
                           in-map="[rutCompany:rutEmisor, trackId:trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]"/-->
 
-            <return error="true" message="repuesta: $resp"/>
+            <return error="true" message="repuesta: $ppp ***** $resp"/>
         </actions>
     </service>
 
@@ -1396,6 +1390,7 @@ TrackId Token']" type="Map"/>
 
             <set field="salida" value=""/>
             <set field="statusXML" value=""/>
+            <set field="token" value="0"/>
 
             <set field="tipo" value="39"/>
             <if condition="fiscalTaxDocumentTypeEnumId.equals('Ftdt-41')">
@@ -1489,14 +1484,22 @@ TrackId Token']" type="Map"/>
                 System.out.println("Folio: " + folio + ", token: " + token)
 
                 // Ejecutar GET https://apicert.sii.cl/boleta.electronica.envio/{rut}-{dv}-{trackid}
-                // Se obtiene objeto JSON
-                JSONObject resp
-                if (dteSystemIsProduction) {
+                /*if (dteSystemIsProduction) {
                     String token = con.getToken(pkey, certificate)
                     resp = con.getEstadoBOLETAProduccion(rutEmisor, rutReceptor, monto, fechaEmision, ""+folio, tipo, token)
                 } else {
                     String token = con.getTokenCert(pkey, certificate)
                     resp = con.getEstadoBOLETACertificacion(rutEmisor, rutReceptor, monto, fechaEmision, ""+folio, tipo, token)
+                }*/
+
+                if (dteSystemIsProduction) { // aaaaaaaaaaaa
+                    logger.warn("Consultando Boleta en produccion")
+                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([isProduction:'yes',  organizationPartyId:organizationPartyId]).call().token
+                    resp = ec.service.sync().name("mchile.sii.DTECommServices.get#EstadoBoletaProduccion").parameters([rutCompany:rutEmisor, , rutReceptor:rutReceptor, monto:monto, fechaEmision:fechaEmision, folio:folio, tipo:tipo, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]).call().respSII
+                } else {
+                    logger.warn("Consultando Boleta en Certificacion")
+                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([isProduction:'',  organizationPartyId:organizationPartyId]).call().token
+                    resp = ec.service.sync().name("mchile.sii.DTECommServices.get#EstadoBoletaCertificacion").parameters([rutCompany:rutEmisor, rutReceptor:rutReceptor, monto:monto, fechaEmision:fechaEmision, folio:folio, tipo:tipo, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]).call().respSII
                 }
 
                 String estado = (String) resp.get("codigo")
@@ -1820,6 +1823,7 @@ TrackId Token']" type="Map"/>
         </out-parameters>
     </service>
 
+
     <service verb="get" noun="SeedCertification">
         <out-parameters>
             <parameter name="getSeedResponse" type="Map">
@@ -1860,9 +1864,103 @@ TrackId Token']" type="Map"/>
             <script>
             urlSolicitud = "https://apicert.sii.cl/recursos/v1/boleta.electronica.envio";
             hostEnvio = "apicert.sii.cl";
-            //return getEstadoEnvioBOLETA(rutCompany, trackId, token, urlSolicitud, hostEnvio);
             </script>
             <service-call name="mchile.sii.DTECommServices.get#EstadoEnvioBoleta" out-map="respuesta"
+                          in-map="[rutCompany:rutCompany, trackId:trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]"/>
+            <set field="respSII" from="respuesta.respSII"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="EstadoEnvioBoletaProduccion">
+        <in-parameters>
+            <parameter name="rutCompany" required="true"/>
+            <parameter name="trackId" required="true"/>
+            <parameter name="token" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="respSII"/>
+        </out-parameters>
+        <actions>
+            <set field="urlSolicitud"/>
+            <set field="hostEnvio"/>
+            <script>
+                // Cambiar a url y host produccion
+                urlSolicitud = "https://apicert.sii.cl/recursos/v1/boleta.electronica.envio";
+                hostEnvio = "apicert.sii.cl";
+            </script>
+            <service-call name="mchile.sii.DTECommServices.get#EstadoEnvioBoleta" out-map="respuesta"
+                          in-map="[rutCompany:rutCompany, trackId:trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]"/>
+            <set field="respSII" from="respuesta.respSII"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="EstadoBoleta" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/getEstadoBoleta.groovy">
+        <description>Verificacion del estado de una Boleta</description>
+        <in-parameters>
+            <parameter name="rutCompany" required="true"/>
+            <parameter name="rutReceptor" required="true"/>
+            <parameter name="monto" required="true"/>
+            <parameter name="folio" required="true"/>
+            <parameter name="tipo" required="true"/>
+            <parameter name="token" required="true"/>
+            <parameter name="urlSolicitud" required="true"/>
+            <parameter name="hostEnvio" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="respSII"/>
+        </out-parameters>
+    </service>
+
+    <service verb="get" noun="EstadoBoletaCertificacion">
+        <in-parameters>
+            <parameter name="rutCompany" required="true"/>
+            <parameter name="rutReceptor" required="true"/>
+            <parameter name="monto" required="true"/>
+            <parameter name="folio" required="true"/>
+            <parameter name="tipo" required="true"/>
+            <parameter name="token" required="true"/>
+            <parameter name="urlSolicitud" required="true"/>
+            <parameter name="hostEnvio" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="respSII"/>
+        </out-parameters>
+        <actions>
+            <set field="urlSolicitud"/>
+            <set field="hostEnvio"/>
+            <script>
+                urlSolicitud = "https://apicert.sii.cl/recursos/v1/boleta.electronica.envio";
+                hostEnvio = "apicert.sii.cl";
+            </script>
+            <service-call name="mchile.sii.DTECommServices.get#EstadoBoleta" out-map="respuesta"
+                          in-map="[rutCompany:rutCompany, trackId:trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]"/>
+            <set field="respSII" from="respuesta.respSII"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="EstadoBoletaProduccion">
+        <in-parameters>
+            <parameter name="rutCompany" required="true"/>
+            <parameter name="rutReceptor" required="true"/>
+            <parameter name="monto" required="true"/>
+            <parameter name="folio" required="true"/>
+            <parameter name="tipo" required="true"/>
+            <parameter name="token" required="true"/>
+            <parameter name="urlSolicitud" required="true"/>
+            <parameter name="hostEnvio" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="respSII"/>
+        </out-parameters>
+        <actions>
+            <set field="urlSolicitud"/>
+            <set field="hostEnvio"/>
+            <script>
+                // Cambiar a url y host produccion
+                urlSolicitud = "https://apicert.sii.cl/recursos/v1/boleta.electronica.envio";
+                hostEnvio = "apicert.sii.cl";
+            </script>
+            <service-call name="mchile.sii.DTECommServices.get#EstadoBoleta" out-map="respuesta"
                           in-map="[rutCompany:rutCompany, trackId:trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]"/>
             <set field="respSII" from="respuesta.respSII"/>
         </actions>
