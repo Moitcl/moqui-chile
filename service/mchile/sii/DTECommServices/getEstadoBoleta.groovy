@@ -1,7 +1,6 @@
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.util.EntityUtils;
 import org.w3c.dom.*;
 import javax.xml.parsers.*;
 import java.io.*;
@@ -10,18 +9,19 @@ import javax.xml.crypto.dsig.dom.*;
 import javax.xml.crypto.dsig.spec.*;
 import javax.xml.crypto.dsig.keyinfo.*;
 import java.util.*;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.stream.StreamResult;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerException;
-import javax.xml.transform.dom.DOMSource;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.StringEntity;
-import org.xml.sax.SAXException;
 import org.moqui.context.ExecutionContext
-import java.nio.file.Paths;
-import java.nio.file.Files;
 import org.apache.http.util.EntityUtils;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.cookie.BasicClientCookie;
+import org.apache.http.impl.client.BasicCookieStore;
+import org.apache.http.protocol.BasicHttpContext;
+import org.apache.http.protocol.HttpContext;
+import org.apache.http.message.BasicHeader;
+import org.apache.http.HttpEntity;
+import org.apache.http.client.CookieStore;
+import org.apache.http.client.params.ClientPNames;
+import org.apache.http.client.params.CookiePolicy;
+import org.apache.http.client.protocol.ClientContext;
 
 ExecutionContext ec = context.ec
 
@@ -64,20 +64,8 @@ HttpEntity resEntity = response.getEntity();
 
 String resp = null;
 
-String respSII = EntityUtils.toString(resEntity);
+respSII = EntityUtils.toString(resEntity);
 System.out.println("Respuesta SII: " + respSII);
 
-// Armar JSON y devolverlo
-JSONObject jsonObject = null;
-try {
-    Object obj = JSONValue.parse(respSII);
-    jsonObject = (JSONObject) obj;
-    //String estado = (String) jsonObject.get("estado");
-    //String trackid = String.valueOf(jsonObject.get("trackid"));
-    //System.out.println("Estado: " + estado);
-    //System.out.println("Trackid: " + trackid);
-} catch (Exception pe) {
-    System.out.println("JSON parse error");
-    System.out.println(pe);
-}
+
 return
