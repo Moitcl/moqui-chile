@@ -117,7 +117,7 @@ class NotaDeDebitoTests extends Specification {
                            orderItemSeqId:'01', returnReasonEnumId:'RrsnDefective', returnResponseEnumId:'RrspRefund', returnQuantity:5, returnPrice:500000])
               .call()
       // Lista de items
-      ArrayList items= [[returnItemSeqId:'01', returnQuantity:'1', returnPrice: 10000, pctDiscount:0, description:'HORAS PROGRAMADOR']]
+      ArrayList items= [[returnItemSeqId:'01', returnQuantity:'1', returnPrice: 10000, description:'HORAS PROGRAMADOR']]
       // Creacion de Nota de Credito
       Map factOut = ec.service.sync().name("mchile.sii.DTEServices.generar#NotaCredito")
               .parameters([returnId:returnId, invoiceId:invoiceId, issuerPartyId:partyId, fiscalTaxDocumentTypeEnumId:'Ftdt-61', items:items])

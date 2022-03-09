@@ -96,13 +96,11 @@ class MoquiDTEUtils {
             }
             Integer quantity = detailEntry.quantity
             String uom = null
-            BigDecimal pctDiscount
             if (!detailType in ["ShipmentItem"]) {
                 if (detailEntry.quantityUomId.equals('TF_hr'))
                     uom = "Hora"
                 else if (detailEntry.quantityUomId.equals('TF_mon'))
                     uom = "Mes"
-                pctDiscount = detailEntry.pctDiscount
             }
             String itemAfecto = "true"
             if (detailEntry.productId) {
@@ -189,14 +187,6 @@ class MoquiDTEUtils {
                 detailMap.quantity = quantity
             if(uom != null)
                 detailMap.uom = uom
-            if((pctDiscount != null) && (pctDiscount > 0)) {
-                ec.logger.warn("Aplicando descuento " + pctDiscount+"% a precio "+ priceItem )
-                BigDecimal descuento = totalItem * pctDiscount / 100
-                ec.logger.warn("Descuento:" + descuento)
-                detailMap.porcentajeDescuento = pctDiscount
-                detailMap.montoDescuento = Math.round(descuento)
-                totalItem = totalItem - descuento
-            }
             if (priceItem != null && (detailType != "ShipmentItem" || Math.round(priceItem) > 0))
                 detailMap.priceItem = priceItem
             detailMap.montoItem = totalItem

@@ -107,7 +107,7 @@ class NotaDeCreditoTests extends Specification {
               .call()
 
       // Lista de items
-      ArrayList items= [[returnItemSeqId:'01', returnQuantity:'1', returnPrice: 10000, pctDiscount:0, description:'HORAS PROGRAMADOR']]
+      ArrayList items= [[returnItemSeqId:'01', returnQuantity:'1', returnPrice: 10000, description:'HORAS PROGRAMADOR']]
 
       // Creacion de Nota de Credito
       Map factOut = ec.service.sync().name("mchile.sii.DTEServices.generar#NotaCredito")
