@@ -182,21 +182,6 @@ if (tipoDte == 33) {
     totalNeto = detMap.totalNeto
 }
 
-// Descuento Global
-if(globalDiscount != null && Integer.valueOf(globalDiscount) > 0) {
-    if (totalNeto != null)
-        totalNeto = totalNeto - Math.round(totalNeto?:0 * (Long.valueOf(globalDiscount) / 100))
-    if (totalExento != null)
-        totalExento = totalExento - Math.round(totalExento?:0 * (Long.valueOf(globalDiscount) / 100))
-    // Creación entradas en XML
-    discountMap = [:]
-    discountMap.numeroLinea = 1
-    discountMap.tipo = "D"
-    discountMap.tipoValor = "%"
-    discountMap.valor = globalDiscount
-    discountMap.glosa = globalDr
-    globalDiscountOrChargeList = [discountMap]
-}
 // Totales
 if (totalNeto != null) {
     long totalIVA = Math.round(totalNeto * vatTaxRate)
