@@ -76,6 +76,7 @@ montoExento = 0 as Long
 montoIVARecuperable = 0 as Long
 totalNeto = 0 as Long
 totalExento = 0 as Long
+totalDescuentos = 0 as Long
 
 // Campo para guardar resumen atributos -->
 amount = 0 as Long
@@ -111,6 +112,7 @@ if (tipoDte == 33) {
         throw new BaseArtifactException("Factura afecta tiene solamente ítemes exentos")
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
+    totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 34) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     detalleList = detMap.detalleList
@@ -120,6 +122,7 @@ if (tipoDte == 33) {
         throw new BaseArtifactException("Factura exenta tiene ítemes afectos")
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
+    totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 61) {
     // Nota de Crédito Electrónica
     ec.logger.warn("Creando DTE tipo 61")
@@ -144,6 +147,7 @@ if (tipoDte == 33) {
         totalNeto = 0
         totalExento = 0
     }
+    totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 56) {
     // Nota de Débito Electrónica
     ec.logger.warn("Creando DTE tipo 56")
@@ -167,6 +171,7 @@ if (tipoDte == 33) {
         totalNeto = 0
         totalExento = 0
     }
+    totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 52) {
     // Guías de Despacho
     ec.logger.warn("Creando DTE tipo 52")
@@ -180,6 +185,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "ShipmentItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalDescuentos = detMap.totalDescuentos
 }
 
 // Totales

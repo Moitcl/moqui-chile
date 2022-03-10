@@ -86,6 +86,7 @@ class MoquiDTEUtils {
         Long totalExento = null
         int numberAfectos = 0
         int numberExentos = 0
+        Long totalDescuentos = 0
 
         detailList.each { detailEntryObj ->
             HashMap detailEntry = (detailEntryObj instanceof EntityValue) ? detailEntryObj.getMap() : detailEntryObj
@@ -95,6 +96,9 @@ class MoquiDTEUtils {
                 nombreItem = productEv? productEv.productName : ''
             }
             Integer quantity = detailEntry.quantity
+            Integer montoDescuento = detailEntry.montoDescuento
+            BigDecimal porcentajeDescuento = detailEntry.porcentajeDescuento
+            totalDescuentos += montoDescuento
             String uom = null
             if (!detailType in ["ShipmentItem"]) {
                 if (detailEntry.quantityUomId.equals('TF_hr'))
@@ -144,6 +148,7 @@ class MoquiDTEUtils {
                     totalItem = totalItem + (quantity - quantityHandled) * priceMap.price
                 }
                 priceItem = totalItem / quantity as BigDecimal
+                totalItem = totalItem - montoDescuento
                 totalItem = totalItem.setScale(0, BigDecimal.ROUND_HALF_UP) as Long
             } else if (detailType == "DebitoItem") {
                 if(codRef == 2) {
@@ -166,7 +171,7 @@ class MoquiDTEUtils {
                 }
             } else {
                 priceItem = detailEntry.amount
-                totalItem = (quantity?:0) * (priceItem?:0)
+                totalItem = (quantity?:0) * (priceItem?:0) - montoDescuento
             }
 
             if (itemAfecto == "true")
@@ -198,15 +203,19 @@ class MoquiDTEUtils {
             }
             if (detailType == "ReturnItem" && codRef == 2) {
                 singleDet = [detailMap]
-                return [detalleList:singleDet, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
+                return [detalleList:singleDet, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos, totalDescuentos:totalDescuentos]
             }
             if (detailType == "DebitoItem" && codRef == 2) {
                 singleDet = [detailMap]
-                return [detailArray:singleDet, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
+                return [detailArray:singleDet, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos, totalDescuentos:totalDescuentos]
             }
+            if (porcentajeDescuento)
+                detailMap.porcentajeDescuento = porcentajeDescuento
+            if (montoDescuento)
+                detailMap.montoDescuento = montoDescuento
             i = i + 1
         }
-        return [detalleList:detalleList, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos]
+        return [detalleList:detalleList, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos, totalDescuentos:totalDescuentos]
     }
 
     public static Map<String, Object> prepareReferences(ExecutionContext ec, List<HashMap> referenciaList, String rutReceptor, Long tipoFactura) {

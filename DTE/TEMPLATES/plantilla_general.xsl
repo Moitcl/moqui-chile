@@ -528,8 +528,9 @@
             </fo:block></fo:table-cell>
             <fo:table-cell text-align="right"><fo:block margin="2pt">
                 <xsl:choose>
-                    <xsl:when test="siidte:DescuentoPct | DescuentoPct"><xsl:value-of select="format-number(siidte:DescuentoPct | DescuentoPct, '###.###', 'european')"/>
-                    <xsl:otherwise>0</xsl:otherwise>%</xsl:when>
+                    <xsl:when test="siidte:DescuentoPct | DescuentoPct"><xsl:value-of select="format-number(siidte:DescuentoPct | DescuentoPct, '#0,###', 'european')"/>%</xsl:when>
+                    <xsl:when test="siidte:DescuentoMonto | DescuentoMonto">$&#160;<xsl:value-of select="format-number(siidte:DescuentoMonto | DescuentoMonto, '###.###', 'european')"/></xsl:when>
+                    <xsl:otherwise> </xsl:otherwise>
                 </xsl:choose>
             </fo:block></fo:table-cell>
             <fo:table-cell>
