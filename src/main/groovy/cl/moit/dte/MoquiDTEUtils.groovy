@@ -98,7 +98,8 @@ class MoquiDTEUtils {
             Integer quantity = detailEntry.quantity
             Integer montoDescuento = detailEntry.montoDescuento
             BigDecimal porcentajeDescuento = detailEntry.porcentajeDescuento
-            totalDescuentos += montoDescuento
+            if (montoDescuento)
+                totalDescuentos += montoDescuento
             String uom = null
             if (!detailType in ["ShipmentItem"]) {
                 if (detailEntry.quantityUomId.equals('TF_hr'))
@@ -158,7 +159,7 @@ class MoquiDTEUtils {
                     totalItem = 0
                 } else {
                     priceItem = detailEntry.amount
-                    totalItem = (quantity?:0) * (priceItem?:0)
+                    totalItem = (quantity?:0) * (priceItem?:0) - (montoDescuento?:0)
                 }
             } else if (detailType == "ReturnItem") {
                 if (codRef == 2) {
@@ -171,7 +172,7 @@ class MoquiDTEUtils {
                 }
             } else {
                 priceItem = detailEntry.amount
-                totalItem = (quantity?:0) * (priceItem?:0) - montoDescuento
+                totalItem = (quantity?:0) * (priceItem?:0) - (montoDescuento?:0)
             }
 
             if (itemAfecto == "true")
