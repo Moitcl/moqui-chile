@@ -72,6 +72,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fechaVencimiento" type="Date"/>
             <parameter name="tipoDespacho"/>
             <parameter name="codigosActividadEconomica"/>
+            <parameter name="descuentoORecargoGlobalList" type="List"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
@@ -597,8 +598,8 @@ along with this software (see the LICENSE.md file). If not, see
                 <service-call name="mchile.sii.DTEServices.genera#Boleta" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, issuerPartyId:issuerPartyId,
                                     rutReceptor:rutReceptor, razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor, contactoReceptor:contactoReceptor,
                                     direccionReceptor:direccionReceptor, comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
-                                    invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, receiverPartyId:receiverPartyId]"
-                              out-map="context"/>
+                                    descuentoORecargoGlobalList:descuentoORecargoGlobalList, invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago,
+                                    referenciaList:referenciaList, receiverPartyId:receiverPartyId]" out-map="context"/>
                 <return/>
             </if>
 
@@ -608,14 +609,15 @@ along with this software (see the LICENSE.md file). If not, see
                                     rutReceptor:rutReceptor, razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor, contactoReceptor:contactoReceptor,
                                     direccionReceptor:direccionReceptor, comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList,
                                     invoiceMessage:invoice.invoiceMessage, invoiceId:invoiceId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList,
-                                    receiverPartyId:receiverPartyId, glosaPagos:glosaPagos, settlementTermId:settlementTermId,
+                                    receiverPartyId:receiverPartyId, glosaPagos:glosaPagos, settlementTermId:settlementTermId, descuentoORecargoGlobalList:descuentoORecargoGlobalList,
                                     fechaEmision:fechaEmision, fechaVencimiento:fechaVencimiento]" out-map="context"/>
             </then><else-if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-56', 'Ftdt-61']">
                 <!-- Create Credit or Debit Note -->
                 <service-call name="mchile.sii.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, rutEmisor:rutEmisor, rutReceptor:rutReceptor,
                                     razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor, contactoReceptor:contactoReceptor, direccionReceptor:direccionReceptor,
                                     comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:invoiceItemList, invoiceId:invoiceId, returnId:returnId, formaPago:formaPago,
-                                    medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId, receiverPartyId:receiverPartyId]" out-map="context"/>
+                                    descuentoORecargoGlobalList:descuentoORecargoGlobalList, medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId,
+                                    receiverPartyId:receiverPartyId]" out-map="context"/>
             </else-if></if>
 
             <if condition="sendToSii">
@@ -693,7 +695,8 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="invoiceId" required="true"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="invoiceItemList"/>
+            <parameter name="invoiceItemList" type="List"/>
+            <parameter name="descuentoORecargoGlobalList" type="List"/>
         </out-parameters>
         <actions>
             <!-- Items de invoice -->
@@ -704,50 +707,76 @@ along with this software (see the LICENSE.md file). If not, see
                 <order-by field-name="invoiceItemSeqId"/>
             </entity-find>
             <set field="invoiceItemList" from="[]"/>
+            <set field="descuentoORecargoGlobalList" from="[]"/>
+            <set field="numeroLineaDescuentoORecargoGlobal" from="0"/>
             <iterate list="invoiceItemEVList" entry="invoiceItemEV">
-                <set field="invoiceItem" from="invoiceItemEV.getMap()"/>
-                <script>invoiceItemList.add(invoiceItem)</script>
-                <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="subitemList">
-                    <econdition field-name="invoiceId"/>
-                    <econdition field-name="parentItemSeqId" from="invoiceItemEV.invoiceItemSeqId"/>
-                </entity-find>
-                <set field="first" from="true" type="Boolean"/>
-                <set field="totalDiscount" from="0" type="BigDecimal"/>
-                <iterate list="subitemList" entry="subitem">
-                    <if condition="subitem.itemTypeEnumId == 'ItemDetailedDescription'"><then>
-                        <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}${subitem.description}"/>
-                    </then><else-if condition="subitem.itemTypeEnumId == 'ItemDiscount'">
-                        <entity-find entity-name="mantle.order.OrderItemBilling" list="billingList">
-                            <econdition field-name="invoiceId" from="invoiceId"/>
-                            <econdition field-name="invoiceItemSeqId" from="subitem.invoiceItemSeqId"/>
-                        </entity-find>
-                        <if condition="billingList"><then>
-                            <entity-find-one entity-name="mantle.order.OrderItem" auto-field-map="billingList.first" value-field="orderItem"/>
-                            <set field="hide" from="orderItem?.hideInParent == 'Y' &amp;&amp; (first || hide)"/>
-                            <if condition="first || invoiceItem.porcentajeDescuento">
-                                <if condition="first || invoiceItem.porcentajeDescuento == orderItem.sourcePercentage"><then>
-                                    <set field="invoiceItem.porcentajeDescuento" from="orderItem.sourcePercentage"/>
-                                </then><else>
-                                    <set field="invoiceItem.porcentajeDescuento" from="null"/>
-                                </else></if>
-                            </if>
+                <if condition="invoiceItemEV.itemTypeEnumId in ['ItemDiscount', 'ItemPromoDiscount']"><then>
+                    <set field="numeroLineaDescuentoORecargoGlobal" from="numeroLineaDescuentoORecargoGlobal+1"/>
+                    <set field="itemAmount" from="((invoiceItemEV.quantity?:0) * (invoiceItemEV.amount?:0)).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                    <entity-find entity-name="mantle.order.OrderItemBilling" list="billingList">
+                        <econdition field-name="invoiceId" from="invoiceId"/>
+                        <econdition field-name="invoiceItemSeqId" from="subitem.invoiceItemSeqId"/>
+                    </entity-find>
+                    <if condition="billingList"><then>
+                        <entity-find-one entity-name="mantle.order.OrderItem" auto-field-map="billingList.first" value-field="orderItem"/>
+                        <if condition="orderItem.sourcePercentage != null"><then>
+                            <set field="valor" from="orderItem.sourcePercentage"/>
+                            <set field="tipoValor" value="%"/>
                         </then><else>
-                            <set field="hide" from="ec.user.getPreference('mchile.dte.PreferHiddenDiscountInParent') == 'true' &amp;&amp; (first || hide)"/>
-                            <set field="invoiceItem.porcentajeDescuento" from="null"/>
+                            <set field="valor" from="(orderItem.amount*orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                            <set field="tipoValor" from="'$'"/>
                         </else></if>
-                        <set field="totalDiscount" from="totalDiscount + (subitem.amount*subitem.quantity as BigDecimal).setScale(0,java.math.RoundingMode.HALF_UP)"/>
-                    </else-if><else>
-                        <return error="true" message="Unknown itemTypeEnumId for subitem ${invoiceId}:${subitem.itemSeqId}: ${subitem.itemTypeEnumId}"/>
+                    </then><else>
+                        <set field="valor" from="(orderItem.amount*orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                        <set field="tipoValor" from="'$'"/>
                     </else></if>
-                    <set field="first" from="false"/>
-                </iterate>
-                <if condition="hide"><then>
-                    <if condition="ec.user.getPreference('mchile.dte.AddDiscountSubitemDescription') == 'true'">
-                        <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}Incluye ${subitem.description} por ${ec.l10n.formatCurrency((-1*subitem.amount*subitem.quantity/invoiceItem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), invoice.currencyUomId)}${invoiceItem.quantity > 1? ' (unitario)': ''}"/>
-                    </if>
-                    <set field="invoiceItem.amount" from="invoiceItem.amount + (totalDiscount/invoiceItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
-                </then><else>
-                    <set field="invoiceItem.montoDescuento" from="-totalDiscount"/>
+                    // ToDo: determine whether discount is afecto or exento
+                    <script>descuentoORecargoGlobalList.add([numeroLinea:numeroLineaDescuentoORecargoGlobal, tipo:'D', afecto:true, glosa:invoiceItemEV.description, valor:valor, tipoValor:tipoValor, monto:itemAmount])</script>
+                </then><else>ceItemEV.description,
+                    <set field="invoiceItem" from="invoiceItemEV.getMap()"/>
+                    <script>invoiceItemList.add(invoiceItem)</script>
+                    <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="subitemList">
+                        <econdition field-name="invoiceId"/>
+                        <econdition field-name="parentItemSeqId" from="invoiceItemEV.invoiceItemSeqId"/>
+                    </entity-find>
+                    <set field="first" from="true" type="Boolean"/>
+                    <set field="totalDiscount" from="0" type="BigDecimal"/>
+                    <iterate list="subitemList" entry="subitem">
+                        <if condition="subitem.itemTypeEnumId == 'ItemDetailedDescription'"><then>
+                            <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}${subitem.description}"/>
+                        </then><else-if condition="subitem.itemTypeEnumId == 'ItemDiscount'">
+                            <entity-find entity-name="mantle.order.OrderItemBilling" list="billingList">
+                                <econdition field-name="invoiceId" from="invoiceId"/>
+                                <econdition field-name="invoiceItemSeqId" from="subitem.invoiceItemSeqId"/>
+                            </entity-find>
+                            <if condition="billingList"><then>
+                                <entity-find-one entity-name="mantle.order.OrderItem" auto-field-map="billingList.first" value-field="orderItem"/>
+                                <set field="hide" from="orderItem?.hideInParent == 'Y' &amp;&amp; (first || hide)"/>
+                                <if condition="first || invoiceItem.porcentajeDescuento">
+                                    <if condition="first || invoiceItem.porcentajeDescuento == orderItem.sourcePercentage"><then>
+                                        <set field="invoiceItem.porcentajeDescuento" from="orderItem.sourcePercentage"/>
+                                    </then><else>
+                                        <set field="invoiceItem.porcentajeDescuento" from="null"/>
+                                    </else></if>
+                                </if>
+                            </then><else>
+                                <set field="hide" from="ec.user.getPreference('mchile.dte.PreferHiddenDiscountInParent') == 'true' &amp;&amp; (first || hide)"/>
+                                <set field="invoiceItem.porcentajeDescuento" from="null"/>
+                            </else></if>
+                            <set field="totalDiscount" from="totalDiscount + (subitem.amount*subitem.quantity as BigDecimal).setScale(0,java.math.RoundingMode.HALF_UP)"/>
+                        </else-if><else>
+                            <return error="true" message="Unknown itemTypeEnumId for subitem ${invoiceId}:${subitem.itemSeqId}: ${subitem.itemTypeEnumId}"/>
+                        </else></if>
+                        <set field="first" from="false"/>
+                    </iterate>
+                    <if condition="hide"><then>
+                        <if condition="ec.user.getPreference('mchile.dte.AddDiscountSubitemDescription') == 'true'">
+                            <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}Incluye ${subitem.description} por ${ec.l10n.formatCurrency((-1*subitem.amount*subitem.quantity/invoiceItem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), invoice.currencyUomId)}${invoiceItem.quantity > 1? ' (unitario)': ''}"/>
+                        </if>
+                        <set field="invoiceItem.amount" from="invoiceItem.amount + (totalDiscount/invoiceItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                    </then><else>
+                        <set field="invoiceItem.montoDescuento" from="-totalDiscount"/>
+                    </else></if>
                 </else></if>
             </iterate>
         </actions>

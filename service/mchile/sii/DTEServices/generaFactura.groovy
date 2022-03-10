@@ -188,13 +188,23 @@ if (tipoDte == 33) {
     totalDescuentos = detMap.totalDescuentos
 }
 
+descuentoORecargoGlobalList.each {
+    if (it.tipo == 'D') {
+        if (it.afecto)
+            descuentoGlobalAfecto = (descuentoGlobalAfecto?:0) - it.monto
+        else
+            descuentoGlobalExento = (descuentoGlobalExento?:0) - it.monto
+    }
+}
+
 // Totales
 if (totalNeto != null) {
+    totalNeto = totalNeto - (descuentoGlobalAfecto?:0)
     long totalIVA = Math.round(totalNeto * vatTaxRate)
     montoIVARecuperable = totalIVA
     totalInvoice = totalNeto + totalIVA + totalExento
 } else
-    totalInvoice = totalExento
+    totalInvoice = totalExento - (descuentoGlobalExento?:0)
 
 // Chequeo de valores entre Invoice y calculados
 if (invoice) {
@@ -375,7 +385,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
             }
         }
         //SubTotInfo{}
-        globalDiscountOrChargeList?.each { discountOrChargeMap ->
+        descuentoORecargoGlobalList?.each { discountOrChargeMap ->
             DscRcgGlobal{
                 NroLinDR(discountOrChargeMap.numeroLinea)
                 TpoMov(discountOrChargeMap.tipo)
