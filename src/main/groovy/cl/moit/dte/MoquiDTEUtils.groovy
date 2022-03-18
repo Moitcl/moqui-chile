@@ -149,7 +149,7 @@ class MoquiDTEUtils {
                     totalItem = totalItem + (quantity - quantityHandled) * priceMap.price
                 }
                 priceItem = totalItem / quantity as BigDecimal
-                totalItem = totalItem - montoDescuento
+                totalItem = totalItem - (montoDescuento?:0)
                 totalItem = totalItem.setScale(0, BigDecimal.ROUND_HALF_UP) as Long
             } else if (detailType == "DebitoItem") {
                 if(codRef == 2) {
