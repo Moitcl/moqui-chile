@@ -91,7 +91,7 @@ if (response.getStatusLine().getStatusCode() != 200) {
 
 HttpEntity resEntity = response.getEntity();
 
-String respSII = EntityUtils.toString(resEntity);
+respSII = EntityUtils.toString(resEntity);
 System.out.println("Respuesta SII: " + respSII);
 
 return
