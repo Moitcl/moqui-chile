@@ -62,8 +62,6 @@ HttpResponse response = httpclient.execute(httpget, localContext);
 
 HttpEntity resEntity = response.getEntity();
 
-String resp = null;
-
 respSII = EntityUtils.toString(resEntity);
 System.out.println("Respuesta SII: " + respSII);
 
