@@ -127,14 +127,14 @@ if (tipoDte == 33) {
     referenciaList = refMap.referenciaList
     anulaBoleta = refMap.anulaBoleta
     folioAnulaBoleta = refMap.folioAnulaBoleta
-    codRef = refMap.codigo
+    codRef = referenciaList[0].codigo
 
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
 
-    if (codRef == 2 && detalleList.length() > 1) {
-        ec.message.addError("codRef = 2 && detalleList.length() = ${detalleList.length()}")
+    if (codRef == 2 && detalleList.size() > 1) {
+        ec.message.addError("codRef = 2 && detalleList.size() = ${detalleList.size()}")
         return
     }
 
@@ -150,14 +150,14 @@ if (tipoDte == 33) {
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, null, tipoDte)
     referenciaList = refMap.referenciaList
     dteExenta = refMap.dteExenta
-    codRef = refMap.codigo
+    codRef = referenciaList[0].codigo
 
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "DebitoItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
 
-    if (codRef == 2 && detalleList.length() > 1) {
-        ec.message.addError("codRef = 2 && detalleList.length() = ${detalleList.length()}")
+    if (codRef == 2 && detalleList.size() > 1) {
+        ec.message.addError("codRef = 2 && detalleList.size() = ${detalleList.size()}")
         return
     }
 
@@ -216,18 +216,34 @@ if (invoice) {
 idDocumento = "Dte-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
 String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
 
-StringWriter xmlWriter = new StringWriter()
-MarkupBuilder xmlBuilder = new MarkupBuilder(xmlWriter)
-
 if (giroReceptor.length() > 39)
     giroReceptor = giroReceptor.substring(0,39)
 razonSocialReceptorTimbre = razonSocialReceptor.length() > 39? razonSocialReceptor.substring(0,39): razonSocialReceptor
+
+StringWriter xmlWriterTimbre = new StringWriter()
+MarkupBuilder xmlBuilderTimbre = new MarkupBuilder(new IndentPrinter(new PrintWriter(xmlWriterTimbre), "", false))
 
 // Timbre
 String detalleIt1 = detalleList.get(0).nombreItem
 if (detalleIt1.length() > 40)
     detalleIt1 = detalleIt1.substring(0, 40)
-datosTed = "<DD><RE>${rutEmisor}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptorTimbre}</RSR><MNT>${totalInvoice}</MNT><IT1>${detalleIt1}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
+
+xmlBuilderTimbre.DD() {
+    RE(rutEmisor)
+    TD(tipoDte)
+    F(folio)
+    FE(ec.l10n.format(fechaEmision, "yyyy-MM-dd"))
+    RR(rutReceptor)
+    RSR(razonSocialReceptorTimbre)
+    MNT(totalInvoice)
+    IT1(detalleIt1)
+    xmlBuilderTimbre.getMkp().yieldUnescaped(folioResult.cafFragment.replaceAll('>\\s*<', '><').trim())
+    TSTED(ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss"))
+}
+datosTed = xmlWriterTimbre.toString()
+
+StringWriter xmlWriter = new StringWriter()
+MarkupBuilder xmlBuilder = new MarkupBuilder(xmlWriter)
 
 String schemaLocation = 'http://www.sii.cl/SiiDte DTE_v10.xsd'
 xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation) {
@@ -407,6 +423,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
 uri = "#" + idDocumento
 
 String facturaXmlString = xmlWriter.toString()
+facturaXmlString = facturaXmlString.replaceAll("[^\\x00-\\xFF]", "")
 xmlWriter.close()
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")

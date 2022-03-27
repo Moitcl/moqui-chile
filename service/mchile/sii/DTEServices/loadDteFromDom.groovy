@@ -11,25 +11,61 @@ ExecutionContext ec = context.ec
 
 boolean processDocument = true
 
-if (domNode == null)
+if (domNode == null) {
     ec.message.addError("No domNode present")
+    return
+}
 
 groovy.util.Node documento = MoquiDTEUtils.dom2GroovyNode(domNode)
 
 errorMessages = []
 discrepancyMessages = []
 warningMessages = []
+internalErrors = []
+Integer invoiceItemCount = 0
 
-if (domNode.getAttributes().getNamedItem("xmlns")?.getTextContent() == "http://www.sii.cl/SiiDte") {
-    documentPath = "/sii:DTE/sii:Documento"
-} else {
-    domNode.setAttribute("xmlns", null)
-    documentPath = "/DTE/Documento"
-}
-byte[] dteXml = MoquiDTEUtils.getRawXML(domNode)
+byte[] dteXml = MoquiDTEUtils.getRawXML(domNode, true)
 Document doc2 = MoquiDTEUtils.parseDocument(dteXml)
-if (!MoquiDTEUtils.verifySignature(doc2, documentPath, null)) {
-    errorMessages.add("Signature mismatch for document ${documento.Documento.'@ID'.text()}")
+namespace = MoquiDTEUtils.getNamespace(domNode)
+boolean verified = false
+if (namespace == "http://www.sii.cl/SiiDte") {
+    ec.logger.info("Namespace is SII")
+    documentPath = "/sii:DTE/sii:Documento"
+    try {verified = MoquiDTEUtils.verifySignature(doc2, documentPath, null)} catch (Exception e) {
+        ec.logger.error("Verifying signature: ${e.toString()}")
+    }
+    if (!verified) {
+        ec.logger.info("Verifying without namespace")
+        dteXml = new String(MoquiDTEUtils.getRawXML(doc2, true), "ISO-8859-1").replaceAll(" xmlns=\"http://www.sii.cl/SiiDte\"", "").getBytes("ISO-8859-1")
+        doc2 = MoquiDTEUtils.parseDocument(dteXml)
+        documentPath = "/DTE/Documento"
+        try {verified = MoquiDTEUtils.verifySignature(doc2, documentPath, null)} catch (Exception e) {
+            ec.logger.error("Verifying signature: ${e.toString()}")
+        }
+    }
+} else {
+    ec.logger.info("No namespace")
+    documentPath = "/DTE/Documento"
+    try {verified = MoquiDTEUtils.verifySignature(doc2, documentPath, null)} catch (Exception e) {
+        ec.logger.error("Verifying signature: ${e.toString()}")
+    }
+    if (!verified) {
+        ec.logger.info("Verifying with namespace")
+        new cl.moit.dte.XmlNamespaceTranslator().addTranslation(null, "http://www.sii.cl/SiiDte").addTranslation("", "http://www.sii.cl/SiiDte").translateNamespaces(doc2)
+        dteXml = MoquiDTEUtils.getRawXML(doc2, true)
+        doc2 = MoquiDTEUtils.parseDocument(dteXml)
+        domNode = doc2.getDocumentElement()
+        documentPath = "/sii:DTE/sii:Documento"
+        try {verified = MoquiDTEUtils.verifySignature(doc2, documentPath, null)} catch (Exception e) {
+            ec.logger.error("Verifying signature: ${e.toString()}")
+        }
+    }
+}
+if (!verified) {
+    if (ignoreSignatureErrors)
+        discrepancyMessages.add("Signature mismatch for document ${documento.Documento.'@ID'.text()}")
+    else
+        errorMessages.add("Signature mismatch for document ${documento.Documento.'@ID'.text()}")
 }
 
 vatTaxRate = ec.service.sync().name("mchile.TaxServices.get#VatTaxRate").call().taxRate
@@ -46,10 +82,15 @@ if (verResult.code != VerifyResult.TED_OK)
  */
 tipoDte = encabezado.IdDoc.TipoDTE.text()
 folioDte = encabezado.IdDoc.Folio.text() as Integer
-fchEmis = encabezado.IdDoc.FchEmis.text()
+
+reserved = ec.service.sync().name("mchile.sii.SIIServices.get#RutEspeciales").call()
 
 emisor = encabezado.Emisor
 rutEmisor = emisor.RUTEmisor.text()
+if (rutEmisor in reserved.rutList) {
+    discrepancyMessages.add("Rut de emisor es Rut reservado, no se puede importar automáticamente")
+    return
+}
 
 issuerPartyId = ec.service.sync().name("mchile.sii.DTECommServices.get#PartyIdByRut").parameters([idValue:rutEmisor, createUnknown:createUnknownIssuer, razonSocial:emisor.RznSoc.text(), roleTypeId:'Supplier',
                                                                                               giro:emisor.GiroEmis.text(), direccion:emisor.DirOrigen.text(), comuna:emisor.CmnaOrigen.text(), ciudad:emisor.CiudadOrigen.text()]).call().partyId
@@ -79,18 +120,40 @@ ec.logger.warn("folio: ${folioDte}")
 
 // Totales
 BigDecimal montoNeto = (encabezado.Totales.MntNeto.text() ?: 0) as BigDecimal
-BigDecimal montoTotal = (encabezado.Totales.MntTotal.text() ?: 0) as BigDecimal
+montoTotal = (encabezado.Totales.MntTotal.text() ?: 0) as BigDecimal // es retornado, si se especifica clase se considera var local y no retorna
 BigDecimal montoExento = (encabezado.Totales.MntExe.text() ?: 0) as BigDecimal
 BigDecimal tasaIva = (encabezado.Totales.TasaIVA.text() ?: 0) as BigDecimal
 BigDecimal iva = (encabezado.Totales.IVA.text() ?: 0) as BigDecimal
-mntTotal = montoTotal as BigDecimal
+BigDecimal impuestos = 0
 
-if ((montoNeto + montoExento + iva) != montoTotal) errorMessages.add("Total inválido (montoTotal no coincide con suma de monto neto, monto exento e iva.")
+impuestosMap = [:]
+encabezado.Totales.ImptoReten.each { it ->
+    tipoImpuesto = it.TipoImp.text()
+    tasaImpuesto = it.TasaImp.text() as BigDecimal
+    montoImpuesto = it.MontoImp.text() as BigDecimal
+    impuestos += montoImpuesto
+    if (impuestosMap[tipoImpuesto] == null) {
+        impuesto = [tipo:tipoImpuesto, tasa:tasaImpuesto, monto:montoImpuesto]
+        impuestosMap[tipoImpuesto] = impuesto
+    } else {
+        if (impuesto.tasa != tasa)
+            ec.message.addError("Tasa impuesto mismatch para impuesto ${tipoImpuesto}")
+        impuesto.monto = impuesto.monto + montoImpuesto
+    }
+}
+
+if ((montoNeto + montoExento + iva + impuestos) != montoTotal) errorMessages.add("Total inválido (montoTotal no coincide con suma de monto neto, monto exento, iva e impuestos)")
 if (montoNeto > 0 && tasaIva / 100 != vatTaxRate) errorMessages.add("Tasa IVA no coincide: esperada: ${vatTaxRate*100}%, recibida: ${tasaIva}%")
 
 // Datos receptor
 rutReceptor = encabezado.Receptor.RUTRecep.text()
-rutRecep = rutReceptor
+if (rutReceptor in reserved.rutList) {
+    errorMessages.add("Rut de receptor es Rut reservado, no se puede importar automáticamente")
+    estadoRecepDte = 2
+    recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+    sentRecStatusId = 'Ftd-ReceiverReject'
+    return
+}
 
 if (rutReceptorCaratula != null && rutReceptorCaratula != rutReceptor) {
     discrepancyMessages.add("Rut mismatch: carátula indica Rut receptor ${rutEmisorCaratula}, pero documento indica ${rutEmisor}")
@@ -100,19 +163,43 @@ mapOut = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").param
 tipoDteEnumId = mapOut.fiscalTaxDocumentTypeEnumId
 existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([issuerPartyIdValue:rutEmisor, fiscalTaxDocumenTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte])
         .disableAuthz().list()
+isDuplicated = false
 if (existingDteList) {
-    errorMessages.add("Ya existe registrada DTE tipo ${tipoDte} para emisor ${rutEmisor} y folio ${folioDte}")
     dte = existingDteList.first
-    contentList = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml'])
-            .disableAuthz().list()
-    if (contentList) {
+    if (dte.sentRecStatusId == 'Ftd-ReceiverReject') {
+        ec.logger.info("Existente tiene estado rechazado, eliminando para partir de cero")
+        // remove existing DTE and start from scratch
+        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentAttributes").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).call()
+        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentContent").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).parameter("fiscalTaxDocumentContentId", "*").call()
+        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentEmailMessage").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).parameter("fiscalTaxDocumentEmailMessageId", "*").call()
+        ec.service.sync().name("delete#mchile.dte.ReferenciaDte").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).parameter("referenciaId", "*").call()
+        ec.service.sync().name("delete#mchile.dte.DteEnvioFiscalTaxDocument").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).parameter("envioId", "*").call()
+        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocument").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).call()
     } else {
-        ec.message.addError("No hay contenido local")
+        contentList = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml'])
+                .disableAuthz().list()
+        if (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-ReceiverAccept'] && contentList) {
+            ec.logger.error("Contenido existe, DTE está aprobado")
+            xmlInDb = ec.resource.getLocationReference(contentList.first().contentLocation).openStream().readAllBytes()
+            if (xmlInDb == dteXml) {
+                estadoRecepDte = 0
+                recepDteGlosa = 'ACEPTADO OK'
+                sentRecStatusId = 'Ftde-DuplicateNotProcessed'
+                fechaEmision = ec.l10n.format(dte.date, 'yyyy-MM-dd')
+                isDuplicated = true
+                return
+            }
+        }
+        errorMessages.add("Ya existe registrada DTE tipo ${tipoDte} para emisor ${rutEmisor} y folio ${folioDte}, diferente al recibido")
+        estadoRecepDte = 2
+        recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+        isDuplicated = true
+        return
     }
 }
 
 DateFormat formatter = new SimpleDateFormat("yyyy-MM-dd")
-String fechaEmision = encabezado.IdDoc.FchEmis.text()
+fechaEmision = encabezado.IdDoc.FchEmis.text() // es retornado, si se especifica clase se considera variable local y no se retorna valor
 String fechaVencimiento = encabezado.IdDoc.FchVenc.text()
 Date date = formatter.parse(fechaEmision)
 Timestamp issuedTimestamp = new Timestamp(date.getTime())
@@ -158,16 +245,23 @@ if (tipoDteEnumId == 'Ftdt-61') {
 } else {
     fromPartyId = issuerPartyId
     toPartyId = receiverPartyId
-    invoiceTypeEnumId = 'InvoiceFiscalTaxDocumentReception'
+    invoiceTypeEnumId = 'InvoiceSales'
 }
-if (ec.message.hasError())
+if (ec.message.hasError()) {
+    estadoRecepDte = 2
+    recepDteGlosa = 'RECHAZADO, Errores: ' + ec.message.getErrors().join(', ') + ((errorMessages.size() > 0) ? (', ' + errorMessages.join(', ')) : '')
+        + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+    sentRecStatusId = 'Ftd-ReceiverReject'
     return
+}
 
-invoiceCreateMap =  [fromPartyId:fromPartyId, toPartyId:toPartyId, invoiceTypeEnumId:invoiceTypeEnumId, invoiceDate:issuedTimestamp, currencyUomId:'CLP']
+invoiceCreateMap =  [fromPartyId:fromPartyId, toPartyId:toPartyId, invoiceTypeEnumId:invoiceTypeEnumId, invoiceDate:issuedTimestamp, currencyUomId:'CLP', statusId:invoiceStatusId]
 if (dueTimestamp)
     invoiceCreateMap.dueDate = dueTimestamp
-invoiceMap = ec.service.sync().name("mantle.account.InvoiceServices.create#Invoice").parameters(invoiceCreateMap).disableAuthz().call()
-invoiceId = invoiceMap.invoiceId
+if (tipoDteEnumId in ['Ftdt-101', 'Ftdt-102', 'Ftdt-109', 'Ftdt-110', 'Ftdt-111', 'Ftdt-112', 'Ftdt-30', 'Ftdt-32', 'Ftdt-33', 'Ftdt-34', 'Ftdt-35', 'Ftdt-38', 'Ftdt-39']) {
+    invoiceMap = ec.service.sync().name("mantle.account.InvoiceServices.create#Invoice").parameters(invoiceCreateMap).disableAuthz().call()
+    invoiceId = invoiceMap.invoiceId
+}
 BigDecimal montoItem = 0 as BigDecimal
 detalleList = documento.Documento.Detalle
 ec.logger.warn("Recorriendo detalles: ${detalleList.size()}")
@@ -185,12 +279,20 @@ detalleList.each { detalle ->
     ec.logger.warn("Precio: ${detalle.PrcItem.text()}")
     ec.logger.warn("Monto: ${detalle.MontoItem.text()}")
     itemDescription = detalle.NmbItem?.text()
-    quantity = detalle.QtyItem ? (detalle.QtyItem.text() as BigDecimal) : null
+    BigDecimal quantity = detalle.QtyItem ? (detalle.QtyItem.text() as BigDecimal) : null
     price = detalle.PrcItem ? (detalle.PrcItem.text() as BigDecimal) : null
     montoItem = detalle.MontoItem ? (detalle.MontoItem.text() as BigDecimal) : null
+    descuentoMonto = detalle.DescuentoMonto ? (detalle.DescuentoMonto.text() as BigDecimal) : 0 as BigDecimal
+    descuentoMonto = descuentoMonto.setScale(0, RoundingMode.HALF_UP)
     totalCalculado += montoItem
-    if (price == null && montoItem != null) {
-        price = montoItem / quantity
+    if (((price?:0) * (quantity?:0)) == 0 && montoItem != null) {
+        if (quantity == null)
+            quantity = 1 as BigDecimal
+        price = (montoItem-descuentoMonto) / quantity
+    } else if (((price * quantity) - descuentoMonto).setScale(0, RoundingMode.HALF_UP) != montoItem) {
+        discrepancyMessages.add("En detalle ${nroDetalles} (${itemDescription?:''}), montoItem (${montoItem} no calza con el valor unitario (${price}) multiplicado por cantidad (${quantity}) menos descuento (${descuentoMonto}), redondeado")
+        dteAmount = price
+        price = montoItem/quantity
     }
     try {
         indExe = detalle.IndExe?.text() as Integer
@@ -211,19 +313,18 @@ detalleList.each { detalle ->
     if (itemExento)
         totalExento += montoItem
 
-    productId = null
-    if (quantity*price != montoItem) {
-        if ((quantity*price).setScale(0, RoundingMode.HALF_UP)) {
-            itemDescription = "${itemDescription} (cantidad original: ${quantity})"
-            quantity = 1
-            price = montoItem
-        } else {
-            errorMessages.add("montoItem (${montoItem} no calza con el valor unitario (${price}) multiplicado por cantidad (${quantity})")
-        }
+    if (quantity.setScale(3, RoundingMode.HALF_UP)*price.setScale(3, RoundingMode.HALF_UP) != (quantity*price).setScale(0, RoundingMode.HALF_UP)) {
+        dteQuantity = quantity
+        dteAmount = price
+        price = (price * quantity).setScale(0, RoundingMode.HALF_UP)
+        quantity = 1
     }
-    if (!attemptProductMatch) {
-        ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales',
+
+    Map itemMap = null
+    if (!attemptProductMatch && invoiceId) {
+        itemMap = ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales', dteQuantity:dteQuantity, dteAmount:dteAmount,
                                                                                                 productId: (itemExento? 'SRVCEXENTO': null), description: itemDescription, quantity: quantity, amount: price]).call()
+        invoiceItemCount++
     } else {
         ec.logger.warn("Buscando código item")
         cdgItemList = detalle.CdgItem
@@ -257,20 +358,40 @@ detalleList.each { detalle ->
                     .conditionDate("fromDate", "thruDate", issuedTimestamp).list()
             exentoBd = exentoList.size() > 0
             if (exentoBd != itemExento)
-                errorMessages.add("Exento mismatch, XML dice ${itemExento? '' : 'no '} exento, producto en BD dice ${exentoBd? '' : 'no '} exento")
+                discrepancyMessages.add("Exento mismatch, XML dice ${itemExento? '' : 'no '} exento, producto en BD dice ${exentoBd? '' : 'no '} exento")
             product = ec.entity.find("mantle.product.Product").condition("productId", productId).one()
             if (product.productName.toString().trim().toLowerCase() != itemDescription.trim().toLowerCase())
-                errorMessages.add("Description mismatch, XML dice ${itemDescription}, producto en BD dice ${product.productName}")
+                discrepancyMessages.add("Description mismatch, XML dice ${itemDescription}, producto en BD dice ${product.productName}")
             ec.logger.info("Agregando producto preexistente ${productId}, cantidad ${quantity} *************** orderId: ${orderId}")
         } else {
             if (itemExento)
                 productId = 'SRVCEXENTO'
             ec.logger.warn("Producto ${itemDescription} no existe en el sistema, se creará como genérico")
         }
-        ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales',
-                                                                                                productId: productId, description: itemDescription, quantity: quantity, amount: price]).call()
+        if (invoiceId) {
+            itemMap = ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales', dteQuantity:dteQuantity, dteAmount:dteAmount,
+                                                                                                              productId: productId, description: itemDescription, quantity: quantity, amount: price]).call()
+            invoiceItemCount++
+        }
+    }
+    if (descuentoMonto && invoiceId) {
+        parentItemSeqId = itemMap.invoiceItemSeqId
+        ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, parentItemSeqId:parentItemSeqId, itemTypeEnumId:'ItemDiscount',
+                                                                                                description: 'Descuento', quantity: 1, amount:-descuentoMonto]).call()
+        invoiceItemCount++
     }
 
+}
+
+impuestosMap.each { impuestoCode, impuestoMap ->
+    impuestoEnum = ec.entity.find("moqui.basic.Enumeration").condition([parentEnumId: "ItemTCChlDte", enumCode:impuestoCode]).one()
+    if (impuestoEnum == null)
+        internalErrors.add("Did not find impuesto for code ${impuestoCode}")
+    else if (invoiceId) {
+        ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId  : invoiceId, itemTypeEnumId: impuestoEnum.enumId,
+                                                                                                description: impuestoEnum.description, quantity: 1, amount: impuestoMap.monto]).call()
+        invoiceItemCount++
+    }
 }
 
 globalList = documento.Documento.DscRcgGlobal
@@ -293,56 +414,139 @@ globalList.each { globalItem ->
     BigDecimal amount = 0
     BigDecimal pctValue
     if (tpoVal == '$') {
-        amount = globalItem.ValorDR.text() as BigDecimal
+        amount = (globalItem.ValorDR.text() as BigDecimal).setScale(0, RoundingMode.HALF_UP)
     } else if (tpoVal == '%') {
         pctValue = globalItem.ValorDR.text() as BigDecimal
-        amount = totalCalculado / 100.0 * pctValue
+        amount = (totalCalculado / 100.0 * pctValue).setScale(0, RoundingMode.HALF_UP)
     } else {
         errorMessages.add("Tipo valor inválido DscRcgGlobal ${globalItemCount}, se esperaba \$ o % y se recibió ${tpoVal}")
     }
     if (itemTypeEnumId == 'ItemDiscount')
         amount = -1 * amount
-    ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:itemTypeEnumId,
-                               description: globalItem.GlosaDR.text(), quantity:1, amount: amount]).call()
+    if (invoiceId) {
+        ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:itemTypeEnumId,
+                                                                                                description: globalItem.GlosaDR.text(), quantity:1, amount: amount]).call()
+        invoiceItemCount++
+    }
     totalCalculado += amount
 }
 
-if (totalCalculado != (montoNeto + montoExento)) errorMessages.add("Monto total (neto + exento) no coincide, calculado: ${totalCalculado}, recibido: ${montoNeto + montoExento}")
+newInvoiceStatusId = null
+if (totalCalculado != (montoNeto + montoExento)) discrepancyMessages.add("Monto total (neto + exento) no coincide, calculado: ${totalCalculado}, en totales de DTE: ${montoNeto + montoExento}")
+if (totalExento != montoExento) {
+    discrepancyMessages.add("Monto exento no coincide, calculado: ${totalExento}, en totales de DTE: ${montoExento}")
+    newInvoiceStatusId = 'InvoiceRequiresManualIntervention'
+}
 
 totalCalculadoIva = (montoNeto * vatTaxRate).setScale(0, RoundingMode.HALF_UP)
 
 if (iva != totalCalculadoIva) {
-    errorMessages.add("No coincide monto IVA, DTE indica ${iva}, calculado: ${totalCalculadoIva}")
+    discrepancyMessages.add("No coincide monto IVA, DTE indica ${iva}, calculado: ${totalCalculadoIva}")
 }
-if (totalCalculadoIva > 0) {
+if (totalCalculadoIva > 0 && invoiceId) {
     ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemVatTax', description: 'IVA', quantity: 1, amount: totalCalculadoIva, taxAuthorityId:'CL_SII']).call()
 }
 
-invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", invoiceId).one()
-if (invoice.invoiceTotal != mntTotal)
-    errorMessages.add("No coinciden totales, DTE indica ${mntTotal}, calculado: ${invoice.invoiceTotal}")
+if (invoiceId) {
+    invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", invoiceId).one()
+    if (invoice.invoiceTotal != montoTotal) {
+        diff = invoice.invoiceTotal - montoTotal
+        if (diff == iva && totalExento == montoExento) {
+            factor = 1-(diff/invoice.invoiceTotal)
+            itemList = ec.entity.find("mantle.account.invoice.InvoiceItem").condition("invoiceId", invoiceId).forUpdate(true).list()
+            itemList.each {
+                boolean afecto = true
+                if (it.productId) {
+                    afectoMap = ec.service.sync().name("mchile.sii.DTEServices.check#Afecto").parameter("productId", it.productId).call()
+                    afecto = afectoMap.afecto
+                }
+                if (afecto) {
+                    dteAmount = it.dteAmount ?: it.amount
+                    decimals = 2
+                    it.amount = (it.amount * factor).setScale(decimals, RoundingMode.HALF_UP)
+                    while (decimals > 0 && (it.amount * it.quantity).setScale(0, RoundingMode.HALF_UP) != it.amount * it.quantity) {
+                        decimals--
+                        it.amount = it.amount.setScale(decimals, RoundingMode.HALF_UP)
+                    }
+                    if ((it.amount * it.quantity).setScale(0, RoundingMode.HALF_UP) != it.amount * it.quantity) {
+                        it.dteQuantity = it.dteQuantity ?: it.quantity
+                        it.amount = (it.amount * it.quantity).setScale(0, RoundingMode.HALF_UP)
+                        it.quantity = 1
+                    }
+                }
+                it.update()
+            }
+            invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", invoiceId).one()
+            diff = invoice.invoiceTotal - montoTotal
+        }
+        diffAbs = (diff < 0) ? -diff : diff
+        if (diffAbs <= invoiceItemCount && totalExento == montoExento) {
+            itemList = ec.entity.find("mantle.account.invoice.InvoiceItem").condition("invoiceId", invoiceId).forUpdate(true).list()
+            for (int i = 0; diff != 0 && i < itemList.size(); i++) {
+                increment = diff > 0 ? -1 : 1
+                EntityValue item = itemList.get(i)
+                parentItemSeqId = item.invoiceItemSeqId
+                ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, parentItemSeqId:parentItemSeqId, itemTypeEnumId:'ItemDteRoundingAdjust',
+                                                                                                        description: 'Ajuste redondeo DTE', quantity: 1, amount:increment]).call()
+                diff += increment
+            }
+            invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", invoiceId).one()
+            diff = invoice.invoiceTotal - montoTotal
+            if (diff != 0)
+                ec.message.addError("Could not handle diff for document ${documento.Documento.'@ID'.text()}")
+        } else {
+            // No se puede resolver automáticamente la diferencia, se trata como discrepancia
+            discrepancyMessages.add("No coinciden totales, DTE indica total ${montoTotal} y exento ${montoExento}, calculado: total ${invoice.invoiceTotal} y exento ${totalExento}")
+            newInvoiceStatusId = 'InvoiceRequiresManualIntervention'
+        }
+    }
+}
 
 if (errorMessages.size() > 0) {
     estadoRecepDte = 2
-    recepDteGlosa = 'RECHAZADO: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', ' + discrepancyMessages.join(', ')) : '')
+    recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+    sentRecStatusId = 'Ftd-ReceiverReject'
     ec.logger.error(recepDteGlosa)
-    return
+    if (recepDteGlosa.length() > 256)
+        recepDteGlosa = recepDteGlosa.substring(0, 256)
+    if (invoice) {
+        invoice.statusId = 'InvoiceCancelled'
+        invoice.invoiceMessage = recepDteGlosa
+        invoice.update()
+    }
 } else if (discrepancyMessages.size() > 0) {
     estadoRecepDte = 1
     recepDteGlosa = 'ACEPTADO CON DISCREPANCIAS: ' + discrepancyMessages.join(', ')
     ec.logger.warn(recepDteGlosa)
-    return
+    if (recepDteGlosa.length() > 256)
+        recepDteGlosa = recepDteGlosa.substring(0, 256)
+    sentRecStatusId = 'Ftd-ReceiverAck'
+    if (invoice) {
+        invoice.invoiceMessage = recepDteGlosa
+        if (newInvoiceStatusId && invoice) {
+            invoice.statusId = newInvoiceStatusId
+        }
+        invoice.update()
+    }
 } else {
     estadoRecepDte = 0
     recepDteGlosa = 'ACEPTADO OK'
+    sentRecStatusId = 'Ftd-ReceiverAck'
 }
+
+if (existingDteList)
+    return
 
 // Se guarda DTE recibido en la base de datos
 createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rutEmisor, fiscalTaxDocumentTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte,
              receiverPartyId:receiverPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', receiverPartyIdValue:rutReceptor, date:issuedTimestamp, invoiceId:invoiceId, statusId:'Ftd-Issued',
-             sendAuthStatusId:'Ftd-SentAuthAccepted', sendRecStatusId:'Ftd-SentRec']
+             sentAuthStatusId:'Ftd-SentAuthAccepted', sentRecStatusId:sentRecStatusId]
 mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call()
 fiscalTaxDocumentId = mapOut.fiscalTaxDocumentId
+
+createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, date:ec.user.nowTimestamp, amount:montoTotal, montoNeto:montoNeto, montoExento:montoExento, tasaImpuesto:tasaIva, tipoImpuesto:1, montoIvaRecuperable:montoIva, montoIvaNoRecuperable:0,
+            fechaEmision:issuedTimestamp]
+mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call()
 
 locationReferenceBase = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folioDte}"
 contentLocationXml = "${locationReferenceBase}.xml"
@@ -389,7 +593,8 @@ referenciasList.each { groovy.util.Node referencia ->
         errorMessages.add("Valor inválido en referencia ${nroRef}, campo CodRef: ${referencia.CodRef.text()}")
     if (tipoDteEnumId == "Ftdt-801") {
         // Orden de Compra, va en el Invoice y no en mchile.dte.ReferenciaDte
-        ec.service.sync().name("update#mantle.account.invoice.Invoice").parameters([invoiceId:invoiceId, otherPartyOrderId:folio, otherPartyOrderDate:refDate]).call()
+        if (invoiceId)
+            ec.service.sync().name("update#mantle.account.invoice.Invoice").parameters([invoiceId:invoiceId, otherPartyOrderId:folio, otherPartyOrderDate:refDate]).call()
     } else if (tipoDteEnumId && refDate) {
         ec.service.sync().name("create#mchile.dte.ReferenciaDte").parameters([invoiceId:invoiceId, referenciaTypeEnumId:'RefDteTypeInvoice', fiscalTaxDocumentTypeEnumId:tipoDteEnumId,
                                                                               folio:folio, fecha: refDate, codigoReferenciaEnumId:codRefEnumId, razonReferencia:referencia.RazonRef?.text()]).call()

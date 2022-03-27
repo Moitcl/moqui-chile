@@ -11,6 +11,7 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.w3c.dom.Document
 import org.w3c.dom.Element
+import org.w3c.dom.NamedNodeMap
 import org.w3c.dom.NodeList
 import org.w3c.dom.ls.LSInput
 import org.w3c.dom.ls.LSResourceResolver
@@ -65,8 +66,22 @@ class MoquiDTEUtils {
     }
 
     public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType, Integer codRef) throws BaseArtifactException {
-        int i = 0
         List detalleList = []
+
+        // Text Correction DTEs have no detail list
+        if (detailList.size() == 0 && codRef == 2) {
+            if (detailType == "InvoiceItem" || detailType == "DebitoItem") {
+                Map detailMap = [:]
+                detailMap.numeroLinea = 1
+                detailMap.nombreItem = "Corrige Dato Receptor"
+                detailMap.priceItem = 0.000001
+                detailMap.montoItem = 0
+                detalleList.add(detailMap)
+                return [detalleList:detalleList, totalNeto:0, totalExento:0, numberExentos:0, numberAfectos:0]
+            }
+        }
+
+        int i = 0
         Long totalNeto = null
         Long totalExento = null
         int numberAfectos = 0
@@ -136,19 +151,21 @@ class MoquiDTEUtils {
                 if(codRef == 2) {
                     quantity = null
                     priceItem = null
-                    nombreItem = "CORRIGE TEXTO"
+                    nombreItem = "Corrige Dato Receptor"
                     totalItem = 0
                 } else {
                     priceItem = detailEntry.amount
                     totalItem = (quantity?:0) * (priceItem?:0)
                 }
-            } else if (detailType == "ReturnItem" && codRef == 2) {
-                quantity = null
-                priceItem = null
-                nombreItem = "CORRIGE GIROS"
-                totalItem = 0
             } else if (detailType == "ReturnItem") {
-                priceItem = detailEntry.returnPrice
+                if (codRef == 2) {
+                    quantity = null
+                    priceItem = null
+                    nombreItem = "Corrige Dato Receptor"
+                    totalItem = 0
+                } else {
+                    priceItem = detailEntry.returnPrice
+                }
             } else {
                 priceItem = detailEntry.amount
                 totalItem = (quantity?:0) * (priceItem?:0)
@@ -212,7 +229,9 @@ class MoquiDTEUtils {
         int i = 0
         referenciaList.each { referenciaEntry ->
             String folioRef = referenciaEntry.folio
-            Integer codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as Integer
+            Integer codRef = null
+            if (referenciaEntry.codigoReferenciaEnumId != null)
+                codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as Integer
             Timestamp fechaRef = referenciaEntry.fecha instanceof java.sql.Date? new Timestamp(referenciaEntry.fecha.time) : referenciaEntry.fecha
 
             // Agrego referencias
@@ -231,7 +250,7 @@ class MoquiDTEUtils {
                 referenciaMap.tipoDocumento = tpoDocRef as String
                 if (rutReceptor)
                     referenciaMap.rutOtro = rutReceptor
-                if(tipoFactura == 61 && (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-39") || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41")) && codRef.equals(1) ) {
+                if(tipoFactura == 61 && (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-39") || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41")) && codRef?.equals(1) ) {
                     // Nota de crédito hace referencia a Boletas Electrónicas
                     anulaBoleta = 'true'
                     folioAnulaBoleta = referenciaEntry.folio.toString()
@@ -411,6 +430,9 @@ class MoquiDTEUtils {
     }
 
     public static byte[] sign(Document doc, String baseUri, PrivateKey pKey, X509Certificate cert, String uri, String tagName) {
+        return sign(doc, baseUri, pKey, cert, uri, tagName, true)
+    }
+    public static byte[] sign(Document doc, String baseUri, PrivateKey pKey, X509Certificate cert, String uri, String tagName, boolean addPreamble) {
         try {
             NodeList nodes = doc.getElementsByTagName(tagName);
             if (tagName != "")
@@ -439,22 +461,23 @@ class MoquiDTEUtils {
             XMLSignature signature = fac.newXMLSignature(si, ki);
             signature.sign(dsc);
 
-            return getRawXML(doc);
+            return getRawXML(doc, addPreamble);
         } catch (Exception e) {
             e.printStackTrace();
         }
         return null;
     }
 
-    public static byte[] getRawXML(org.w3c.dom.Node doc) {
-        return getRawXML(doc, "ISO-8859-1")
+    public static byte[] getRawXML(org.w3c.dom.Node doc, boolean addPreamble) {
+        return getRawXML(doc, "ISO-8859-1", addPreamble)
     }
-    public static String getStringXML(org.w3c.dom.Node doc) {
+    public static String getStringXML(org.w3c.dom.Node doc, boolean addPreamble) {
         TransformerFactory transformerFactory = TransformerFactory.newInstance();
         Transformer transformer;
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            baos.write("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n".getBytes("UTF-8"));
+            if (addPreamble)
+                baos.write("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n".getBytes("UTF-8"));
             transformer = transformerFactory.newTransformer();
             transformer.setOutputProperty(OutputKeys.INDENT, "no");
             transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
@@ -473,8 +496,11 @@ class MoquiDTEUtils {
         return null
     }
     public static byte[] getRawXML(org.w3c.dom.Node doc, String encoding) {
+        return getRawXml(doc, encoding, true)
+    }
+    public static byte[] getRawXML(org.w3c.dom.Node doc, String encoding, boolean addPreamble) {
         try {
-            String outAux = getStringXML(doc)
+            String outAux = getStringXML(doc, addPreamble)
             return outAux?.getBytes(encoding)
         } catch (TransformerConfigurationException e) {
             e.printStackTrace();
@@ -501,6 +527,8 @@ class MoquiDTEUtils {
         factory.setNamespaceAware(true);
         factory.setIgnoringElementContentWhitespace(false);
         factory.setValidating(validating)
+        factory.setFeature("http://apache.org/xml/features/nonvalidating/load-dtd-grammar", false);
+        factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
         if (validating) {
             factory.setAttribute(JAXP_SCHEMA_LANGUAGE, W3C_XML_SCHEMA);
         }
@@ -525,7 +553,7 @@ class MoquiDTEUtils {
     }
 
     public static groovy.util.Node dom2GroovyNode(org.w3c.dom.Node node) {
-        String xml = getStringXML(node)
+        String xml = getStringXML(node, true)
         return dom2GroovyNode(xml)
     }
     public static groovy.util.Node dom2GroovyNode(String xml) {
@@ -729,6 +757,34 @@ class MoquiDTEUtils {
         void setCertifiedText(boolean certifiedText) {
 
         }
+    }
+
+    public static String getNamespace(org.w3c.dom.Node node) {
+        Element root = node.getOwnerDocument().getDocumentElement()
+        HashMap<String, String> namespaces = getAllAttributes(root)
+        String prefix = getPrefix(node.getNodeName())
+
+        if (prefix == null)
+            return namespaces.get("xmlns")
+
+        return namespaces.get("xmlns:" + prefix)
+    }/*w  ww . j av a2  s  .c o m*/
+
+    public static HashMap<String, String> getAllAttributes(org.w3c.dom.Node node) {
+        HashMap<String, String> attributes = new HashMap<String, String>()
+        NamedNodeMap attr = node.getAttributes()
+        for (int j = 0; j < attr.getLength(); j++) {
+            attributes.put(attr.item(j).getNodeName(), attr.item(j).getNodeValue())
+        }
+        return attributes
+    }
+
+    public static String getPrefix(String value) {
+        try {
+            return value.substring(0, value.indexOf(":"))
+        } catch (Exception e) {
+        }
+        return null
     }
 
 }

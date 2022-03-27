@@ -14,6 +14,26 @@ along with this software (see the LICENSE.md file). If not, see
 -->
 <services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
 
+    <service verb="get" noun="RutEspeciales">
+        <description>Reserved Ruts and with special meaning for SII / Ruts Reservados y con significado especial para el SII</description>
+        <out-parameters>
+            <parameter name="rutList" type="List"/>
+            <parameter name="rutMap" type="Map"/>
+        </out-parameters>
+        <actions>
+            <set field="rutMap" from="[
+                                        '11111111-1': 'Utilizado en Ejemplos',
+                                        '22222222-2': 'Utilizado en Ejemplos',
+                                        '33333333-3': 'Agrupación de personas',
+                                        '44444446-0': 'Extranjero sin domicilio ni residencia en Chile para Boletas de Honorarios',
+                                        '55555555-5': 'Extranjero sin Rut',
+                                        '66666666-6': 'Persona con rut desconocido',
+                                        '77777777-7': 'Agrupación de transacciones con tarjetas de crédito bancarias'
+                                        ]"/>
+            <set field="rutList" from="rutMap.keySet()"/>
+        </actions>
+    </service>
+
     <service verb="get" noun="SituacionTributariaTerceros">
         <in-parameters>
             <parameter name="rut"/>
@@ -381,15 +401,20 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="isProduction"><then>
                 <set field="refreshContact" type="Boolean" from="pcm == null || pcm.verifyCodeDate == null || (ec.user.nowTimestamp.time - pcm.verifyCodeDate.time) > 3*24*60*60*1000"/>
             </then><else>
-                <set field="refreshContact" type="Boolean" from="false"/>
+                <set field="refreshContact" type="Boolean" from="ec.user.getPreference('mchile.dte.FetchEmailFromSiiInCert')"/>
             </else></if>
             <if condition="refreshContact"><then>
+                <service-call name="mchile.sii.SIIServices.get#RutEspeciales" out-map="rutEspeciales"/>
+                <if condition="partyIdValue in rutEspeciales.rutList">
+                    <message>Rut ${partyIdValue} es un Rut especial, no se consulta en el SII</message>
+                    <return/>
+                </if>
                 <service-call name="mchile.sii.SIIServices.consulta#ContribuyentesAutorizadosContacto" in-map="[rut:rut.rutSinDv, dv:rut.dv, dtePartyId:dtePartyId]" out-map="cac"/>
                 <if condition="cac.mailContacto == null || cac.mailContacto.length() &lt; 5">
                     <return error="true" message="Error obteniendo mailContacto del SII, recibido: ${cac.mailContacto}"/>
                 </if>
                 <set field="xmlReceptionEmailAddress" from="cac.mailContacto"/>
-                <if condition="pcm == null"><then>
+                <if condition="cm == null"><then>
                     <service-call name="mantle.party.ContactServices.create#EmailAddress" in-map="[emailAddress:cac.mailContacto, partyId:partyId, contactMechPurposeId:'EmailDteXmlRec',
                             fromDate:ec.user.nowTimestamp, verifyCodeDate:ec.user.nowTimestamp]" out-map="context"/>
                 </then><else>
@@ -404,6 +429,9 @@ along with this software (see the LICENSE.md file). If not, see
                     </else></if>
                 </else></if>
             </then><else>
+                <if condition="cm == null">
+                    <return error="true" message="No existe mail para envío de documentos DTE en la BD y configuración impide consultar al SII"/>
+                </if>
                 <set field="xmlReceptionEmailAddress" from="cm.infoString"/>
             </else></if>
         </actions>
