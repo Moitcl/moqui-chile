@@ -289,7 +289,8 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 //FchVencim()
                 if (detalle.uom)
                     UnmdItem(uom)
-                PrcItem(detalle.priceItem)
+                //PrcItem(detalle.priceItem)
+                PrcItem(detalle.priceItem + Math.round(detalle.priceItem * vatTaxRate))
                 //OtrMnda{}
                 if (detalle.porcentajeDescuento)
                     DescuentoPct(detalle.porcentajeDescuento)
