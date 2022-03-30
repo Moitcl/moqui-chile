@@ -76,6 +76,7 @@ montoExento = 0 as Long
 montoIVARecuperable = 0 as Long
 totalNeto = 0 as Long
 totalExento = 0 as Long
+totalDescuentos = 0 as Long
 
 // Campo para guardar resumen atributos -->
 amount = 0 as Long
@@ -111,6 +112,7 @@ if (tipoDte == 33) {
         throw new BaseArtifactException("Factura afecta tiene solamente ítemes exentos")
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
+    totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 34) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     detalleList = detMap.detalleList
@@ -120,6 +122,7 @@ if (tipoDte == 33) {
         throw new BaseArtifactException("Factura exenta tiene ítemes afectos")
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
+    totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 61) {
     // Nota de Crédito Electrónica
     ec.logger.warn("Creando DTE tipo 61")
@@ -144,6 +147,7 @@ if (tipoDte == 33) {
         totalNeto = 0
         totalExento = 0
     }
+    totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 56) {
     // Nota de Débito Electrónica
     ec.logger.warn("Creando DTE tipo 56")
@@ -167,6 +171,7 @@ if (tipoDte == 33) {
         totalNeto = 0
         totalExento = 0
     }
+    totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 52) {
     // Guías de Despacho
     ec.logger.warn("Creando DTE tipo 52")
@@ -180,30 +185,26 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "ShipmentItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalDescuentos = detMap.totalDescuentos
 }
 
-// Descuento Global
-if(globalDiscount != null && Integer.valueOf(globalDiscount) > 0) {
-    if (totalNeto != null)
-        totalNeto = totalNeto - Math.round(totalNeto?:0 * (Long.valueOf(globalDiscount) / 100))
-    if (totalExento != null)
-        totalExento = totalExento - Math.round(totalExento?:0 * (Long.valueOf(globalDiscount) / 100))
-    // Creación entradas en XML
-    discountMap = [:]
-    discountMap.numeroLinea = 1
-    discountMap.tipo = "D"
-    discountMap.tipoValor = "%"
-    discountMap.valor = globalDiscount
-    discountMap.glosa = globalDr
-    globalDiscountOrChargeList = [discountMap]
+descuentoORecargoGlobalList.each {
+    if (it.tipo == 'D') {
+        if (it.afecto)
+            descuentoGlobalAfecto = (descuentoGlobalAfecto?:0) - it.monto
+        else
+            descuentoGlobalExento = (descuentoGlobalExento?:0) - it.monto
+    }
 }
+
 // Totales
 if (totalNeto != null) {
+    totalNeto = totalNeto - (descuentoGlobalAfecto?:0)
     long totalIVA = Math.round(totalNeto * vatTaxRate)
     montoIVARecuperable = totalIVA
     totalInvoice = totalNeto + totalIVA + totalExento
 } else
-    totalInvoice = totalExento
+    totalInvoice = totalExento - (descuentoGlobalExento?:0)
 
 // Chequeo de valores entre Invoice y calculados
 if (invoice) {
@@ -384,7 +385,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
             }
         }
         //SubTotInfo{}
-        globalDiscountOrChargeList?.each { discountOrChargeMap ->
+        descuentoORecargoGlobalList?.each { discountOrChargeMap ->
             DscRcgGlobal{
                 NroLinDR(discountOrChargeMap.numeroLinea)
                 TpoMov(discountOrChargeMap.tipo)
