@@ -567,7 +567,6 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
 
             <!-- Se filtra por CAF activo (PK) para el tipo de DTE -->
-            <set field="activo" value="true"/>
             <entity-find entity-name="mchile.dte.Caf" list="cafEntryList" for-update="true">
                 <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
                 <econdition field-name="issuerPartyId" from="partyId"/>
@@ -575,38 +574,39 @@ along with this software (see the LICENSE.md file). If not, see
                 <order-by field-name="desde"/>
             </entity-find>
 
-            <set field="cafEntry" from="cafEntryList.first"/>
-            <if condition="!cafEntry">
+            <if condition="!cafEntryList">
                 <return error="true" message="No existe CAF activo para DTE tipo ${fiscalTaxDocumentTypeEnumId}"/>
             </if>
-
-            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="reservedList" for-update="true">
-                <econdition field-name="fiscalTaxDocumentTypeEnumId" value="${fiscalTaxDocumentTypeEnumId}"/>
-                <econdition field-name="issuerPartyId" from="partyId"/>
-                <econdition field-name="fiscalTaxDocumentNumber" operator="greater-equals" from="cafEntry.desde"/>
-                <econdition field-name="fiscalTaxDocumentNumber" operator="less-equals" from="cafEntry.hasta"/>
-                <econdition field-name="statusId" value="Ftd-NotIssued"/>
-                <select-field field-name="fiscalTaxDocumentNumber"/>
-                <order-by field-name="fiscalTaxDocumentNumber"/>
-            </entity-find>
-            <if condition="!reservedList">
-                <return error="true" message="No hay folios disponibles para DTE tipo ${fiscalTaxDocumentTypeEnumId} ${cafEntry.desde}-${cafEntry.hasta} - ${cafEntry.filename}"/>
-            </if>
-
-            <set field="folio" from="reservedList.first().fiscalTaxDocumentNumber"/>
-
-            <set field="cafFragment" from="cafEntry.cafFragment"/>
-            <set field="privateKey" from="cafEntry.privateKey"/>
-            <set field="keyType" from="cafEntry.keyType"/>
-            <set field="rut" from="cafEntry.rut"/>
-            <set field="razonSocial" from="cafEntry.razonSocial"/>
-            <set field="desde" from="cafEntry.desde"/>
-            <set field="hasta" from="cafEntry.hasta"/>
-            <set field="fechaAutorizacion" from="cafEntry.fechaAutorizacion"/>
-
-            <set field="cafEntry.siguienteFolio" from="folio"/>
-            <entity-update value-field="cafEntry"/>
-
+            <iterate list="cafEntrylList" entry="cafEntry">
+                <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="reservedList" for-update="true">
+                    <econdition field-name="fiscalTaxDocumentTypeEnumId" value="${fiscalTaxDocumentTypeEnumId}"/>
+                    <econdition field-name="issuerPartyId" from="partyId"/>
+                    <econdition field-name="fiscalTaxDocumentNumber" operator="greater-equals" from="cafEntry.desde"/>
+                    <econdition field-name="fiscalTaxDocumentNumber" operator="less-equals" from="cafEntry.hasta"/>
+                    <econdition field-name="statusId" value="Ftd-NotIssued"/>
+                    <select-field field-name="fiscalTaxDocumentNumber"/>
+                    <order-by field-name="fiscalTaxDocumentNumber"/>
+                </entity-find>
+                <if condition="reservedList"><then>
+                    <set field="folio" from="reservedList.first().fiscalTaxDocumentNumber"/>
+                    <set field="cafFragment" from="cafEntry.cafFragment"/>
+                    <set field="privateKey" from="cafEntry.privateKey"/>
+                    <set field="keyType" from="cafEntry.keyType"/>
+                    <set field="rut" from="cafEntry.rut"/>
+                    <set field="razonSocial" from="cafEntry.razonSocial"/>
+                    <set field="desde" from="cafEntry.desde"/>
+                    <set field="hasta" from="cafEntry.hasta"/>
+                    <set field="fechaAutorizacion" from="cafEntry.fechaAutorizacion"/>
+                    <set field="cafEntry.siguienteFolio" from="folio"/>
+                    <entity-update value-field="cafEntry"/>
+                    <return/>
+                </then><else>
+                    <!-- No folio available, mark as inactive -->
+                    <set field="cafEntry.activo" value=""/>
+                    <entity-update value-field="cafEntry"/>
+                </else></if>
+            </iterate>
+            <return error="true" message="No hay folios disponibles para DTE tipo ${fiscalTaxDocumentTypeEnumId}"/>
         </actions>
     </service>
 
