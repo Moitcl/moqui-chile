@@ -11,16 +11,18 @@
  * along with this software (see the LICENSE.md file). If not, see
  * <http://creativecommons.org/publicdomain/zero/1.0/>.
  */
+apply plugin: 'java-library'
 apply plugin: 'groovy'
-
-sourceCompatibility = '1.8'
-targetCompatibility = '1.8'
 
 def componentNode = parseComponent(project)
 version = componentNode.'@version'
 def jarBaseName = componentNode.'@name'
 def moquiDir = projectDir.parentFile.parentFile.parentFile
 def frameworkDir = file(moquiDir.absolutePath + '/framework')
+
+configurations {
+    execWarRuntime.extendsFrom api
+}
 
 // to run use "gradle dependencyUpdates"
 apply plugin: 'com.github.ben-manes.versions'
@@ -44,12 +46,12 @@ repositories {
 }
 
 dependencies {
-    compile project(':framework')
-    compile project(':moqui-util')
-    testCompile project(':framework').configurations.testCompile.allDependencies
+    api project(':framework')
+    api project(':moqui-util')
+    testImplementation project(':framework').configurations.testImplementation.allDependencies
 
     // also required in moqui-fop
-    compile ('org.apache.xmlgraphics:fop-core:2.6') {
+    api ('org.apache.xmlgraphics:fop-core:2.6') {
         exclude group: 'xalan'
         exclude group: 'xml-apis' // can't exclude batik-ext but has some same classes as xml-apis so exclude that
         exclude group: 'org.apache.ant'
@@ -62,15 +64,15 @@ dependencies {
     //compile 'com.github.transbankdevelopers:transbank-sdk-java:1.5.1'
 
     // DTE (Código PDF-417), also required in moqui-fop
-    compile module('net.sf.barcode4j:barcode4j:2.1')
-    compile module('net.sf.barcode4j:barcode4j-fop-ext:2.1')
-    compile 'uk.org.okapibarcode:okapibarcode:0.3.0'
+    api module('net.sf.barcode4j:barcode4j:2.1')
+    api module('net.sf.barcode4j:barcode4j-fop-ext:2.1')
+    api 'uk.org.okapibarcode:okapibarcode:0.3.0'
 
     // XML SOAP (RemoteXmlsoapServiceRunner)
-    compile 'javax.xml.soap:javax.xml.soap-api:1.4.0'
-    compile 'com.sun.xml.messaging.saaj:saaj-impl:1.4.0'
+    api 'javax.xml.soap:javax.xml.soap-api:1.4.0'
+    api 'com.sun.xml.messaging.saaj:saaj-impl:1.4.0'
 
-    compile 'xalan:xalan:2.7.0'
+    api 'xalan:xalan:2.7.0'
 
 }
 
@@ -78,13 +80,13 @@ task cleanLib(type: Delete) { delete fileTree(dir: projectDir.absolutePath+'/lib
 clean.dependsOn cleanLib
 
 task copyDependencies { doLast {
-    copy { from (configurations.runtime - project(':framework').configurations.runtime - project(':framework').jar.archivePath)
+    copy { from (configurations.runtimeClasspath - project(':framework').configurations.runtimeClasspath - project(':framework').jar.archivePath)
         into file(projectDir.absolutePath + '/lib') }
 } }
 copyDependencies.dependsOn cleanLib
 jar.dependsOn copyDependencies
 
-check.dependsOn.remove(test)
+check.dependsOn.clear()
 
 jar {
     destinationDir = file(projectDir.absolutePath + '/lib')
