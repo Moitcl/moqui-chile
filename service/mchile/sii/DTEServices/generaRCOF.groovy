@@ -115,10 +115,8 @@ FileOutputStream fos = new FileOutputStream("/home/cherrera/moit/cowork/moqui-fr
 fos.write(facturaXml);
 fos.close();
 
-return
-
 // Creación de registro en FiscalTaxDocument -->
-dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:issuerPartyId]).one()
+dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:idDocumento, issuerPartyId:issuerPartyId]).one()
 
 dteEv.receiverPartyId = receiverPartyId
 dteEv.receiverPartyIdTypeEnumId = "PtidNationalTaxId"
@@ -126,8 +124,10 @@ dteEv.receiverPartyIdValue = rutReceptor.trim()
 dteEv.statusId = "Ftd-Issued"
 dteEv.sentAuthStatusId = "Ftd-NotSentAuth"
 dteEv.sentRecStatusId = "Ftd-NotSentRec"
-dteEv.invoiceId = invoiceId
-dteEv.shipmentId = shipmentId
+dteEv.fechaInicio = fechaInicio
+dteEv.fechaFinal = fechaFin
+//dteEv.invoiceId = invoiceId
+//dteEv.shipmentId = shipmentId
 Date date = new Date()
 Timestamp ts = new Timestamp(date.getTime())
 dteEv.date = ts
