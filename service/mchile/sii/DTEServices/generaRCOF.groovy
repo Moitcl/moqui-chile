@@ -33,7 +33,8 @@ mapBoletaExenta = ec.service.sync().name("mchile.sii.DTEServices.get#ResumenRcof
 mapNotaCredito = ec.service.sync().name("mchile.sii.DTEServices.get#ResumenRcof").parameters([fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-61', organizationPartyId:organizationPartyId]).call()
 
 
-idDocumento = "Rcof-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
+tmst = ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
+idDocumento = "Rcof-" + tmst
 String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
 
 StringWriter xmlWriter = new StringWriter()
@@ -49,9 +50,9 @@ xmlBuilder.ConsumoFolios(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http:/
             NroResol(NroResol)
             FchInicio(fechaInicio)
             FchFinal(fechaFin)
-            Correlativo(correlativo)
-            SecEnvio(secEnvio)
-            TmstFirmaEnv(tmstFirmaEnv)
+            Correlativo(1)
+            SecEnvio(1)
+            TmstFirmaEnv(tmstFirmaResp)
         }
         Resumen {
             TipoDocumento(39)
@@ -116,36 +117,15 @@ fos.write(facturaXml);
 fos.close();
 
 // Creación de registro en FiscalTaxDocument -->
-dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:idDocumento, issuerPartyId:issuerPartyId]).one()
+//dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:tmstFirmaResp, issuerPartyId:issuerPartyId]).one()
 
-dteEv.receiverPartyId = receiverPartyId
-dteEv.receiverPartyIdTypeEnumId = "PtidNationalTaxId"
-dteEv.receiverPartyIdValue = rutReceptor.trim()
-dteEv.statusId = "Ftd-Issued"
-dteEv.sentAuthStatusId = "Ftd-NotSentAuth"
-dteEv.sentRecStatusId = "Ftd-NotSentRec"
-dteEv.fechaInicio = fechaInicio
-dteEv.fechaFinal = fechaFin
-//dteEv.invoiceId = invoiceId
-//dteEv.shipmentId = shipmentId
-Date date = new Date()
-Timestamp ts = new Timestamp(date.getTime())
-dteEv.date = ts
-dteEv.update()
+createMap = [fiscalTaxDocumentTypeEnumId:'Ftdt-Rcof', fiscalTaxDocumentId:tmst, fiscalTaxDocumentNumber:tmst, issuerPartyId:organizationPartyId, issuerPartyIdValue:rutEmisor,issuerPartyIdTypeEnumId:'PtidNationalTaxId',receiverPartyId:receiverPartyId, statusId:"Ftd-Issued", sentAuthStatusId:"Ftd-NotSentAuth", sentRecStatusId:"Ftd-NotSentRec", fechaInicio:fechaInicio, fechaFinal:fechaFin, date:ts]
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call())
 
 xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/RCOF-${id}.xml"
 
 // Creacion de registros en FiscalTaxDocumentContent
-createMapBase = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, contentDte:ts]
-ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlContentLocation]).call())
-ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
-
-
-// Creación de registro en FiscalTaxDocumentAttributes
-//fechaEmisionString = ec.l10n.format(fechaEmision, "yyyy-MM-dd")
-//createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:totalInvoice, fechaEmision:fechaEmisionString, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:montoNeto, tasaImpuesto:19,
-//             montoExento:montoExento, montoIVARecuperable:montoIVARecuperable]
-//ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call())
-//fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId
-
+//createMapBase = [fiscalTaxDocumentId:tmst, contentDte:tmst]
+//ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlContentLocation]).call())
+//ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
 
