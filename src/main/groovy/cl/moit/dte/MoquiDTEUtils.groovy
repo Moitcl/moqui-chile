@@ -337,7 +337,12 @@ class MoquiDTEUtils {
             }
 
             // Validate the XMLSignature.
-            if (!signature.validate(valContext)) {
+            try {
+                if (!signature.validate(valContext)) {
+                    failedIdList.add(signedElementId)
+                    return
+                }
+            } catch (XMLSignatureException e) {
                 failedIdList.add(signedElementId)
                 return
             }
