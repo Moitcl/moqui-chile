@@ -313,11 +313,16 @@ detalleList.each { detalle ->
     if (itemExento)
         totalExento += montoItem
 
-    if (quantity.setScale(3, RoundingMode.HALF_UP)*price.setScale(3, RoundingMode.HALF_UP) != (quantity*price).setScale(0, RoundingMode.HALF_UP)) {
-        dteQuantity = quantity
-        dteAmount = price
-        price = (price * quantity).setScale(0, RoundingMode.HALF_UP)
-        quantity = 1
+    roundingAdjustmentItemAmount = 0 as BigDecimal
+    if (quantity*price != montoItem) {
+        roundingAdjustmentItemAmount = montoItem - (quantity*price).setScale(6, RoundingMode.HALF_UP) as BigDecimal
+        if (((quantity*price) + roundingAdjustmentItemAmount) != montoItem) {
+            roundingAdjustmentItemAmount = 0
+            dteQuantity = quantity
+            dteAmount = price
+            price = (price * quantity).setScale(0, RoundingMode.HALF_UP)
+            quantity = 1
+        }
     }
 
     Map itemMap = null
@@ -379,6 +384,19 @@ detalleList.each { detalle ->
         ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, parentItemSeqId:parentItemSeqId, itemTypeEnumId:'ItemDiscount',
                                                                                                 description: 'Descuento', quantity: 1, amount:-descuentoMonto]).call()
         invoiceItemCount++
+    }
+
+    if (roundingAdjustmentItemAmount != 0) {
+        description = "Ajuste redondeo DTE (precio ${dteAmount?:price}, cantidad ${dteQuantity?:quantity}, montoItem ${montoItem}"
+        if (itemMap?.invoiceItemSeqId == null) {
+            ec.message.addMessage("Need to add rounding adjustment item but did not create a parent item, itemMap ${itemMap}, invoiceId: ${invoiceId}")
+            ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId  : invoiceId, itemTypeEnumId: 'ItemDteRoundingAdjust',
+                                                                                                    description: description, quantity: 1, amount: roundingAdjustmentItemAmount]).call()
+        } else {
+            parentItemSeqId = itemMap.invoiceItemSeqId
+            ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, parentItemSeqId:parentItemSeqId, itemTypeEnumId:'ItemDteRoundingAdjust',
+                                                                                                    description: description, quantity: 1, amount:roundingAdjustmentItemAmount]).call()
+        }
     }
 
 }
