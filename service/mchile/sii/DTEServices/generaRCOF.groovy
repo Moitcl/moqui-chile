@@ -125,7 +125,7 @@ ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").
 xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/RCOF-${id}.xml"
 
 // Creacion de registros en FiscalTaxDocumentContent
-//createMapBase = [fiscalTaxDocumentId:tmst, contentDte:tmst]
-//ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlContentLocation]).call())
-//ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
+createMapBase = [fiscalTaxDocumentId:tmst, contentDte:tmst]
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlContentLocation]).call())
+ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
 
