@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd"
+        menu-image="glyphicon glyphicon-shopping-cart" menu-image-type="icon" default-menu-title="RCOF Enviadas a SII"
+        default-menu-index="53">
+
+    <transition name="verificarEnvioSII">
+        <parameter name="fiscalTaxDocumentId"/>
+        <parameter name="fiscalTaxDocumentTypeEnumId"/>
+        <actions>
+            <service-call name="mchile.sii.DTECommServices.verificaEnSII#EnvioBoleta"
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, organizationPartyId:activeOrgId, trackId:trackId]" out-map="verifyOut"/>
+            <!--log message="-> ${verifyOut.statusSii}" level="warn"/>
+            <if condition="verifyOut.statusSii == '0'">
+                <return error="false" message="${verifyOut.salida}"/>
+            </if>
+            <if condition="verifyOut.statusSii != '0'">
+                <return error="true" message="ERROR: ${verifyOut.salida}"/>
+            </if-->
+            <return error="false" message="${verifyOut.glosaError}"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="verificarEnSII">
+        <parameter name="fiscalTaxDocumentId"/>
+        <parameter name="fiscalTaxDocumentTypeEnumId"/>
+        <parameter name="activeOrgId"/>
+        <parameter name="trackId"/>
+        <actions>
+            <service-call name="mchile.sii.DTECommServices.verificaEnSII#Boleta"
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, organizationPartyId:activeOrgId]" out-map="verifyOut"/>
+            <if condition="verifyOut.errorCode == '0'"><then>
+                <return message="${verifyOut.glosaError}"/>
+            </then><else>
+                <message type="danger">ERROR ${verifyOut.errorCode}: ${verifyOut.glosaError}</message>
+            </else></if>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="editInvoice">
+        <default-response url="/vapps/PopcAdmin/Accounting/Invoice/EditInvoice"/>
+    </transition>
+
+    <transition name="marcarNoEnviado">
+        <actions>
+            <service-call name="mchile.sii.DTECommServices.marcarNoEnviado#Documento"
+                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" out-map="context"/>
+        </actions>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="pdf" read-only="true">
+        <parameter name="fiscalTaxDocumentId"/>
+        <actions>
+
+            <set field="extraPathNameList" from="sri.screenUrlInfo.extraPathNameList"/>
+
+            <if condition="extraPathNameList &amp;&amp; !fiscalTaxDocumentId">
+                <set field="fiscalTaxDocumentId" from="extraPathNameList[0]"/></if>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="document" cache="false">
+                <field-map field-name="fiscalTaxDocumentId"/>
+                <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Pdf"/>
+            </entity-find-one>
+            <if condition="document == null"><then>
+                <!-- NOTE: consider returning a default image instead of 404 -->
+                <script>ec.web.sendError(404, null, null)</script>
+            </then><else>
+                <script>ec.web.sendResourceResponse(document.contentLocation, true)</script>
+            </else></if>
+        </actions>
+        <default-response type="none"/>
+    </transition>
+
+    <transition name="xml" read-only="true">
+        <parameter name="fiscalTaxDocumentId"/>
+        <actions>
+            <set field="extraPathNameList" from="sri.screenUrlInfo.extraPathNameList"/>
+
+
+            <if condition="extraPathNameList &amp;&amp; !fiscalTaxDocumentId">
+                <set field="fiscalTaxDocumentId" from="extraPathNameList[0]"/></if>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="document" cache="false">
+                <field-map field-name="fiscalTaxDocumentId"/>
+                <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
+            </entity-find-one>
+            <if condition="document == null"><then>
+                <!-- NOTE: consider returning a default image instead of 404 -->
+                <script>ec.web.sendError(404, null, null)</script>
+            </then><else>
+                <script>ec.web.sendResourceResponse(document.contentLocation, true)</script>
+            </else></if>
+        </actions>
+        <default-response type="none"/>
+    </transition>
+
+    <transition-include name="downloadDocumentInternal" location="component://MoquiChile/template/dte/DteTransitions.xml"/>
+
+    <transition-include name="searchPartyList" location="component://SimpleScreens/template/party/PartyForms.xml"/>
+    <actions>
+        <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
+            <search-form-inputs/>
+            <!--econdition-object field="searchMap"/-->
+            <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in"
+                        from="['Ftdt-Rcof']"/>
+            <!--econdition field-name="sentAuthStatusId" value="Ftd-SentAuthAccepted"/-->
+            <econdition field-name="sentAuthStatusId" value="Ftd-SentAuthUnverified"/>
+            <order-by field-name="-fiscalTaxDocumentNumber"/>
+        </entity-find>
+    </actions>
+
+    <widgets>
+
+        <label text="DTE ya emitidas y enviadas al SII" type="h4"/>
+
+        <form-list name="DteForm" list="dteList" show-pdf-button="true" show-csv-button="true" header-dialog="true" saved-finds="true">
+            <row-actions>
+                <!-- Se busca ubicación de XML y PDF -->
+                <service-call name="mchile.sii.DTEServices.get#DteContent"
+                              in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
+                <set field="xmlFilename" from="content"/>
+
+                <service-call name="mchile.sii.DTEServices.get#DteContent"
+                              in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf']" out-map="context"/>
+                <set field="pdfFilename" from="content"/>
+                <log message="tipo: $sentAuthStatusId" level="warn"/>
+            </row-actions>
+            <field name="_useRowSubmit"><default-field><hidden default-value="true"/></default-field></field>
+            <field name="fiscalTaxDocumentId"><default-field><hidden default-value="true"/></default-field></field>
+            <field name="fiscalTaxDocumentId">
+                <header-field show-order-by="true"><text-line size="6"/></header-field>
+                <default-field>
+                    <display/>
+                </default-field>
+            </field>
+            <field name="fiscalTaxDocumentTypeEnumId">
+                <header-field title="Type" show-order-by="true">
+                    <drop-down allow-empty="true" allow-multiple="true">
+                        <entity-options key="${enumId}">
+                            <entity-find entity-name="moqui.basic.Enumeration">
+                                <econdition field-name="enumTypeId" value="FiscalTaxDocumentType"/>
+                            </entity-find>
+                        </entity-options>
+                    </drop-down>
+                </header-field>
+                <default-field>
+                    <display-entity entity-name="moqui.basic.Enumeration"/>
+                </default-field>
+            </field>
+            <field name="fechaInicio">
+                <header-field show-order-by="true"><text-line size="6"/></header-field>
+                <default-field>
+                    <display/>
+                </default-field>
+            </field>
+            <field name="fechaFin">
+                <header-field show-order-by="true"><text-line size="6"/></header-field>
+                <default-field>
+                    <display/>
+                </default-field>
+            </field>
+            <field name="trackId">
+                <header-field title="Track ID en SII" show-order-by="true"><text-find/></header-field>
+                <default-field><display/>
+                </default-field>
+            </field>
+            <field name="xml">
+                <default-field title=" ">
+                    <link url="downloadDocumentInternal" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fileType:'Ftdct-Xml']" text="XML" link-type="anchor"/>
+                </default-field>
+            </field>
+            <!--field name="verificarEnvioSII">
+                <default-field title=" ">
+                    <link url="verificarEnvioSII" tooltip="Ver Estado envio SII"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, trackId:trackId]" text="Verificar envio SII"/>
+                </default-field>
+            </field>
+            <field name="verificarEnSII">
+                <default-field title=" ">
+                    <link url="verificarEnSII" tooltip="Ver Estado en SII"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, trackId:trackId]" text="Verificar Boleta en SII"/>
+                </default-field>
+            </field-->
+            <field name="marcarNoEnviado">
+                <default-field title=" ">
+                    <link url="marcarNoEnviado" tooltip="Marcar como no enviado"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" text="Marcar como no enviado"/>
+                </default-field>
+            </field>
+        </form-list>
+    </widgets>
+</screen>
