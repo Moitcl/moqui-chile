@@ -336,7 +336,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                 //CredEC()
                 //GrntDep()
                 //Comisiones{}
-                MntTotal(totalInvoice)
+                MntTotal(totalInvoice as Integer)
                 if (montoNoFacturable)
                     MontoNF(montoNoFacturable)
                 //MontoPeriodo()
@@ -381,7 +381,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                 //RecargoMonto()
                 //SubRecargo{}
                 //CodImpAdic()
-                MontoItem(detalle.montoItem)
+                MontoItem(detalle.montoItem as Integer)
             }
         }
         //SubTotInfo{}
