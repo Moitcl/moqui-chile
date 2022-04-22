@@ -95,8 +95,8 @@ class MoquiDTEUtils {
                 EntityValue productEv = ec.entity.find("mantle.product.Product").condition("productId", detailEntry.productId).one()
                 nombreItem = productEv? productEv.productName : ''
             }
-            Integer quantity = detailEntry.quantity
-            Integer montoDescuento = detailEntry.montoDescuento
+            BigDecimal quantity = detailEntry.quantity
+            BigDecimal montoDescuento = detailEntry.montoDescuento
             BigDecimal porcentajeDescuento = detailEntry.porcentajeDescuento
             if (montoDescuento)
                 totalDescuentos += montoDescuento
@@ -113,11 +113,11 @@ class MoquiDTEUtils {
                 itemAfecto = afectoOutMap.afecto
             }
 
-            Integer priceItem
+            BigDecimal priceItem
             BigDecimal totalItem = 0
             if (detailType == "ShipmentItem") {
                 ec.logger.info("handling price for productId ${detailEntry.productId}")
-                Integer quantityHandled = 0
+                BigDecimal quantityHandled = 0
                 List<EntityValue> sisList = ec.entity.find("mantle.shipment.ShipmentItemSource").condition([shipmentId:detailEntry.shipmentId, productId: detailEntry.productId]).list()
                 if (sisList) {
                     sisList.each { sis ->
