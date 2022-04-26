@@ -1,26 +1,26 @@
-package cl.moit.dte;
+package cl.moit.dte
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
+import org.krysalis.barcode4j.xalan.BarcodeExt
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+import org.w3c.dom.Document
+import org.w3c.dom.DocumentFragment
+import org.w3c.dom.NodeList
+import org.xml.sax.SAXException
+import uk.org.okapibarcode.backend.Pdf417
+import uk.org.okapibarcode.output.SvgRenderer
 
-import org.krysalis.barcode4j.xalan.BarcodeExt;
-import org.w3c.dom.Document;
-import org.w3c.dom.DocumentFragment;
-import org.w3c.dom.NodeList;
-import org.xml.sax.SAXException;
-
-import uk.org.okapibarcode.backend.Pdf417;
-import uk.org.okapibarcode.output.SvgRenderer;
-
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
-import java.awt.Color;
+import javax.xml.transform.OutputKeys
+import javax.xml.transform.Transformer
+import javax.xml.transform.TransformerException
+import javax.xml.transform.TransformerFactory
+import javax.xml.transform.dom.DOMSource
+import javax.xml.transform.stream.StreamResult
+import java.awt.*
 
 public class TedBarcodeExtension extends BarcodeExt {
+
+    protected final static Logger logger = LoggerFactory.getLogger(TedBarcodeExtension.class);
 
     public DocumentFragment generate(NodeList tedxml) throws SAXException, IOException {
         try {
@@ -40,12 +40,9 @@ public class TedBarcodeExtension extends BarcodeExt {
             int width = barcode.getWidth();
             int height = barcode.getHeight();
 
-            Document tedDocument = (Document) org.apache.xmlbeans.XmlBeans.getContextTypeLoader().parse(baos.toString(), null, null).getDomNode();
+            Document tedDocument = (Document) cl.moit.dte.MoquiDTEUtils.parseDocument(baos.toByteArray());
             DocumentFragment tedFragment = tedDocument.createDocumentFragment();
-            NodeList tedNodeList = tedDocument.getChildNodes();
-            for (int i = 0; i < tedNodeList.getLength(); i++) {
-                tedFragment.appendChild(tedNodeList.item(i));
-            }
+            tedFragment.appendChild(tedDocument.getDocumentElement());
 
             return tedFragment;
 

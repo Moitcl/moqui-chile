@@ -76,8 +76,8 @@ class FacturacionAfectaTests extends Specification {
               .call()
 
       logger.info("[DTE] Generación de la Factura a partir del Invoice Creado")
-      Map factOut = ec.service.sync().name("mchile.sii.DTEServices.facturar#Invoice")
-              .parameters([invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dteType, activeOrgId:partyId])
+      Map factOut = ec.service.sync().name("mchile.sii.DTEServices.create#DteFromInvoice")
+              .parameters([invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dteType])
               .call()
       String fiscalTaxDocumentId = factOut.fiscalTaxDocumentId
 

@@ -3,8 +3,31 @@
         menu-image="glyphicon glyphicon-shopping-cart" menu-image-type="icon" default-menu-title="Envíos" default-menu-index="90">
 
     <transition name="verificaEnvio">
-        <service-call name="mchile.sii.DTECommServices.verifica#EnvioEnSii"/>
+        <service-call name="mchile.sii.DTECommServices.check#EnviosEnviadosSii"/>
         <default-response url="."/>
+    </transition>
+
+    <transition name="sendEnvio">
+        <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDteReceiver"/>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="processEnvio">
+        <service-call name="mchile.sii.DTECommServices.process#PendingDteEnvio"/>
+        <default-response url="."/>
+    </transition>
+
+    <transition name="downloadEnvio" read-only="true">
+        <actions>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
+            <script>
+                if (envio?.documentLocation)
+                    ec.web.sendResourceResponse(envio.documentLocation)
+                else
+                    ec.message.addError("No se encuentra documento de envío ${envioId}")
+            </script>
+        </actions>
+        <default-response type="none"/>
     </transition>
 
     <actions>
@@ -16,9 +39,23 @@
     <widgets>
         <form-list name="FindEnvioForm" list="envioList" header-dialog="true">
             <auto-fields-entity entity-name="mchile.dte.DteEnvio" auto-columns="false"/>
+            <field name="statusId">
+                <header-field><drop-down allow-multiple="true" allow-empty="true"><entity-options>
+                    <entity-find entity-name="moqui.basic.StatusItem"><econdition field-name="statusTypeId" value="DteEnvio"/></entity-find>
+                </entity-options></drop-down></header-field>
+                <default-field><display-entity entity-name="moqui.basic.StatusItem"/></default-field>
+            </field>
             <field name="actions">
+                <header-field><submit text="Search"/></header-field>
                 <default-field>
-                    <link url="verificaEnvio" text="Verificar en SII" condition="statusId == 'Ftde-Sent' &amp;&amp; rutReceptor == '60803000-K'" parameter-map="[envioId:envioId]"/>
+                    <link url="verificaEnvio" text="Verificar en SII" condition="statusId == 'Ftde-Sent' &amp;&amp; rutReceptor == '60803000-K'" parameter-map="[initialDelaySeconds:0, checkAttempts:1, envioId:envioId]"/>
+                    <link url="sendEnvio" text="Enviar" condition="statusId == 'Ftde-Created'" parameter-map="[envioIdList:[envioId]]"/>
+                    <link url="processEnvio" text="Procesar" condition="statusId == 'Ftde-Received'" parameter-map="[envioIdList:[envioId], ignoreLastAttempt:true]"/>
+                </default-field>
+            </field>
+            <field name="documentLocation">
+                <default-field>
+                    <link url="downloadEnvio" parameter-map="[envioId:envioId]" text="${documentLocation}" link-type="anchor"/>
                 </default-field>
             </field>
             <columns>

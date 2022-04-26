@@ -9,29 +9,12 @@
     <transition-include name="getFacilityList" location="component://SimpleScreens/template/facility/FacilityTransitions.xml"/>
 
     <transition name="loadDte">
-        <parameter name="fiscalTaxDocumentAggrEnumId"/>
-        <parameter name="activeOrgId"/>
-        <parameter name="acctgTransTypeEnumId"/>
-        <parameter name="organizationPartyId"/>
-        <parameter name="transactionDate"/>
-        <parameter name="amountUomId"/>
-        <parameter name="glJournalId"/>
-        <parameter name="invoiceId"/>
-        <actions>
-            <service-call name="mchile.sii.DTEServices.preLoad#Dte" in-map="[xml:xml, pdf:pdf, activeOrgId:activeOrgId, productMatch:productMatch, organizationPartyId:organizationPartyId,
-                    fiscalTaxDocumentAggrEnumId:fiscalTaxDocumentAggrEnumId, invoiceId:invoiceId]"/>
-        </actions>
+        <service-call name="mchile.sii.DTEServices.preLoad#Dte" in-map="context"/>
         <default-response url="."/>
     </transition>
 
     <transition name="loadDt">
-        <service-call name="mchile.sii.DTEServices.load#Dt" in-map="[invoiceId:invoiceId, pdf:pdf, amount:amount, issuerPartyId:issuerPartyId,
-            amount:amount, montoNeto:montoNeto, fiscalTaxDocumentNumber:nroDocumento, tasaImpuesto:tasaImpuesto, tipoImpuesto:tipoImpuesto,
-            fechaEmision:fechaEmision, documentoAnulado:documentoAnulado, montoExento:montoExento, montoIVARecuperable:montoIVARecuperable,
-            codigoIVANoRecuperable:codigoIVANoRecuperable, montoIVANoRecuperable:montoIVANoRecuperable, montoIVAUsoComun:montoIVAUsoComun, activeOrgId:activeOrgId,
-            codigoOtroImpuestoORetencion:codigoOtroImpuestoORetencion, tasaOtroImpuestoORetencion:tasaOtroImpuestoORetencion, montoOtroImpuestoORetencionConCredito:montoOtroImpuestoORetencionConCredito,
-            montoOtroImpuestoORetencionSinCredito:montoOtroImpuestoORetencionSinCredito, montoNetoActivoFijo:montoNetoActivoFijo, montoIVAActivoFijo:montoIVAActivoFijo,
-            montoIVANoRetenido:montoIVANoRetenido, codigoSucursal:codigoSucursal, notasDebitoCreditoFacturasCompra:notasDebitoCreditoFacturasCompra, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"/>
+        <service-call name="mchile.sii.DTEServices.load#Dt"/>
         <default-response url="."/>
     </transition>
 
@@ -51,7 +34,6 @@
             <econdition field-name="invoiceTypeEnumId" value="InvoiceSales"/>
             <econdition field-name="statusId" operator="not-equals" value="InvoiceCancelled"/>
             <econdition field-name="fiscalTaxDocumentId" operator="is-null"/>
-            <econdition field-name="toPartyId" operator="equals" from="activeOrgId"/>
             <order-by field-name="-invoiceDate"/>
         </entity-find>
     </actions>
@@ -60,7 +42,6 @@
         <label text="Invoices/Ordenes de compra para asociarle factura" type="h4"/>
         <container-dialog id="LoadDteDialog" button-text="Cargar XML de Factura Electrónica">
             <form-single name="LoadDteForm" transition="loadDte">
-                <field name="activeOrgId"><default-field><hidden/></default-field></field>
                 <field name="xml"><default-field title="XML de Factura"><file size="30"/></default-field></field>
                 <field name="pdf"><default-field><file size="30"/></default-field></field>
                 <!--field name="fiscalTaxDocumentTypeEnumId"-->
@@ -70,23 +51,25 @@
                         <econdition field-name="enumTypeId" value="FiscalTaxDocumentAggr"/>
                     </entity-find>
                 </entity-options></drop-down></default-field></field>
-                <field name="organizationPartyId"><default-field title="Organization"><drop-down no-current-selected-key="${activeOrgId}">
-                    <entity-options key="${partyId}" text="PartyNameTemplate">
-                        <entity-find entity-name="mantle.party.PartyDetailAndRole">
-                            <econdition field-name="roleTypeId" value="OrgInternal"/>
-                            <econdition field-name="disabled" value="N" or-null="true"/>
-                            <order-by field-name="organizationName"/>
-                        </entity-find>
-                    </entity-options>
-                </drop-down></default-field></field>
-                <field name="productMatch">
-                    <default-field title="Calzar con productos ya registrados">
-                        <check no-current-selected-key="true">
-                            <option key="true" text=" "/>
-                        </check>
-                    </default-field>
-                </field>
+                <field name="createUnknownIssuer"><default-field title=""><check no-current-selected-key="true"><option key="true" text="Crear Inexistente"/></check></default-field></field>
+                <field name="requireIssuerInternalOrg"><default-field title=""><check no-current-selected-key=" "><option key="true" text="Debe ser Org Interna"/></check></default-field></field>
+                <field name="createUnknownReceiver"><default-field title=""><check no-current-selected-key=" "><option key="true" text="Crear Inexistente"/></check></default-field></field>
+                <field name="requireReceiverInternalOrg"><default-field title=""><check no-current-selected-key="true"><option key="true" text="Debe ser Org Interna"/></check></default-field></field>
+                <field name="productMatch"><default-field title=""><check no-current-selected-key="true"><option key="true" text="Calzar con productos ya registrados"/></check></default-field></field>
+                <field name="ignoreSignatureErrors"><default-field title=""><check no-current-selected-key="true"><option key="true" text="Ignorar problemas de firma"/></check></default-field></field>
                 <field name="load"><default-field><submit/></default-field></field>
+                <field-layout>
+                    <field-row>
+                        <field-ref name="xml"/>
+                        <field-ref name="pdf"/>
+                    </field-row>
+                    <field-ref name="fiscalTaxDocumentAggrEnumId"/>
+                    <field-row-big><field-ref name="productMatch"/></field-row-big>
+                    <field-group title="Issuer"><field-row><field-ref name="createUnknownIssuer"/><field-ref name="requireIssuerInternalOrg"/></field-row></field-group>
+                    <field-group title="Receiver"><field-row><field-ref name="createUnknownReceiver"/><field-ref name="requireReceiverInternalOrg"/></field-row></field-group>
+                    <field-ref name="ignoreSignatureErrors"/>
+                    <field-ref name="load"/>
+                </field-layout>
             </form-single>
         </container-dialog>
 

@@ -61,8 +61,7 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
         boolean debug = serviceParams?.debug
         if (debug)
             logger.info("Debug mode is ON")
-        String soapAction = serviceParams.get("soapAction")
-        String parameterOrder = serviceParams.get("parameterOrder")
+        String parameterOrder = serviceParams?.parameterOrder
 
         String methodNamespace = serviceParams?.methodNamespace
         String methodNamespacePrefix = serviceParams?.methodNamespacePrefix
@@ -85,6 +84,12 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
             parameters.remove("xmlRpcBasicAuthentication")
         }
 
+        if (serviceParams?.mimeHeaders instanceof Map) {
+            serviceParams.mimeHeaders.each { key, value ->
+                message.getMimeHeaders().addHeader(key, value)
+            }
+        }
+
         /*
         Map<String, Object> soapConfig = (Map<String, Object>)parameters.get("xmlRpcSoapAttributes")
         if (soapConfig) {
@@ -102,7 +107,6 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
         }
 
         Name bodyName = envelope.createName(method, methodNamespacePrefix, methodNamespace);
-        message.getMimeHeaders().addHeader("SOAPAction", soapAction);
 
         SOAPBodyElement bodyElement = body.addBodyElement(bodyName);
         if (parameterOrder) {
@@ -120,7 +124,7 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
 
         if (debug) logger.info("Parameters: ${parameters}")
         //if (debug) logger.info("ContentType: ${message.version}; ${msg.encoding}")
-        if (debug) logger.info("XML String: ${body.toString()}")
+        if (debug) logger.info("XML String: ${envelope.toString()}")
 
         SOAPMessage response = connection.call(message, endpoint);
 

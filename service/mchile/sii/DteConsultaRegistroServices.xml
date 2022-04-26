@@ -1,0 +1,332 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+    <service verb="consultar" noun="DocDteCedible">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="codResp"/>
+            <parameter name="descResp"/>
+            <parameter name="listaEventosDoc" type="List">
+                <parameter name="eventoDoc" type="Map">
+                    <parameter name="codEvento"/>
+                    <parameter name="descEvento"/>
+                    <parameter name="rutResponsable"/>
+                    <parameter name="dvResponsable"/>
+                    <parameter name="fechaEvento"/>
+                </parameter>
+            </parameter>
+            <parameter name="rutToken"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte"/>
+            <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="context"/>
+            <if condition="dte.receiverPartyId in filterOrgIds">
+                <set field="organizationPartyId" from="dte.receiverPartyId"/>
+            </if>
+            <if condition="certificate == null &amp;&amp; dte.issuerPartyId in filterOrgIds">
+                <set field="organizationPartyId" from="dte.issuerPartyId"/>
+            </if>
+            <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[isProduction:isProduction, partyId:organizationPartyId]" out-map="tokenMap"/>
+            <set field="token" value="TOKEN=${tokenMap.token}"/>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:dte.issuerPartyIdValue]" out-map="rutMap"/>
+            <set field="rutEmisor" from="rutMap.rut"/>
+            <set field="dvEmisor" from="rutMap.dv"/>
+            <service-call name="mchile.sii.DTEServices.get#SIICode" in-map="dte" out-map="context"/>
+            <set field="tipoDoc" from="siiCode"/>
+            <set field="folio" from="dte.fiscalTaxDocumentNumber"/>
+            <set field="xmlRpcServiceParams" from="[debug:false, mimeHeaders:[cookie:token], methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio']" type="Map"/>
+            <if condition="isProduction"><then>
+                <service-call name="mchile.sii.DteConsultaRegistroServices.consultar#DocDteCedibleProduction" in-map="context" out-map="outMap"/>
+            </then><else>
+                <service-call name="mchile.sii.DteConsultaRegistroServices.consultar#DocDteCedibleCertification" in-map="context" out-map="outMap"/>
+            </else></if>
+            <set field="codResp" from="outMap.return?.codResp"/>
+            <set field="descResp" from="outMap.return?.descResp"/>
+            <set field="listaEventosDoc" from="outMap.return?.listaEventosDoc"/>
+            <set field="rutToken" from="outMap.return?.rutToken"/>
+        </actions>
+    </service>
+    <service verb="consultar" noun="DocDteCedibleCertification" type="remote-xml-soap" location="https://ws2.sii.cl/WSREGISTRORECLAMODTECERT/registroreclamodteservice" method="consultarDocDteCedible">
+        <in-parameters>
+            <parameter name="xmlRpcServiceParams" default="[debug:false, headers:[cookie:Token], methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio']" type="Map"/>
+            <parameter name="rutEmisor"/>
+            <parameter name="dvEmisor"/>
+            <parameter name="tipoDoc"/>
+            <parameter name="folio"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="return"/>
+        </out-parameters>
+    </service>
+    <service verb="consultar" noun="DocDteCedibleProduction" type="remote-xml-soap" location="https://ws1.sii.cl/WSREGISTRORECLAMODTE/registroreclamodteservice" method="consultarDocDteCedible">
+        <in-parameters>
+            <parameter name="xmlRpcServiceParams" default="[debug:false, methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio']" type="Map"/>
+            <parameter name="rutEmisor"/>
+            <parameter name="dvEmisor"/>
+            <parameter name="tipoDoc"/>
+            <parameter name="folio"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="return"/>
+        </out-parameters>
+    </service>
+
+    <service verb="get" noun="Version">
+        <out-parameters>
+            <parameter name="version"/>
+        </out-parameters>
+        <actions>
+            <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+            <script>if (!isProduction) cl.moit.proxy.debug.TrustAllTrustManager.init()</script>
+            <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="context"/>
+            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[isProduction:isProduction, partyId:(activeOrgId?:filterOrgIds[0])]" out-map="tokenMap"/>
+            <set field="token" value="TOKEN=${tokenMap.token}"/>
+            <set field="xmlRpcServiceParams" from="[debug:true, mimeHeaders:[cookie:token], methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio']" type="Map"/>
+            <if condition="isProduction"><then>
+                <service-call name="mchile.sii.DteConsultaRegistroServices.get#VersionProduction" in-map="context" out-map="context"/>
+            </then><else>
+                <service-call name="mchile.sii.DteConsultaRegistroServices.get#VersionCertification" in-map="context" out-map="context"/>
+            </else></if>
+        </actions>
+    </service>
+    <service verb="get" noun="VersionCertification" type="remote-xml-soap" location="https://ws2.sii.cl/WSREGISTRORECLAMODTECERT/registroreclamodteservice" method="getVersion">
+        <in-parameters>
+            <parameter name="xmlRpcServiceParams" default="[debug:true, methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws']" type="Map"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="version"/>
+        </out-parameters>
+    </service>
+    <service verb="get" noun="VersionProduction" type="remote-xml-soap" location="https://ws1.sii.cl/WSREGISTRORECLAMODTE/registroreclamodteservice" method="getVersion">
+        <in-parameters>
+            <parameter name="xmlRpcServiceParams" default="[debug:true, methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws']" type="Map"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="version"/>
+        </out-parameters>
+    </service>
+
+    <service verb="ingresar" noun="AceptacionReclamoDoc">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="accion" required="true"><description>aceptaContenido, reclamaContenido, reciboMercaderias, reclamoFaltaParcialMercaderias, reclamoFaltaTotalMercaderias</description></parameter>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="codResp"/>
+            <parameter name="descResp"/>
+            <parameter name="listaEventosDoc" type="List">
+                <parameter name="eventoDoc" type="Map">
+                    <parameter name="codEvento"/>
+                    <parameter name="descEvento"/>
+                    <parameter name="rutResponsable"/>
+                    <parameter name="dvResponsable"/>
+                    <parameter name="fechaEvento"/>
+                </parameter>
+            </parameter>
+            <parameter name="rutToken"/>
+        </out-parameters>
+        <actions>
+            <set field="accionMap" from="[aceptaContenido:'ACD', reclamaContenido:'RCD', reciboMercaderias:'ERM', reclamoFaltaParcialMercaderias:'RFP', reclamoFaltaTotalMercaderias:'RFT']"/>
+            <set field="accionDoc" from="accionMap[accion]"/>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte"/>
+            <!-- ToDo: check dte statusId and evaluate possible actions -->
+            <set field="organizationPartyId" from="dte.receiverPartyId"/>
+            <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[isProduction:isProduction, partyId:dte.issuerPartyId]" out-map="tokenMap"/>
+            <set field="token" value="TOKEN=${tokenMap.token}"/>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:dte.issuerPartyIdValue]" out-map="rutMap"/>
+            <set field="rutEmisor" from="rutMap.rut"/>
+            <set field="dvEmisor" from="rutMap.dv"/>
+            <service-call name="mchile.sii.DTEServices.get#SIICode" in-map="dte" out-map="context"/>
+            <set field="tipoDoc" from="siiCode"/>
+            <set field="folio" from="dte.fiscalTaxDocumentNumber"/>
+            <set field="xmlRpcServiceParams" from="[debug:false, mimeHeaders:[cookie:token], methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio']" type="Map"/>
+            <if condition="isProduction"><then>
+                <service-call name="mchile.sii.DteConsultaRegistroServices.ingresar#AceptacionReclamoDocProduccion" in-map="context" out-map="outMap"/>
+            </then><else>
+                <service-call name="mchile.sii.DteConsultaRegistroServices.ingresar#AceptacionReclamoDocCertificacion" in-map="context" out-map="outMap"/>
+            </else></if>
+            <set field="codResp" from="outMap.return?.codResp"/>
+            <set field="descResp" from="outMap.return?.descResp"/>
+            <set field="listaEventosDoc" from="outMap.return?.listaEventosDoc"/>
+            <set field="rutToken" from="outMap.return?.rutToken"/>
+        </actions>
+    </service>
+    <service verb="ingresar" noun="AceptacionReclamoDocCertification" type="remote-xml-soap" location="https://ws2.sii.cl/WSREGISTRORECLAMODTECERT/registroreclamodteservice" method="ingresarAceptacionReclamoDoc">
+        <in-parameters>
+            <parameter name="xmlRpcServiceParams" default="[debug:false, headers:[cookie:Token], methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio accionDoc']" type="Map"/>
+            <parameter name="rutEmisor"/>
+            <parameter name="dvEmisor"/>
+            <parameter name="tipoDoc"/>
+            <parameter name="folio"/>
+            <parameter name="accionDoc"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="return"/>
+        </out-parameters>
+    </service>
+    <service verb="ingresar" noun="AceptacionReclamoDocProduction" type="remote-xml-soap" location="https://ws1.sii.cl/WSREGISTRORECLAMODTE/registroreclamodteservice" method="ingresarAceptacionReclamoDoc">
+        <in-parameters>
+            <parameter name="xmlRpcServiceParams" default="[debug:false, methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio accionDoc']" type="Map"/>
+            <parameter name="rutEmisor"/>
+            <parameter name="dvEmisor"/>
+            <parameter name="tipoDoc"/>
+            <parameter name="folio"/>
+            <parameter name="accionDoc"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="return"/>
+        </out-parameters>
+    </service>
+
+    <service verb="get" noun="EventosHistoricos">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="codResp"/>
+            <parameter name="descResp"/>
+            <parameter name="listaEventosDoc" type="List">
+                <parameter name="eventoDoc" type="Map">
+                    <parameter name="codEvento"/>
+                    <parameter name="descEvento"/>
+                    <parameter name="rutResponsable"/>
+                    <parameter name="dvResponsable"/>
+                    <parameter name="fechaEvento"/>
+                </parameter>
+            </parameter>
+            <parameter name="rutToken"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte"/>
+            <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="context"/>
+            <if condition="dte.receiverPartyId in filterOrgIds">
+                <set field="organizationPartyId" from="dte.receiverPartyId"/>
+            </if>
+            <if condition="certificate == null &amp;&amp; dte.issuerPartyId in filterOrgIds">
+                <set field="organizationPartyId" from="dte.issuerPartyId"/>
+            </if>
+            <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+            <script>if (!isProduction) cl.moit.proxy.debug.TrustAllTrustManager.init()</script>
+            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[isProduction:isProduction, partyId:organizationPartyId]" out-map="tokenMap"/>
+            <set field="token" value="TOKEN=${tokenMap.token}"/>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:dte.issuerPartyIdValue]" out-map="rutMap"/>
+            <set field="rutEmisor" from="rutMap.rut"/>
+            <set field="dvEmisor" from="rutMap.dv"/>
+            <service-call name="mchile.sii.DTEServices.get#SIICode" in-map="dte" out-map="context"/>
+            <set field="tipoDoc" from="siiCode"/>
+            <set field="folio" from="dte.fiscalTaxDocumentNumber"/>
+            <set field="xmlRpcServiceParams" from="[debug:true, mimeHeaders:[cookie:token], methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio']" type="Map"/>
+            <if condition="isProduction"><then>
+                <service-call name="mchile.sii.DteConsultaRegistroServices.get#EventosHistoricosProduction" in-map="context" out-map="outMap"/>
+            </then><else>
+                <service-call name="mchile.sii.DteConsultaRegistroServices.get#EventosHistoricosCertification" in-map="context" out-map="outMap"/>
+            </else></if>
+            <set field="codResp" from="outMap.return?.codResp"/>
+            <set field="descResp" from="outMap.return?.descResp"/>
+            <set field="listaEventosDoc" from="outMap.return?.listaEventosDoc"/>
+            <if condition="listaEventosDoc instanceof Map"><set field="listaEventosDoc" from="[listaEventosDoc]"/></if>
+            <set field="rutToken" from="outMap.return?.rutToken"/>
+        </actions>
+    </service>
+    <service verb="get" noun="EventosHistoricosCertification" type="remote-xml-soap" location="https://ws2.sii.cl/WSREGISTRORECLAMODTECERT/registroreclamodteservice" method="listarEventosHistDoc">
+        <in-parameters>
+            <parameter name="xmlRpcServiceParams" default="[debug:false, headers:[cookie:Token], methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio']" type="Map"/>
+            <parameter name="rutEmisor"/>
+            <parameter name="dvEmisor"/>
+            <parameter name="tipoDoc"/>
+            <parameter name="folio"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="return"/>
+        </out-parameters>
+    </service>
+    <service verb="get" noun="EventosHistoricosProduction" type="remote-xml-soap" location="https://ws1.sii.cl/WSREGISTRORECLAMODTE/registroreclamodteservice" method="listarEventosHistDoc">
+        <in-parameters>
+            <parameter name="xmlRpcServiceParams" default="[debug:false, methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio']" type="Map"/>
+            <parameter name="rutEmisor"/>
+            <parameter name="dvEmisor"/>
+            <parameter name="tipoDoc"/>
+            <parameter name="folio"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="return"/>
+        </out-parameters>
+    </service>
+
+    <service verb="get" noun="FechaRecepcionSii">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="fechaRecepcion"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte"/>
+            <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="context"/>
+            <if condition="dte.receiverPartyId in filterOrgIds">
+                <set field="organizationPartyId" from="dte.receiverPartyId"/>
+            </if>
+            <if condition="certificate == null &amp;&amp; dte.issuerPartyId in filterOrgIds">
+                <set field="organizationPartyId" from="dte.issuerPartyId"/>
+            </if>
+            <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[isProduction:isProduction, partyId:organizationPartyId]" out-map="tokenMap"/>
+            <set field="token" value="TOKEN=${tokenMap.token}"/>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:dte.issuerPartyIdValue]" out-map="rutMap"/>
+            <set field="rutEmisor" from="rutMap.rut"/>
+            <set field="dvEmisor" from="rutMap.dv"/>
+            <service-call name="mchile.sii.DTEServices.get#SIICode" in-map="dte" out-map="context"/>
+            <set field="tipoDoc" from="siiCode"/>
+            <set field="folio" from="dte.fiscalTaxDocumentNumber"/>
+            <set field="xmlRpcServiceParams" from="[debug:false, mimeHeaders:[cookie:token], methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio']" type="Map"/>
+            <if condition="isProduction"><then>
+                <service-call name="mchile.sii.DteConsultaRegistroServices.get#FechaRecepcionSiiProduction" in-map="context" out-map="outMap"/>
+            </then><else>
+                <service-call name="mchile.sii.DteConsultaRegistroServices.get#FechaRecepcionSiiCertification" in-map="context" out-map="outMap"/>
+            </else></if>
+            <set field="fechaRecepcion" from="outMap.return"/>
+        </actions>
+    </service>
+    <service verb="get" noun="FechaRecepcionSiiCertification" type="remote-xml-soap" location="https://ws2.sii.cl/WSREGISTRORECLAMODTECERT/registroreclamodteservice" method="consultarFechaRecepcionSii">
+        <in-parameters>
+            <parameter name="xmlRpcServiceParams" default="[debug:false, headers:[cookie:Token], methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio']" type="Map"/>
+            <parameter name="rutEmisor"/>
+            <parameter name="dvEmisor"/>
+            <parameter name="tipoDoc"/>
+            <parameter name="folio"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="return"/>
+        </out-parameters>
+    </service>
+    <service verb="get" noun="FechaRecepcionSiiProduction" type="remote-xml-soap" location="https://ws1.sii.cl/WSREGISTRORECLAMODTE/registroreclamodteservice" method="consultarFechaRecepcionSii">
+        <in-parameters>
+            <parameter name="xmlRpcServiceParams" default="[debug:true, methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio']" type="Map"/>
+            <parameter name="rutEmisor"/>
+            <parameter name="dvEmisor"/>
+            <parameter name="tipoDoc"/>
+            <parameter name="folio"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="return"/>
+        </out-parameters>
+    </service>
+
+</services>

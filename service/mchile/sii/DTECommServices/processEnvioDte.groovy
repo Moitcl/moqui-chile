@@ -16,7 +16,9 @@ if (dteEnvioEv.statusId != 'Ftde-Received') {
 }
 
 inputStream = ec.resource.getLocationReference(dteEnvioEv.documentLocation).openStream()
-Map processingParameters = new JsonSlurper().parseText(dteEnvioEv.processingParameters)
+Map processingParameters = [:]
+if (dteEnvioEv.processingParameters != null && dteEnvioEv.processingParameters != '')
+    processingParameters = new JsonSlurper().parseText(dteEnvioEv.processingParameters)
 
 Boolean createUnknownIssuer = processingParameters.createUnknownIssuer ?: true
 Boolean requireIssuerInternalOrg = processingParameters.requireIssuerInternalOrg ?: false
@@ -70,7 +72,10 @@ if (rutReceptorCaratula != receptor.RUTRecep.text()) {
     estadoRecepEnv = 2
 }
 receiverPartyId = ec.service.sync().name("mchile.sii.DTECommServices.get#PartyIdByRut").parameters([idValue:rutReceptorCaratula, createUnknown:createUnknownReceiver, razonSocial:receptor.RznSocRecep.text(), roleTypeId:'Customer',
-                                                                                              giro:emisor.GiroRecep.text(), direccion:emisor.DirRecep.text(), comuna:emisor.CmnaRecep.text(), ciudad:emisor.CiudadRecep.text()]).call().partyId
+                                                                                              giro:emisor.GiroRecep.text(), direccion:emisor.DirRecep.text(), comuna:emisor.CmnaRecep.text(), ciudad:emisor.CiudadRecep.text()]).call()?.partyId
+if (!receiverPartyId) {
+    return
+}
 
 envioRespuestaId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-RespuestaDte', statusId:'Ftde-Created', rutEmisor:rutReceptorCaratula, rutReceptor:rutEmisorCaratula, fechaEnvio:ec.user.nowTimestamp, internalId:idRecepcionDte]).call().envioId
 
@@ -81,7 +86,7 @@ if (issuerTaxName == null || issuerTaxName.size() == 0)
 
 ec.logger.warn("Emisor según carátula: ${rutEmisorCaratula}, issuerTaxName ${issuerTaxName}")
 
-digestValue = envioDte.Signature.SignedInfo.DigestValue.text()
+digestValue = envioDte.Signature.SignedInfo.Reference.DigestValue.text()
 
 /*
 glosaEstadoRecepcionMap = [0:'Envío Recibido Conforme.', 1:'Envío Rechazado – Error de Schema', 2:'Envío Rechazado - Error de Firma', 3:'Envío Rechazado - RUT Receptor No Corresponde',
@@ -96,11 +101,23 @@ org.w3c.dom.NodeList dteNodeList = (org.w3c.dom.NodeList) expression.evaluate(do
 
 totalItems = dteNodeList.length
 recepcionList = []
+rejectionCount = 0
+discrepancyCount = 0
+allDuplicated = (dteNodeList.length > 0)
 dteNodeList.each { org.w3c.dom.Node domNode ->
     recepcion = ec.service.sync().name("mchile.sii.DTEServices.load#DteFromDom").parameters(context+[domNode:domNode]).call()
+    if (!recepcion.isDuplicated)
+        allDuplicated = false
     recepcionList.add(recepcion)
+    if (recepcion.estadoRecepDte == 2) rejectionCount++
+    if (recepcion.estadoRecepDte == 1) discrepancyCount++
     ec.message.clearErrors()
-    processedItems++
+    if (recepcion.internalErrors == null || recepcion.internalErrors.size() == 0)
+        processedItems++
+}
+
+if (allDuplicated) {
+    newEnvioStatusId = 'Ftde-DuplicateNotProcessed'
 }
 
 estadoGlosaMap = [0:'Envio Recibido Conforme', 1:'Envio Rechazado - Error de Schema', 2:'Envio Rechazado - Error de Firma', 3:'Envio Rechazado - RUT Receptor No Corresponde', 90:'Envio Rechazado - Archivo Repetido',
@@ -137,10 +154,10 @@ acuseRecibo.RespuestaDTE('xmlns': 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http
                 RecepcionDTE {
                     TipoDTE(recepcion.tipoDte)
                     Folio(recepcion.folioDte)
-                    FchEmis(recepcion.fchEmis)
+                    FchEmis(recepcion.fechaEmision)
                     RUTEmisor(recepcion.rutEmisor)
-                    RUTRecep(recepcion.rutRecep)
-                    MntTotal(recepcion.mntTotal)
+                    RUTRecep(recepcion.rutReceptor)
+                    MntTotal(recepcion.montoTotal)
                     EstadoRecepDTE(recepcion.estadoRecepDte)
                     RecepDTEGlosa(recepcion.recepDteGlosa)
                 }
@@ -163,10 +180,10 @@ try {
 doc2 = MoquiDTEUtils.parseDocument(salida)
 
 if (MoquiDTEUtils.verifySignature(doc2, "/sii:RespuestaDTE/sii:Resultado", "./sii:Caratula/sii:TmstFirmaResp/text()")) {
-    xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDTE/${rutReceptorCaratula}/${idAcuseRecibo}.xml"
+    xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDte/${rutReceptorCaratula}/${idAcuseRecibo}.xml"
     ec.logger.warn("Envio generado OK")
 } else {
-    xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDTE/${rutEmisor}/${idAcuseRecibo}-mala.xml"
+    xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDte/${rutEmisor}/${idAcuseRecibo}-mala.xml"
     ec.logger.warn("Error al generar envio")
 }
 xmlContentRr = ec.resource.getLocationReference(xmlContentLocation)
