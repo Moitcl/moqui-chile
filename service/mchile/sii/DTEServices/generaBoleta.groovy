@@ -159,10 +159,7 @@ if (detalleIt1.length() > 40)
     detalleIt1 = detalleIt1.substring(0, 40)
 datosTed = "<DD><RE>${rutEmisor}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptorTimbre}</RSR><MNT>${totalInvoice}</MNT><IT1>${detalleIt1}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
 
-//String schemaLocation = 'http://www.sii.cl/SiiDte EnvioBOLETA_v11.xsd'
 String schemaLocation = ''
-//xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation) {
-//xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0') {
 xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
     Documento(ID: idDocumento) {
         Encabezado {
@@ -202,8 +199,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
             }
             Emisor {
                 RUTEmisor(rutEmisor)
-                //RznSocEmisor(razonSocialEmisor)
-                RznSocEmisor("Moit SPA")
+                RznSocEmisor(razonSocialEmisor)
                 GiroEmisor(giroEmisor)
                 //Telefono(fonoContacto)
                 //CorreoEmisor(mailContacto)
@@ -404,7 +400,6 @@ ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
 //    ec.resource.getLocationReference(pdfCedibleContentLocation).putBytes(pdfCedibleBytes)
 //}
 
-// Creación de registro en FiscalTaxDocumentAttributes
 // Creación de registro en FiscalTaxDocumentAttributes
 
 ec.logger.warn("******************************* Monto neto:" + totalNeto);
