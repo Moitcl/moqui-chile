@@ -2,6 +2,8 @@ package cl.moit.net;
 
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.Request;
+import org.eclipse.jetty.client.dynamic.HttpClientTransportDynamic;
+import org.eclipse.jetty.io.ClientConnector;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.moqui.BaseException;
 import org.moqui.util.RestClient;
@@ -28,7 +30,10 @@ public class ClientAuthRequestFactory implements RestClient.RequestFactory {
         sslContextFactory.setKeyStorePassword(password);
         sslContextFactory.setEndpointIdentificationAlgorithm("HTTPS");
 
-        httpClient = new HttpClient(sslContextFactory);
+        ClientConnector clientConnector = new ClientConnector();
+        clientConnector.setSslContextFactory(sslContextFactory);
+
+        httpClient = new HttpClient(new HttpClientTransportDynamic(clientConnector));
         // use a default idle timeout of 15 seconds, should be lower than server idle timeouts which will vary by server but 30 seconds seems to be common
         httpClient.setIdleTimeout(15000);
         try { httpClient.start(); } catch (Exception e) { throw new BaseException("Error starting HTTP client", e); }
