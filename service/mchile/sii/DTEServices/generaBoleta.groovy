@@ -390,7 +390,7 @@ createMapBase = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, contentDte:ts]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlContentLocation]).call())
 ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
 
-ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.genera#PDF").parameters([xmlLocation:xmlContentLocation, issuerPartyId:issuerPartyId, invoiceMessage:invoiceMessage]).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.genera#PDF").parameters([xmlLocation:xmlContentLocation, issuerPartyId:issuerPartyId, invoiceMessage:invoiceMessage, boleta:'true']).call())
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfContentLocation]).call())
 ec.resource.getLocationReference(pdfContentLocation).putBytes(pdfBytes)
 // TODO ?
