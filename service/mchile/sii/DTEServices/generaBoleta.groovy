@@ -108,7 +108,7 @@ if (tipoDte == 39) {
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
     if (numberAfectos == 0 && numberExentos > 0)
-        throw new BaseArtifactException("Factura afecta tiene solamente ítemes exentos")
+        throw new BaseArtifactException("Boleta afecta tiene solamente ítemes exentos")
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
 } else if (tipoDte == 41) {
@@ -117,7 +117,7 @@ if (tipoDte == 39) {
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
     if (numberAfectos > 0)
-        throw new BaseArtifactException("Factura exenta tiene ítemes afectos")
+        throw new BaseArtifactException("Boleta exenta tiene ítemes afectos")
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
 }
