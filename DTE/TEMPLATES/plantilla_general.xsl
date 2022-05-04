@@ -344,6 +344,8 @@
                                     <xsl:choose>
                                         <xsl:when test="$tipo=33">FACTURA ELECTRÓNICA</xsl:when>
                                         <xsl:when test="$tipo=34">FACTURA ELECTRÓNICA EXENTA</xsl:when>
+                                        <xsl:when test="$tipo=39">BOLETA ELECTRÓNICA</xsl:when>
+                                        <xsl:when test="$tipo=41">FACTURA ELECTRÓNICA EXENTA</xsl:when>
                                         <xsl:when test="$tipo=52">GUIA DE DESPACHO ELECTRÓNICA</xsl:when>
                                         <xsl:when test="$tipo=56">NOTA DE DEBITO ELECTRÓNICA</xsl:when>
                                         <xsl:when test="$tipo=61">NOTA DE CREDITO ELECTRÓNICA</xsl:when>
@@ -518,7 +520,7 @@
                 <xsl:if test="siidte:DscItem | DscItem"><fo:block margin="2pt"><xsl:value-of select="siidte:DscItem | DscItem"/></fo:block></xsl:if>
             </fo:table-cell>
             <fo:table-cell text-align="right">
-                <fo:block margin="2pt"><xsl:value-of select="siidte:QtyItem | QtyItem"/>&#160;<xsl:value-of select="siidte:UnmdItem | UnmdItem"/></fo:block>
+                <fo:block margin="2pt"><xsl:value-of select="format-number(siidte:QtyItem | QtyItem, '###.##0,###', 'european')"/>&#160;<xsl:value-of select="siidte:UnmdItem | UnmdItem"/></fo:block>
             </fo:table-cell>
             <fo:table-cell text-align="right"><fo:block margin="2pt">
                 <xsl:choose>
