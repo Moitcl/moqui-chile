@@ -370,7 +370,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                 //FchVencim()
                 if (detalle.uom)
                     UnmdItem(uom)
-                PrcItem(detalle.priceItem)
+                PrcItem(Math.round(detalle.priceItem))
                 //OtrMnda{}
                 if (detalle.porcentajeDescuento)
                     DescuentoPct(detalle.porcentajeDescuento)
@@ -428,6 +428,8 @@ facturaXmlString = facturaXmlString.replaceAll("[^\\x00-\\xFF]", "")
 xmlWriter.close()
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
+
+ec.logger.warn("==> XML: ${facturaXmlString}")
 
 try {
     MoquiDTEUtils.validateDocumentSii(ec, facturaXml, schemaLocation)
