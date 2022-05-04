@@ -71,6 +71,8 @@ if (!verified) {
 vatTaxRate = ec.service.sync().name("mchile.TaxServices.get#VatTaxRate").call().taxRate
 
 totalCalculadoIva = 0 as BigDecimal
+totalNoFacturable = 0 as BigDecimal
+totalBruto = 0 as BigDecimal
 // tipo de DTE
 groovy.util.NodeList encabezado = documento.Documento.Encabezado
 
@@ -82,6 +84,7 @@ if (verResult.code != VerifyResult.TED_OK)
  */
 tipoDte = encabezado.IdDoc.TipoDTE.text()
 folioDte = encabezado.IdDoc.Folio.text() as Integer
+montosBrutos = encabezado.IdDoc.MntBruto?.text() == "1"
 
 reserved = ec.service.sync().name("mchile.sii.SIIServices.get#RutEspeciales").call()
 
@@ -121,6 +124,7 @@ ec.logger.warn("folio: ${folioDte}")
 // Totales
 BigDecimal montoNeto = (encabezado.Totales.MntNeto.text() ?: 0) as BigDecimal
 montoTotal = (encabezado.Totales.MntTotal.text() ?: 0) as BigDecimal // es retornado, si se especifica clase se considera var local y no retorna
+BigDecimal montoNoFacturable = (encabezado.Totales.MontoNF.text() ?: 0) as BigDecimal
 BigDecimal montoExento = (encabezado.Totales.MntExe.text() ?: 0) as BigDecimal
 BigDecimal tasaIva = (encabezado.Totales.TasaIVA.text() ?: 0) as BigDecimal
 BigDecimal iva = (encabezado.Totales.IVA.text() ?: 0) as BigDecimal
@@ -282,15 +286,32 @@ detalleList.each { detalle ->
     BigDecimal quantity = detalle.QtyItem ? (detalle.QtyItem.text() as BigDecimal) : null
     price = detalle.PrcItem ? (detalle.PrcItem.text() as BigDecimal) : null
     montoItem = detalle.MontoItem ? (detalle.MontoItem.text() as BigDecimal) : null
+    montoItemBruto = null
     descuentoMonto = detalle.DescuentoMonto ? (detalle.DescuentoMonto.text() as BigDecimal) : 0 as BigDecimal
     descuentoMonto = descuentoMonto.setScale(0, RoundingMode.HALF_UP)
-    totalCalculado += montoItem
+    if (montoItem && montosBrutos) {
+        montoItemBruto = montoItem
+        montoItem = ec.service.sync().name("mchile.TaxServices.calculate#NetFromGrossPrice").parameters([grossPrice:montoItemBruto]).call().netPrice
+        priceBrtuto = price
+        if (price != null) {
+            price = ec.service.sync().name("mchile.TaxServices.calculate#NetFromGrossPrice").parameters([grossPrice:price]).call().netPrice
+        }
+        descuentoMontoBruto = descuentoMonto
+        descuentoMonto = ec.service.sync().name("mchile.TaxServices.calculate#NetFromGrossPrice").parameters([grossPrice:descuentoMonto]).call().netPrice
+        totalBruto += montoItemBruto
+        ec.message.addMessage("Recalculando montoItem, montoItemBruto ${montoItemBruto}, montoItem ${montoItem}, totalBruto ${totalBruto}")
+    }
     if (((price?:0) * (quantity?:0)) == 0 && montoItem != null) {
         if (quantity == null)
             quantity = 1 as BigDecimal
         price = (montoItem-descuentoMonto) / quantity
     } else if (((price * quantity) - descuentoMonto).setScale(0, RoundingMode.HALF_UP) != montoItem) {
-        discrepancyMessages.add("En detalle ${nroDetalles} (${itemDescription?:''}), montoItem (${montoItem} no calza con el valor unitario (${price}) multiplicado por cantidad (${quantity}) menos descuento (${descuentoMonto}), redondeado")
+        if (montosBrutos) {
+            if (montoItemBruto && priceBruto && ((priceBruto * quantity) - descuentoMontoBruto).setScale(0, RoundingMode.HALF_UP) != montoItemBruto)
+                discrepancyMessages.add("En detalle ${nroDetalles} (${itemDescription?:''}), montoItem (${montoItemBruto}) no calza con el valor unitario (${priceBruto}) multiplicado por cantidad (${quantity}) menos descuento (${descuentoMontoBruto}), redondeado")
+        } else {
+            discrepancyMessages.add("En detalle ${nroDetalles} (${itemDescription?:''}), montoItem (${montoItem}) no calza con el valor unitario (${price}) multiplicado por cantidad (${quantity}) menos descuento (${descuentoMonto}), redondeado")
+        }
         dteAmount = price
         price = montoItem/quantity
     }
@@ -302,23 +323,57 @@ detalleList.each { detalle ->
     // Si el indicador es no exento hay que agregar IVA como item aparte
     // Se puede ir sumando el IVA y si es mayor que 0 crear el item
     Boolean itemExento = false
+    Boolean montoEsFacturable = true
     if (indExe == null && (tipoDte != '34')) {
         // Item y documento afecto
-        ec.logger.warn("Item afecto")
-        itemExento = false
-    } else { // Item exento o documento exento
-        ec.logger.warn("Item exento")
+    } else if ((tipoDte == '34' && indExe == null) || indExe == 1) {
         itemExento = true
+    } else if (indExe == 2) {
+        // Producto o servicio no es facturable
+        montoEsFacturable = false
+        if (tipoDte == '34')
+            itemExento = true
+    } else if (indExe == 3) {
+        // Garantía de depósito por envases (Cervezas, Jugos, Aguas Minerales, Bebidas Analcohólicas u otros autorizados por Resolución especial)
+        montoEsFacturable = false
+        if (tipoDte == '34')
+            itemExento = true
+    } else if (indExe == 4) {
+        // Ítem No Venta. Para facturas y guías de despacho (ésta última con Indicador Tipo de Traslado de Bienes igual a 1) y este ítem no será facturado.
+        montoEsFacturable = false
+        if (tipoDte == '34')
+            itemExento = true
+    } else if (indExe == 5) {
+        // Ítem a rebajar. Para guías de despacho NO VENTA que rebajan guía anterior. En el área de referencias se debe indicar la guía anterior.
+        montoEsFacturable = false
+        if (tipoDte == '34')
+            itemExento = true
+    } else if (indExe == 6) {
+        // Producto o servicio no facturable negativo (excepto en liquidaciones-factura)
+        montoEsFacturable = false
+        if (tipoDte == '34')
+            itemExento = true
+    } else {
+        errorMessages.add("Valor inválido para indicador exento (IndExe): ${indExe}")
     }
-    if (itemExento)
-        totalExento += montoItem
+    if (montoEsFacturable) {
+        if (itemExento)
+            totalExento += montoItem
+        totalCalculado += montoItem
+    } else
+        totalNoFacturable += montoItem
 
-    if (quantity.setScale(3, RoundingMode.HALF_UP)*price.setScale(3, RoundingMode.HALF_UP) != (quantity*price).setScale(0, RoundingMode.HALF_UP)) {
-        dteQuantity = quantity
-        dteAmount = price
-        price = (price * quantity).setScale(0, RoundingMode.HALF_UP)
-        quantity = 1
-    }
+    roundingAdjustmentItemAmount = 0 as BigDecimal
+        if (quantity * price != montoItem) {
+            roundingAdjustmentItemAmount = montoItem - (quantity * price).setScale(6, RoundingMode.HALF_UP) as BigDecimal
+            if (((quantity * price) + roundingAdjustmentItemAmount) != montoItem) {
+                roundingAdjustmentItemAmount = 0
+                dteQuantity = quantity
+                dteAmount = price
+                price = (price * quantity).setScale(0, RoundingMode.HALF_UP)
+                quantity = 1
+            }
+        }
 
     Map itemMap = null
     if (!attemptProductMatch && invoiceId) {
@@ -381,6 +436,19 @@ detalleList.each { detalle ->
         invoiceItemCount++
     }
 
+    if (roundingAdjustmentItemAmount != 0) {
+        description = "Ajuste redondeo DTE (precio ${dteAmount?:price}, cantidad ${dteQuantity?:quantity}, montoItem ${montoItem}"
+        if (itemMap?.invoiceItemSeqId == null) {
+            ec.message.addMessage("Need to add rounding adjustment item but did not create a parent item, itemMap ${itemMap}, invoiceId: ${invoiceId}")
+            ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId  : invoiceId, itemTypeEnumId: 'ItemDteRoundingAdjust',
+                                                                                                    description: description, quantity: 1, amount: roundingAdjustmentItemAmount]).call()
+        } else {
+            parentItemSeqId = itemMap.invoiceItemSeqId
+            ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, parentItemSeqId:parentItemSeqId, itemTypeEnumId:'ItemDteRoundingAdjust',
+                                                                                                    description: description, quantity: 1, amount:roundingAdjustmentItemAmount]).call()
+        }
+    }
+
 }
 
 impuestosMap.each { impuestoCode, impuestoMap ->
@@ -394,12 +462,19 @@ impuestosMap.each { impuestoCode, impuestoMap ->
     }
 }
 
+//errorMessages.add("Test")
+
 globalList = documento.Documento.DscRcgGlobal
 Integer globalItemCount = 0
 globalList.each { globalItem ->
     globalItemCount++
     tpoMov = globalItem.TpoMov.text()
     nroLinea = globalItem.NroLinDR.text() as Integer
+    try {
+        indExe = globalItem.IndExeDR?.text() as Integer
+    } catch (NumberFormatException e) {
+        indExe = null
+    }
     if (globalItemCount != nroLinea)
         errorMessages.add("Valor número línea Descuento o Recargo no calza, esperado ${globalItemCount}, recibido ${nroLinea}")
     if (tpoMov == 'D') {
@@ -428,17 +503,30 @@ globalList.each { globalItem ->
                                                                                                 description: globalItem.GlosaDR.text(), quantity:1, amount: amount]).call()
         invoiceItemCount++
     }
-    totalCalculado += amount
+    ec.logger.warn("DescuentoORecargo, indExe: ${indExe}")
+    if (indExe == null)
+        totalCalculado += amount
+    else if (indExe == 1) {
+        totalExento += amount
+        totalCalculado += amount
+    } else if (indExe == 2)
+        totalNoFacturable += amount
+    else
+        errorMessages.add("Valor inválido para registro IndExeDR: ${indExe}")
 }
 
 newInvoiceStatusId = null
+
+totalCalculadoIva = (montoNeto * vatTaxRate).setScale(0, RoundingMode.HALF_UP)
 if (totalCalculado != (montoNeto + montoExento)) discrepancyMessages.add("Monto total (neto + exento) no coincide, calculado: ${totalCalculado}, en totales de DTE: ${montoNeto + montoExento}")
 if (totalExento != montoExento) {
     discrepancyMessages.add("Monto exento no coincide, calculado: ${totalExento}, en totales de DTE: ${montoExento}")
     newInvoiceStatusId = 'InvoiceRequiresManualIntervention'
 }
-
-totalCalculadoIva = (montoNeto * vatTaxRate).setScale(0, RoundingMode.HALF_UP)
+if (totalNoFacturable != montoNoFacturable) {
+    discrepancyMessages.add("Monto no facturable no coincide, calculado: ${totalNoFacturable}, en totales de DTE: ${montoNoFacturable}")
+    newInvoiceStatusId = 'InvoiceRequiresManualIntervention'
+}
 
 if (iva != totalCalculadoIva) {
     discrepancyMessages.add("No coincide monto IVA, DTE indica ${iva}, calculado: ${totalCalculadoIva}")

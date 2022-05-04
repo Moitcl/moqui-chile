@@ -3,6 +3,8 @@ package cl.moit.net;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.HttpProxy;
 import org.eclipse.jetty.client.api.Request;
+import org.eclipse.jetty.client.dynamic.HttpClientTransportDynamic;
+import org.eclipse.jetty.io.ClientConnector;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.moqui.BaseException;
 import org.moqui.util.RestClient;
@@ -16,9 +18,11 @@ public class ProxyRequestFactory  implements RestClient.RequestFactory {
     private static final Logger logger = LoggerFactory.getLogger(ClientAuthRequestFactory.class);
 
     public ProxyRequestFactory(String proxyHost, int proxyPort) {
-        SslContextFactory.Client sslContextFactory = new SslContextFactory.Client();
-        sslContextFactory.setTrustAll(true);
-        httpClient = new HttpClient(sslContextFactory);
+        SslContextFactory.Client sslContextFactory = new SslContextFactory.Client(true);
+        ClientConnector clientConnector = new ClientConnector();
+        clientConnector.setSslContextFactory(sslContextFactory);
+
+        httpClient = new HttpClient(new HttpClientTransportDynamic(clientConnector));
         httpClient.getProxyConfiguration().getProxies().add(new HttpProxy(proxyHost, proxyPort));
         // use a default idle timeout of 15 seconds, should be lower than server idle timeouts which will vary by server but 30 seconds seems to be common
         httpClient.setIdleTimeout(15000);
