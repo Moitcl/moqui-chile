@@ -106,6 +106,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalExento = detMap.totalExento
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
     if (numberAfectos == 0 && numberExentos > 0)
@@ -116,6 +117,8 @@ if (tipoDte == 33) {
 } else if (tipoDte == 34) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     detalleList = detMap.detalleList
+    totalNeto = detMap.totalNeto
+    totalExento = detMap.totalExento
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
     if (numberAfectos > 0)
@@ -135,6 +138,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalExento = detMap.totalExento
 
     if (codRef == 2 && detalleList.size() > 1) {
         ec.message.addError("codRef = 2 && detalleList.size() = ${detalleList.size()}")
@@ -159,6 +163,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "DebitoItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalExento = detMap.totalExento
 
     if (codRef == 2 && detalleList.size() > 1) {
         ec.message.addError("codRef = 2 && detalleList.size() = ${detalleList.size()}")
@@ -185,6 +190,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "ShipmentItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalExento = detMap.totalExento
     totalDescuentos = detMap.totalDescuentos
 }
 
@@ -204,7 +210,7 @@ if (totalNeto != null) {
     montoIVARecuperable = totalIVA
     totalInvoice = totalNeto + totalIVA + totalExento
 } else
-    totalInvoice = totalExento - (descuentoGlobalExento?:0)
+    totalInvoice = (totalExento?:0) - (descuentoGlobalExento?:0)
 
 // Chequeo de valores entre Invoice y calculados
 if (invoice) {
