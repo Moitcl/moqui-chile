@@ -208,7 +208,7 @@ if (totalNeto != null) {
     totalNeto = totalNeto - (descuentoGlobalAfecto?:0)
     long totalIVA = Math.round(totalNeto * vatTaxRate)
     montoIVARecuperable = totalIVA
-    totalInvoice = totalNeto + totalIVA + totalExento
+    totalInvoice = (totalNeto?:0) + totalIVA + (totalExento?:0)
 } else
     totalInvoice = (totalExento?:0) - (descuentoGlobalExento?:0)
 
