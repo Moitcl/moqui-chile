@@ -328,13 +328,13 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
             //RUTSolicita()
             //Transporte{}
             Totales {
-                MntNeto(Math.round(totalNeto))
+                MntNeto(Math.round(totalNeto?:0))
                 if (totalExento != null && totalExento > 0)
                     MntExe(totalExento)
                 //MntBase()
                 //MntMargenCom()
                 TasaIVA(ec.l10n.format(vatTaxRate*100, "##"))
-                IVA(Math.round(totalNeto * vatTaxRate))
+                IVA(Math.round((totalNeto?:0) * vatTaxRate))
                 //IVAProp()
                 //IVATerc()
                 //ImptoReten{}
