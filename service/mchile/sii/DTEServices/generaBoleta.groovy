@@ -346,18 +346,18 @@ xmlWriter.close()
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
 
-//try {
-//    MoquiDTEUtils.validateDocumentSii(ec, facturaXml, schemaLocation)
-//} catch (Exception e) {
-//    ec.message.addError("Failed validation: " + e.getMessage())
-//}
+try {
+    MoquiDTEUtils.validateDocumentSii(ec, facturaXml, schemaLocation)
+} catch (Exception e) {
+    ec.message.addError("Failed validation: " + e.getMessage())
+}
 
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
-//if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
-//    ec.logger.warn("Boleta folio ${folio} generada OK")
-//} else {
-//    ec.message.addError("Error al generar Boleta folio ${folio}: firma inválida")
-//}
+if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
+    ec.logger.warn("Boleta folio ${folio} generada OK")
+} else {
+    ec.message.addError("Error al generar Boleta folio ${folio}: firma inválida")
+}
 
 if (ec.message.hasError())
     return
