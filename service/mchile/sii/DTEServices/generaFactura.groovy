@@ -106,6 +106,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalExento = detMap.totalExento
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
     if (numberAfectos == 0 && numberExentos > 0)
@@ -116,6 +117,8 @@ if (tipoDte == 33) {
 } else if (tipoDte == 34) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     detalleList = detMap.detalleList
+    totalNeto = detMap.totalNeto
+    totalExento = detMap.totalExento
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
     if (numberAfectos > 0)
@@ -135,6 +138,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalExento = detMap.totalExento
 
     if (codRef == 2 && detalleList.size() > 1) {
         ec.message.addError("codRef = 2 && detalleList.size() = ${detalleList.size()}")
@@ -159,6 +163,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "DebitoItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalExento = detMap.totalExento
 
     if (codRef == 2 && detalleList.size() > 1) {
         ec.message.addError("codRef = 2 && detalleList.size() = ${detalleList.size()}")
@@ -185,6 +190,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "ShipmentItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalExento = detMap.totalExento
     totalDescuentos = detMap.totalDescuentos
 }
 
@@ -202,9 +208,9 @@ if (totalNeto != null) {
     totalNeto = totalNeto - (descuentoGlobalAfecto?:0)
     long totalIVA = Math.round(totalNeto * vatTaxRate)
     montoIVARecuperable = totalIVA
-    totalInvoice = totalNeto + totalIVA + totalExento
+    totalInvoice = (totalNeto?:0) + totalIVA + (totalExento?:0)
 } else
-    totalInvoice = totalExento - (descuentoGlobalExento?:0)
+    totalInvoice = (totalExento?:0) - (descuentoGlobalExento?:0)
 
 // Chequeo de valores entre Invoice y calculados
 if (invoice) {
@@ -322,13 +328,13 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
             //RUTSolicita()
             //Transporte{}
             Totales {
-                MntNeto(Math.round(totalNeto))
+                MntNeto(Math.round(totalNeto?:0))
                 if (totalExento != null && totalExento > 0)
                     MntExe(totalExento)
                 //MntBase()
                 //MntMargenCom()
                 TasaIVA(ec.l10n.format(vatTaxRate*100, "##"))
-                IVA(Math.round(totalNeto * vatTaxRate))
+                IVA(Math.round((totalNeto?:0) * vatTaxRate))
                 //IVAProp()
                 //IVATerc()
                 //ImptoReten{}
@@ -370,7 +376,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                 //FchVencim()
                 if (detalle.uom)
                     UnmdItem(uom)
-                PrcItem(detalle.priceItem)
+                PrcItem(Math.round(detalle.priceItem*1000000)/1000000)
                 //OtrMnda{}
                 if (detalle.porcentajeDescuento)
                     DescuentoPct(detalle.porcentajeDescuento)
@@ -428,6 +434,8 @@ facturaXmlString = facturaXmlString.replaceAll("[^\\x00-\\xFF]", "")
 xmlWriter.close()
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
+
+ec.logger.warn("==> XML: ${facturaXmlString}")
 
 try {
     MoquiDTEUtils.validateDocumentSii(ec, facturaXml, schemaLocation)
