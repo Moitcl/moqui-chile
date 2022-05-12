@@ -454,8 +454,6 @@ xmlWriter.close()
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
 
-ec.logger.warn("==> XML: ${facturaXmlString}")
-
 try {
     MoquiDTEUtils.validateDocumentSii(ec, facturaXml, schemaLocation)
 } catch (Exception e) {
