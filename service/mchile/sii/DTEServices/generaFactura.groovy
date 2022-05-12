@@ -451,6 +451,9 @@ uri = "#" + idDocumento
 String facturaXmlString = xmlWriter.toString()
 facturaXmlString = facturaXmlString.replaceAll("[^\\x00-\\xFF]", "")
 xmlWriter.close()
+
+ec.logger.warn(facturaXmlString);
+
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
 
