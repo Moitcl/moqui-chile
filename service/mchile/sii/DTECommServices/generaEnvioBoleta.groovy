@@ -87,26 +87,26 @@ Document doc = MoquiDTEUtils.parseDocument(xmlWriter.toString().getBytes())
 byte[] salida = MoquiDTEUtils.sign(doc, "#" + idEnvio, pkey, certificate, "#" + idEnvio, "SetDTE")
 doc = MoquiDTEUtils.parseDocument(salida)
 
-/*try {
+try {
     MoquiDTEUtils.validateDocumentSii(ec, salida, schemaLocation)
 } catch (Exception e) {
     ec.message.addError("Failed validation: " + e.getMessage())
-}*/
+}
 
 ts = ec.user.nowTimestamp
-//if (MoquiDTEUtils.verifySignature(doc, "/sii:EnvioDTE/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()")) {
+if (MoquiDTEUtils.verifySignature(doc, "/sii:EnvioDTE/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()")) {
     xmlContentLocation = "dbresource://moit/erp/dte/EnvioDte/${rutEmisor}/${idEnvio}.xml"
     envioRr = ec.resource.getLocationReference(xmlContentLocation)
     envioRr.putBytes(salida)
     fileName = envioRr.fileName
     ec.logger.warn("Envio generado OK")
-/*} else {
+} else {
     xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/${idEnvio}-mala.xml"
     envioRr = ec.resource.getLocationReference(xmlContentLocation)
     envioRr.putBytes(salida)
     fileName = envioRr.fileName
     ec.logger.warn("Error al generar envio")
-}*/
+}
 
 envioId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-EnvioDte', statusId:'Ftde-Created', internalId:idEnvio, rutEmisor:rutEmisor, rutReceptor:rutReceptor,
                                                                  registerDate:ec.user.nowTimestamp, documentLocation:xmlContentLocation, fileName:fileName]).call().envioId
