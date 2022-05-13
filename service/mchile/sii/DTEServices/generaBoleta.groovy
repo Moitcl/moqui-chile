@@ -346,11 +346,13 @@ xmlWriter.close()
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
 
-try {
+
+// Validacion siempre fallara por estructura de boletas (deben ir en un envio siempre)
+/*try {
     MoquiDTEUtils.validateDocumentSii(ec, facturaXml, schemaLocation)
 } catch (Exception e) {
     ec.message.addError("Failed validation: " + e.getMessage())
-}
+}*/
 
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
 if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {

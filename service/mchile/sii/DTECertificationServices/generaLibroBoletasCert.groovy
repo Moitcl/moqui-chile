@@ -49,7 +49,7 @@ xmlBuilder.LibroBoleta(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://w
             RUTEmisorLibro("")
             RUTEnvia("12857517-0")
             PeriodoTributario("2022-05")
-            FchResol("2018-05-13")
+            FchResol("2018-10-24")
             NroResol("0")
             TipoLibro("ESPECIAL")
             TipoEnvio("TOTAL")
