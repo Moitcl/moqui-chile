@@ -231,7 +231,8 @@ class MoquiDTEUtils {
             String folioRef = referenciaEntry.folio
             Integer codRef = null
             if (referenciaEntry.codigoReferenciaEnumId != null)
-                codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as Integer
+                codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as String
+                //codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as Integer
             Timestamp fechaRef = referenciaEntry.fecha instanceof java.sql.Date? new Timestamp(referenciaEntry.fecha.time) : referenciaEntry.fecha
 
             // Agrego referencias
