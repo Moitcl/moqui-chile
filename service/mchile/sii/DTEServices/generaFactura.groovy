@@ -35,7 +35,7 @@ if (giroOutMap == null) {
 giroEmisor = giroOutMap.description
 
 // Recuperación del código SII de DTE -->
-codeOut = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameter("fiscalTaxDocumentTypeEnumId", fiscalTaxDocumentTypeEnumId).call()
+codeOut = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]).call()
 tipoDte = codeOut.siiCode
 
 // Formas de pago
@@ -85,27 +85,47 @@ uom = null
 // Reference to buying order
 EntityValue invoice = null
 if (invoiceId) {
+    referenciaTypeEnumId = "RefDteTypeFactura"
     invoice = ec.entity.find("mantle.account.invoice.Invoice").condition([invoiceId:invoiceId]).one()
     if (invoice.otherPartyOrderId) {
         itemBillingList = ec.entity.find("mantle.order.OrderItemBilling").condition([invoiceId:invoiceId]).selectField("orderId,orderItemSeqId").list()
         if (itemBillingList) {
             orderList = ec.entity.find("mantle.order.OrderItemAndPart").condition([otherPartyOrderId:invoice.otherPartyOrderId, orderId:itemBillingList.orderId, orderId_op:"in", orderItemSeqId:itemBillingList.orderItemSeqId, orderItemSeqId_op:"in"]).orderBy("-otherPartyOrderDate").list()
             fecha = orderList.first?.otherPartyOrderDate?:ec.user.nowTimestamp
+            orderId = orderList.first?.orderId
         } else
             fecha = ec.user.nowTimestamp
         reference = ec.entity.makeValue("mchile.dte.ReferenciaDte")
         reference.folio = invoice.otherPartyOrderId
         reference.razonReferencia = "Orden de Compra"
-        reference.referenciaTypeEnumId = "RefDteTypeInvoice"
+        reference.referenciaTypeEnumId = referenciaTypeEnumId
         reference.fecha = fecha
         reference.fiscalTaxDocumentTypeEnumId = "Ftdt-801"
         referenciaList.add(reference)
+        if (orderId) {
+            orderContentList = ec.entity.find("mantle.order.OrderContent").condition([orderId:orderId]).selectField("orderContentTypeEnumId,externalContentId,externalContentDate").list()
+            if(orderContentList) {
+                orderContentList.each {
+                    if (!['Oct-801', 'Oct-Others'].contains(it.orderContentTypeEnumId)) {
+                        referenceType = ec.entity.find("moqui.basic.Enumeration").condition([enumId:it.orderContentTypeEnumId]).one()
+                        reference = ec.entity.makeValue("mchile.dte.ReferenciaDte")
+                        reference.folio = it.externalContentId
+                        reference.razonReferencia = referenceType.description
+                        reference.referenciaTypeEnumId = referenciaTypeEnumId
+                        reference.fecha = it.externalContentDate
+                        reference.fiscalTaxDocumentTypeEnumId = referenceType.relatedEnumId
+                        referenciaList.add(reference)
+                    }
+                }
+            }
+        }
     }
 }
 if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalExento = detMap.totalExento
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
     if (numberAfectos == 0 && numberExentos > 0)
@@ -116,6 +136,8 @@ if (tipoDte == 33) {
 } else if (tipoDte == 34) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     detalleList = detMap.detalleList
+    totalNeto = detMap.totalNeto
+    totalExento = detMap.totalExento
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
     if (numberAfectos > 0)
@@ -135,6 +157,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalExento = detMap.totalExento
 
     if (codRef == 2 && detalleList.size() > 1) {
         ec.message.addError("codRef = 2 && detalleList.size() = ${detalleList.size()}")
@@ -159,6 +182,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "DebitoItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalExento = detMap.totalExento
 
     if (codRef == 2 && detalleList.size() > 1) {
         ec.message.addError("codRef = 2 && detalleList.size() = ${detalleList.size()}")
@@ -185,6 +209,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "ShipmentItem", codRef)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalExento = detMap.totalExento
     totalDescuentos = detMap.totalDescuentos
 }
 
@@ -202,9 +227,9 @@ if (totalNeto != null) {
     totalNeto = totalNeto - (descuentoGlobalAfecto?:0)
     long totalIVA = Math.round(totalNeto * vatTaxRate)
     montoIVARecuperable = totalIVA
-    totalInvoice = totalNeto + totalIVA + totalExento
+    totalInvoice = (totalNeto?:0) + totalIVA + (totalExento?:0)
 } else
-    totalInvoice = totalExento - (descuentoGlobalExento?:0)
+    totalInvoice = (totalExento?:0) - (descuentoGlobalExento?:0)
 
 // Chequeo de valores entre Invoice y calculados
 if (invoice) {
@@ -322,13 +347,13 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
             //RUTSolicita()
             //Transporte{}
             Totales {
-                MntNeto(Math.round(totalNeto))
+                MntNeto(Math.round(totalNeto?:0))
                 if (totalExento != null && totalExento > 0)
                     MntExe(totalExento)
                 //MntBase()
                 //MntMargenCom()
                 TasaIVA(ec.l10n.format(vatTaxRate*100, "##"))
-                IVA(Math.round(totalNeto * vatTaxRate))
+                IVA(Math.round((totalNeto?:0) * vatTaxRate))
                 //IVAProp()
                 //IVATerc()
                 //ImptoReten{}
@@ -370,7 +395,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                 //FchVencim()
                 if (detalle.uom)
                     UnmdItem(uom)
-                PrcItem(detalle.priceItem)
+                PrcItem(Math.round(detalle.priceItem*1000000)/1000000)
                 //OtrMnda{}
                 if (detalle.porcentajeDescuento)
                     DescuentoPct(detalle.porcentajeDescuento)
@@ -426,6 +451,9 @@ uri = "#" + idDocumento
 String facturaXmlString = xmlWriter.toString()
 facturaXmlString = facturaXmlString.replaceAll("[^\\x00-\\xFF]", "")
 xmlWriter.close()
+
+ec.logger.warn(facturaXmlString);
+
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
 
