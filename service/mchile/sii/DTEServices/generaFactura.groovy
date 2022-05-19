@@ -35,7 +35,7 @@ if (giroOutMap == null) {
 giroEmisor = giroOutMap.description
 
 // Recuperación del código SII de DTE -->
-codeOut = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameter("fiscalTaxDocumentTypeEnumId", fiscalTaxDocumentTypeEnumId).call()
+codeOut = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]).call()
 tipoDte = codeOut.siiCode
 
 // Formas de pago
@@ -85,21 +85,40 @@ uom = null
 // Reference to buying order
 EntityValue invoice = null
 if (invoiceId) {
+    referenciaTypeEnumId = "RefDteTypeFactura"
     invoice = ec.entity.find("mantle.account.invoice.Invoice").condition([invoiceId:invoiceId]).one()
     if (invoice.otherPartyOrderId) {
         itemBillingList = ec.entity.find("mantle.order.OrderItemBilling").condition([invoiceId:invoiceId]).selectField("orderId,orderItemSeqId").list()
         if (itemBillingList) {
             orderList = ec.entity.find("mantle.order.OrderItemAndPart").condition([otherPartyOrderId:invoice.otherPartyOrderId, orderId:itemBillingList.orderId, orderId_op:"in", orderItemSeqId:itemBillingList.orderItemSeqId, orderItemSeqId_op:"in"]).orderBy("-otherPartyOrderDate").list()
             fecha = orderList.first?.otherPartyOrderDate?:ec.user.nowTimestamp
+            orderId = orderList.first?.orderId
         } else
             fecha = ec.user.nowTimestamp
         reference = ec.entity.makeValue("mchile.dte.ReferenciaDte")
         reference.folio = invoice.otherPartyOrderId
         reference.razonReferencia = "Orden de Compra"
-        reference.referenciaTypeEnumId = "RefDteTypeInvoice"
+        reference.referenciaTypeEnumId = referenciaTypeEnumId
         reference.fecha = fecha
         reference.fiscalTaxDocumentTypeEnumId = "Ftdt-801"
         referenciaList.add(reference)
+        if (orderId) {
+            orderContentList = ec.entity.find("mantle.order.OrderContent").condition([orderId:orderId]).selectField("orderContentTypeEnumId,externalContentId,externalContentDate").list()
+            if(orderContentList) {
+                orderContentList.each {
+                    if (!['Oct-801', 'Oct-Others'].contains(it.orderContentTypeEnumId)) {
+                        referenceType = ec.entity.find("moqui.basic.Enumeration").condition([enumId:it.orderContentTypeEnumId]).one()
+                        reference = ec.entity.makeValue("mchile.dte.ReferenciaDte")
+                        reference.folio = it.externalContentId
+                        reference.razonReferencia = referenceType.description
+                        reference.referenciaTypeEnumId = referenciaTypeEnumId
+                        reference.fecha = it.externalContentDate
+                        reference.fiscalTaxDocumentTypeEnumId = referenceType.relatedEnumId
+                        referenciaList.add(reference)
+                    }
+                }
+            }
+        }
     }
 }
 if (tipoDte == 33) {
@@ -432,10 +451,11 @@ uri = "#" + idDocumento
 String facturaXmlString = xmlWriter.toString()
 facturaXmlString = facturaXmlString.replaceAll("[^\\x00-\\xFF]", "")
 xmlWriter.close()
+
+ec.logger.warn(facturaXmlString);
+
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
-
-ec.logger.warn("==> XML: ${facturaXmlString}")
 
 try {
     MoquiDTEUtils.validateDocumentSii(ec, facturaXml, schemaLocation)
