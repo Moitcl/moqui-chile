@@ -105,8 +105,11 @@ if (tipoDte == 39) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    if(detMap.totalExento)
+        totalExento = detMap.totalExento
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
+
     if (numberAfectos == 0 && numberExentos > 0)
         throw new BaseArtifactException("Boleta afecta tiene solamente ítemes exentos")
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
@@ -133,12 +136,12 @@ if (totalNeto != null) {
     totalInvoice = totalExento
 
 // Chequeo de valores entre Invoice y calculados
-if (invoice) {
+/*if (invoice) {
     if (invoice.invoiceTotal != totalInvoice) {
         ec.message.addError("No coinciden valores totales, calculado: ${totalInvoice}, en invoice ${invoiceId}: ${invoice.invoiceTotal}")
         return
     }
-}
+}*/
 
 idDocumento = "Bol-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
 String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
@@ -286,7 +289,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 if (detalle.uom)
                     UnmdItem(uom)
                 //PrcItem(detalle.priceItem)
-                PrcItem(detalle.priceItem + Math.round(detalle.priceItem * vatTaxRate))
+                PrcItem(Math.round(detalle.priceItem + Math.round(detalle.priceItem * vatTaxRate)))
                 //OtrMnda{}
                 if (detalle.porcentajeDescuento)
                     DescuentoPct(detalle.porcentajeDescuento)
@@ -298,7 +301,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 //SubRecargo{}
                 //CodImpAdic()
                 //MontoItem(detalle.montoItem)
-                MontoItem(detalle.montoItem + Math.round(detalle.montoItem * vatTaxRate))
+                MontoItem(Math.round(detalle.montoItem + Math.round(detalle.montoItem * vatTaxRate)))
             }
         }
         //SubTotInfo{}
