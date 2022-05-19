@@ -572,6 +572,8 @@ if (invoiceId) {
             itemList = ec.entity.find("mantle.account.invoice.InvoiceItem").condition("invoiceId", invoiceId).forUpdate(true).list()
             for (int i = 0; diff != 0 && i < itemList.size(); i++) {
                 increment = diff > 0 ? -1 : 1
+                diffAbs = (diff < 0) ? -diff : diff
+                if (diffAbs < 1) increment = -diff
                 EntityValue item = itemList.get(i)
                 parentItemSeqId = item.invoiceItemSeqId
                 ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, parentItemSeqId:parentItemSeqId, itemTypeEnumId:'ItemDteRoundingAdjust',
