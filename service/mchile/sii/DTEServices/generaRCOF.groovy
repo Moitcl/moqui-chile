@@ -43,8 +43,8 @@ MarkupBuilder xmlBuilder = new MarkupBuilder(xmlWriter)
 String schemaLocation = 'http://www.sii.cl/SiiDte ConsumoFolio_v10.xsd'
 xmlBuilder.ConsumoFolios(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation) {
     DocumentoConsumoFolios(ID: idDocumento) {
-        Caratula {
-            RUTEmisor(rutEmisor)
+        Caratula(version: '1.0') {
+            RutEmisor(rutEmisor)
             RUTEnvia(rutEnvia)
             FchResol(fchResol)
             NroResol(NroResol)
