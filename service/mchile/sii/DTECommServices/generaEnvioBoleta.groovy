@@ -94,7 +94,7 @@ try {
 }
 
 ts = ec.user.nowTimestamp
-if (MoquiDTEUtils.verifySignature(doc, "/sii:EnvioDTE/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()")) {
+if (MoquiDTEUtils.verifySignature(doc, "/sii:EnvioBOLETA/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()")) {
     xmlContentLocation = "dbresource://moit/erp/dte/EnvioDte/${rutEmisor}/${idEnvio}.xml"
     envioRr = ec.resource.getLocationReference(xmlContentLocation)
     envioRr.putBytes(salida)

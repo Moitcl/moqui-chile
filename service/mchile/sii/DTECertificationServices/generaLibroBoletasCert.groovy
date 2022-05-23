@@ -46,7 +46,7 @@ String schemaLocation = 'http://www.sii.cl/SiiDte LibroBOLETA_v10.xsd'
 xmlBuilder.LibroBoleta(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation) {
     EnvioLibro(ID: idDocumento) {
         Caratula {
-            RUTEmisorLibro("")
+            RUTEmisorLibro("76222457-7")
             RUTEnvia("12857517-0")
             PeriodoTributario("2022-05")
             FchResol("2018-10-24")
