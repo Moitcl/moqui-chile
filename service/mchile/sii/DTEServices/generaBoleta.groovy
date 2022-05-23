@@ -104,6 +104,7 @@ if (invoiceId) {
 if (tipoDte == 39) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     detalleList = detMap.detalleList
+    //throw new BaseArtifactException("Lista:"+detalleList)
     totalNeto = detMap.totalNeto
     if(detMap.totalExento)
         totalExento = detMap.totalExento
@@ -287,7 +288,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 //FchElabor()
                 //FchVencim()
                 if (detalle.uom)
-                    UnmdItem(uom)
+                    UnmdItem(detalle.uom)
                 //PrcItem(detalle.priceItem)
                 PrcItem(Math.round(detalle.priceItem + Math.round(detalle.priceItem * vatTaxRate)))
                 //OtrMnda{}

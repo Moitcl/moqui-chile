@@ -103,7 +103,6 @@ class MoquiDTEUtils {
             // Solucion parche
             //if (!detailType in ["ShipmentItem"]) {
             if (!detailType.equals("ShipmentItem")) {
-                uom = "dddddd";
                 if (detailEntry.quantityUomId.equals('TF_hr'))
                     uom = "Hora"
                 else if (detailEntry.quantityUomId.equals('TF_mon'))
