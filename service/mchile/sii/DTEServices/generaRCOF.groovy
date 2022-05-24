@@ -45,9 +45,11 @@ xmlBuilder.ConsumoFolios(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http:/
     DocumentoConsumoFolios(ID: idDocumento) {
         Caratula(version: '1.0') {
             RutEmisor(rutEmisor)
-            RUTEnvia(rutEnvia)
-            FchResol(fchResol)
-            NroResol(NroResol)
+            RutEnvia(rutEnvia)
+            //FchResol(fchResol)
+            FchResol("2018-10-24")
+            //NroResol(NroResol)
+            NroResol(0)
             FchInicio(fechaInicio)
             FchFinal(fechaFin)
             Correlativo(1)

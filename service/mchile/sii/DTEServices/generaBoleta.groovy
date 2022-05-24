@@ -104,7 +104,7 @@ if (invoiceId) {
 if (tipoDte == 39) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     detalleList = detMap.detalleList
-    //throw new BaseArtifactException("Lista:"+detalleList)
+    //throw new BaseArtifactException("Lista:"+detMap.totalExento)
     totalNeto = detMap.totalNeto
     if(detMap.totalExento)
         totalExento = detMap.totalExento
@@ -290,19 +290,25 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 if (detalle.uom)
                     UnmdItem(detalle.uom)
                 //PrcItem(detalle.priceItem)
-                PrcItem(Math.round(detalle.priceItem + Math.round(detalle.priceItem * vatTaxRate)))
+                if(detalle.indicadorExento)
+                    PrcItem(Math.round(detalle.priceItem))
+                if(!detalle.indicadorExento)
+                    PrcItem(Math.round(detalle.priceItem + Math.round(detalle.priceItem * vatTaxRate)))
                 //OtrMnda{}
-                if (detalle.porcentajeDescuento)
-                    DescuentoPct(detalle.porcentajeDescuento)
-                if (detalle.montoDescuento)
-                    DescuentoMonto(detalle.montoDescuento)
+                //if (detalle.porcentajeDescuento)
+                   // DescuentoPct(detalle.porcentajeDescuento)
+                //if (detalle.montoDescuento)
+                    //DescuentoMonto(detalle.montoDescuento)
                 //SubDscto{}
                 //RecargoPct()
                 //RecargoMonto()
                 //SubRecargo{}
                 //CodImpAdic()
                 //MontoItem(detalle.montoItem)
-                MontoItem(Math.round(detalle.montoItem + Math.round(detalle.montoItem * vatTaxRate)))
+                if(detalle.indicadorExento)
+                    MontoItem(Math.round(detalle.montoItem))
+                if(!detalle.indicadorExento)
+                    MontoItem(Math.round(detalle.montoItem + Math.round(detalle.montoItem * vatTaxRate)))
             }
         }
         //SubTotInfo{}
@@ -406,10 +412,9 @@ ec.resource.getLocationReference(pdfContentLocation).putBytes(pdfBytes)
 //}
 
 // Creación de registro en FiscalTaxDocumentAttributes
-
 ec.logger.warn("******************************* Monto neto:" + totalNeto);
 fechaEmisionString = ec.l10n.format(fechaEmision, "yyyy-MM-dd")
 createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:totalInvoice, fechaEmision:fechaEmisionString, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:totalNeto, tasaImpuesto:19,
-             montoExento:montoExento, montoIVARecuperable:montoIVARecuperable]
+             montoExento:totalExento, montoIVARecuperable:montoIVARecuperable]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call())
 fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId
