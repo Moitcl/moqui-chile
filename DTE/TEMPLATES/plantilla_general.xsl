@@ -184,7 +184,25 @@
                                 <fo:block margin-top="1cm" font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
                                           fox:border-radius="4pt" border-width="0.8pt"  border-style="solid" margin-right="2pt">
                                     <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
-
+                                    <fo:table table-layout="fixed">
+                                        <fo:table-column column-width="100%"/>
+                                        <fo:table-header background-color="#eaeaea"><fo:table-row>
+                                            <fo:table-cell><fo:block font-size="9.01pt" text-align="center" margin="4pt">Formas de pago:</fo:block></fo:table-cell>
+                                        </fo:table-row></fo:table-header>
+                                        <fo:table-body>
+                                            <fo:table-row>
+                                                <fo:table-cell>
+                                                    <fo:block font-weight="bold" margin-left="4pt" margin-top="4pt">Transferencia bancaria</fo:block>
+                                                    <fo:block margin-left="4pt" hyphenate="false"><xsl:value-of select="$cuentaBancariaText"/>
+                                                        <xsl:if test="$cuentaBancariaMail">
+                                                            <xsl:value-of select="' '"/>
+                                                            <fo:basic-link><xsl:attribute name="external-destination">mailto:<xsl:value-of select="$cuentaBancariaMail"/></xsl:attribute><xsl:value-of select="$cuentaBancariaMail"/></fo:basic-link>
+                                                        </xsl:if>
+                                                    </fo:block>
+                                                </fo:table-cell>
+                                            </fo:table-row>
+                                        </fo:table-body>
+                                    </fo:table>
                                 </fo:block>
                             </xsl:if>
 
@@ -198,6 +216,7 @@
                                     <fo:table-column column-width="2.4cm"/>
                                     <fo:table-body>
                                         <fo:table-row>
+                                            <fo:table-cell><fo:block font-weight="bold" margin="2pt">Descuento Global</fo:block></fo:table-cell>
                                             <fo:table-cell><fo:block text-align="right" margin="2pt"><xsl:choose>
                                                 <xsl:when test="(siidte:DscRcgGlobal[siidte:NroLinDR=1]) | DscRcgGlobal[NroLinDR=1]"><xsl:value-of select="format-number((siidte:DscRcgGlobal/siidte:ValorDR | DscRcgGlobal/ValorDR), '###.###','european')"/>%</xsl:when>
                                                 <xsl:otherwise>-</xsl:otherwise>
@@ -340,7 +359,7 @@
                         </fo:table>
                     </fo:block-container>
                     <fo:block-container absolute-position="auto" margin-top="0.1cm">
-                        <fo:block font-size="10.21pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" color="red" text-align="center">S.I.I. - SANTIAGO ORIENTE</fo:block>
+                        <fo:block font-size="10.21pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" color="red" text-align="center">S.I.I. - <xsl:value-of select="$oficinaSII"/></fo:block>
                     </fo:block-container>
                 </fo:table-cell>
             </fo:table-body>
