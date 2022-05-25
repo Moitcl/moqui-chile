@@ -137,12 +137,12 @@ if (totalNeto != null) {
     totalInvoice = totalExento
 
 // Chequeo de valores entre Invoice y calculados
-/*if (invoice) {
+if (invoice) {
     if (invoice.invoiceTotal != totalInvoice) {
         ec.message.addError("No coinciden valores totales, calculado: ${totalInvoice}, en invoice ${invoiceId}: ${invoice.invoiceTotal}")
         return
     }
-}*/
+}
 
 idDocumento = "Bol-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
 String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
