@@ -14,12 +14,12 @@ dteConstituyeVentaTypeList = ['Ftdt-39', 'Ftdt-41']
 if (invoiceId != null && fiscalTaxDocumentTypeEnumId in dteConstituyeVentaTypeList) {
     existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("invoiceId", invoiceId).condition("fiscalTaxDocumentTypeEnumId", "in", dteConstituyeVentaTypeList).list()
     // deshabilitado para pruebas
-    /*if (existingDteList) {
+    if (existingDteList) {
         existingFiscalTaxDocumentTypeEnumId = existingDteList.first.fiscalTaxDocumentTypeEnumId
         dteEnum = ec.entity.find("moqui.basic.Enumeration").condition("enumId", existingFiscalTaxDocumentTypeEnumId).one()
         ec.message.addError("Ya existe un DTE para la orden de cobro ${invoiceId}, de tipo ${dteEnum.description} (${dteEnum.enumId})")
         return
-    }*/
+    }
 }
 
 // Recuperacion de parametros de la organizacion -->
