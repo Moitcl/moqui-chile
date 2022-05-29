@@ -168,6 +168,7 @@ tipoDteEnumId = mapOut.fiscalTaxDocumentTypeEnumId
 existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([issuerPartyIdValue:rutEmisor, fiscalTaxDocumenTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte])
         .disableAuthz().list()
 isDuplicated = false
+fechaEmision = encabezado.IdDoc.FchEmis.text() // es retornado, si se especifica clase se considera variable local y no se retorna valor
 if (existingDteList) {
     dte = existingDteList.first
     if (dte.sentRecStatusId == 'Ftd-ReceiverReject') {
@@ -203,7 +204,6 @@ if (existingDteList) {
 }
 
 DateFormat formatter = new SimpleDateFormat("yyyy-MM-dd")
-fechaEmision = encabezado.IdDoc.FchEmis.text() // es retornado, si se especifica clase se considera variable local y no se retorna valor
 String fechaVencimiento = encabezado.IdDoc.FchVenc.text()
 Date date = formatter.parse(fechaEmision)
 Timestamp issuedTimestamp = new Timestamp(date.getTime())
@@ -572,6 +572,8 @@ if (invoiceId) {
             itemList = ec.entity.find("mantle.account.invoice.InvoiceItem").condition("invoiceId", invoiceId).forUpdate(true).list()
             for (int i = 0; diff != 0 && i < itemList.size(); i++) {
                 increment = diff > 0 ? -1 : 1
+                diffAbs = (diff < 0) ? -diff : diff
+                if (diffAbs < 1) increment = -diff
                 EntityValue item = itemList.get(i)
                 parentItemSeqId = item.invoiceItemSeqId
                 ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, parentItemSeqId:parentItemSeqId, itemTypeEnumId:'ItemDteRoundingAdjust',
