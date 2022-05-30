@@ -344,6 +344,8 @@
                                     <xsl:choose>
                                         <xsl:when test="$tipo=33">FACTURA ELECTRÓNICA</xsl:when>
                                         <xsl:when test="$tipo=34">FACTURA ELECTRÓNICA EXENTA</xsl:when>
+                                        <xsl:when test="$tipo=39">BOLETA ELECTRÓNICA</xsl:when>
+                                        <xsl:when test="$tipo=41">BOLETA ELECTRÓNICA EXENTA</xsl:when>
                                         <xsl:when test="$tipo=52">GUIA DE DESPACHO ELECTRÓNICA</xsl:when>
                                         <xsl:when test="$tipo=56">NOTA DE DEBITO ELECTRÓNICA</xsl:when>
                                         <xsl:when test="$tipo=61">NOTA DE CREDITO ELECTRÓNICA</xsl:when>
