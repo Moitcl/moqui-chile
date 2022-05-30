@@ -46,10 +46,10 @@ xmlBuilder.ConsumoFolios(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http:/
         Caratula(version: '1.0') {
             RutEmisor(rutEmisor)
             RutEnvia(rutEnvia)
-            //FchResol(fchResol)
-            FchResol("2018-10-24")
-            //NroResol(NroResol)
-            NroResol(0)
+            FchResol(fechaResolucionSii)
+            // NroResol is 0 in Certification
+            //NroResol(0)
+            NroResol(numeroResolucionSii)
             FchInicio(fechaInicio)
             FchFinal(fechaFin)
             Correlativo(1)
@@ -114,9 +114,10 @@ xmlWriter.close()
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "DocumentoConsumoFolios")
 
-FileOutputStream fos = new FileOutputStream("/home/cherrera/moit/cowork/moqui-framework/runtime/component/moquichile/DTE/TEMP/RCOF-.xml")
+// Just in case you need to create xml outside of Moqui
+/*FileOutputStream fos = new FileOutputStream("/home/cherrera/moit/cowork/moqui-framework/runtime/component/moquichile/DTE/TEMP/RCOF-"+tmst+".xml")
 fos.write(facturaXml);
-fos.close();
+fos.close();*/
 
 // Creación de registro en FiscalTaxDocument -->
 //dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:tmstFirmaResp, issuerPartyId:issuerPartyId]).one()
