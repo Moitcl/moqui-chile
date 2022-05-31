@@ -120,8 +120,6 @@ fos.write(facturaXml);
 fos.close();*/
 
 // Creación de registro en FiscalTaxDocument -->
-//dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:tmstFirmaResp, issuerPartyId:issuerPartyId]).one()
-
 createMap = [fiscalTaxDocumentTypeEnumId:'Ftdt-Rcof', fiscalTaxDocumentId:tmst, fiscalTaxDocumentNumber:tmst, issuerPartyId:organizationPartyId, issuerPartyIdValue:rutEmisor,issuerPartyIdTypeEnumId:'PtidNationalTaxId',receiverPartyId:receiverPartyId, statusId:"Ftd-Issued", sentAuthStatusId:"Ftd-NotSentAuth", sentRecStatusId:"Ftd-NotSentRec", fechaInicio:fechaInicio, fechaFin:fechaFin, date:ts]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call())
 

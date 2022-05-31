@@ -157,8 +157,6 @@ razonSocialReceptorTimbre = razonSocialReceptor.length() > 39? razonSocialRecept
 // Timbre
 String detalleIt1 = detalleList.get(0).nombreItem
 
-
-
 if (detalleIt1.length() > 40)
     detalleIt1 = detalleIt1.substring(0, 40)
 datosTed = "<DD><RE>${rutEmisor}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptorTimbre}</RSR><MNT>${totalInvoice}</MNT><IT1>${detalleIt1}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
@@ -186,40 +184,16 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                     MntCancel(montoCancelacion)
                 if (saldoInsoluto)
                     SaldoInsol(saldoInsoluto)
-                //MntPagos{}
-                //PeriodoDesde()
-                //PeriodoHasta()
-                //MedioPago(medioPago?:'PE')
-                //TpoCtaPago()
-                //NumCtaPago()
-                //BcoPago()
-                //TermPagoCdg
-                //if (glosaPagos)
-                //    TermPagoGlosa(glosaPagos)
-                //TermPagoDias
-                //if (fechaVencimiento)
-                //    FchVenc(ec.l10n.format(fechaVencimiento, "yyyy-MM-dd"))
-
             }
             Emisor {
                 RUTEmisor(rutEmisor)
                 RznSocEmisor(razonSocialEmisor)
                 GiroEmisor(giroEmisor)
-                //Telefono(fonoContacto)
-                //CorreoEmisor(mailContacto)
-                //codigosActividadEconomica.split(',').each { codigoActividad ->
-                //    Acteco(codigoActividad)
-                //}
-                //Sucursal(sucursal)
                 if (codigoSucursalSii)
                     CdgSIISucur(codigoSucursalSii)
                 DirOrigen(direccionOrigen)
                 CmnaOrigen(comunaOrigen)
                 CiudadOrigen(ciudadOrigen)
-                //if (codigoVendedor)
-                //    CdgVendedor(codigoVendedor)
-                //if (identificadorAdicionalEmisor)
-                //    IdAdicEmisor(identificadorAdicionalEmisor)
             }
             Receptor {
                 RUTRecep(rutReceptor)
@@ -234,9 +208,6 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 DirRecep(direccionReceptor)
                 CmnaRecep(comunaReceptor)
                 CiudadRecep(ciudadReceptor)
-                //DirPostal
-                //CmnaPostal
-                //CiudadPostal
             }
             //RUTSolicita()
             //Transporte{}
@@ -244,8 +215,6 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 MntNeto(Math.round(totalNeto))
                 if (totalExento != null && totalExento > 0)
                     MntExe(totalExento)
-                //MntBase()
-                //MntMargenCom()
                 //TasaIVA(ec.l10n.format(vatTaxRate*100, "##"))
                 IVA(Math.round(totalNeto * vatTaxRate))
                 //IVAProp()
@@ -275,13 +244,9 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 }
                 if (detalle.indicadorExento)
                     IndExe(detalle.indicadorExento)
-                //Retenedor{}
                 NmbItem(detalle.nombreItem)
                 if (detalle.descripcionItem)
                     DscItem(detalle.descripcionItem)
-                //QtyRef()
-                //UnmdRef()
-                //PrcRef()
                 if (detalle.quantity != null)
                     QtyItem(detalle.quantity)
                 //Subcantidad{}
@@ -299,12 +264,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                    // DescuentoPct(detalle.porcentajeDescuento)
                 //if (detalle.montoDescuento)
                     //DescuentoMonto(detalle.montoDescuento)
-                //SubDscto{}
-                //RecargoPct()
-                //RecargoMonto()
-                //SubRecargo{}
-                //CodImpAdic()
-                //MontoItem(detalle.montoItem)
+
                 if(detalle.indicadorExento)
                     MontoItem(Math.round(detalle.montoItem))
                 if(!detalle.indicadorExento)
