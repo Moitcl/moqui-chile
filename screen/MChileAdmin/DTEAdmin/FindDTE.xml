@@ -18,15 +18,16 @@
             <script><![CDATA[
                     documentIds = []
                     for (int i = 0; ; i++) {
-                        if ((context.get("_useRowSubmit") == "true" || context.get("_useRowSubmit_" + i) == "true")
-                                && context.get("_rowSubmit_" + i) != "true") continue
                         String curKey = "fiscalTaxDocumentId_" + i
-                        if (context.containsKey(curKey))  {
-                            documentIds.add(context.get(curKey))
-                        } else { break }
+                        if (!context.containsKey(curKey))
+                            break
+                        if (context.get("envioSII") != "envioSII" || context.get("_rowSubmit_" + i) != "true") continue
+                        documentIds.add(context.get(curKey))
                     }
             ]]></script>
-            <service-call name="mchile.sii.DTEServices.preparaEnvio#Documentos" in-map="context"/>
+            <if condition="documentIds">
+                <service-call name="mchile.sii.DTEServices.preparaEnvio#Documentos" in-map="context"/>
+            </if>
         </actions>
         <default-response url="."/>
     </transition>
@@ -67,119 +68,80 @@
 
     <actions>
         <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
-            <search-form-inputs/>
-            <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in"
-                        from="['Ftdt-33','Ftdt-34','Ftdt-61','Ftdt-56','Ftdt-52','Ftdt-110','Ftdt-112']"/>
+            <search-form-inputs default-order-by="-fiscalTaxDocumentNumber,fiscalTaxDocumentTypeEnumId"/>
+            <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" from="['Ftdt-33','Ftdt-34','Ftdt-61','Ftdt-56','Ftdt-52','Ftdt-110','Ftdt-112']"/>
             <econdition field-name="statusId" value="Ftd-Issued"/>
-            <econdition field-name="sentAuthStatusId" value="Ftd-NotSentAuth"/>
+            <econditions combine="or">
+                <econdition field-name="issuerPartyId" operator="in" from="filterOrgIds"/>
+                <econdition field-name="receiverPartyId" operator="in" from="filterOrgIds"/>
+            </econditions>
             <order-by field-name="-date"/>
         </entity-find>
 
     </actions>
+
     <widgets>
 
-        <label text="DTE listas para ser enviadas al SII" type="h4"/>
+        <label text="Documentos Tributarios" type="h4"/>
 
         <form-list name="DteForm" list="dteList" show-pdf-button="true" show-csv-button="true" header-dialog="true" saved-finds="true" multi="true" transition="envioSII">
             <row-actions>
-                <!-- Se busca ubicación de XML y PDF -->
-                <service-call name="mchile.sii.DTEServices.get#DteContent"
-                              in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
-                <set field="xmlFilename" from="content"/>
-
-                <service-call name="mchile.sii.DTEServices.get#DteContent"
-                              in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf']" out-map="context"/>
-                <set field="pdfFilename" from="content"/>
-
+                <entity-find-one entity-name="mantle.order.OrderItemBilling" value-field="invoice">
+                    <field-map field-name="invoiceId" from="invoiceId"/>
+                    <field-map field-name="invoiceItemSeqId" value="01"/>
+                </entity-find-one>
             </row-actions>
-            <field name="_useRowSubmit"><default-field><hidden default-value="true"/></default-field></field>
-            <field name="fiscalTaxDocumentId"><default-field><hidden default-value="true"/></default-field></field>
-            <field name="activeOrgId"><default-field><hidden default-value="true"/></default-field></field>
-            <field name="fiscalTaxDocumentId">
-                <header-field show-order-by="true" title="Identificador"><text-line size="6"/></header-field>
-                <default-field>
-                    <display/>
-                </default-field>
+            <field name="_rowSubmit">
+                <conditional-field condition="! (sentAuthStatusId in ['Ftd-SentAuthUnverified', 'Ftd-SentAuthAccepted'])" title="">
+                    <check><option key="true" text=" "/></check>
+                </conditional-field>
+                <default-field title=""><hidden default-value="false"/></default-field>
+            </field>
+            <field name="fiscalTaxDocumentId"><default-field><hidden/></default-field></field>
+            <field name="fiscalTaxDocumentTypeEnumId">
+                <header-field title="Type" show-order-by="true"><drop-down allow-empty="true" allow-multiple="true"><entity-options key="${enumId}">
+                    <entity-find entity-name="moqui.basic.Enumeration">
+                        <econdition field-name="enumTypeId" value="FiscalTaxDocumentType"/>
+                    </entity-find>
+                </entity-options></drop-down></header-field>
+                <default-field><display-entity entity-name="moqui.basic.Enumeration"/></default-field>
             </field>
             <field name="fiscalTaxDocumentNumber">
                 <header-field show-order-by="true" title="Folio"><text-line size="6"/></header-field>
-                <default-field>
-                    <display/>
-                </default-field>
+                <default-field><display/></default-field>
             </field>
-            <field name="fiscalTaxDocumentTypeEnumId">
-                <header-field title="Type" show-order-by="true">
-                    <drop-down allow-empty="true" allow-multiple="true">
-                        <entity-options key="${enumId}">
-                            <entity-find entity-name="moqui.basic.Enumeration">
-                                <econdition field-name="enumTypeId" value="FiscalTaxDocumentType"/>
-                            </entity-find>
-                        </entity-options>
-                    </drop-down>
-                </header-field>
-                <default-field>
-                    <display-entity entity-name="moqui.basic.Enumeration"/>
-                </default-field>
+            <field name="date">
+                <header-field show-order-by="true"><date-find/></header-field>
+                <default-field><display/></default-field>
             </field>
-
             <field name="receiverPartyId">
-                <header-field title="Receptor">
-                    <drop-down allow-empty="true"><dynamic-options transition="searchPartyList" server-search="true" min-length="2"
-                                                                   parameter-map="[roleTypeId:'Customer,OrgInternal']"/></drop-down>
-                </header-field>
-                <default-field><link url="editParty" entity-name="mantle.party.PartyDetail" text="PartyNameTemplate" link-type="anchor"/></default-field>
-            </field>
-            <field name="invoiceId">
-                <header-field title="Invoice ID" show-order-by="true"><text-find/></header-field>
-                <default-field><link url="editInvoice" text="${invoiceId}" link-type="anchor" parameter-map="[invoiceId:invoiceId]"/>
+                <header-field title="Receptor"><drop-down allow-empty="true">
+                    <dynamic-options transition="searchPartyList" server-search="true" min-length="2" parameter-map="[roleTypeId:'Customer,OrgInternal']"/>
+                </drop-down></header-field>
+                <default-field>
+                    <link url="../AccountDetails" entity-name="mantle.party.PartyDetail" text="PartyNameTemplate" link-type="anchor" parameter-map="[partyId:receiverPartyId]"/>
                 </default-field>
             </field>
-            <field name="xml">
-                <default-field title=" ">
-                    <link url="downloadDocumentInternal" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fileType:'Ftdct-Xml']" text="XML" link-type="anchor"/>
+            <field name="sentAuthStatusId"><default-field title="Envío a SII"><display-entity entity-name="moqui.basic.StatusItem"/></default-field></field>
+            <field name="sentRecStatusId"><default-field title="Envío a Receptor"><display-entity entity-name="moqui.basic.StatusItem"/></default-field></field>
+            <field name="document">
+                <header-field><submit text="Search"/></header-field>
+                <conditional-field condition="! (sentAuthStatusId in ['Ftd-SentAuthUnverified', 'Ftd-SentAuthAccepted'])" title="">
+                    <link url="marcarEnviado" tooltip="Marcar como enviado"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, statusId:'Ftd-SentAuthAccepted']" text="Marcar como enviado"/>
+                    <link url="eliminarDTE" tooltip="Eliminar DTE"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="Eliminar DTE" confirmation="Eliminar DTE?"/>
+                </conditional-field>
+                <default-field title="">
+                    <link url="downloadDocument" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fileType:'Ftdct-Xml']" text="XML" link-type="anchor-button" icon="fa fa-file-lines"/>
+                    <link url="downloadDocument" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fileType:'Ftdct-Pdf']" text="PDF" link-type="anchor-button" icon="fa fa-file-pdf"/>
+                    <link  condition="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-50', 'Ftdt-52', 'Ftdt-55', 'Ftdt-56', 'Ftdt-60', 'Ftdt-61'])" url="downloadDocument" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fileType:'Ftdct-PdfCedible']" text="PDF Cedible" link-type="anchor-button"/>
+                    <link url="enviarAReceptor" tooltip="Enviar XML a receptor de documento" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="Enviar a Receptor"
+                          condition="sentRecStatusId.equals('Ftd-NotSentRec') &amp;&amp; sentAuthStatusId.equals('Ftd-SentAuthAccepted')"/>
+                    <link url="verificarEnSII" tooltip="Verificar Estado en SII" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"
+                          text="Verificar SII" condition="sentAuthStatusId.equals('Ftd-SentAuthUnverified')"/>
                 </default-field>
             </field>
-            <field name="pdf">
-                <default-field title=" ">
-                    <link url="downloadDocumentInternal" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fileType:'Ftdct-Pdf']" text="PDF" link-type="anchor"/>
-                </default-field>
+            <field name="envioSII"><default-field title="Enviar a SII"><submit/></default-field>
             </field>
-            <field name="pdfCedible">
-                <default-field title=" ">
-                    <link url="downloadDocumentInternal" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fileType:'Ftdct-PdfCedible']" text="PDF Cedible" link-type="anchor"/>
-                </default-field>
-            </field>
-
-            <field name="verificarEnSII">
-                <default-field title=" ">
-                    <link url="verificarEnSII" tooltip="Verificar Estado en SII"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" text="Verificar en SII"/>
-                </default-field>
-            </field>
-
-            <!-- No soportado aún -->
-            <!--field name="cesionElectronica">
-                <default-field title=" ">
-                    <link url="cesionElectronica" tooltip="Cesión Electrónica"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" text="Cesión Electrónica" url-type="transition"/>
-                </default-field>
-            </field-->
-
-            <field name="marcarEnviado">
-                <default-field title=" ">
-                    <link url="marcarEnviado" tooltip="Marcar como enviado"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" text="Marcar como enviado"/>
-                </default-field>
-            </field>
-
-            <field name="eliminar">
-                <default-field title=" ">
-                    <link url="eliminarDTE" tooltip="Eliminar DTE"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="Eliminar DTE"/>
-                </default-field>
-            </field>
-
-            <field name="_rowSubmit"><default-field title="Enviar a SII">
-                <check no-current-selected-key="false"><option key="true" text=" "/></check></default-field>
-            </field>
-            <field name="envioSII"><default-field title="Enviar a SII"><submit/></default-field></field>
-
         </form-list>
     </widgets>
 </screen>
