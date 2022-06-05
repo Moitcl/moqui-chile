@@ -109,6 +109,14 @@ class MoquiDTEUtils {
                     uom = "Mes"
                 else if (detailEntry.quantityUomId.equals('WT_kg'))
                     uom = "Kgs"
+                else if (detailEntry.quantityUomId.equals('WT_g'))
+                    uom = "grms"
+                else if (detailEntry.quantityUomId.equals('LEN_m'))
+                    uom = "Mtr"
+                else if (detailEntry.quantityUomId.equals('VLIQ_L'))
+                    uom = "Ltr"
+                else if (detailEntry.quantityUomId.equals('VLIQ_L'))
+                    uom = "Ltr"
             }
             String itemAfecto = "true"
             if (detailEntry.productId) {
