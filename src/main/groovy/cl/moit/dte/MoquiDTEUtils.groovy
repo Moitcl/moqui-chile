@@ -98,6 +98,7 @@ class MoquiDTEUtils {
             BigDecimal quantity = detailEntry.quantity
             BigDecimal montoDescuento = detailEntry.montoDescuento
             BigDecimal porcentajeDescuento = detailEntry.porcentajeDescuento
+            BigDecimal ajusteDecimal = detailEntry.ajusteDecimal
             if (montoDescuento)
                 totalDescuentos += montoDescuento
             String uom = null
@@ -150,7 +151,7 @@ class MoquiDTEUtils {
                 }
                 priceItem = totalItem / quantity as BigDecimal
                 totalItem = totalItem - (montoDescuento?:0)
-                totalItem = totalItem.setScale(0, BigDecimal.ROUND_HALF_UP) as Long
+                totalItem = totalItem.setScale(0, java.math.RoundingMode.ROUND_HALF_UP) as Long
             } else if (detailType == "DebitoItem") {
                 if(codRef == 2) {
                     quantity = null
@@ -172,7 +173,7 @@ class MoquiDTEUtils {
                 }
             } else {
                 priceItem = detailEntry.amount
-                totalItem = (quantity?:0) * (priceItem?:0) - (montoDescuento?:0)
+                totalItem = (quantity?:0) * (priceItem?:0) - (montoDescuento?:0) + (ajusteDecimal?:0)
             }
 
             if (itemAfecto == "true")
