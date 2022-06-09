@@ -151,7 +151,7 @@ class MoquiDTEUtils {
                 }
                 priceItem = totalItem / quantity as BigDecimal
                 totalItem = totalItem - (montoDescuento?:0)
-                totalItem = totalItem.setScale(0, java.math.RoundingMode.ROUND_HALF_UP) as Long
+                totalItem = totalItem.setScale(0, java.math.RoundingMode.HALF_UP) as Long
             } else if (detailType == "DebitoItem") {
                 if(codRef == 2) {
                     quantity = null
