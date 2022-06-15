@@ -466,6 +466,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="filename"/>
             <parameter name="partyId" required="true"/>
             <parameter name="activateCaf" type="Boolean" default="false"/>
+            <parameter name="markUsedUpTo" type="Integer"/>
         </in-parameters>
         <out-parameters>
             <parameter name="cafId"/>
@@ -483,7 +484,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="filename" from="contentRr.fileName"/>
             </if>
             <set field="cafDataString" from="new String(contentByteArray, 'ISO-8859-1')"/>
-            <set field="autorizacion" from="new groovy.util.XmlParser(false, false).parseText(cafDataString)"/>
+            <set field="autorizacion" from="new groovy.xml.XmlParser(false, false).parseText(cafDataString)"/>
             <set field="privateKey" from="autorizacion.RSASK.text()"/>
             <if condition="privateKey == null || privateKey.length() == 0"><then>
                 <set field="privateKey" from="autorizacion.DSASK.text()"/>
@@ -495,7 +496,7 @@ along with this software (see the LICENSE.md file). If not, see
             </else></if>
             <script><![CDATA[
                 StringWriter writer = new StringWriter()
-                nodePrinter = new groovy.util.XmlNodePrinter(new PrintWriter(writer))
+                nodePrinter = new groovy.xml.XmlNodePrinter(new PrintWriter(writer))
                 nodePrinter.setPreserveWhitespace(true)
                 nodePrinter.print(autorizacion.CAF[0])
                 writer.close()
@@ -524,19 +525,24 @@ along with this software (see the LICENSE.md file). If not, see
                   cafData:cafDataString, publicKey:publicKey, privateKey:privateKey, keyType:keyType, cafFragment:cafFragment]"/>
             <service-call name="create#mchile.dte.Caf" out-map="context" in-map="createMap"/>
 
+
             <!-- Creación de registros para reservar folios -->
             <script><![CDATA[
                 int inicio = Integer.parseInt(desde)
                 int fin = Integer.parseInt(hasta)
+                if (markUsedUpTo != null && (markUsedUpTo < inicio-1 || markUsedUpTo > fin)) {
+                    ec.message.addError("Valor markUsedUpTo fuera de rango: ${markUsedUpTo} no está dentro del rango del CAF de ${inicio} hasta ${fin}")
+                }
                 for (int folio = inicio; folio <= fin; folio++) {
                     fiscalTaxDocumentId = "$tipoDte-$rutNoDv-$folio"
-                    createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:partyId,
-                        issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rut, statusId:'Ftd-NotIssued', sentAuthStatusId:'Ftd-NotSentAuth', sentRecStatusId:'Ftd-NotSentRec']
-                    context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call())
+                    if (markUsedUpTo == null || folio > markUsedUpTo) {
+                        createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:partyId,
+                                     issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rut, statusId:'Ftd-NotIssued', sentAuthStatusId:'Ftd-NotSentAuth', sentRecStatusId:'Ftd-NotSentRec']
+                        context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call())
+                    }
                 }
             ]]></script>
             <if condition="activateCaf"><service-call name="mchile.sii.DTEServices.activar#Caf" in-map="context"/></if>
-
         </actions>
     </service>
 

@@ -565,7 +565,7 @@ class MoquiDTEUtils {
     public static groovy.util.Node dom2GroovyNode(String xml) {
         boolean validating = false
         boolean namespaceAware = false
-        return new groovy.util.XmlParser(validating, namespaceAware).parseText(xml)
+        return new groovy.xml.XmlParser(validating, namespaceAware).parseText(xml)
     }
 
     public static String firmaTimbre(String datosTed, String privateKeyData) {
