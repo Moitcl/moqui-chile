@@ -82,7 +82,7 @@ restClient.text(body).encoding("ISO-8859-1")
 RestResponse response = restClient.call()
 xmlResponse = response.text()
 
-XmlParser parser = new groovy.util.XmlParser(false, true)
+XmlParser parser = new groovy.xml.XmlParser(false, true)
 xmlDoc = null
 status = null
 try {
