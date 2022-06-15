@@ -28,8 +28,8 @@ dteEvList.each { dte ->
         is = ec.resource.getLocationReference(contentLocation).openStream()
         xmlString = new String(is.readAllBytes(), "ISO-8859-1").replaceAll("<\\?xml[^>]*\\?>\n*","")
         dteList.add(xmlString)
-    } catch (IOException e) {
-        ec.message.addError("Could not read DTE content: ${e.toString()}")
+    } catch (IOException|NullPointerException e) {
+        ec.message.addError("Could not read DTE content at ${contentLocation}: ${e.toString()}")
     } finally {
         is?.close()
     }
