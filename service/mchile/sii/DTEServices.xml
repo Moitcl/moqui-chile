@@ -466,6 +466,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="filename"/>
             <parameter name="partyId" required="true"/>
             <parameter name="activateCaf" type="Boolean" default="false"/>
+            <parameter name="markUsedUpTo" type="Integer"/>
         </in-parameters>
         <out-parameters>
             <parameter name="cafId"/>
@@ -524,19 +525,33 @@ along with this software (see the LICENSE.md file). If not, see
                   cafData:cafDataString, publicKey:publicKey, privateKey:privateKey, keyType:keyType, cafFragment:cafFragment]"/>
             <service-call name="create#mchile.dte.Caf" out-map="context" in-map="createMap"/>
 
+
             <!-- Creación de registros para reservar folios -->
             <script><![CDATA[
                 int inicio = Integer.parseInt(desde)
                 int fin = Integer.parseInt(hasta)
+                if (markUsedUpTo != null && (markUsedUpTo < inicio-1 || markUsedUpTo > fin)) {
+                    ec.message.addError("Valor markUsedUpTo fuera de rango: ${markUsedUpTo} no está dentro del rango del CAF de ${inicio} hasta ${fin}")
+                }
                 for (int folio = inicio; folio <= fin; folio++) {
                     fiscalTaxDocumentId = "$tipoDte-$rutNoDv-$folio"
+                    if (markUsedUpTo == null || folio > markUsedUpTo) {
+                        statusId = 'Ftd-NotIssued'
+                        sentAuthStatusId = 'Ftd-NotSentAuth'
+                        sentRecStatusId = 'Ftd-NotSentRec'
+                        ec.logger.error("Creando folio ${folio}, statusId ${statusId}")
+                    } else {
+                        statusId = 'Ftd-Issued'
+                        sentAuthStatusId = 'Ftd-SentAuthAccepted'
+                        sentRecStatusId = 'Ftd-SentRec'
+                        ec.logger.warn("Creando folio ${folio}, statusId ${statusId}")
+                    }
                     createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:partyId,
-                        issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rut, statusId:'Ftd-NotIssued', sentAuthStatusId:'Ftd-NotSentAuth', sentRecStatusId:'Ftd-NotSentRec']
+                        issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rut, statusId:statusId, sentAuthStatusId:sentAuthStatusId, sentRecStatusId:sentRecStatusId]
                     context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call())
                 }
             ]]></script>
             <if condition="activateCaf"><service-call name="mchile.sii.DTEServices.activar#Caf" in-map="context"/></if>
-
         </actions>
     </service>
 
