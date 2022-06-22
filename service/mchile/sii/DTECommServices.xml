@@ -84,14 +84,20 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="rutReceptor" from="null"/>
                     <set field="rutEmisor" from="null"/>
                     <set field="folio" value=""/>
+                    <set field="receptorPartyId" from="null"/>
                     <iterate list="dteList" entry="envioDte">
                         <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" auto-field-map="envioDte"/>
                         <if condition="rutReceptor == null"><set field="rutReceptor" from="dte.receiverPartyIdValue"/></if>
-                        <if condition="dte.receiverPartyIdValue != rutReceptor"><return error="true" message="No se puede incluir más de un receptor en un envío (envío ${envioId})"/></if>
+                        <if condition="dte.receiverPartyIdValue != rutReceptor"><return error="true" message="No se puede incluir más de un receptor en un envío (envío ${envio.envioId})"/></if>
                         <if condition="rutEmisor == null"><set field="rutEmisor" from="dte.issuerPartyIdValue"/></if>
-                        <if condition="dte.issuerPartyIdValue != rutEmisor"><return error="true" message="No se puede incluir más de un emisor en un envío (envío ${envioId})"/></if>
+                        <if condition="dte.issuerPartyIdValue != rutEmisor"><return error="true" message="No se puede incluir más de un emisor en un envío (envío ${envio.envioId})"/></if>
                         <set field="folio" value="${folio.length() > 0? ', ': ''}${dte.fiscalTaxDocumentNumber}"/>
                         <set field="issuerPartyId" from="dte.issuerPartyId"/>
+                        <if condition="receptorPartyId &amp;&amp; receptorPartyId != dte.receiverPartyId"><then>
+                            <message type="warning">Found more than one receptorPartyId for envio ${envio.envioId}: ${receptorPartyId} and ${dte.receiverPartyId}</message>
+                        </then><else>
+                            <set field="receptorPartyId" from="dte.receiverPartyId"/>
+                        </else></if>
                     </iterate>
                     <service-call name="mchile.sii.DTEServices.get#DteInfo" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId]" out-map="dteInfo"/>
                     <set field="envioMessageText" value="Adjunto encontrará el documento tributario ${dteInfo.doctypeName} con folio${dteList.size() > 1? 's':''} ${folio} emitido por ${dteInfo.issuerName} (Rut ${rutEmisor})."/>
@@ -112,13 +118,12 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="envioContent" from="ec.resource.getLocationReference(envio.documentLocation)"/>
                 <set field="xmlAttachment" from="[attachmentLocation:envioContent.location, fileName:envioContent.fileName, contentType:envioContent.contentType]"/>
                 <service-call name="mchile.sii.DTECommServices.get#PartyIdByRut" in-map="[idValue:envio.rutEmisor]" out-map="emisorMap" out-map-add-to-existing="false"/>
-                <service-call name="mchile.sii.DTECommServices.get#PartyIdByRut" in-map="[idValue:envio.rutReceptor]" out-map="receptorMap" out-map-add-to-existing="false"/>
-                <service-call name="mchile.sii.SIIServices.get#XmlReceptionEmail" in-map="[partyId:receptorMap.partyId, partyIdValue:envio.rutReceptor, dtePartyId:emisorMap.partyId]" out-map="context"/>
+                <service-call name="mchile.sii.SIIServices.get#XmlReceptionEmail" in-map="[partyId:receptorPartyId, partyIdValue:envio.rutReceptor, dtePartyId:emisorMap.partyId]" out-map="context"/>
                 <entity-find-one entity-name="moqui.basic.Enumeration" value-field="tipoEnvioEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
                 <if condition="!xmlReceptionEmailAddress">
                     <return error="true" message="No se encuentra dirección de mail para envío tipo ${tipoEnvioEv.description}: ${envio.envioId}"/>
                 </if>
-                <entity-find-one entity-name="mantle.party.PartyDetail" value-field="receiverDetail" auto-field-map="[partyId:receptorMap.partyId]"/>
+                <entity-find-one entity-name="mantle.party.PartyDetail" value-field="receiverDetail" auto-field-map="[partyId:receptorPartyId]"/>
                 <set field="receiverName" from="ec.resource.expand('PartyNameOnlyTemplate', null, receiverDetail)"/>
                 <set field="bodyParameters" from="[title:subject, subject:subject, receiverName:receiverName, receiverRut:envio.rutReceptor, envioMessageText:envioMessageText]"/>
                 <entity-find-one entity-name="moqui.basic.email.EmailTemplate" value-field="emailTemplate" auto-field-map="[emailTemplateId:'MchDteSendEnvio']"/>
