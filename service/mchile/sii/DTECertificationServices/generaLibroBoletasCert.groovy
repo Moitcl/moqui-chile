@@ -93,7 +93,7 @@ doc2 = MoquiDTEUtils.parseDocument(facturaXml)
 
 // Se deja archivo en /tmp
 
-dirSalida = '/home/cherrera/moit/cowork/moqui-framework/runtime/component/moquichile/DTE/TEMP/libroBoleta.xml'
+dirSalida = '/tmp/libroBoleta.xml'
 
 File file = new File(dirSalida);
 
