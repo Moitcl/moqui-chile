@@ -373,6 +373,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
             <set field="dteSystemIsProduction" from="isProduction"/>
+            <set field="ec.user.context.dteSystemIsProduction" from="isProduction"/>
         </actions>
     </service>
 
@@ -466,6 +467,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="filename"/>
             <parameter name="partyId" required="true"/>
             <parameter name="activateCaf" type="Boolean" default="false"/>
+            <parameter name="markBlockedUpTo" type="Integer"/>
         </in-parameters>
         <out-parameters>
             <parameter name="cafId"/>
@@ -483,7 +485,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="filename" from="contentRr.fileName"/>
             </if>
             <set field="cafDataString" from="new String(contentByteArray, 'ISO-8859-1')"/>
-            <set field="autorizacion" from="new groovy.util.XmlParser(false, false).parseText(cafDataString)"/>
+            <set field="autorizacion" from="new groovy.xml.XmlParser(false, false).parseText(cafDataString)"/>
             <set field="privateKey" from="autorizacion.RSASK.text()"/>
             <if condition="privateKey == null || privateKey.length() == 0"><then>
                 <set field="privateKey" from="autorizacion.DSASK.text()"/>
@@ -495,7 +497,7 @@ along with this software (see the LICENSE.md file). If not, see
             </else></if>
             <script><![CDATA[
                 StringWriter writer = new StringWriter()
-                nodePrinter = new groovy.util.XmlNodePrinter(new PrintWriter(writer))
+                nodePrinter = new groovy.xml.XmlNodePrinter(new PrintWriter(writer))
                 nodePrinter.setPreserveWhitespace(true)
                 nodePrinter.print(autorizacion.CAF[0])
                 writer.close()
@@ -524,19 +526,26 @@ along with this software (see the LICENSE.md file). If not, see
                   cafData:cafDataString, publicKey:publicKey, privateKey:privateKey, keyType:keyType, cafFragment:cafFragment]"/>
             <service-call name="create#mchile.dte.Caf" out-map="context" in-map="createMap"/>
 
+
             <!-- Creación de registros para reservar folios -->
             <script><![CDATA[
                 int inicio = Integer.parseInt(desde)
                 int fin = Integer.parseInt(hasta)
+                if (markBlockedUpTo != null && (markBlockedUpTo < inicio-1 || markBlockedUpTo > fin)) {
+                    ec.message.addError("Valor markBlockedUpTo fuera de rango: ${markBlockedUpTo} no está dentro del rango del CAF de ${inicio} hasta ${fin}")
+                }
                 for (int folio = inicio; folio <= fin; folio++) {
                     fiscalTaxDocumentId = "$tipoDte-$rutNoDv-$folio"
+                    if (markBlockedUpTo == null || folio > markBlockedUpTo)
+                        statusId = 'Ftd-NotIssued'
+                    else
+                        statusId = 'Ftd-Blocked'
                     createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:partyId,
-                        issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rut, statusId:'Ftd-NotIssued', sentAuthStatusId:'Ftd-NotSentAuth', sentRecStatusId:'Ftd-NotSentRec']
+                                 issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rut, statusId:statusId, sentAuthStatusId:'Ftd-NotSentAuth', sentRecStatusId:'Ftd-NotSentRec']
                     context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call())
                 }
             ]]></script>
             <if condition="activateCaf"><service-call name="mchile.sii.DTEServices.activar#Caf" in-map="context"/></if>
-
         </actions>
     </service>
 
@@ -921,83 +930,67 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="descuentoORecargoGlobalList" from="[]"/>
             <set field="numeroLineaDescuentoORecargoGlobal" from="0"/>
             <iterate list="invoiceItemEVList" entry="invoiceItemEV">
-                <if condition="invoiceItemEV.itemTypeEnumId in ['ItemDiscount', 'ItemPromoDiscount']">
-                    <then>
-                        <set field="numeroLineaDescuentoORecargoGlobal" from="numeroLineaDescuentoORecargoGlobal+1"/>
-                        <set field="itemAmount" from="((invoiceItemEV.quantity?:0) * (invoiceItemEV.amount?:0)).setScale(0, java.math.RoundingMode.HALF_UP)"/>
-                        <entity-find entity-name="mantle.order.OrderItemBilling" list="billingList">
-                            <econdition field-name="invoiceId" from="invoiceId"/>
-                            <econdition field-name="invoiceItemSeqId" from="subitem.invoiceItemSeqId"/>
-                        </entity-find>
-                        <if condition="billingList">
-                            <then>
+                <if condition="invoiceItemEV.itemTypeEnumId in ['ItemDiscount', 'ItemPromoDiscount']"><then>
+                    <set field="numeroLineaDescuentoORecargoGlobal" from="numeroLineaDescuentoORecargoGlobal+1"/>
+                    <set field="itemAmount" from="((invoiceItemEV.quantity?:0) * (invoiceItemEV.amount?:0)).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                    <entity-find entity-name="mantle.order.OrderItemBilling" list="billingList">
+                        <econdition field-name="invoiceId" from="invoiceId"/>
+                        <econdition field-name="invoiceItemSeqId" from="invoiceItemEV.invoiceItemSeqId"/>
+                    </entity-find>
+                    <if condition="billingList"><then>
+                        <entity-find-one entity-name="mantle.order.OrderItem" auto-field-map="billingList.first" value-field="orderItem"/>
+                        <if condition="orderItem.sourcePercentage != null"><then>
+                            <set field="valor" from="orderItem.sourcePercentage"/>
+                            <set field="tipoValor" value="%"/>
+                        </then><else>
+                            <set field="valor" from="(orderItem.amount*orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                            <set field="tipoValor" from="'$'"/>
+                        </else></if>
+                    </then><else>
+                        <set field="valor" from="(orderItem.amount*orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                        <set field="tipoValor" from="'$'"/>
+                    </else></if>
+                    <!-- ToDo: determine whether discount is afecto or exento -->
+                    <script>descuentoORecargoGlobalList.add([numeroLinea:numeroLineaDescuentoORecargoGlobal, tipo:'D', afecto:true, glosa:invoiceItemEV.description, valor:valor, tipoValor:tipoValor, monto:itemAmount])</script>
+                </then><else><!-- ceItemEV.description, -->
+                    <set field="invoiceItem" from="invoiceItemEV.getMap()"/>
+                    <script>invoiceItemList.add(invoiceItem)</script>
+                    <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="subitemList">
+                        <econdition field-name="invoiceId"/>
+                        <econdition field-name="parentItemSeqId" from="invoiceItemEV.invoiceItemSeqId"/>
+                    </entity-find>
+                    <set field="first" from="true" type="Boolean"/>
+                    <set field="totalDiscount" from="0" type="BigDecimal"/>
+                    <iterate list="subitemList" entry="subitem">
+                        <if condition="subitem.itemTypeEnumId == 'ItemDetailedDescription'"><then>
+                            <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}${subitem.description}"/>
+                        </then><else-if condition="subitem.itemTypeEnumId == 'ItemDiscount'">
+                            <entity-find entity-name="mantle.order.OrderItemBilling" list="billingList">
+                                <econdition field-name="invoiceId" from="invoiceId"/>
+                                <econdition field-name="invoiceItemSeqId" from="subitem.invoiceItemSeqId"/>
+                            </entity-find>
+                            <if condition="billingList"><then>
                                 <entity-find-one entity-name="mantle.order.OrderItem" auto-field-map="billingList.first" value-field="orderItem"/>
-                                <if condition="orderItem.sourcePercentage != null">
-                                    <then>
-                                        <set field="valor" from="orderItem.sourcePercentage"/>
-                                        <set field="tipoValor" value="%"/>
-                                    </then>
-                                    <else>
-                                        <set field="valor" from="(orderItem.amount*orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
-                                        <set field="tipoValor" from="'$'"/>
-                                    </else>
+                                <set field="hide" from="orderItem?.hideInParent == 'Y' &amp;&amp; (first || hide)"/>
+                                <if condition="invoiceItem.porcentajeDescuento">
+                                    <if condition="hide || invoiceItem.porcentajeDescuento == orderItem.sourcePercentage"><then>
+                                        <set field="invoiceItem.porcentajeDescuento" from="orderItem.sourcePercentage"/>
+                                    </then><else>
+                                        <set field="invoiceItem.porcentajeDescuento" from="null"/>
+                                    </else></if>
                                 </if>
-                            </then>
-                            <else>
-                                <set field="valor" from="(orderItem.amount*orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
-                                <set field="tipoValor" from="'$'"/>
-                            </else>
-                        </if>
-                        <!-- ToDo: determine whether discount is afecto or exento -->
-                        <script>descuentoORecargoGlobalList.add([numeroLinea:numeroLineaDescuentoORecargoGlobal, tipo:'D', afecto:true, glosa:invoiceItemEV.description, valor:valor, tipoValor:tipoValor, monto:itemAmount])</script>
-                    </then>
-                    <else><!-- ceItemEV.description, -->
-                        <set field="invoiceItem" from="invoiceItemEV.getMap()"/>
-                        <script>invoiceItemList.add(invoiceItem)</script>
-                        <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="subitemList">
-                            <econdition field-name="invoiceId"/>
-                            <econdition field-name="parentItemSeqId" from="invoiceItemEV.invoiceItemSeqId"/>
-                        </entity-find>
-                        <set field="first" from="true" type="Boolean"/>
-                        <set field="totalDiscount" from="0" type="BigDecimal"/>
-                        <iterate list="subitemList" entry="subitem">
-                            <if condition="subitem.itemTypeEnumId == 'ItemDetailedDescription'">
-                                <then>
-                                    <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}${subitem.description}"/>
-                                </then>
-                                <else-if condition="subitem.itemTypeEnumId == 'ItemDiscount'">
-                                    <entity-find entity-name="mantle.order.OrderItemBilling" list="billingList">
-                                        <econdition field-name="invoiceId" from="invoiceId"/>
-                                        <econdition field-name="invoiceItemSeqId" from="subitem.invoiceItemSeqId"/>
-                                    </entity-find>
-                                    <if condition="billingList">
-                                        <then>
-                                            <entity-find-one entity-name="mantle.order.OrderItem" auto-field-map="billingList.first" value-field="orderItem"/>
-                                            <set field="hide" from="orderItem?.hideInParent == 'Y' &amp;&amp; (first || hide)"/>
-                                            <if condition="invoiceItem.porcentajeDescuento">
-                                                <if condition="hide || invoiceItem.porcentajeDescuento == orderItem.sourcePercentage">
-                                                    <then>
-                                                        <set field="invoiceItem.porcentajeDescuento" from="orderItem.sourcePercentage"/>
-                                                    </then>
-                                                    <else>
-                                                        <set field="invoiceItem.porcentajeDescuento" from="null"/>
-                                                    </else>
-                                                </if>
-                                            </if>
-                                        </then>
-                                        <else>
-                                            <set field="hide" from="ec.user.getPreference('mchile.dte.PreferHiddenDiscountInParent') == 'true' &amp;&amp; (first || hide)"/>
-                                            <set field="invoiceItem.porcentajeDescuento" from="null"/>
-                                        </else>
-                                    </if>
-                                    <set field="totalDiscount" from="totalDiscount + (subitem.amount*subitem.quantity as BigDecimal).setScale(0,java.math.RoundingMode.HALF_UP)"/>
-                                </else-if>
-                                <else>
-                                    <return error="true" message="Unknown itemTypeEnumId for subitem ${invoiceId}:${subitem.itemSeqId}: ${subitem.itemTypeEnumId}"/>
-                                </else>
-                            </if>
-                            <set field="first" from="false"/>
-                        </iterate>
+                            </then><else>
+                                <set field="hide" from="ec.user.getPreference('mchile.dte.PreferHiddenDiscountInParent') == 'true' &amp;&amp; (first || hide)"/>
+                                <set field="invoiceItem.porcentajeDescuento" from="null"/>
+                            </else></if>
+                            <set field="totalDiscount" from="totalDiscount + (subitem.amount*subitem.quantity as BigDecimal).setScale(0,java.math.RoundingMode.HALF_UP)"/>
+                        </else-if><else-if condition="subitem.itemTypeEnumId == 'ItemDteRoundingAdjust'">
+                            <set field="invoiceItem.ajusteDecimal" from="invoiceItem.ajusteDecimal?:0 + subitem.amount*subitem.quantity"/>
+                        </else-if><else>
+                            <return error="true" message="Unknown itemTypeEnumId for subitem ${invoiceId}:${subitem.invoiceItemSeqId}: ${subitem.itemTypeEnumId}"/>
+                        </else></if>
+                        <set field="first" from="false"/>
+                    </iterate>
                         <if condition="hide">
                             <then>
                                 <if condition="ec.user.getPreference('mchile.dte.AddDiscountSubitemDescription') == 'true'">
@@ -2079,8 +2072,7 @@ along with this software (see the LICENSE.md file). If not, see
                           contactoReceptor:contactoReceptor, direccionReceptor:direccionReceptor, comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:items,
                           invoiceId:invoiceId, returnId:returnId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId, receiverPartyId:receiverPartyId]" out-map="context"/>
             <if condition="sendToSii">
-                <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[rutReceptor:rutReceptor, organizationPartyId:issuerPartyId, documentIdList:[fiscalTaxDocumentId]]"
-                              out-map="context"/>
+                <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[organizationPartyId:issuerPartyId, documentIdList:[fiscalTaxDocumentId]]" out-map="context"/>
                 <script>ec.service.special().name("mchile.sii.DTECommServices.start#EnvioServiceJob").parameter("envioId", envioId).registerOnCommit()</script>
             </if>
         </actions>
@@ -2282,7 +2274,7 @@ along with this software (see the LICENSE.md file). If not, see
                           contactoReceptor:contactoReceptor, direccionReceptor:direccionReceptor, comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:items,
                           invoiceId:invoiceId, returnId:returnId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId, receiverPartyId:receiverPartyId]" out-map="context"/>
             <if condition="sendToSii">
-                <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[rutReceptor:rutReceptor, organizationPartyId:issuerPartyId, documentIdList:[fiscalTaxDocumentId]]"
+                <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[organizationPartyId:issuerPartyId, documentIdList:[fiscalTaxDocumentId]]"
                               out-map="context"/>
                 <script>ec.service.job("sii_dte_EnviaDteEnvio").parameter("envioId", envioId).run()</script>
             </if>
@@ -2548,6 +2540,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="tipoDespachoEnumId"/>
             <parameter name="settlementTermId"/>
             <parameter name="sendToSii" type="Boolean" default="true"/>
+            <parameter name="fechaEmision" type="Date" default="ec.user.nowTimestamp"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
@@ -2721,13 +2714,14 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="formaPago" value="2"/>
 
             <!-- Generacion de guía de despacho -->
-            <service-call name="mchile.sii.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-52', rutEmisor:rutEmisor, rutReceptor:rutReceptor, razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor,
-                          contactoReceptor:contactoReceptor, direccionReceptor:direccionReceptor, comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:shipmentItemDetailList,
-                          invoiceId:invoiceId, returnId:returnId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId, receiverPartyId:partyId,
-                          indTraslado:indTraslado, tipoDespacho:tipoDespacho, shipmentId:shipmentId, glosaPagos:glosaPagos, settlementTermId:settlementTermId]" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.genera#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-52', rutEmisor:rutEmisor, rutReceptor:rutReceptor,
+                                razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor, contactoReceptor:contactoReceptor, direccionReceptor:direccionReceptor,
+                                comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:shipmentItemDetailList, invoiceId:invoiceId, returnId:returnId,
+                                formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId, receiverPartyId:partyId,
+                                indTraslado:indTraslado, tipoDespacho:tipoDespacho, shipmentId:shipmentId, glosaPagos:glosaPagos, settlementTermId:settlementTermId,
+                                fechaEmision:fechaEmision]" out-map="context"/>
             <if condition="sendToSii">
-                <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[rutReceptor:rutReceptor, organizationPartyId:issuerPartyId, documentIdList:[fiscalTaxDocumentId]]"
-                              out-map="context"/>
+                <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[organizationPartyId:issuerPartyId, documentIdList:[fiscalTaxDocumentId]]" out-map="context"/>
                 <script>ec.service.special().name("mchile.sii.DTECommServices.start#EnvioServiceJob").parameter("envioId", envioId).registerOnCommit()</script>
             </if>
         </actions>
@@ -3642,6 +3636,90 @@ along with this software (see the LICENSE.md file). If not, see
                 </then></if>
             </iterate>
             <log message="More than itemCount, less than totalQuantity: ${betweenItemCountAndQuantity}"/>
+        </actions>
+    </service>
+
+    <service verb="enforce" noun="RoundedTotalOrderItem">
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+            <parameter name="orderPartSeqId" required="true"/>
+            <parameter name="quantity" type="BigDecimal"/>
+            <parameter name="unitAmount" type="BigDecimal"/>
+            <parameter name="orderItemSeqId" required="true"/>
+            <parameter name="itemTypeEnumId"/>
+            <parameter name="parentItemSeqId"/>
+        </in-parameters>
+        <actions>
+            <if condition="itemTypeEnumId == 'ItemDteRoundingAdjust'">
+                <entity-delete-by-condition entity-name="mantle.order.OrderItem">
+                    <econdition field-name="orderId"/>
+                    <econdition field-name="orderPartSeqId"/>
+                    <econdition field-name="itemTypeEnumId" value="ItemDteRoundingAdjust"/>
+                    <econdition field-name="parentItemSeqId"/>
+                    <econdition field-name="orderItemSeqId" operator="not-equals"/>
+                </entity-delete-by-condition>
+                <return/>
+            </if>
+            <set field="roundingAdjustmentItemAmount" from="0" type="BigDecimal"/>
+            <set field="itemTotal" from="(quantity?:0)*(unitAmount?:0)" type="BigDecimal"/>
+            <set field="montoItem" from="itemTotal.setScale(0, java.math.RoundingMode.HALF_UP)"/>
+            <if condition="itemTotal != montoItem">
+                <set field="roundingAdjustmentItemAmount" from="montoItem - itemTotal.setScale(6, java.math.RoundingMode.HALF_UP)" type="BigDecimal"/>
+                <if condition="roundingAdjustmentItemAmount != 0">
+                    <if condition="itemTotal + roundingAdjustmentItemAmount != montoItem">
+                        <set field="roundingAdjustmentItemAmount" from="0"/>
+                        <set field="dteQuantity" from="quantity"/>
+                        <set field="dteAmount" from="unitAmount"/>
+                        <set field="unitAmount" from="(unitAmount * quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                        <set field="quantity" from="1"/>
+                    </if>
+                    <set field="description" value="Ajuste redondeo DTE (precio ${dteAmount?:unitAmount}, cantidad ${dteQuantity?:quantity}, montoItem ${montoItem}"/>
+                    <service-call name="create#mantle.order.OrderItem" in-map="[orderId:orderId, orderPartSeqId:orderPartSeqId, itemTypeEnumId:'ItemDteRoundingAdjust', description: description,
+                                quantity: 1, unitAmount:roundingAdjustmentItemAmount, parentItemSeqId:orderItemSeqId]"/>
+                </if>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="block" noun="Folio">
+        <in-parameters>
+            <parameter name="issuerPartyId" required="true"/>
+            <parameter name="issuerPartyIdValue" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" type="Integer" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" for-update="true">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="fiscalTaxDocumentNumber"/>
+                <econdition field-name="issuerPartyId"/>
+                <econdition field-name="issuerPartyIdValue"/>
+                <econdition field-name="statusId" value="Ftd-NotIssued"/>
+            </entity-find>
+            <iterate list="ftdList" entry="ftd">
+                <service-call name="update#mchile.dte.FiscalTaxDocument" in-map="[fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, statusId:'Ftd-Blocked']"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="unblock" noun="Folio">
+        <in-parameters>
+            <parameter name="issuerPartyId" required="true"/>
+            <parameter name="issuerPartyIdValue" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" type="Integer" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" for-update="true">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="fiscalTaxDocumentNumber"/>
+                <econdition field-name="issuerPartyId"/>
+                <econdition field-name="issuerPartyIdValue"/>
+                <econdition field-name="statusId" value="Ftd-Blocked"/>
+            </entity-find>
+            <iterate list="ftdList" entry="ftd">
+                <service-call name="update#mchile.dte.FiscalTaxDocument" in-map="[fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, statusId:'Ftd-NotIssued']"/>
+            </iterate>
         </actions>
     </service>
 
