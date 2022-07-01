@@ -200,6 +200,7 @@ if (tipoDte == 33) {
     // Guías de Despacho
     ec.logger.warn("Creando DTE tipo 52")
 
+    indTraslado = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:indTrasladoEnumId, enumTypeId:'IndTraslado']).call().siiCode
     // TODO: Si la referencia es tipo fe de erratas, Monto Item puede ser 0
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
@@ -487,6 +488,7 @@ dteEv.sentAuthStatusId = "Ftd-NotSentAuth"
 dteEv.sentRecStatusId = "Ftd-NotSentRec"
 dteEv.invoiceId = invoiceId
 dteEv.shipmentId = shipmentId
+dteEv.indTrasladoEnumId = indTrasladoEnumId
 Date date = new Date()
 Timestamp ts = new Timestamp(date.getTime())
 dteEv.date = ts

@@ -97,4 +97,37 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="add" noun="TipoTrasladoToFiscalTaxDocument">
+        <actions>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="gdList" for-update="true">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" value="Ftdt-52"/>
+                <econdition field-name="indTrasladoEnumId" operator="is-null"/>
+                <econdition field-name="statusId" value="Ftd-Issued"/>
+                <order-by field-name="fiscalTaxDocumentNumber"/>
+            </entity-find>
+            <log message="Found ${gdList.size()} Guías de Despacho with no indTrasladoEnumId"/>
+            <iterate list="gdList" entry="gd">
+                <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="xmlList">
+                    <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
+                    <econdition field-name="fiscalTaxDocumentId" from="gd.fiscalTaxDocumentId"/>
+                </entity-find>
+                <if condition="xmlList.size() != 1">
+                    <return error="true" message="For fiscalTaxDocumentId ${gd.fiscalTaxDocumentId} expected to find 1 XML content, but found ${xmlList.size()}"/>
+                </if>
+                <set field="gdXmlString" from="ec.resource.getLocationReference(xmlList.first.contentLocation).getText()"/>
+                <set field="gdDom" from="new groovy.xml.XmlParser(false, false).parseText(gdXmlString)"/>
+                <set field="xmlIndTraslado" from="gdDom.Documento.Encabezado.IdDoc.IndTraslado.text()"/>
+                <entity-find entity-name="moqui.basic.Enumeration" list="enumList">
+                    <econdition field-name="enumTypeId" value="IndTraslado"/>
+                    <econdition field-name="enumCode" from="xmlIndTraslado"/>
+                </entity-find>
+                <if condition="!enumList"><message error="true">Could not find enum for indTraslado ${xmlIndTraslado}, fiscalTaxDocumentId ${gd.fiscalTaxDocumentId}</message></if>
+                <set field="indTrasladoEnumId" from="enumList.first.enumId"/>
+                <log message="Asignando IndTraslado para guía ${gd.fiscalTaxDocumentNumber} es ${indTrasladoEnumId}"/>
+                <set field="gd.indTrasladoEnumId" from="indTrasladoEnumId"/>
+                <entity-update value-field="gd"/>
+            </iterate>
+        </actions>
+    </service>
+
 </services>

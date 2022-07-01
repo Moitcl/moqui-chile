@@ -64,7 +64,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="formaPago"/>
             <parameter name="referenciaList" type="List"/>
             <parameter name="glosaPagos"/>
-            <parameter name="indTraslado" type="Integer"/>
+            <parameter name="indTrasladoEnumId"/>
             <parameter name="tipoDespacho" type="Integer"/>
             <parameter name="settlementTermId"/>
             <parameter name="invoiceMessage"/>
@@ -467,7 +467,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="filename"/>
             <parameter name="partyId" required="true"/>
             <parameter name="activateCaf" type="Boolean" default="false"/>
-            <parameter name="markUsedUpTo" type="Integer"/>
+            <parameter name="markBlockedUpTo" type="Integer"/>
         </in-parameters>
         <out-parameters>
             <parameter name="cafId"/>
@@ -531,16 +531,18 @@ along with this software (see the LICENSE.md file). If not, see
             <script><![CDATA[
                 int inicio = Integer.parseInt(desde)
                 int fin = Integer.parseInt(hasta)
-                if (markUsedUpTo != null && (markUsedUpTo < inicio-1 || markUsedUpTo > fin)) {
-                    ec.message.addError("Valor markUsedUpTo fuera de rango: ${markUsedUpTo} no está dentro del rango del CAF de ${inicio} hasta ${fin}")
+                if (markBlockedUpTo != null && (markBlockedUpTo < inicio-1 || markBlockedUpTo > fin)) {
+                    ec.message.addError("Valor markBlockedUpTo fuera de rango: ${markBlockedUpTo} no está dentro del rango del CAF de ${inicio} hasta ${fin}")
                 }
                 for (int folio = inicio; folio <= fin; folio++) {
                     fiscalTaxDocumentId = "$tipoDte-$rutNoDv-$folio"
-                    if (markUsedUpTo == null || folio > markUsedUpTo) {
-                        createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:partyId,
-                                     issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rut, statusId:'Ftd-NotIssued', sentAuthStatusId:'Ftd-NotSentAuth', sentRecStatusId:'Ftd-NotSentRec']
-                        context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call())
-                    }
+                    if (markBlockedUpTo == null || folio > markBlockedUpTo)
+                        statusId = 'Ftd-NotIssued'
+                    else
+                        statusId = 'Ftd-Blocked'
+                    createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:partyId,
+                                 issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rut, statusId:statusId, sentAuthStatusId:'Ftd-NotSentAuth', sentRecStatusId:'Ftd-NotSentRec']
+                    context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call())
                 }
             ]]></script>
             <if condition="activateCaf"><service-call name="mchile.sii.DTEServices.activar#Caf" in-map="context"/></if>
@@ -2464,7 +2466,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="globalDiscount"/>
             <parameter name="glosaDr"/>
             <parameter name="glosaPagos"/>
-            <parameter name="indTraslado" type="Integer"/>
+            <parameter name="indTrasladoEnumId"/>
             <parameter name="tipoDespacho" type="Integer"/>
             <parameter name="settlementTermId"/>
             <parameter name="invoiceMessage"/>
@@ -2678,9 +2680,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="contactoReceptor" from="razonSocialReceptor"/>
             </if>
 
-            <service-call name="mchile.sii.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:indTrasladoEnumId, enumTypeId:'IndTraslado']" out-map="codeOut"/>
-            <set field="indTraslado" from="codeOut.siiCode"/>
-
             <if condition="tipoDespachoEnumId">
                 <service-call name="mchile.sii.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:tipoDespachoEnumId, enumTypeId:'TipoDespacho']" out-map="codeOut"/>
                 <set field="tipoDespacho" from="codeOut.siiCode"/>
@@ -2694,7 +2693,7 @@ along with this software (see the LICENSE.md file). If not, see
                                 razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor, contactoReceptor:contactoReceptor, direccionReceptor:direccionReceptor,
                                 comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:shipmentItemDetailList, invoiceId:invoiceId, returnId:returnId,
                                 formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId, receiverPartyId:partyId,
-                                indTraslado:indTraslado, tipoDespacho:tipoDespacho, shipmentId:shipmentId, glosaPagos:glosaPagos, settlementTermId:settlementTermId,
+                                indTrasladoEnumId:indTrasladoEnumId, tipoDespacho:tipoDespacho, shipmentId:shipmentId, glosaPagos:glosaPagos, settlementTermId:settlementTermId,
                                 fechaEmision:fechaEmision]" out-map="context"/>
             <if condition="sendToSii">
                 <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[organizationPartyId:issuerPartyId, documentIdList:[fiscalTaxDocumentId]]" out-map="context"/>
@@ -3653,6 +3652,48 @@ along with this software (see the LICENSE.md file). If not, see
                                 quantity: 1, unitAmount:roundingAdjustmentItemAmount, parentItemSeqId:orderItemSeqId]"/>
                 </if>
             </if>
+        </actions>
+    </service>
+
+    <service verb="block" noun="Folio">
+        <in-parameters>
+            <parameter name="issuerPartyId" required="true"/>
+            <parameter name="issuerPartyIdValue" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" type="Integer" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" for-update="true">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="fiscalTaxDocumentNumber"/>
+                <econdition field-name="issuerPartyId"/>
+                <econdition field-name="issuerPartyIdValue"/>
+                <econdition field-name="statusId" value="Ftd-NotIssued"/>
+            </entity-find>
+            <iterate list="ftdList" entry="ftd">
+                <service-call name="update#mchile.dte.FiscalTaxDocument" in-map="[fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, statusId:'Ftd-Blocked']"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="unblock" noun="Folio">
+        <in-parameters>
+            <parameter name="issuerPartyId" required="true"/>
+            <parameter name="issuerPartyIdValue" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" type="Integer" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" for-update="true">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="fiscalTaxDocumentNumber"/>
+                <econdition field-name="issuerPartyId"/>
+                <econdition field-name="issuerPartyIdValue"/>
+                <econdition field-name="statusId" value="Ftd-Blocked"/>
+            </entity-find>
+            <iterate list="ftdList" entry="ftd">
+                <service-call name="update#mchile.dte.FiscalTaxDocument" in-map="[fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, statusId:'Ftd-NotIssued']"/>
+            </iterate>
         </actions>
     </service>
 

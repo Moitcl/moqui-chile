@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd" default-menu-title="Detalle CAF" default-menu-index="90" default-menu-include="false">
+    
+    <parameter name="cafId" required="true"/>
+
+    <transition name="blockFolio">
+        <service-call name="mchile.sii.DTEServices.block#Folio"/>
+        <default-response url="."/>
+    </transition>
+    <transition name="unblockFolio">
+        <service-call name="mchile.sii.DTEServices.unblock#Folio"/>
+        <default-response url="."/>
+    </transition>
+
+    <actions>
+        <entity-find-one entity-name="mchile.dte.Caf" value-field="caf"/>
+        <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="folioList">
+            <search-form-inputs/>
+            <econdition field-name="fiscalTaxDocumentTypeEnumId" from="caf.fiscalTaxDocumentTypeEnumId"/>
+            <econdition field-name="issuerPartyId" from="caf.issuerPartyId"/>
+            <econdition field-name="issuerPartyIdValue" from="caf.rut"/>
+            <econdition field-name="fiscalTaxDocumentNumber" operator="less-equals" from="caf.hasta"/>
+            <econdition field-name="fiscalTaxDocumentNumber" operator="greater-equals" from="caf.desde"/>
+        </entity-find>
+    </actions>
+    <widgets>
+        <form-list name="FolioForm" list="folioList">
+            <field name="fiscalTaxDocumentNumber">
+                <header-field title="Folio"><range-find/></header-field>
+                <default-field><display/></default-field>
+            </field>
+            <field name="statusId">
+                <header-field title="Status"><drop-down allow-empty="true" allow-multiple="true"><entity-options>
+                    <entity-find entity-name="moqui.basic.StatusItem">
+                        <econdition field-name="statusTypeId" value="FiscalTaxDocumentStatus"/>
+                    </entity-find>
+                </entity-options></drop-down></header-field>
+                <default-field><display-entity entity-name="moqui.basic.StatusItem"/></default-field>
+            </field>
+            <field name="action">
+                <header-field>
+                    <submit/>
+                </header-field>
+                <conditional-field condition="statusId == 'Ftd-NotIssued'">
+                    <link url="blockFolio" text="Block" confirmation="Se bloqueará el folio ${fiscalTaxDocumentNumber}, no será emitido" parameter-map="[
+                    fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber, issuerPartyId:issuerPartyId, issuerPartyIdValue:issuerPartyIdValue]"/>
+                </conditional-field>
+                <conditional-field condition="statusId == 'Ftd-Blocked'">
+                    <link url="unblockFolio" text="Unblock" confirmation="Se liberará el folio ${fiscalTaxDocumentNumber} para ser emitido" parameter-map="[
+                    fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:fiscalTaxDocumentNumber, issuerPartyId:issuerPartyId, issuerPartyIdValue:issuerPartyIdValue]"/>
+                </conditional-field>
+                <default-field><ignored/></default-field>
+            </field>
+        </form-list>
+    </widgets>
+</screen>
