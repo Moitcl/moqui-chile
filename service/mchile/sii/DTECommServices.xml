@@ -71,6 +71,7 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find entity-name="mchile.dte.DteEnvio" list="envioList" for-update="true">
                 <econdition field-name="envioId" operator="in" from="envioIdList" ignore-if-empty="true"/>
                 <econdition field-name="envioTypeEnumId" operator="in" from="envioTypeEnumIdList" ignore-if-empty="true"/>
+                <econdition field-name="rutReceptor" operator="not-equals" value="60803000-K"/>
                 <econdition field-name="statusId" value="Ftde-Created" ignore="envioIdList"/>
                 <econdition field-name="statusId" operator="in" value="Ftde-Created,Ftde-Failed"/>
                 <econdition field-name="lastAttempt" operator="less-equals" from="ec.user.nowTimestamp.time-(secondsBeforeRetry*1000)" ignore="secondsBeforeRetry == null" ignore-if-empty="true" or-null="true"/>
@@ -84,14 +85,20 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="rutReceptor" from="null"/>
                     <set field="rutEmisor" from="null"/>
                     <set field="folio" value=""/>
+                    <set field="receptorPartyId" from="null"/>
                     <iterate list="dteList" entry="envioDte">
                         <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" auto-field-map="envioDte"/>
                         <if condition="rutReceptor == null"><set field="rutReceptor" from="dte.receiverPartyIdValue"/></if>
-                        <if condition="dte.receiverPartyIdValue != rutReceptor"><return error="true" message="No se puede incluir más de un receptor en un envío (envío ${envioId})"/></if>
+                        <if condition="dte.receiverPartyIdValue != rutReceptor"><return error="true" message="No se puede incluir más de un receptor en un envío (envío ${envio.envioId})"/></if>
                         <if condition="rutEmisor == null"><set field="rutEmisor" from="dte.issuerPartyIdValue"/></if>
-                        <if condition="dte.issuerPartyIdValue != rutEmisor"><return error="true" message="No se puede incluir más de un emisor en un envío (envío ${envioId})"/></if>
+                        <if condition="dte.issuerPartyIdValue != rutEmisor"><return error="true" message="No se puede incluir más de un emisor en un envío (envío ${envio.envioId})"/></if>
                         <set field="folio" value="${folio.length() > 0? ', ': ''}${dte.fiscalTaxDocumentNumber}"/>
                         <set field="issuerPartyId" from="dte.issuerPartyId"/>
+                        <if condition="receptorPartyId &amp;&amp; receptorPartyId != dte.receiverPartyId"><then>
+                            <message type="warning">Found more than one receptorPartyId for envio ${envio.envioId}: ${receptorPartyId} and ${dte.receiverPartyId}</message>
+                        </then><else>
+                            <set field="receptorPartyId" from="dte.receiverPartyId"/>
+                        </else></if>
                     </iterate>
                     <service-call name="mchile.sii.DTEServices.get#DteInfo" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId]" out-map="dteInfo"/>
                     <set field="envioMessageText" value="Adjunto encontrará el documento tributario ${dteInfo.doctypeName} con folio${dteList.size() > 1? 's':''} ${folio} emitido por ${dteInfo.issuerName} (Rut ${rutEmisor})."/>
@@ -112,13 +119,12 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="envioContent" from="ec.resource.getLocationReference(envio.documentLocation)"/>
                 <set field="xmlAttachment" from="[attachmentLocation:envioContent.location, fileName:envioContent.fileName, contentType:envioContent.contentType]"/>
                 <service-call name="mchile.sii.DTECommServices.get#PartyIdByRut" in-map="[idValue:envio.rutEmisor]" out-map="emisorMap" out-map-add-to-existing="false"/>
-                <service-call name="mchile.sii.DTECommServices.get#PartyIdByRut" in-map="[idValue:envio.rutReceptor]" out-map="receptorMap" out-map-add-to-existing="false"/>
-                <service-call name="mchile.sii.SIIServices.get#XmlReceptionEmail" in-map="[partyId:receptorMap.partyId, partyIdValue:envio.rutReceptor, dtePartyId:emisorMap.partyId]" out-map="context"/>
+                <service-call name="mchile.sii.SIIServices.get#XmlReceptionEmail" in-map="[partyId:receptorPartyId, partyIdValue:envio.rutReceptor, dtePartyId:emisorMap.partyId]" out-map="context"/>
                 <entity-find-one entity-name="moqui.basic.Enumeration" value-field="tipoEnvioEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
                 <if condition="!xmlReceptionEmailAddress">
                     <return error="true" message="No se encuentra dirección de mail para envío tipo ${tipoEnvioEv.description}: ${envio.envioId}"/>
                 </if>
-                <entity-find-one entity-name="mantle.party.PartyDetail" value-field="receiverDetail" auto-field-map="[partyId:receptorMap.partyId]"/>
+                <entity-find-one entity-name="mantle.party.PartyDetail" value-field="receiverDetail" auto-field-map="[partyId:receptorPartyId]"/>
                 <set field="receiverName" from="ec.resource.expand('PartyNameOnlyTemplate', null, receiverDetail)"/>
                 <set field="bodyParameters" from="[title:subject, subject:subject, receiverName:receiverName, receiverRut:envio.rutReceptor, envioMessageText:envioMessageText]"/>
                 <entity-find-one entity-name="moqui.basic.email.EmailTemplate" value-field="emailTemplate" auto-field-map="[emailTemplateId:'MchDteSendEnvio']"/>
@@ -191,7 +197,7 @@ along with this software (see the LICENSE.md file). If not, see
                     </else></if>
                 </then><else-if condition="(bodyPart.contentType.contains('text/plain') || bodyPart.contentType.contains('text/html')) &amp;&amp; bodyPart.filename != null">
                     <log level="warn" message="Ignoring bodyPart of type ${bodyPart.contentType} and filename ${filename} for mail ${messageId}"/>
-                </else-if><else-if condition="(bodyPart.disposition == 'attachment' || bodyPart.disposition == null) &amp;&amp; bodyPart.filename.endsWith('.xml')">
+                </else-if><else-if condition="(bodyPart.disposition == 'attachment' || bodyPart.disposition == null) &amp;&amp; bodyPart.filename.toLowerCase().endsWith('.xml')">
                     <if condition="bodyPart.contentBytes == null &amp;&amp; bodyPart.contentText == null">
                         <log level="error" message="No contentBytes nor contentText for message ${messageId}"/>
                         <continue/>
@@ -395,7 +401,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="processed" from="false"/>
             <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>
             <set field="envioRr" from="ec.resource.getLocationReference(envio.documentLocation)"/>
-            <set field="respuesta" from=" new groovy.util.XmlParser(false, false).parse(envioRr.openStream())"/>
+            <set field="respuesta" from=" new groovy.xml.XmlParser(false, false).parse(envioRr.openStream())"/>
             <set field="caratula" from="respuesta.Resultado.Caratula"/>
             <set field="recepcionEnvioList" from="respuesta.Resultado.RecepcionEnvio"/>
             <set field="resultadoDteList" from="respuesta.Resultado.ResultadoDTE"/>
@@ -578,7 +584,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="withError" from="false"/>
             <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>
             <set field="envioRr" from="ec.resource.getLocationReference(envio.documentLocation)"/>
-            <set field="envioRecibos" from=" new groovy.util.XmlParser(false, false).parse(envioRr.openStream())"/>
+            <set field="envioRecibos" from=" new groovy.xml.XmlParser(false, false).parse(envioRr.openStream())"/>
             <set field="caratula" from="envioRecibos.SetRecibos.Caratula"/>
             <set field="reciboList" from="envioRecibos.SetRecibos.Recibo.DocumentoRecibo"/>
             <set field="rutEmisor" from="caratula.RutRecibe.text()"/>
@@ -626,7 +632,7 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
             <set field="envioRr" from="ec.resource.getLocationReference(envio.documentLocation)"/>
-            <set field="resultado" from=" new groovy.util.XmlParser(false, false).parse(envioRr.openStream())"/>
+            <set field="resultado" from=" new groovy.xml.XmlParser(false, false).parse(envioRr.openStream())"/>
             <set field="rutEmisor" from="resultado.IDENTIFICACION.RUTEMISOR.text().toUpperCase()"/>
             <set field="estadoResultado" from="resultado.IDENTIFICACION.ESTADO.text()"/>
             <set field="trackId" from="resultado.IDENTIFICACION.TRACKID.text()"/>
@@ -931,7 +937,7 @@ along with this software (see the LICENSE.md file). If not, see
             <script><![CDATA[
                 salida = getEstDteResponse.getEstDteReturn
                 ec.logger.info("salida: ${salida}")
-                xmlDoc = new groovy.util.XmlParser(false, false).parseText(salida)
+                xmlDoc = new groovy.xml.XmlParser(false, false).parseText(salida)
                 header = xmlDoc.'SII:RESP_HDR'
                 status = header.ESTADO.text()
                 glosa = header.GLOSA_ESTADO.text()
@@ -1054,7 +1060,7 @@ along with this software (see the LICENSE.md file). If not, see
                 glosasErrorCode = ['0': 'Se retorna el estado', '1': 'El envío no es de la Empresa, faltan parámetros de entrada', '2': 'Error de Proceso']
                 salida = getEstUpResponse.getEstUpReturn
                 ec.logger.info("salida: ${salida}")
-                xmlDoc = new groovy.util.XmlParser(false, true).parseText(salida)
+                xmlDoc = new groovy.xml.XmlParser(false, true).parseText(salida)
                 header = xmlDoc.'SII:RESP_HDR'
                 ec.logger.info("header: ${header}")
                 estado = header.ESTADO.text()
@@ -1075,7 +1081,7 @@ along with this software (see the LICENSE.md file). If not, see
                 documentosInformados = body.INFORMADOS.text()
                 documentosAceptados = body.ACEPTADOS.text()
                 documentosRechazados = body.RECHAZADOS.text()
-                if (estado in ['PDR', 'FOK', 'CRT', 'SOK']) {
+                if (estado in ['PDR', 'PRD', 'FOK', 'CRT', 'SOK']) {
                     ec.logger.info("Envío en proceso")
                     hasError = true
                 } else if (estado == 'EPR') {
@@ -1713,7 +1719,7 @@ TrackId Token']" type="Map"/>
             <script><![CDATA[
                 seedReturn = getSeedResponse?.getSeedReturn
                 bais = new ByteArrayInputStream(seedReturn.getBytes())
-                groovy.util.Node seedReturn = new groovy.util.XmlParser(false, false).parse(bais)
+                groovy.util.Node seedReturn = new groovy.xml.XmlParser(false, false).parse(bais)
                 bais.close()
                 semilla = seedReturn.'SII:RESP_BODY'.SEMILLA.text()
                 estado = seedReturn.'SII:RESP_HDR'.ESTADO.text()
@@ -1787,7 +1793,7 @@ TrackId Token']" type="Map"/>
             <script><![CDATA[
                 tokenReturn = getTokenResponse?.getTokenReturn
                 bais = new ByteArrayInputStream(tokenReturn.getBytes())
-                groovy.util.Node seedReturn = new groovy.util.XmlParser(false, false).parse(bais)
+                groovy.util.Node seedReturn = new groovy.xml.XmlParser(false, false).parse(bais)
                 bais.close()
                 token = seedReturn.'SII:RESP_BODY'.TOKEN.text()
                 estado = seedReturn.'SII:RESP_HDR'.ESTADO.text()

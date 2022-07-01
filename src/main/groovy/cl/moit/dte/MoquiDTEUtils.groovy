@@ -97,6 +97,7 @@ class MoquiDTEUtils {
             BigDecimal quantity = detailEntry.quantity
             BigDecimal montoDescuento = detailEntry.montoDescuento
             BigDecimal porcentajeDescuento = detailEntry.porcentajeDescuento
+            BigDecimal ajusteDecimal = detailEntry.ajusteDecimal
             if (montoDescuento)
                 totalDescuentos += montoDescuento
             String uom = null
@@ -119,7 +120,7 @@ class MoquiDTEUtils {
             BigDecimal priceItem
             BigDecimal totalItem = 0
             if (detailType == "ShipmentItem") {
-                ec.logger.info("handling price for productId ${detailEntry.productId}")
+                //ec.logger.info("handling price for productId ${detailEntry.productId}")
                 BigDecimal quantityHandled = 0
                 List<EntityValue> sisList = ec.entity.find("mantle.shipment.ShipmentItemSource").condition([shipmentId:detailEntry.shipmentId, productId: detailEntry.productId]).list()
                 if (sisList) {
@@ -155,7 +156,7 @@ class MoquiDTEUtils {
                 }
                 priceItem = totalItem / quantity as BigDecimal
                 totalItem = totalItem - (montoDescuento?:0)
-                totalItem = totalItem.setScale(0, BigDecimal.ROUND_HALF_UP) as Long
+                totalItem = totalItem.setScale(0, java.math.RoundingMode.HALF_UP) as Long
             } else if (detailType == "DebitoItem") {
                 if(codRef == 2) {
                     quantity = null
@@ -177,7 +178,7 @@ class MoquiDTEUtils {
                 }
             } else {
                 priceItem = detailEntry.amount
-                totalItem = (quantity?:0) * (priceItem?:0) - (montoDescuento?:0)
+                totalItem = (quantity?:0) * (priceItem?:0) - (montoDescuento?:0) + (ajusteDecimal?:0)
             }
 
             if (itemAfecto == "true")
@@ -570,7 +571,7 @@ class MoquiDTEUtils {
     public static groovy.util.Node dom2GroovyNode(String xml) {
         boolean validating = false
         boolean namespaceAware = false
-        return new groovy.util.XmlParser(validating, namespaceAware).parseText(xml)
+        return new groovy.xml.XmlParser(validating, namespaceAware).parseText(xml)
     }
 
     public static String firmaTimbre(String datosTed, String privateKeyData) {
