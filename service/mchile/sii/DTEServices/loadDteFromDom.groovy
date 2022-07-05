@@ -692,8 +692,8 @@ referenciasList.each { groovy.util.Node referencia ->
 
 }
 
-if (envioDteId)
-    ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioDteId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
+if (envioId)
+    ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
 if (envioRespuestaId)
     ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioRespuestaId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
 
