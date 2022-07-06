@@ -281,6 +281,7 @@ detalleList.each { detalle ->
     ec.logger.warn("Nombre item: ${detalle.NmbItem.text()}")
     ec.logger.warn("Cantidad: ${detalle.QtyItem.text()}")
     ec.logger.warn("Precio: ${detalle.PrcItem.text()}")
+    ec.logger.warn("Descuento: ${detalle.DescuentoMonto?.text()}")
     ec.logger.warn("Monto: ${detalle.MontoItem.text()}")
     itemDescription = detalle.NmbItem?.text()
     BigDecimal quantity = detalle.QtyItem ? (detalle.QtyItem.text() as BigDecimal) : null
@@ -304,7 +305,7 @@ detalleList.each { detalle ->
     if (((price?:0) * (quantity?:0)) == 0 && montoItem != null) {
         if (quantity == null)
             quantity = 1 as BigDecimal
-        price = (montoItem-descuentoMonto) / quantity
+        price = (montoItem+descuentoMonto) / quantity
     } else if (((price * quantity) - descuentoMonto).setScale(0, RoundingMode.HALF_UP) != montoItem) {
         if (montosBrutos) {
             if (montoItemBruto && priceBruto && ((priceBruto * quantity) - descuentoMontoBruto).setScale(0, RoundingMode.HALF_UP) != montoItemBruto)
@@ -313,7 +314,7 @@ detalleList.each { detalle ->
             discrepancyMessages.add("En detalle ${nroDetalles} (${itemDescription?:''}), montoItem (${montoItem}) no calza con el valor unitario (${price}) multiplicado por cantidad (${quantity}) menos descuento (${descuentoMonto}), redondeado")
         }
         dteAmount = price
-        price = montoItem/quantity
+        price = (montoItem+descuentoMonto)/quantity
     }
     try {
         indExe = detalle.IndExe?.text() as Integer
@@ -364,16 +365,16 @@ detalleList.each { detalle ->
         totalNoFacturable += montoItem
 
     roundingAdjustmentItemAmount = 0 as BigDecimal
-        if (quantity * price != montoItem) {
-            roundingAdjustmentItemAmount = montoItem - (quantity * price).setScale(6, RoundingMode.HALF_UP) as BigDecimal
-            if (((quantity * price) + roundingAdjustmentItemAmount) != montoItem) {
-                roundingAdjustmentItemAmount = 0
-                dteQuantity = quantity
-                dteAmount = price
-                price = (price * quantity).setScale(0, RoundingMode.HALF_UP)
-                quantity = 1
-            }
+    if (quantity * price != montoItem) {
+        roundingAdjustmentItemAmount = montoItem - descuentoMonto - (quantity * price).setScale(6, RoundingMode.HALF_UP) as BigDecimal
+        if (((quantity * price) + roundingAdjustmentItemAmount) != montoItem) {
+            roundingAdjustmentItemAmount = 0
+            dteQuantity = quantity
+            dteAmount = price
+            price = (price * quantity).setScale(0, RoundingMode.HALF_UP)
+            quantity = 1
         }
+    }
 
     Map itemMap = null
     if (!attemptProductMatch && invoiceId) {
@@ -692,8 +693,8 @@ referenciasList.each { groovy.util.Node referencia ->
 
 }
 
-if (envioDteId)
-    ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioDteId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
+if (envioId)
+    ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
 if (envioRespuestaId)
     ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioRespuestaId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
 
