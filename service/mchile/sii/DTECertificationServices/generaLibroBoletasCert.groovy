@@ -78,18 +78,9 @@ xmlWriter.close()
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "EnvioLibro")
 
-//try {
-//    MoquiDTEUtils.validateDocumentSii(ec, facturaXml, schemaLocation)
-//} catch (Exception e) {
-//    ec.message.addError("Failed validation: " + e.getMessage())
-//}
 
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
-/*if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
-    ec.logger.warn("DTE folio ${folio} generada OK")
-} else {
-    ec.message.addError("Error al generar DTE folio ${folio}: firma inválida")
-}*/
+
 
 // Se deja archivo en /tmp
 
