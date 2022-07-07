@@ -123,9 +123,34 @@ along with this software (see the LICENSE.md file). If not, see
                 </entity-find>
                 <if condition="!enumList"><message error="true">Could not find enum for indTraslado ${xmlIndTraslado}, fiscalTaxDocumentId ${gd.fiscalTaxDocumentId}</message></if>
                 <set field="indTrasladoEnumId" from="enumList.first.enumId"/>
-                <log message="Asignando IndTraslado para guía ${gd.fiscalTaxDocumentNumber} es ${indTrasladoEnumId}"/>
                 <set field="gd.indTrasladoEnumId" from="indTrasladoEnumId"/>
                 <entity-update value-field="gd"/>
+                <log message="Asignando IndTraslado para guía ${gd.fiscalTaxDocumentNumber} es ${indTrasladoEnumId}"/>
+                <service-call name="store#mchile.dte.GuiaDespacho" in-map="[fiscalTaxDocumentId:gd.fiscalTaxDocumentId, indTrasladoEnumId:indTrasladoEnumId]"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="migrate" noun="SeparateGuiaDespachoEntity">
+        <actions>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" for-update="true">
+                <econdition field-name="statusId" value="Ftd-Issued"/>
+                <econdition field-name="indTrasladoEnumId" operator="is-not-null"/>
+                <order-by field-name="fiscalTaxDocumentNumber"/>
+            </entity-find>
+            <log message="Found ${ftdList.size()} elements"/>
+            <return/>
+            <iterate list="ftdList" entry="ftd">
+                <if condition="ftd.fiscalTaxDocumentTypeEnumId == 'Ftdt-52'"><then>
+                    <entity-find-one entity-name="mchile.dte.GuiaDespacho" value-field="gd" auto-field-map="ftd"/>
+                    <if condition="gd &amp;&amp; gd.indTrasladoEnumId != ftd.indTrasladoEnumId">
+                        <return error="true" message="indTrasladoEnumId mismatch between FiscalTaxDocument entity (${ftd.indTrasladoEnumId}) and GuiaDespacho entity (${gd.indTrasladoEnumId})"/>
+                    </if>
+                    <service-call name="store#mchile.dte.GuiaDespacho" in-map="[fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, indTrasladoEnumId:indTrasladoEnumId]"/>
+                </then><else>
+                    <set field="ftd.indTrasladoEnumId" from="null"/>
+                    <entity-update value-field="ftd"/>
+                </else></if>
             </iterate>
         </actions>
     </service>
