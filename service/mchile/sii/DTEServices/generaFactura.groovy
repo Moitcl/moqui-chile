@@ -488,11 +488,14 @@ dteEv.sentAuthStatusId = "Ftd-NotSentAuth"
 dteEv.sentRecStatusId = "Ftd-NotSentRec"
 dteEv.invoiceId = invoiceId
 dteEv.shipmentId = shipmentId
-dteEv.indTrasladoEnumId = indTrasladoEnumId
 Date date = new Date()
 Timestamp ts = new Timestamp(date.getTime())
 dteEv.date = ts
 dteEv.update()
+
+if (tipoDte == 52) {
+    ec.service.sync.name("store#mchile.dte.GuiaDespacho").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, indTrasladoEnumId:indTrasladoEnumId]).call()
+}
 
 xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folio}.xml"
 pdfContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folio}.pdf"
