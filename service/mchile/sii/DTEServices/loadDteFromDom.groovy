@@ -85,6 +85,7 @@ if (verResult.code != VerifyResult.TED_OK)
 tipoDte = encabezado.IdDoc.TipoDTE.text()
 folioDte = encabezado.IdDoc.Folio.text() as Integer
 montosBrutos = encabezado.IdDoc.MntBruto?.text() == "1"
+indTraslado = encabezado.IdDoc.IndTraslado?.text()
 
 reserved = ec.service.sync().name("mchile.sii.SIIServices.get#RutEspeciales").call()
 
@@ -266,6 +267,7 @@ if (tipoDteEnumId in ['Ftdt-101', 'Ftdt-102', 'Ftdt-109', 'Ftdt-110', 'Ftdt-111'
     invoiceMap = ec.service.sync().name("mantle.account.InvoiceServices.create#Invoice").parameters(invoiceCreateMap).disableAuthz().call()
     invoiceId = invoiceMap.invoiceId
 }
+
 BigDecimal montoItem = 0 as BigDecimal
 detalleList = documento.Documento.Detalle
 ec.logger.warn("Recorriendo detalles: ${detalleList.size()}")
@@ -634,6 +636,18 @@ createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalT
              sentAuthStatusId:'Ftd-SentAuthAccepted', sentRecStatusId:sentRecStatusId]
 mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call()
 fiscalTaxDocumentId = mapOut.fiscalTaxDocumentId
+if (tipoDteEnumId == 'Ftdt-52') {
+    if (!indTraslado)
+        errorMessages.add("Guía de despacho no indica tipo de traslado (IndTraslado): ${indTraslado}")
+    else {
+        indTrasladoEnumId = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameters([fiscalTaxDocumentTypeEnumId:indTrasladoEnumId, enumTypeId:'IndTraslado']).call().fiscalTaxDocumentTypeEnumId
+        if (!indTrasladoEnumId)
+            errorMessages.add("Guía de despacho indica tipo de traslado (IndTraslado) desconocido: ${indTraslado}")
+        else {
+            ec.service.sync.name("store#mchile.dte.GuiaDespacho").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, indTrasladoEnumId:indTrasladoEnumId]).call()
+        }
+    }
+}
 
 createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, date:ec.user.nowTimestamp, amount:montoTotal, montoNeto:montoNeto, montoExento:montoExento, tasaImpuesto:tasaIva, tipoImpuesto:1, montoIvaRecuperable:montoIva, montoIvaNoRecuperable:0,
             fechaEmision:issuedTimestamp]
