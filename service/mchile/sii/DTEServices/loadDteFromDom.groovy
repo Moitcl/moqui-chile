@@ -644,7 +644,7 @@ if (tipoDteEnumId == 'Ftdt-52') {
         if (!indTrasladoEnumId)
             errorMessages.add("Guía de despacho indica tipo de traslado (IndTraslado) desconocido: ${indTraslado}")
         else {
-            ec.service.sync.name("store#mchile.dte.GuiaDespacho").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, indTrasladoEnumId:indTrasladoEnumId]).call()
+            ec.service.sync().name("store#mchile.dte.GuiaDespacho").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, indTrasladoEnumId:indTrasladoEnumId]).call()
         }
     }
 }
