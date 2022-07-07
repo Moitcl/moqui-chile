@@ -14,12 +14,12 @@ dteConstituyeVentaTypeList = ['Ftdt-39', 'Ftdt-41']
 if (invoiceId != null && fiscalTaxDocumentTypeEnumId in dteConstituyeVentaTypeList) {
     existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("invoiceId", invoiceId).condition("fiscalTaxDocumentTypeEnumId", "in", dteConstituyeVentaTypeList).list()
     // deshabilitado para pruebas
-    if (existingDteList) {
+    /*if (existingDteList) {
         existingFiscalTaxDocumentTypeEnumId = existingDteList.first.fiscalTaxDocumentTypeEnumId
         dteEnum = ec.entity.find("moqui.basic.Enumeration").condition("enumId", existingFiscalTaxDocumentTypeEnumId).one()
         ec.message.addError("Ya existe un DTE para la orden de cobro ${invoiceId}, de tipo ${dteEnum.description} (${dteEnum.enumId})")
         return
-    }
+    }*/
 }
 
 // Recuperacion de parametros de la organizacion -->
@@ -138,10 +138,10 @@ if (totalNeto != null) {
 
 // Chequeo de valores entre Invoice y calculados
 if (invoice) {
-    if (invoice.invoiceTotal != totalInvoice) {
+    /*if (invoice.invoiceTotal != totalInvoice) {
         ec.message.addError("No coinciden valores totales, calculado: ${totalInvoice}, en invoice ${invoiceId}: ${invoice.invoiceTotal}")
         return
-    }
+    }*/
 }
 
 idDocumento = "Bol-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
@@ -286,9 +286,8 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
         referenciaList.each { referencia ->
             Referencia {
                 NroLinRef(referencia.numeroLinea)
-                TpoDocRef(referencia.tipoDocumento)
-                //IndGlobal()
-                FolioRef(referencia.folio)
+                //TpoDocRef(referencia.tipoDocumento)
+                //FolioRef(referencia.folio)
                 //if (referencia.rutOtro)
                     //RUTOtr(referencia.rutOtro)
                 //if (referencia.fecha)
