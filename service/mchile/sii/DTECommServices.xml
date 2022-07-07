@@ -60,6 +60,21 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="send" noun="PendingDteEnvio">
+        <in-parameters>
+            <parameter name="envioId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
+            <if condition="envio == null"><return error="true" message="No se encuentra envio ${envioId}"/></if>
+            <if condition="envio.rutReceptor == '60803000-K'"><then>
+                <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:envioId]"/>
+            </then><else>
+                <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDteReceiver" in-map="[envioIdList:[envioId], secondsBeforeRetry:0]"/>
+            </else></if>
+        </actions>
+    </service>
+
     <service verb="send" noun="PendingEnvioDteReceiver" authenticate="anonymous-all">
         <in-parameters>
             <parameter name="envioIdList" type="List"/>
@@ -108,28 +123,36 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="envioMessageText" value="Adjunto encontrará el resultado del proceso de revision y validación de un envío de Documentos Tributarios Electrónicos que Usted realizó."/>
                     <set field="subject" value="Acuse de Recibo Nro. ${envio.internalId} - Receptor: ${envio.rutEmisor}"/>
                     <set field="emailTypeEnumId" value="Ftdemt-XmlReceptionResponse"/>
+                    <service-call name="mchile.sii.DTECommServices.get#PartyIdByRut" in-map="[idValue:envio.rutReceptor]" out-map="receptorMap" out-map-add-to-existing="false"/>
+                    <set field="receptorPartyId" from="receptorMap?.partyId"/>
                 </else-if><else-if condition="envio.envioTypeEnumId == 'Ftde-EnvioRecibos'">
                     <!-- Aceptación / Acuse de Recibo que da pie a título ejecutivo de factura -->
                     <set field="emailTypeEnumId" value="Ftdemt-XmlCommercialAcceptance"/>
                     <set field="envioMessageText" value="Adjunto encontrará la Aceptación del Documento Tributario Electrónico que Usted envió."/>
                     <set field="subject" value="Aceptación Nro. ${envio.internalId} - Receptor: ${envio.rutEmisor}"/>
+                    <service-call name="mchile.sii.DTECommServices.get#PartyIdByRut" in-map="[idValue:envio.rutReceptor]" out-map="receptorMap" out-map-add-to-existing="false"/>
+                    <set field="receptorPartyId" from="receptorMap?.partyId"/>
                 </else-if><else>
                     <return error="true" message="Unsupported envioTypeEnumId ${envio.envioTypeEnumId}"/>
                 </else></if>
                 <set field="envioContent" from="ec.resource.getLocationReference(envio.documentLocation)"/>
                 <set field="xmlAttachment" from="[attachmentLocation:envioContent.location, fileName:envioContent.fileName, contentType:envioContent.contentType]"/>
                 <service-call name="mchile.sii.DTECommServices.get#PartyIdByRut" in-map="[idValue:envio.rutEmisor]" out-map="emisorMap" out-map-add-to-existing="false"/>
-                <service-call name="mchile.sii.SIIServices.get#XmlReceptionEmail" in-map="[partyId:receptorPartyId, partyIdValue:envio.rutReceptor, dtePartyId:emisorMap.partyId]" out-map="context"/>
+                <set field="xmlReceptionEmailAddress" from="null"/>
+                <service-call name="mchile.sii.SIIServices.get#XmlReceptionEmail" in-map="[partyId:receptorPartyId, partyIdValue:envio.rutReceptor, dtePartyId:emisorMap.partyId]" out-map="context"
+                                ignore-error="true" transaction="force-new"/>
                 <entity-find-one entity-name="moqui.basic.Enumeration" value-field="tipoEnvioEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
-                <if condition="!xmlReceptionEmailAddress">
-                    <return error="true" message="No se encuentra dirección de mail para envío tipo ${tipoEnvioEv.description}: ${envio.envioId}"/>
-                </if>
-                <entity-find-one entity-name="mantle.party.PartyDetail" value-field="receiverDetail" auto-field-map="[partyId:receptorPartyId]"/>
-                <set field="receiverName" from="ec.resource.expand('PartyNameOnlyTemplate', null, receiverDetail)"/>
-                <set field="bodyParameters" from="[title:subject, subject:subject, receiverName:receiverName, receiverRut:envio.rutReceptor, envioMessageText:envioMessageText]"/>
-                <entity-find-one entity-name="moqui.basic.email.EmailTemplate" value-field="emailTemplate" auto-field-map="[emailTemplateId:'MchDteSendEnvio']"/>
-                <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" in-map="[toAddresses:xmlReceptionEmailAddress, emailTemplateId:'MchDteSendEnvio', emailTypeEnumId:emailTypeEnumId,
+                <if condition="xmlReceptionEmailAddress"><then>
+                    <entity-find-one entity-name="mantle.party.PartyDetail" value-field="receiverDetail" auto-field-map="[partyId:receptorPartyId]"/>
+                    <set field="receiverName" from="ec.resource.expand('PartyNameOnlyTemplate', null, receiverDetail)"/>
+                    <set field="bodyParameters" from="[title:subject, subject:subject, receiverName:receiverName, receiverRut:envio.rutReceptor, envioMessageText:envioMessageText]"/>
+                    <entity-find-one entity-name="moqui.basic.email.EmailTemplate" value-field="emailTemplate" auto-field-map="[emailTemplateId:'MchDteSendEnvio']"/>
+                    <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" in-map="[toAddresses:xmlReceptionEmailAddress, emailTemplateId:'MchDteSendEnvio', emailTypeEnumId:emailTypeEnumId,
                     attachments:[xmlAttachment], bodyParameters:bodyParameters, subject:subject]" out-map="context"/>
+                </then><else>
+                    <log level="error" message="No se encuentra dirección de mail para envío tipo ${tipoEnvioEv.description}: ${envio.envioId}"/>
+                    <set field="emailMessageId" from="null"/>
+                </else></if>
                 <if condition="emailMessageId"><then>
                     <entity-find entity-name="mchile.dte.DteEnvioFiscalTaxDocument" list="envioDteList">
                         <econdition field-name="envioId" from="envio.envioId"/>
@@ -545,6 +568,11 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <if condition="rutReceptorEnvio != null &amp;&amp; rutReceptorEnvio != rutReceptor">
                 <log level="warn" message="Rut mismatch en envío ${envioId} rut receptor indicado en inicio: ${rutReceptorEnvio}, en documento tipo ${tipoDte} folio ${folio} es ${rutReceptor}"/>
+                <set field="processedWithErrors" from="true"/>
+                <set field="process" from="false" type="Boolean"/>
+            </if>
+            <if condition="estadoDte != '0'">
+                <set field="processedWithErrors" from="true"/>
                 <set field="process" from="false" type="Boolean"/>
             </if>
             <if condition="process">
@@ -745,7 +773,6 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="envioId" required="true"/>
-            <parameter name="useLib" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
             <parameter name="trackId"/>
