@@ -493,9 +493,11 @@ Timestamp ts = new Timestamp(date.getTime())
 dteEv.date = ts
 dteEv.update()
 
+/*
 if (tipoDte == 52) {
     ec.service.sync().name("store#mchile.dte.GuiaDespacho").parameters([fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, indTrasladoEnumId:indTrasladoEnumId]).call()
 }
+ */
 
 xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folio}.xml"
 pdfContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folio}.pdf"
