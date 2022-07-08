@@ -793,6 +793,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="envioId"/>
             <parameter name="minSecondsBetweenAttempts" type="Integer" default="1800"/>
             <parameter name="maxAttempts" type="Integer" default="5"/>
+            <parameter name="triggerEnvioToReceiver" type="Boolean" default="true"/>
         </in-parameters>
         <actions>
             <entity-find entity-name="mchile.dte.DteEnvio" list="envioList">
@@ -808,16 +809,19 @@ along with this software (see the LICENSE.md file). If not, see
             <script>if (initialDelaySeconds) Thread.sleep(initialDelaySeconds*1000L)</script>
             <set field="retryList" from="1..checkAttempts"/>
             <set field="newStatusByEnvioId" from="[:]"/>
+            <set field="totalAcceptedDocs" from="0"/>
             <iterate list="retryList" entry="attempt">
                 <set field="reattemptList" from="[]"/>
                 <script>Thread.sleep(initialDelaySeconds*1000L)</script>
                 <log message="Starting attempt ${attempt}"/>
                 <iterate list="envioList" entry="envio">
                     <service-call name="mchile.sii.DTECommServices.verifica#EnvioEnSii" in-map="[envioId:envio.envioId]" transaction="force-new" out-map="checkMap" ignore-error="true"/>
+                    <set field="totalAcceptedDocs" from="totalAcceptedDocs + (checkMap.documentosAceptados?:0)"/>
                     <if condition="checkMap.hasError"><then>
                         <script>reattemptList.add(envio)</script>
                     </then><else>
                         <service-call name="update#mchile.dte.DteEnvio" in-map="[envioId:envio.envioId, statusId:'Ftde-Processed', lastAttempt:ec.user.nowTimestamp, attemptCount:((envio.attemptCount?:0)+1)]" transaction="force-new" ignore-error="true"/>
+                        <set field="sentEnvios" from="sentEnvios+1"/>
                     </else></if>
                     <if condition="checkMap.newStatusId">
                         <set field="newStatusByEnvioId[envio.envioId]" from="checkMap.newStatusId"/>
@@ -841,6 +845,9 @@ along with this software (see the LICENSE.md file). If not, see
                 <if condition="newStatusId"><set field="updateMap.statusId" from="newStatusId"/></if>
                 <service-call name="update#mchile.dte.DteEnvio" in-map="updateMap" transaction="force-new" ignore-error="true"/>
             </iterate>
+            <if condition="triggerEnvioToReceiver &amp;&amp; totalAcceptedDocs &gt; 0">
+                <script>ec.service.job("sii_dte_CreateEnvioDteReceiver").run()</script>
+            </if>
         </actions>
     </service>
 
@@ -1048,9 +1055,9 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="serverCode"/>
             <parameter name="serverCodeGlosa"/>
             <parameter name="tipoDte"/>
-            <parameter name="documentosInformados"/>
-            <parameter name="documentosAceptados"/>
-            <parameter name="documentosRechazados"/>
+            <parameter name="documentosInformados" type="Integer"/>
+            <parameter name="documentosAceptados" type="Integer"/>
+            <parameter name="documentosRechazados" type="Integer"/>
             <parameter name="hasError" type="Boolean"/>
             <parameter name="newStatusId"/>
         </out-parameters>
@@ -1111,9 +1118,15 @@ along with this software (see the LICENSE.md file). If not, see
                     serverCodeGlosa = glosasServerCode[serverCode]
                 body = xmlDoc.'SII:RESP_BODY'
                 tipoDte = body.TIPO_DOCTO.text()
-                documentosInformados = body.INFORMADOS.text()
-                documentosAceptados = body.ACEPTADOS.text()
-                documentosRechazados = body.RECHAZADOS.text()
+                try {
+                    documentosInformados = body.INFORMADOS.text() as Integer
+                } catch (Exception e) {}
+                try {
+                    documentosAceptados = body.ACEPTADOS.text() as Integer
+                } catch (Exception e) {}
+                try {
+                    documentosRechazados = body.RECHAZADOS.text() as Integer
+                } catch (Exception e) {}
                 if (estado in ['PDR', 'PRD', 'FOK', 'CRT', 'SOK']) {
                     ec.logger.info("Envío en proceso")
                     hasError = true
