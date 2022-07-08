@@ -13,22 +13,14 @@
  */
 package cl.moit.moqui.remote
 
-import javax.xml.namespace.QName
-import javax.xml.soap.Name
-import javax.xml.soap.SOAPBody
-import javax.xml.soap.SOAPBodyElement
-import javax.xml.soap.SOAPConnection
-import javax.xml.soap.SOAPConnectionFactory
-import javax.xml.soap.SOAPEnvelope
-import javax.xml.soap.SOAPHeader
-import javax.xml.soap.SOAPMessage
-import javax.xml.soap.SOAPPart
-
 import org.moqui.impl.service.ServiceDefinition
 import org.moqui.impl.service.ServiceFacadeImpl
 import org.moqui.impl.service.ServiceRunner
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+
+import javax.xml.namespace.QName
+import javax.xml.soap.*
 
 public class RemoteXmlsoapServiceRunner implements ServiceRunner {
     protected ServiceFacadeImpl sfi = null
@@ -41,9 +33,29 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
     public Map<String, Object> runService(ServiceDefinition sd, Map<String, Object> parameters) {
         String location = sd.serviceNode.attribute("location")
         String method = sd.serviceNode.attribute("method")
+        Long reattemptPauseMilliseconds = 1500 as Long
+        Integer reattemptAmount = 0 as Integer
+        String reattemptPauseMillisecondsString = sd.serviceNode.attribute("reattemptPauseMilliseconds")
+        String reattemptAmountString = sd.serviceNode.attribute("reattemptAmount")
 
         if (!location) throw new IllegalArgumentException("Cannot call remote service [${sd.serviceName}] because it has no location specified.")
         if (!method) throw new IllegalArgumentException("Cannot call remote service [${sd.serviceName}] because it has no method specified.")
+
+        if (reattemptPauseMillisecondsString) {
+            try {
+                reattemptPauseMilliseconds = Long.valueOf(reattemptPauseMillisecondsString)
+            } catch(NumberFormatException e) {
+                logger.error("reattemptPauseMilliseconds is not a number, set to ${reattemptPauseMilliseconds}")
+            }
+        }
+
+        if (reattemptAmountString) {
+            try {
+                reattemptAmount = Integer.valueOf(reattemptAmountString)
+            } catch(NumberFormatException e) {
+                logger.error("reattemptAmount is not a number, set to ${reattemptAmount}")
+            }
+        }
 
         SOAPConnection connection = SOAPConnectionFactory.newInstance().createConnection()
 
@@ -126,7 +138,23 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
         //if (debug) logger.info("ContentType: ${message.version}; ${msg.encoding}")
         if (debug) logger.info("XML String: ${envelope.toString()}")
 
-        SOAPMessage response = connection.call(message, endpoint);
+        SOAPMessage response
+        int attempt = 1
+        boolean succeeded = false
+        while (!succeeded && attempt <= reattemptAmount + 1) {
+            try {
+                response = connection.call(message, endpoint);
+                succeeded = true
+            } catch (SOAPException e) {
+                logger.warn("Received exception in SOAP call: ${e.message}")
+                if (attempt <= reattemptAmount)
+                    logger.warn("Will reattempt SOAP call after ${reattemptPauseMilliseconds} ms")
+                else
+                    logger.error("Giving up on SOAP call after ${attempt} attempt${attempt > 1? 's': ''}")
+                Thread.sleep(reattemptPauseMilliseconds)
+            }
+            attempt++
+        }
 
         SOAPPart sp = response.getSOAPPart();
         SOAPBody resultBody = sp.getEnvelope().getBody();
