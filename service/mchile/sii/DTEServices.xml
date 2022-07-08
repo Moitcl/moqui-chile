@@ -1188,59 +1188,16 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="preparaEnvio" noun="Documentos">
-        <description>
-            Obtiene datos para llamar a servicio enviar#Documento
-        </description>
+    <service verb="inicia" noun="EnvioLibrosSii">
         <in-parameters>
             <parameter name="documentIds" type="List" required="true"/>
-            <parameter name="libro"/>
-            <parameter name="boleta"/>
         </in-parameters>
         <actions>
-
-            <if condition="documentIds.size() &lt; 1"><return error="true" message="Debe seleccionar al menos 1 DTE para enviar"/></if>
-            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
-                <econdition field-name="fiscalTaxDocumentId" operator="in" from="documentIds"/>
-            </entity-find>
-            <iterate list="dteList" entry="dte">
-                <if condition="issuerPartyId == null"><then>
-                    <set field="issuerPartyId" from="dte.issuerPartyId"/>
-                </then><else-if condition="dte.issuerPartyId != issuerPartyId">
-                    <return error="true" message="No se pueden enviar simultáneamente DTEs de distintos emisores"/>
-                </else-if></if>
-            </iterate>
             <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="context"/>
             <if condition="!(issuerPartyId in userOrgIds)"><return error="true" message="Usuario no tiene autorización para enviar DTEs a nombre de partyId ${issuerPartyId}"/></if>
 
             <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:issuerPartyId]" out-map="context"/>
 
-            <if condition="!libro &amp;&amp; !boleta"><then>
-                <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[organizationPartyId:issuerPartyId, documentIdList:documentIds]" out-map="envio"/>
-                <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="dteEnvio" auto-field-map="[envioId:envio.envioId]"/>
-                <log message="generaEnvio OK, now enviaSII#Envio"/>
-                <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:dteEnvio.envioId, organizationPartyId:issuerPartyId]" out-map="context"/>
-            </then><else-if condition="boleta">
-                <service-call name="mchile.sii.DTECommServices.genera#EnvioBoleta" in-map="[rutReceptor:recepS, organizationPartyId:issuerPartyId, documentIdList:documentIds ]" out-map="envio"/>
-                <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="dteEnvio" auto-field-map="[envioId:envio.envioId]"/>
-                <log message="generaEnvio OK, now enviaSII#EnvioBoleta"/>
-                <service-call name="mchile.sii.DTECommServices.enviaSII#EnvioBoleta" in-map="[envioId:dteEnvio.envioId, organizationPartyId:issuerPartyId]" out-map="context"/>
-                <!-- TODO: este update podria ir en otro lado? -->
-                <!-- Marcar boletas enviadas solo si se recibe envio -->
-                <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteSentList">
-                    <econdition field-name="fiscalTaxDocumentId" operator="in" from="documentIds"/>
-                </entity-find>
-                <iterate list="dteSentList" entry="dte">
-                    <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteEv" for-update="true">
-                        <field-map field-name="fiscalTaxDocumentId" from="dte.fiscalTaxDocumentId"/>
-                    </entity-find-one>
-                    <set field="dteEv.sentAuthStatusId" value="Ftd-SentAuthUnverified"/>
-                    <set field="dteEv.trackId" from="trackId"/>
-                    <entity-update value-field="dteEv"/>
-                </iterate>
-        </else-if></if>
-
-        <if condition="libro">
             <iterate list="documentList" entry="libroEntry">
                 <set field="detailLibro" from="libroEntry instanceof List ? libroEntry : libroEntry.split('-') as List"/>
                 <set field="fiscalTaxDocumentId" from="detailLibro[0]"/>
@@ -1255,103 +1212,169 @@ along with this software (see the LICENSE.md file). If not, see
 
                 <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:envioId, organizationPartyId:issuerPartyId]" out-map="context"/>
             </iterate>
-        </if>
-    </actions>
-</service>
+        </actions>
+    </service>
 
-<service verb="verificaEnSII" noun="Documento">
-    <description>
-        Verificación en el SII de DTE ya enviado
-    </description>
-    <in-parameters>
-        <parameter name="fiscalTaxDocumentId" required="true"/>
-        <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
-        <parameter name="organizationPartyId" required="true"/>
-    </in-parameters>
-    <out-parameters>
-        <parameter name="statusSii" required="true"/>
-        <parameter name="salida" required="true"/>
-    </out-parameters>
-    <actions>
+    <service verb="inicia" noun="EnvioDocumentosSii">
+        <description>
+            Genera envíos para ser enviados al SII y/o gatilla el envío de un envío ya preparado
+        </description>
+        <in-parameters>
+            <parameter name="documentIds" type="List" required="true"/>
+        </in-parameters>
+        <actions>
 
-        <set field="statusSii" value=""/>
+            <if condition="documentIds.size() &lt; 1"><return error="true" message="Debe seleccionar al menos 1 DTE para enviar"/></if>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
+                <econdition field-name="fiscalTaxDocumentId" operator="in" from="documentIds"/>
+            </entity-find>
+            <entity-find entity-name="mchile.dte.DteEnvioAndFiscalTaxDocument" list="envioFtdList">
+                <econdition field-name="fiscalTaxDocumentId" operator="in" from="documentIds"/>
+                <econdition field-name="rutReceptor" value="60803000-K"/>
+                <econdition field-name="envioStatusId" value="Ftde-Created"/>
+            </entity-find>
+            <set field="documentosConEnvio" from="envioFtdList.fiscalTaxDocumentId"/>
+            <set field="enviosAEnviar" from="new LinkedHashSet&lt;String&gt;()"/>
+            <set field="dteIdList" from="[]"/>
+            <set field="boletaIdList" from="[]"/>
+            <iterate list="dteList" entry="dte">
+                <if condition="issuerPartyId == null"><then>
+                    <set field="issuerPartyId" from="dte.issuerPartyId"/>
+                </then><else-if condition="dte.issuerPartyId != issuerPartyId">
+                    <return error="true" message="No se pueden enviar simultáneamente DTEs de distintos emisores"/>
+                </else-if></if>
+                <if condition="dte.sentAuthStatusId != 'Ftd-NotSentAuth'"><then>
+                    <log level="warn" message="Not sending FiscalTaxDocument ${dte.fiscalTaxDocumentId} with sentAuthStatus ${dte.sentAuthStatusId}"/>
+                </then><else-if condition="dte.fiscalTaxDocumentId in documentosConEnvio">
+                    <script>enviosAEnviar.addAll((envioFtdList.findAll { it -> it.fiscalTaxDocumentId == dte.fiscalTaxDocumentId }).collect { return it.envioId })</script>
+                </else-if><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftd-39', 'Ftd-41']">
+                    <script>boletaIdList.add(dte.fiscalTaxDocumentId)</script>
+                </else-if><else>
+                    <script>dteIdList.add(dte.fiscalTaxDocumentId)</script>
+                </else></if>
+            </iterate>
+            <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="context"/>
+            <if condition="!(issuerPartyId in userOrgIds)"><return error="true" message="Usuario no tiene autorización para enviar DTEs a nombre de partyId ${issuerPartyId}"/></if>
 
-        <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:issuerPartyId]" out-map="context"/>
 
-        <service-call name="mchile.DTEServices.get#DteContent"
-                      in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
+            <if condition="dteIdList">
+                <log message="Creating new envio for dteIdList: ${dteIdList}"/>
+                <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[organizationPartyId:issuerPartyId, documentIdList:dteIdList]" out-map="envio" transaction="force-new" ignore-error="true"/>
+                <script>if (envio?.envioId) enviosAEnviar.add(envio.envioId)</script>
+            </if>
+            <if condition="boletaIdList">
+                <service-call name="mchile.sii.DTECommServices.genera#EnvioBoleta" in-map="[rutReceptor:recepS, organizationPartyId:issuerPartyId, documentIdList:boletaIdList]" out-map="envio"/>
+                <service-call name="mchile.sii.DTECommServices.enviaSII#EnvioBoleta" in-map="[envioId:envio.envioId, organizationPartyId:issuerPartyId]" out-map="context"/>
+                <!-- TODO: este update debiera ir en uploadEnvioBoleta.groovy -->
+                <!-- Marcar boletas enviadas solo si se recibe envio -->
+                <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteSentList" for-update="true">
+                    <econdition field-name="fiscalTaxDocumentId" operator="in" from="boletaIdList"/>
+                </entity-find>
+                <iterate list="dteSentList" entry="dte">
+                    <set field="dte.sentAuthStatusId" value="Ftd-SentAuthUnverified"/>
+                    <set field="dte.trackId" from="trackId"/>
+                    <entity-update value-field="dte"/>
+                </iterate>
+            </if>
+            <iterate list="enviosAEnviar" entry="envioId">
+                <log message="Sending envío ${envioId}"/>
+                <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:envioId, organizationPartyId:issuerPartyId]" out-map="context" transaction="force-new" ignore-error="true"/>
+            </iterate>
+        </actions>
+    </service>
 
-        <if condition="!content">
-            <return error="true" message="DTE no existe"/>
-        </if>
-        <set field="envio" from="content"/>
+    <service verb="verificaEnSII" noun="Documento">
+        <description>
+            Verificación en el SII de DTE ya enviado
+        </description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="organizationPartyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="statusSii" required="true"/>
+            <parameter name="salida" required="true"/>
+        </out-parameters>
+        <actions>
 
-        <set field="salida" value=""/>
-        <set field="statusXML" value=""/>
+            <set field="statusSii" value=""/>
+            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
 
-        <script>
-            import java.io.FileInputStream
-            import java.security.KeyStore
-            import java.security.PrivateKey
-            import java.security.cert.X509Certificate
-            import java.util.HashMap
+            <service-call name="mchile.DTEServices.get#DteContent" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
 
-            import org.apache.xmlbeans.XmlOptions
+            <if condition="!content">
+                <return error="true" message="DTE no existe"/>
+            </if>
+            <set field="envio" from="content"/>
 
-            import cl.nic.dte.net.ConexionSii
-            import cl.nic.dte.util.Utilities
-            import cl.sii.siiDte.DTEDocument
-            import cl.sii.xmlSchema.RESPUESTADocument
+            <set field="salida" value=""/>
+            <set field="statusXML" value=""/>
 
-            HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;()
-            namespaces.put("", "http://www.sii.cl/SiiDte")
-            XmlOptions opts = new XmlOptions()
-            opts.setLoadSubstituteNamespaces(namespaces)
+            <script>
+                import java.io.FileInputStream
+                import java.security.KeyStore
+                import java.security.PrivateKey
+                import java.security.cert.X509Certificate
+                import java.util.HashMap
 
-            //DTEDocument doc = DTEDocument.Factory.parse(new FileInputStream(envio), opts)
-            DTEDocument doc = DTEDocument.Factory.parse(contentRef.openStream(), opts)
-            ConexionSii con = new ConexionSii()
+                import org.apache.xmlbeans.XmlOptions
 
+                import cl.nic.dte.net.ConexionSii
+                import cl.nic.dte.util.Utilities
+                import cl.sii.siiDte.DTEDocument
+                import cl.sii.xmlSchema.RESPUESTADocument
 
+                HashMap&lt;String, String&gt; namespaces = new HashMap&lt;String, String&gt;()
+                namespaces.put("", "http://www.sii.cl/SiiDte")
+                XmlOptions opts = new XmlOptions()
+                opts.setLoadSubstituteNamespaces(namespaces)
 
-            RESPUESTADocument resp
-            if (dteSystemIsProduction) {
-                String token = con.getToken(pkey, certificate)
-                resp = con.getEstadoDTEProduccion(rutEnvia, doc.getDTE().getDocumento(), token)
-            } else {
-                String token = con.getTokenCert(pkey, certificate)
-                resp = con.getEstadoDTECertificacion(rutEnvia, doc.getDTE().getDocumento(), token)
-            }
-            opts.setSavePrettyPrintIndent(2)
-            opts.setSavePrettyPrint()
-            resp.save(System.out, opts)
-
-            logger.warn("------" + resp.toString())
-
-            salida = resp.toString()
-            statusXML = salida
-            String status = "0"
-
-            int inicio = statusXML.indexOf("&lt;SII:ESTADO&gt;")
-            int fin = statusXML.indexOf("&lt;/SII:ESTADO&gt;")
-
-            statusXML = statusXML.substring(inicio + 12, fin)
-            logger.warn("STATUS: " + statusXML)
-            statusSii = statusXML
-
-            inicio = salida.indexOf("&lt;SII:GLOSA_ERR&gt;")
-            fin = salida.indexOf("&lt;/SII:GLOSA_ERR&gt;")
-            salida = salida.substring(inicio + 15, fin)
-
-        </script>
-        <set field="statusSii" from="statusXML"/>
-    </actions>
-</service>
+                //DTEDocument doc = DTEDocument.Factory.parse(new FileInputStream(envio), opts)
+                DTEDocument doc = DTEDocument.Factory.parse(contentRef.openStream(), opts)
+                ConexionSii con = new ConexionSii()
 
 
-<service verb="verificaEnvioSIIDeprecated" noun="Boleta">
-    <description>
-        <!-- TODO -->
+
+                RESPUESTADocument resp
+                if (dteSystemIsProduction) {
+                    String token = con.getToken(pkey, certificate)
+                    resp = con.getEstadoDTEProduccion(rutEnvia, doc.getDTE().getDocumento(), token)
+                } else {
+                    String token = con.getTokenCert(pkey, certificate)
+                    resp = con.getEstadoDTECertificacion(rutEnvia, doc.getDTE().getDocumento(), token)
+                }
+                opts.setSavePrettyPrintIndent(2)
+                opts.setSavePrettyPrint()
+                resp.save(System.out, opts)
+
+                logger.warn("------" + resp.toString())
+
+                salida = resp.toString()
+                statusXML = salida
+                String status = "0"
+
+                int inicio = statusXML.indexOf("&lt;SII:ESTADO&gt;")
+                int fin = statusXML.indexOf("&lt;/SII:ESTADO&gt;")
+
+                statusXML = statusXML.substring(inicio + 12, fin)
+                logger.warn("STATUS: " + statusXML)
+                statusSii = statusXML
+
+                inicio = salida.indexOf("&lt;SII:GLOSA_ERR&gt;")
+                fin = salida.indexOf("&lt;/SII:GLOSA_ERR&gt;")
+                salida = salida.substring(inicio + 15, fin)
+
+            </script>
+            <set field="statusSii" from="statusXML"/>
+        </actions>
+    </service>
+
+
+    <service verb="verificaEnvioSIIDeprecated" noun="Boleta">
+        <description>
+            <!-- TODO -->
             Verificación en el SII de envio con rut y trackid
         </description>
         <in-parameters>

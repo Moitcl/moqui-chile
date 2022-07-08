@@ -91,7 +91,8 @@ try {
     if (status == null || status == '')
         status = xmlDoc.'siid:STATUS'.text()
 } catch (SAXParseException e) {
-    ec.logger.warn("Error parsing response: ${e.toString()}")
+    ec.message.addError("Error parsing response: ${e.toString()}")
+    ec.message.addMessage("Response was: ${xmlResponse}")
 }
 
 trackId = null
