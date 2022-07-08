@@ -55,27 +55,12 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[rutReceptor:dte.receiverPartyIdValue, organizationPartyId:dte.issuerPartyId, documentIdList:[dte.fiscalTaxDocumentId]]" out-map="envio"/>
             <script>
                 if (triggerSend)
-                    ec.service.special().name("mchile.sii.DTECommServices.send#PendingEnvioDteReceiver").parameter("envioIdList", [envio.envioId]).registerOnCommit()
+                    ec.service.special().name("mchile.sii.DTECommServices.send#PendingEnvioDteReceiver").parameter("envioId", envio.envioId).registerOnCommit()
             </script>
         </actions>
     </service>
 
-    <service verb="send" noun="PendingDteEnvio">
-        <in-parameters>
-            <parameter name="envioId" required="true"/>
-        </in-parameters>
-        <actions>
-            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
-            <if condition="envio == null"><return error="true" message="No se encuentra envio ${envioId}"/></if>
-            <if condition="envio.rutReceptor == '60803000-K'"><then>
-                <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:envioId]"/>
-            </then><else>
-                <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDteReceiver" in-map="[envioIdList:[envioId], secondsBeforeRetry:0]"/>
-            </else></if>
-        </actions>
-    </service>
-
-    <service verb="send" noun="PendingEnvioDteReceiver" authenticate="anonymous-all">
+    <service verb="send" noun="PendingEnvioDte">
         <in-parameters>
             <parameter name="envioIdList" type="List"/>
             <parameter name="envioTypeEnumIdList" type="List"/>
@@ -86,12 +71,33 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find entity-name="mchile.dte.DteEnvio" list="envioList" for-update="true">
                 <econdition field-name="envioId" operator="in" from="envioIdList" ignore-if-empty="true"/>
                 <econdition field-name="envioTypeEnumId" operator="in" from="envioTypeEnumIdList" ignore-if-empty="true"/>
-                <econdition field-name="rutReceptor" operator="not-equals" value="60803000-K"/>
                 <econdition field-name="statusId" value="Ftde-Created" ignore="envioIdList"/>
                 <econdition field-name="statusId" operator="in" value="Ftde-Created,Ftde-Failed"/>
                 <econdition field-name="lastAttempt" operator="less-equals" from="ec.user.nowTimestamp.time-(secondsBeforeRetry*1000)" ignore="secondsBeforeRetry == null" ignore-if-empty="true" or-null="true"/>
             </entity-find>
-            <iterate list="envioList" entry="envio">
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
+            <if condition="envio == null"><return error="true" message="No se encuentra envio ${envioId}"/></if>
+            <if condition="envio.rutReceptor == '60803000-K'"><then>
+                <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:envioId]" out-map="resultadoEnvio"/>
+            </then><else>
+                <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDteReceiver" in-map="[envioId:envioId, secondsBeforeRetry:secondsBeforeRetry]" out-map="resultadoEnvio"/>
+            </else></if>
+        </actions>
+    </service>
+
+    <service verb="send" noun="PendingEnvioDteReceiver" authenticate="anonymous-all">
+        <in-parameters>
+            <parameter name="envioId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.DteEnvio" list="envioList" for-update="true">
+                <econdition field-name="envioId"/>
+                <econdition field-name="rutReceptor" operator="not-equals" value="60803000-K"/>
+                <econdition field-name="statusId" operator="in" value="Ftde-Created,Ftde-Failed"/>
+                <econdition field-name="lastAttempt" operator="less-equals" from="ec.user.nowTimestamp.time-(secondsBeforeRetry*1000)" ignore="secondsBeforeRetry == null" ignore-if-empty="true" or-null="true"/>
+            </entity-find>
+            <set field="envio" from="envioList.first"/>
+            <if condition="envio">
                 <if condition="envio.envioTypeEnumId == 'Ftde-EnvioDte'"><then>
                     <entity-find entity-name="mchile.dte.DteEnvioFiscalTaxDocument" list="dteList" for-update="true">
                         <econdition field-name="envioId" from="envio.envioId"/>
@@ -164,16 +170,15 @@ along with this software (see the LICENSE.md file). If not, see
                         <entity-update value-field="dte"/>
                     </iterate>
                     <set field="envio.statusId" value="Ftde-Sent"/>
-                    <entity-update value-field="envio"/>
                 </then><else>
-                    <set field="envio.attemptCount" from="(envio.attemptCount?:0)+1"/>
-                    <set field="envio.lastAttempt" from="ec.user.nowTimestamp"/>
                     <if condition="envio.attemptCount >= maxFail">
                         <set field="envio.statusId" value="Ftde-Failed"/>
                     </if>
-                    <entity-update value-field="envio"/>
                 </else></if>
-            </iterate>
+                <set field="envio.attemptCount" from="(envio.attemptCount?:0)+1"/>
+                <set field="envio.lastAttempt" from="ec.user.nowTimestamp"/>
+                <entity-update value-field="envio"/>
+            </if>
         </actions>
     </service>
 
@@ -237,7 +242,7 @@ along with this software (see the LICENSE.md file). If not, see
             </iterate>
             <script>
                 if (envioIdsToProcess)
-                    ec.service.special().name("mchile.sii.DTECommServices.process#PendingDteEnvio").registerOnCommit()
+                    ec.service.special().name("mchile.sii.DTECommServices.process#PendingEnvioDte").registerOnCommit()
             </script>
         </actions>
     </service>
@@ -347,18 +352,18 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="process" noun="PendingDteEnvio" authenticate="anonymous-all">
+    <service verb="process" noun="PendingEnvioDte" authenticate="anonymous-all">
         <in-parameters>
             <parameter name="envioIdList" type="List"/>
             <parameter name="ignoreLastAttempt" type="Boolean" default="false"/>
         </in-parameters>
         <actions>
-            <if condition="context.DTECommServices_processingPendingDteEnvio == 'yes'">
+            <if condition="context.DTECommServices_processingPendingEnvioDte == 'yes'">
                 <!-- was already triggered -->
-                <log message="Returning without running from process#PendingDteEnvio"/>
+                <log message="Returning without running from process#PendingEnvioDte"/>
                 <return/>
             </if>
-            <set field="context.DTECommServices_processingPendingDteEnvio" value="yes"/>
+            <set field="context.DTECommServices_processingPendingEnvioDte" value="yes"/>
             <set field="maxAttemptThreshold" from="3"/>
             <set field="minutesBeforeRetry" from="120"/>
             <entity-find entity-name="mchile.dte.DteEnvio" list="envioList">
@@ -732,7 +737,7 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <actions>
             <script>
-                job = ec.service.job("sii_dte_EnviaDteEnvio")
+                job = ec.service.job("sii_dte_EnviaEnvioDteToSii")
                 if (envioId)
                     job.parameter("envioId", envioId)
                 job.run()
