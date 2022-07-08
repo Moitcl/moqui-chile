@@ -96,12 +96,13 @@ try {
 }
 
 trackId = null
+attemptCount = (envio.attemptCount?:0) + 1
 if (status == '0') {
     trackId = xmlDoc.TRACKID.text()
     if (trackId == null || trackId == '')
         trackId = xmlDoc.'siid:TRACKID'.text()
     ec.logger.warn("DTE Enviada correctamente con trackId " + trackId)
-    ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioId, trackId:trackId, statusId:'Ftde-Sent']).call()
+    ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioId, trackId:trackId, statusId:'Ftde-Sent', attemptCount:attemptCount, lastAttempt:ec.user.nowTimestamp]).call()
     ec.service.special().name("mchile.sii.DTECommServices.start#ValidaEnvioServiceJob").parameters([envioId: envioId, initialDelaySeconds:5, checkDelaySeconds:30, checkAttempts:4, minSecondsBetweenAttempts: 0]).registerOnCommit()
     envioFtdList = ec.entity.find("mchile.dte.DteEnvioFiscalTaxDocument").condition("envioId", envioId).list()
     if (envioFtdList)
@@ -111,6 +112,11 @@ if (status == '0') {
                            '5':'No está autenticado', '6':'Empresa no autorizada a enviar archivos', '7':'Esquema Inválido', '8':'Firma del Documento', '9':'Sistema Bloqueado', '0':'Error Interno']
     ec.message.addMessage("Error "+ status + " al enviar DTE (${errorDescriptionMap[status]?:'Sin descripción'})", "danger")
     ec.logger.info("response: ${xmlResponse}")
+    if (attemptCount <= maxFail)
+        statusId = envio.statusId
+    else
+        statusId = 'Ftde-Failed'
+    ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioId, statusId:statusId, attemptCount:attemptCount, lastAttempt:ec.user.nowTimestamp]).call()
 }
 
 return
