@@ -129,4 +129,46 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="check" noun="DateOnFiscalTaxDocument">
+        <in-parameters>
+            <parameter name="fix" type="Boolean" default="false"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="mismatchCount"/>
+        </out-parameters>
+        <actions>
+            <script><![CDATA[
+                import java.lang.NumberFormatException
+                ]]></script>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocumentAndContent" list="ftdList">
+                <econdition field-name="statusId" value="Ftd-Issued"/>
+                <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
+            </entity-find>
+            <set field="mismatchCount" from="0"/>
+            <iterate list="ftdList" entry="ftd">
+                <script><![CDATA[
+                    if (ftd.contentLocation) {
+                        docRr = ec.resource.getLocationReference(ftd.contentLocation)
+                        ftdDoc = new groovy.xml.XmlParser(false, false).parse(docRr.openStream())
+                        BigDecimal amount = null
+                        Calendar cal = Calendar.instance
+                        cal.setTimeInMillis(ftd.date.time)
+                        cal.set(Calendar.HOUR_OF_DAY, 0)
+                        cal.set(Calendar.MINUTE, 0)
+                        cal.set(Calendar.SECOND, 0)
+                        cal.set(Calendar.MILLISECOND, 0)
+                        ftdDate = new Timestamp(cal.timeInMillis)
+                        date = ec.l10n.parseTimestamp(ftdDoc.Documento.Encabezado.IdDoc.FchEmis.text(), 'yyyy-MM-dd')
+                        if (date != ftdDate) {
+                            mismatchCount++
+                            ec.logger.info("Found date mismatch for DTE ${ftd.fiscalTaxDocumentId}, in XML ${date}, in DB ${ftdDate}")
+                            if (fix)
+                                ec.service.sync().name("update#mchile.dte.FiscalTaxDocument").parameters([fiscalTaxDocumentId: ftd.fiscalTaxDocumentId, date: date]).call()
+                        }
+                    }
+                    ]]></script>
+            </iterate>
+        </actions>
+    </service>
+
 </services>
