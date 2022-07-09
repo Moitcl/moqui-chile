@@ -469,6 +469,7 @@ along with this software (see the LICENSE.md file). If not, see
             <iterate list="envioList" entry="envio">
                 <entity-find-one entity-name="moqui.basic.Enumeration" value-field="envEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
                 <service-call name="mchile.sii.DTECommServices.process#${envEv.enumCode}" in-map="[envioId:envio.envioId]" out-map="processOut" ignore-error="true" transaction="force-new" out-map-add-to-existing="false"/>
+                <set field="newAttemptCount" from="(envio.attemptCount?:0) + 1"/>
                 <if condition="processOut.processed"><then>
                     <if condition="processOut.withError"><then>
                         <set field="newStatusId" value="Ftde-ProcessFailed"/>
@@ -479,9 +480,8 @@ along with this software (see the LICENSE.md file). If not, see
                     </else-if><else>
                         <set field="newStatusId" from="processOut.newEnvioStatusId?:'Ftde-Processed'"/>
                     </else></if>
-                    <service-call name="update#mchile.dte.DteEnvio" in-map="[envioId:envio.envioId, statusId:newStatusId]" transaction="force-new"/>
+                    <service-call name="update#mchile.dte.DteEnvio" in-map="[envioId:envio.envioId, statusId:newStatusId, attemptCount:newAttemptCount, lastAttempt:ec.user.nowTimestamp]" transaction="force-new"/>
                 </then><else>
-                    <set field="newAttemptCount" from="(envio.attemptCount?:0) + 1"/>
                     <set field="newStatusId" from="newAttemptCount >= maxAttemptThreshold ? 'Ftde-ProcessFailed': envio.statusId"/>
                     <service-call name="update#mchile.dte.DteEnvio" in-map="[envioId:envio.envioId, attemptCount:newAttemptCount, lastAttempt:ec.user.nowTimestamp, statusId:newStatusId]" transaction="force-new"/>
                 </else></if>
