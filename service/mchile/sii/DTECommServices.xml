@@ -895,10 +895,10 @@ along with this software (see the LICENSE.md file). If not, see
                 <return/>
             </if>
             <script>if (initialDelaySeconds) Thread.sleep(initialDelaySeconds*1000L)</script>
-            <set field="retryList" from="1..checkAttempts"/>
             <set field="newStatusByEnvioId" from="[:]"/>
             <set field="totalAcceptedDocs" from="0"/>
-            <iterate list="retryList" entry="attempt">
+            <set field="attempt" from="1"/>
+            <while condition="envioList &amp;&amp; attempt &lt;= maxAttempts">
                 <set field="reattemptList" from="[]"/>
                 <script>Thread.sleep(initialDelaySeconds*1000L)</script>
                 <log message="Starting attempt ${attempt}"/>
@@ -916,15 +916,12 @@ along with this software (see the LICENSE.md file). If not, see
                 </iterate>
                 <set field="envioList" from="reattemptList"/>
                 <log message="Finishing attempt ${attempt}"/>
-                <if condition="!envioList">
-                    <log message="No more DteEnvio to process, ending"/>
-                    <return/>
-                </if>
-                <if condition="attempt &lt; checkAttempts">
+                <if condition="envioList &amp;&amp; attempt &lt; checkAttempts">
                     <log message="Waiting ${checkDelaySeconds} before next attempt"/>
                     <script>Thread.sleep(checkDelaySeconds*1000L)</script>
                 </if>
-            </iterate>
+                <set field="attempt" from="attempt + 1"/>
+            </while>
             <iterate list="reattemptList" entry="envio">
                 <set field="attemptCount" from="(envio.attemptCount?:0)+1"/>
                 <set field="updateMap" from="[envioId:envio.envioId, attemptCount:attemptCount, lastAttempt:ec.user.nowTimestamp]"/>
