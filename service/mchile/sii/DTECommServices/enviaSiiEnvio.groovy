@@ -116,7 +116,7 @@ if (status == '0') {
         statusId = envio.statusId
     else
         statusId = 'Ftde-Failed'
-    ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioId, statusId:statusId, attemptCount:attemptCount, lastAttempt:ec.user.nowTimestamp]).call()
+    ec.service.sync().name("update#mchile.dte.DteEnvio").requireNewTransaction(true).parameters([envioId:envioId, statusId:statusId, attemptCount:attemptCount, lastAttempt:ec.user.nowTimestamp]).call()
 }
 
 return
