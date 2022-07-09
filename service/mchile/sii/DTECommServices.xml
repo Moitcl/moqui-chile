@@ -32,6 +32,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="sentRecStatusId" value="Ftd-NotSentRec"/>
             </entity-find>
             <set field="ungeneratedDocumentIdsByIssuerPartyId" from="[:]"/>
+            <set field="envioIdsToSend" from="new LinkedHashSet&lt;String&gt;()"/>
             <iterate list="ftdList" entry="dte">
                 <entity-find entity-name="mchile.dte.DteEnvioAndFiscalTaxDocument" list="existingEnvioList">
                     <econdition field-name="fiscalTaxDocumentId" from="dte.fiscalTaxDocumentId"/>
@@ -42,7 +43,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="envio" from="existingEnvioList.first"/>
                     <log message="Found existing envio ${envio.envioId}, not creating new one"/>
                     <if condition="triggerSend">
-                        <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDte" in-map="[envioIdList:[envio.envioId]]"/>
+                        <script>envioIdsToSend.add(envio.envioId)</script>
                     </if>
                 </then><else>
                     <set field="ungeneratedDocumentIdsByReceiverPartyIdValue" from="ungeneratedDocumentIdsByIssuerPartyId[dte.issuerPartyId]"/>
@@ -58,16 +59,15 @@ along with this software (see the LICENSE.md file). If not, see
                     <script>ungeneratedDocumentIdList.add(dte.fiscalTaxDocumentId)</script>
                 </else></if>
             </iterate>
-            <set field="createdEnvioIds" from="[]"/>
             <iterate list="ungeneratedDocumentIdsByIssuerPartyId" entry="ungeneratedDocumentIdsByReceiverPartyIdValue" key="issuerPartyId">
                 <iterate list="ungeneratedDocumentIdsByReceiverPartyIdValue" entry="ungeneratedDocumentIdList" key="receiverPartyIdValue">
                     <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[rutReceptor:receiverPartyIdValue, organizationPartyId:issuerPartyId, documentIdList:ungeneratedDocumentIdList]" out-map="envio"/>
-                    <script>createdEnvioIds.add(envio.envioId)</script>
+                    <script>envioIdsToSend.add(envio.envioId)</script>
                     <log message="Generated envio ${envio.envioId}"/>
                 </iterate>
             </iterate>
-            <if condition="createdEnvioIds &amp;&amp; triggerSend">
-                <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDte" in-map="[envioIdList:createdEnvioIds]"/>
+            <if condition="envioIdsToSend &amp;&amp; triggerSend">
+                <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDte" in-map="[envioIdList:envioIdsToSend]"/>
             </if>
         </actions>
     </service>
@@ -89,6 +89,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="sentAuthStatusId" value="Ftd-NotSentAuth"/>
             </entity-find>
             <set field="ungeneratedDocumentIdsByIssuerPartyId" from="[:]"/>
+            <set field="envioIdsToSend" from="new LinkedHashSet&lt;String&gt;()"/>
             <iterate list="ftdList" entry="dte">
                 <entity-find entity-name="mchile.dte.DteEnvioAndFiscalTaxDocument" list="existingEnvioList">
                     <econdition field-name="fiscalTaxDocumentId" from="dte.fiscalTaxDocumentId"/>
@@ -99,10 +100,10 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="envio" from="existingEnvioList.first"/>
                     <log message="Found existing envio ${envio.envioId}, not creating new one"/>
                     <if condition="triggerSend">
-                        <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDte" in-map="[envioIdList:[envio.envioId]]"/>
+                        <script>envioIdsToSend.add(envio.envioId)</script>
                     </if>
                 </then><else>
-                    <set field="ungeneratedDocumentIdList" from="ungeneratedDocumentsByIssuerPartyId[dte.issuerPartyId]"/>
+                    <set field="ungeneratedDocumentIdList" from="ungeneratedDocumentIdsByIssuerPartyId[dte.issuerPartyId]"/>
                     <if condition="ungeneratedDocumentIdList == null">
                         <set field="ungeneratedDocumentIdList" from="[]"/>
                         <set field="ungeneratedDocumentIdsByIssuerPartyId[dte.issuerPartyId]" from="ungeneratedDocumentIdList"/>
@@ -110,14 +111,14 @@ along with this software (see the LICENSE.md file). If not, see
                     <script>ungeneratedDocumentIdList.add(dte.fiscalTaxDocumentId)</script>
                 </else></if>
             </iterate>
-            <set field="createdEnvioIds" from="[]"/>
             <iterate list="ungeneratedDocumentIdsByIssuerPartyId" entry="documentIdList" key="issuerPartyId">
+                <log message="Creating envio for documentIdList ${documentIdList}"/>
                 <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[organizationPartyId:issuerPartyId, documentIdList:documentIdList]" out-map="envio" transaction="force-new" ignore-error="true"/>
-                <script>createdEnvioIds.add(envio.envioId)</script>
-                <log message="Generated envio ${envio.envioId}"/>
+                <script>envioIdsToSend.add(envio.envioId)</script>
             </iterate>
-            <if condition="createdEnvioIds &amp;&amp; triggerSend">
-                <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDte" in-map="[envioIdList:createdEnvioIds]"/>
+            <if condition="envioIdsToSend &amp;&amp; triggerSend">
+                <log message="Sending envioIds: ${envioIdsToSend}"/>
+                <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDte" in-map="[envioIdList:envioIdsToSend]"/>
             </if>
         </actions>
     </service>
@@ -162,7 +163,7 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <iterate list="envioList" entry="envio">
                 <if condition="envio.rutReceptor == '60803000-K'"><then>
-                    <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:envioId]" out-map="resultadoEnvio"/>
+                    <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:envio.envioId]" out-map="resultadoEnvio"/>
                 </then><else>
                     <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDteReceiver" in-map="[envioId:envioId, secondsBeforeRetry:secondsBeforeRetry]" out-map="resultadoEnvio"/>
                 </else></if>
