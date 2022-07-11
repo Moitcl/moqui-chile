@@ -467,9 +467,11 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="lastAttempt" operator="less" from="ec.user.nowTimestamp.time-(minutesBeforeRetry*60*1000)" or-null="true" ignore="ignoreLastAttempt"/>
                 <econdition field-name="envioId" operator="in" from="envioIdList" ignore-if-empty="true"/>
             </entity-find>
+            <set field="responseCount" from="0"/>
             <iterate list="envioList" entry="envio">
                 <entity-find-one entity-name="moqui.basic.Enumeration" value-field="envEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
                 <service-call name="mchile.sii.DTECommServices.process#${envEv.enumCode}" in-map="[envioId:envio.envioId]" out-map="processOut" ignore-error="true" transaction="force-new" out-map-add-to-existing="false"/>
+                <if condition="processOut.withResponse"><set field="responseCount" from="responseCount+1"/></if>
                 <set field="newAttemptCount" from="(envio.attemptCount?:0) + 1"/>
                 <if condition="processOut.processed"><then>
                     <if condition="processOut.withError"><then>
@@ -487,6 +489,9 @@ along with this software (see the LICENSE.md file). If not, see
                     <service-call name="update#mchile.dte.DteEnvio" in-map="[envioId:envio.envioId, attemptCount:newAttemptCount, lastAttempt:ec.user.nowTimestamp, statusId:newStatusId]" transaction="force-new"/>
                 </else></if>
             </iterate>
+            <if condition="responseCount &gt; 0">
+                <script>ec.service.special().name("mchile.sii.DTECommServices.start#SendPendingEnvioDteJob").registerOnCommit()</script>
+            </if>
         </actions>
     </service>
 
@@ -499,6 +504,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="processedItems" type="Integer"/>
             <parameter name="processed" type="Boolean"/>
             <parameter name="withError" type="Boolean"/>
+            <parameter name="withResponse" type="Boolean"/>
         </out-parameters>
     </service>
 
@@ -516,6 +522,7 @@ along with this software (see the LICENSE.md file). If not, see
         <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
         <actions>
             <set field="processed" from="false"/>
+            <set field="withResponse" from="false"/>
             <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>
             <set field="envioRr" from="ec.resource.getLocationReference(envio.documentLocation)"/>
             <set field="respuesta" from=" new groovy.xml.XmlParser(false, false).parse(envioRr.openStream())"/>
@@ -746,6 +753,7 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <set field="processed" from="false"/>
             <set field="withError" from="false"/>
+            <set field="withResponse" from="false"/>
             <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>
             <set field="envioRr" from="ec.resource.getLocationReference(envio.documentLocation)"/>
             <set field="envioRecibos" from=" new groovy.xml.XmlParser(false, false).parse(envioRr.openStream())"/>
@@ -794,6 +802,7 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="process" noun="ResultadoEnvio">
         <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
         <actions>
+            <set field="withResponse" from="false"/>
             <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
             <set field="envioRr" from="ec.resource.getLocationReference(envio.documentLocation)"/>
             <set field="resultado" from=" new groovy.xml.XmlParser(false, false).parse(envioRr.openStream())"/>
@@ -860,6 +869,12 @@ along with this software (see the LICENSE.md file). If not, see
         <out-parameters>
             <parameter name="envioId"/>
         </out-parameters>
+    </service>
+
+    <service verb="start" noun="SendPendingEnvioDteJob" authenticate="anonymous-all">
+        <actions>
+            <script>ec.service.job("sii_dte_SendPendingEnvioDte").run()</script>
+        </actions>
     </service>
 
     <service verb="start" noun="EnviaEnvioDteToSiiJob" authenticate="anonymous-all">

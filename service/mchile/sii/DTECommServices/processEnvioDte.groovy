@@ -24,6 +24,7 @@ Boolean createUnknownIssuer = processingParameters.createUnknownIssuer ?: true
 Boolean requireIssuerInternalOrg = processingParameters.requireIssuerInternalOrg ?: false
 Boolean createUnknownReceiver = processingParameters.createUnknownReceiver ?: true
 Boolean requireReceiverInternalOrg = processingParameters.requireReceiverInternalOrg ?: true
+withResponse = false
 
 Document doc
 try {
@@ -83,6 +84,7 @@ if (receiverPartyId == issuerPartyId) {
 }
 
 envioRespuestaId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-RespuestaDte', statusId:'Ftde-Created', rutEmisor:rutReceptorCaratula, rutReceptor:rutEmisorCaratula, fechaEnvio:ec.user.nowTimestamp, internalId:idRecepcionDte]).call().envioId
+withResponse = envioRespuestaId != null
 
 EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()
 issuerTaxName = issuer.taxOrganizationName
