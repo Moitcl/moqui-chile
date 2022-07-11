@@ -77,6 +77,11 @@ if (!receiverPartyId) {
     return
 }
 
+if (receiverPartyId == issuerPartyId) {
+    processed = true
+    return
+}
+
 envioRespuestaId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-RespuestaDte', statusId:'Ftde-Created', rutEmisor:rutReceptorCaratula, rutReceptor:rutEmisorCaratula, fechaEnvio:ec.user.nowTimestamp, internalId:idRecepcionDte]).call().envioId
 
 EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()
