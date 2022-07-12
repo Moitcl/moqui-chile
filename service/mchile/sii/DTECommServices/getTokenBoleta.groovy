@@ -1,16 +1,12 @@
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.util.EntityUtils;
-//import org.apache.http.protocol.*;
 import org.w3c.dom.*;
 import javax.xml.parsers.*;
-import java.io.*;
 import javax.xml.crypto.dsig.*;
 import javax.xml.crypto.dsig.dom.*;
 import javax.xml.crypto.dsig.spec.*;
 import javax.xml.crypto.dsig.keyinfo.*;
-import java.util.*;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.stream.StreamResult;
 import javax.xml.transform.Transformer;
@@ -26,7 +22,7 @@ import org.apache.http.util.EntityUtils;
 
 ExecutionContext ec = context.ec
 
-ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:partyId]).call())
 
 String now = "-"+System.nanoTime();
 
