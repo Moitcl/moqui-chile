@@ -108,7 +108,7 @@ if (MoquiDTEUtils.verifySignature(doc, "/sii:EnvioBOLETA/sii:SetDTE", "./sii:Car
     ec.logger.warn("Error al generar envio")
 }
 
-envioId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-EnvioDte', statusId:'Ftde-Created', internalId:idEnvio, rutEmisor:rutEmisor, rutReceptor:rutReceptor,
+envioId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-EnvioBoleta', statusId:'Ftde-Created', internalId:idEnvio, rutEmisor:rutEmisor, rutReceptor:rutReceptor,
                                                                  registerDate:ec.user.nowTimestamp, documentLocation:xmlContentLocation, fileName:fileName]).call().envioId
 documentIdList.each { documentId ->
     ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters([fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Envio', contentLocation:xmlContentLocation, contentDate:ts]).call()
