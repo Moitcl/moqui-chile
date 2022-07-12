@@ -32,7 +32,7 @@ System.out.println("Usando url token " + urlSolicitud)
 
 
 //String semilla = getSemilla()
-seed = ec.service.sync().name("mchile.sii.DTECommServices.get#SeedBoleta").parameters([isProduction:isProduction]).call().seed
+seed = ec.service.sync().name("mchile.sii.DTECommServices.get#SeedBoleta").parameters([boletaIsProduction:boletaIsProduction]).call().seed
 
 System.out.println("Semilla: " + seed)
 

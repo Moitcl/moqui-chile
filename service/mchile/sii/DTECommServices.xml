@@ -1122,10 +1122,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="FolioDte" from="dte.fiscalTaxDocumentNumber"/>
             <set field="FechaEmisionDte" from="ec.l10n.format(dte.date, 'ddMMyyyy')"/>
             <set field="MontoDte" from="ec.l10n.format(dte.amount, '###')"/>
-            <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
-            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[isProduction:isProduction, partyId:dte.issuerPartyId]" out-map="tokenMap"/>
+            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[dteIsProduction:dteIsProduction, partyId:dte.issuerPartyId]" out-map="tokenMap"/>
             <set field="Token" from="tokenMap.token"/>
-            <if condition="isProduction"><then>
+            <if condition="dteIsProduction"><then>
                 <service-call name="mchile.sii.DTECommServices.verifica#DocumentoEnSiiProduction" in-map="context" out-map="context"/>
             </then><else>
                 <service-call name="mchile.sii.DTECommServices.verifica#DocumentoEnSiiCertification" in-map="context" out-map="context"/>
@@ -1228,7 +1227,6 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:envio.rutEmisor]" out-map="rutMap"/>
             <set field="RutCompania" from="rutMap.rut"/>
             <set field="DvCompania" from="rutMap.dv"/>
-            <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
             <entity-find entity-name="mantle.party.PartyIdentification" list="idList">
                 <econdition field-name="idValue" from="envio.rutEmisor"/>
                 <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
@@ -1240,10 +1238,10 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <if condition="issuerPartyId == null"><return error="true" message="No se encuentra partyId para el rut ${envio.rutEmisor}"/></if>
             <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:issuerPartyId]" out-map="context"/>
-            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[isProduction:isProduction, partyId:issuerPartyId]" out-map="tokenMap"/>
+            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[dteIsProduction:dteIsProduction, partyId:issuerPartyId]" out-map="tokenMap"/>
             <set field="Token" from="tokenMap.token"/>
             <set field="TrackId" from="envio.trackId"/>
-            <if condition="isProduction"><then>
+            <if condition="dteIsProduction"><then>
                 <service-call name="mchile.sii.DTECommServices.verifica#EnvioEnSiiProduction" in-map="context" out-map="context"/>
             </then><else>
                 <service-call name="mchile.sii.DTECommServices.verifica#EnvioEnSiiCertification" in-map="context" out-map="context"/>
@@ -1448,7 +1446,7 @@ TrackId Token']" type="Map"/>
 
                 ResourceReference documentoRr = ec.resource.getLocationReference(dteEnvioEv.documentLocation)
 
-                resp = ec.service.sync().name("mchile.sii.DTECommServices.upload#EnvioBoleta").parameters([rutEnviador:rutCertificado, rutCompania:rutCompania, envioId:envioId, token:token]).call().respSII
+                resp = ec.service.sync().name("mchile.sii.DTECommServices.upload#EnvioBoleta").parameters([partyId:dte.issuerPartyId, rutEnviador:rutCertificado, rutCompania:rutCompania, envioId:envioId, token:token]).call().respSII
                 salida = resp.toString()
                 logger.warn("Salida JSON: " + salida)
 
@@ -1530,7 +1528,7 @@ TrackId Token']" type="Map"/>
 
                 ResourceReference documentoRr = ec.resource.getLocationReference(dteEnvioEv.documentLocation)
 
-                resp = ec.service.sync().name("mchile.sii.DTECommServices.upload#EnvioBoleta").parameters([rutEnviador:rutCertificado, rutCompania:rutEmisor, documentoRr:documentoRr.openStream(), token:token, envioId:envioId]).call().respSII
+                resp = ec.service.sync().name("mchile.sii.DTECommServices.upload#EnvioBoleta").parameters([partyId:organizationPartyId, rutEnviador:rutCertificado, rutCompania:rutEmisor, documentoRr:documentoRr.openStream(), token:token, envioId:envioId]).call().respSII
 
                 salida = resp.toString()
                 logger.warn("Salida JSON: " + salida)
@@ -1595,7 +1593,7 @@ TrackId Token']" type="Map"/>
                 System.out.println("Enviador: " + rutEnviador + ", rutEmisor "+rutEmisor+ ", token: " + token)
 
                 // Ejecutar GET https://apicert.sii.cl/boleta.electronica.envio/{rut}-{dv}-{trackid}
-                if (dteSystemIsProduction) {
+                if (boletaIsProduction) {
                     logger.warn("Consultando envio Boleta en produccion")
                     token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([isProduction:'yes',  partyId:organizationPartyId]).call().token
                     resp = ec.service.sync().name("mchile.sii.DTECommServices.get#EstadoEnvioBoletaProduccion").parameters([rutCompany:rutEmisor, trackId:trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]).call().respSII
@@ -1738,7 +1736,7 @@ TrackId Token']" type="Map"/>
                 System.out.println("Folio: " + folio + ", token: " + token)
 
                 // Ejecutar GET https://apicert.sii.cl/boleta.electronica.envio/{rut}-{dv}-{trackid}
-                if (dteSystemIsProduction) {
+                if (boletaIsProduction) {
                     logger.warn("Consultando Boleta en produccion")
                     token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([isProduction:'yes',  partyId:organizationPartyId]).call().token
                     resp = ec.service.sync().name("mchile.sii.DTECommServices.get#EstadoBoletaProduccion").parameters([rutCompany:rutEmisor, rutReceptor:rutReceptor, monto:monto, fechaEmision:fechaEmision, folio:folio, tipo:tipo, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]).call().respSII
@@ -1866,17 +1864,22 @@ TrackId Token']" type="Map"/>
 
     <service verb="get" noun="Seed">
         <in-parameters>
-            <parameter name="isProduction" type="Boolean"/>
+            <parameter name="dteIsProduction" type="Boolean"/>
+            <parameter name="partyId"/>
         </in-parameters>
         <out-parameters>
             <parameter name="estado"/>
             <parameter name="semilla"/>
         </out-parameters>
         <actions>
-            <if condition="isProduction == null">
+            <if condition="dteIsProduction == null">
+                <if condition="partyId == null">
+                    <return error="true" message="Need to specify dteIsProduction or partyId"/>
+                </if>
                 <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+                <set field="dteIsProduction" from="dteIsProductionByPartyId[partyId]"/>
             </if>
-            <if condition="isProduction"><then>
+            <if condition="dteIsProduction"><then>
                 <service-call name="mchile.sii.DTECommServices.get#SeedProduction" out-map="context"/>
             </then><else>
                 <service-call name="mchile.sii.DTECommServices.get#SeedCertification" out-map="context"/>
@@ -1917,7 +1920,7 @@ TrackId Token']" type="Map"/>
     <service verb="get" noun="Token">
         <in-parameters>
             <parameter name="partyId" required="true"/>
-            <parameter name="isProduction" type="Boolean"/>
+            <parameter name="dteIsProduction" type="Boolean"/>
         </in-parameters>
         <out-parameters>
             <parameter name="token"/>
@@ -1925,8 +1928,9 @@ TrackId Token']" type="Map"/>
             <parameter name="glosa"/>
         </out-parameters>
         <actions>
-            <if condition="isProduction == null">
+            <if condition="dteIsProduction == null">
                 <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+                <set field="dteIsProduction" from="dteIsProductionByPartyId[partyId]"/>
             </if>
             <service-call name="mchile.sii.DTECommServices.get#Seed" in-map="context" out-map="seed"/>
             <if condition="seed.estado != '00'">
@@ -1950,7 +1954,7 @@ TrackId Token']" type="Map"/>
                 byte[] signedXmlBytes = MoquiDTEUtils.sign(doc, "", pkey, certificate, "", "")
                 String signedXml = new String(signedXmlBytes)
             ]]></script>
-            <if condition="isProduction"><then>
+            <if condition="dteIsProduction"><then>
                 <service-call name="mchile.sii.DTECommServices.get#TokenProduction" in-map="[pszXml:signedXml]" out-map="context"/>
             </then><else>
                 <service-call name="mchile.sii.DTECommServices.get#TokenCertification" in-map="[pszXml:signedXml]" out-map="context"/>
@@ -2024,16 +2028,21 @@ TrackId Token']" type="Map"/>
 
     <service verb="get" noun="SeedBoleta">
         <in-parameters>
-            <parameter name="isProduction" type="Boolean"/>
+            <parameter name="boletaIsProduction" type="Boolean"/>
+            <parameter name="partyId"/>
         </in-parameters>
         <out-parameters>
             <parameter name="seed"/>
         </out-parameters>
         <actions>
-            <if condition="isProduction == null">
+            <if condition="boletaIsProduction == null">
+                <if condition="partyId == null">
+                    <return error="true" message="Need to specify boletaIsProduction or partyId"/>
+                </if>
                 <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+                <set field="boletaIsProduction" from="boletaIsProductionByPartyId[partyId]"/>
             </if>
-            <if condition="isProduction"><then>
+            <if condition="boletaIsProduction"><then>
                 <service-call name="mchile.sii.DTECommServices.get#SeedBoletaProduction" out-map="context"/>
             </then><else>
                 <service-call name="mchile.sii.DTECommServices.get#SeedBoletaCertification" out-map="context"/>
@@ -2063,17 +2072,18 @@ TrackId Token']" type="Map"/>
 
     <service verb="get" noun="TokenBoleta">
         <in-parameters>
-            <parameter name="isProduction" type="Boolean"/>
+            <parameter name="boletaIsProduction" type="Boolean"/>
             <parameter name="partyId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="token"/>
         </out-parameters>
         <actions>
-            <if condition="isProduction == null">
+            <if condition="boletaIsProduction == null">
                 <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+                <set field="boletaIsProduction" from="boletaIsProductionByPartyId[partyId]"/>
             </if>
-            <if condition="isProduction"><then>
+            <if condition="boletaIsProduction"><then>
                 <service-call name="mchile.sii.DTECommServices.get#TokenBoletaProduction" out-map="context" in-map="[partyId:partyId]"/>
             </then><else>
                 <service-call name="mchile.sii.DTECommServices.get#TokenBoletaCertification" out-map="context" in-map="[partyId:partyId]"/>
@@ -2105,7 +2115,8 @@ TrackId Token']" type="Map"/>
 
     <service verb="upload" noun="EnvioBoleta">
         <in-parameters>
-            <parameter name="isProduction" type="Boolean"/>
+            <parameter name="partyId" required="true"/>
+            <parameter name="boletaIsProduction" type="Boolean"/>
             <parameter name="rutEnviador" required="true"/>
             <parameter name="rutCompania" required="true"/>
             <parameter name="envioId" required="true"/>
@@ -2114,10 +2125,11 @@ TrackId Token']" type="Map"/>
             <parameter name="respSII"/>
         </out-parameters>
         <actions>
-            <if condition="isProduction == null">
+            <if condition="boletaIsProduction == null">
                 <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+                <set field="boletaIsProduction" from="dteIsProductionByPartyId[partyId]"/>
             </if>
-            <if condition="isProduction"><then>
+            <if condition="boletaIsProduction"><then>
                 <service-call name="mchile.sii.DTECommServices.upload#EnvioBoletaProduccion" out-map="context" in-map="context"/>
             </then><else>
                 <service-call name="mchile.sii.DTECommServices.upload#EnvioBoletaCertificacion" out-map="context" in-map="context"/>
@@ -2142,7 +2154,7 @@ TrackId Token']" type="Map"/>
         <in-parameters>
             <parameter name="urlEnvio" required="true" default-value="https://pangal.sii.cl/recursos/v1/boleta.electronica.envio"/>
             <parameter name="hostEnvio" required="true" default-value="pangal.sii.cl"/>
-            <parameter name="isProduction" type="Boolean"/>
+            <parameter name="boletaIsProduction" type="Boolean"/>
             <parameter name="rutEnviador" required="true"/>
             <parameter name="rutCompania" required="true"/>
             <parameter name="envioId" required="true"/>

@@ -143,6 +143,8 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="rutEnviador"/>
             <parameter name="transformParameters"/>
             <parameter name="dteSystemIsProduction" type="Boolean"/>
+            <parameter name="dteIsProduction" type="Boolean"/>
+            <parameter name="boletaIsProduction" type="Boolean"/>
             <parameter name="certificate" type="java.security.cert.X509Certificate"/>
             <parameter name="pkey" type="java.security.PrivateKey"/>
         </out-parameters>
@@ -215,8 +217,10 @@ along with this software (see the LICENSE.md file). If not, see
                                                     vendorNameColor:vendorNameColor]"/>
 
             <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
-            <set field="dteSystemIsProduction" from="isProduction"/>
-            <set field="ec.user.context.dteSystemIsProduction" from="isProduction"/>
+            <set field="dteSystemIsProduction" from="systemIsProduction"/>
+            <set field="dteIsProduction" from="dteIsProductionByPartyId[partyId]"/>
+            <set field="boletaIsProduction" from="dteIsProductionByPartyId[partyId]"/>
+            <set field="ec.user.context.dteSystemIsProduction" from="systemIsProduction"/>
         </actions>
     </service>
 
@@ -3025,10 +3029,23 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="check" noun="ProductionEnvironment" authenticate="anonymous-view">
         <out-parameters>
-            <parameter name="isProduction" type="Boolean"/>
+            <parameter name="systemIsProduction" type="Boolean"/>
+            <parameter name="dteIsProductionByPartyId" type="List"/>
+            <parameter name="boletaIsProductionByPartyId" type="List"/>
         </out-parameters>
         <actions>
-            <script>isProduction = org.moqui.util.SystemBinding.getPropOrEnv("moquichile.dte.systemIsProduction") == 'true'</script>
+            <set field="systemIsProduction" from="org.moqui.util.SystemBinding.getPropOrEnv('moquichile.dte.systemIsProduction') == 'true'"/>
+            <set field="dteIsProductionByPartyId" from="[:]"/>
+            <set field="boletaIsProductionByPartyId" from="[:]"/>
+            <entity-find entity-name="mantle.party.PartyRole" list="internalOrgList">
+                <econdition field-name="roleTypeId" value="OrgInternal"/>
+            </entity-find>
+            <iterate list="internalOrgList" entry="internalOrg">
+                <service-call name="mantle.party.PartyServices.get#PartySettingValue" in-map="[partySettingTypeId:'moit.dte.DteIsProduction']" out-map="settingMap" out-map-add-to-existing="false"/>
+                <set field="dteIsProductionByPartyId[internalOrg.partyId]" from="systemIsProduction &amp;&amp; (settingMap.settingValue == 'true')"/>
+                <service-call name="mantle.party.PartyServices.get#PartySettingValue" in-map="[partySettingTypeId:'moit.dte.BoletaIsProduction']" out-map="settingMap" out-map-add-to-existing="false"/>
+                <set field="boletaIsProductionByPartyId[internalOrg.partyId]" from="systemIsProduction &amp;&amp; (settingMap.settingValue == 'true')"/>
+            </iterate>
         </actions>
     </service>
 

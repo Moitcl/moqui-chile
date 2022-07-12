@@ -8,14 +8,6 @@ import org.xml.sax.SAXParseException
 
 ExecutionContext ec = context.ec
 
-Boolean isProduction = ec.service.sync().name("mchile.sii.DTEServices.check#ProductionEnvironment").call().isProduction
-URI uploadUrl
-if (isProduction) {
-    uploadUrl = new URI("https://palena.sii.cl/cgi_dte/UPL/DTEUpload")
-} else {
-    uploadUrl = new URI("https://maullin.sii.cl/cgi_dte/UPL/DTEUpload")
-}
-
 envio = ec.entity.find("mchile.dte.DteEnvio").condition("envioId", envioId).one()
 if (envio == null) {
     ec.message.addMessage("No se encuentra envío ${envioId}", "warning")
@@ -34,8 +26,15 @@ if (rutEmisorEnvio != rutEmisor) {
     return
 }
 
+URI uploadUrl
+if (dteIsProduction) {
+    uploadUrl = new URI("https://palena.sii.cl/cgi_dte/UPL/DTEUpload")
+} else {
+    uploadUrl = new URI("https://maullin.sii.cl/cgi_dte/UPL/DTEUpload")
+}
+
 // Get token
-String token = ec.service.sync().name("mchile.sii.DTECommServices.get#Token").parameter("isProduction", isProduction).parameter("partyId", partyIdEmisor).call().token
+String token = ec.service.sync().name("mchile.sii.DTECommServices.get#Token").parameter("dteIsProduction", dteIsProduction).parameter("partyId", partyIdEmisor).call().token
 
 locationReference = ec.resource.getLocationReference(envio.documentLocation)
 

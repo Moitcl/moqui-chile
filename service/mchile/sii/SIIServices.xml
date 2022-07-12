@@ -200,7 +200,8 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <actions>
             <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
-            <set field="hostName" from="isProduction ? 'palena.sii.cl' : 'maullin.sii.cl'"/>
+            <set field="dteIsProduction" from="dteIsProductionByPartyId[partyId]"/>
+            <set field="hostName" from="dteIsProduction ? 'palena.sii.cl' : 'maullin.sii.cl'"/>
             <set field="requestPath" value="/cvc_cgi/dte/of_solicita_folios_dcto"/>
             <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:partyId]" out-map="context"/>
             <entity-find-one entity-name="moqui.basic.Enumeration" value-field="fiscalTaxDocumentType" auto-field-map="[enumId:fiscalTaxDocumentTypeEnumId]"/>
@@ -385,10 +386,11 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <set field="maxDaysWithoutChecking" from="3"/>
             <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+            <set field="dteIsProduction" from="dteIsProductionByPartyId[dtePartyId]"/>
             <entity-find entity-name="mantle.party.contact.PartyContactMech" list="pcmList">
                 <econdition field-name="partyId"/>
-                <econdition field-name="contactMechPurposeId" value="EmailDteXmlRec" ignore="!isProduction"/>
-                <econdition field-name="contactMechPurposeId" operator="in" value="EmailDteXmlRec,EmailPrimary,EmailBilling" ignore="isProduction"/>
+                <econdition field-name="contactMechPurposeId" value="EmailDteXmlRec" ignore="!dteIsProduction"/>
+                <econdition field-name="contactMechPurposeId" operator="in" value="EmailDteXmlRec,EmailPrimary,EmailBilling" ignore="dteIsProduction"/>
                 <date-filter/>
                 <order-by field-name="-fromDate"/>
             </entity-find>
@@ -396,7 +398,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="cm" from="pcm?.contactMech"/>
             <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:partyId]" out-map="rut"/>
             <if condition="rut.rutSinFormato == null || rut.rutSinFormato != partyIdValue"><return error="true" message="Rut mismatch for partyId ${partyId}, received ${partyIdValue}, found in DB ${rut.rutSinFormato}"/></if>
-            <if condition="isProduction"><then>
+            <if condition="dteIsProduction"><then>
                 <set field="refreshContact" type="Boolean" from="pcm == null || pcm.verifyCodeDate == null || (ec.user.nowTimestamp.time - pcm.verifyCodeDate.time) > 3*24*60*60*1000"/>
             </then><else>
                 <set field="refreshContact" type="Boolean" from="ec.user.getPreference('mchile.dte.FetchEmailFromSiiInCert')"/>
