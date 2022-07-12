@@ -112,8 +112,4 @@ documentIdList.each { documentId ->
     ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([fiscalTaxDocumentId:documentId, envioId:envioId]).call()
 }
 
-if (rutEmisor == rutReceptor) {
-    ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioId, statusId:'Ftde-Sent']).call()
-}
-
 return
