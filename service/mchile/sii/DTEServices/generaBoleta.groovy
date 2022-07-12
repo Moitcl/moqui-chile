@@ -10,7 +10,7 @@ import groovy.xml.MarkupBuilder
 
 ExecutionContext ec = context.ec
 
-dteConstituyeVentaTypeList = ['Ftdt-39', 'Ftdt-41']
+dteConstituyeVentaTypeList = ['Ftdt-101', 'Ftdt-102', 'Ftdt-109', 'Ftdt-110', 'Ftdt-30', 'Ftdt-32', 'Ftdt-33', 'Ftdt-34', 'Ftdt-35', 'Ftdt-38', 'Ftdt-39', 'Ftd-41']
 if (invoiceId != null && fiscalTaxDocumentTypeEnumId in dteConstituyeVentaTypeList) {
     existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("invoiceId", invoiceId).condition("fiscalTaxDocumentTypeEnumId", "in", dteConstituyeVentaTypeList).list()
     // deshabilitado para pruebas
@@ -34,8 +34,9 @@ if (giroOutMap == null) {
     return
 }
 giroEmisor = giroOutMap.description
+
 // Recuperación del código SII de DTE -->
-codeOut = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameter("fiscalTaxDocumentTypeEnumId", fiscalTaxDocumentTypeEnumId).call()
+codeOut = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]).call()
 tipoDte = codeOut.siiCode
 
 // Formas de pago
@@ -310,6 +311,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
 uri = "#" + idDocumento
 
 String facturaXmlString = xmlWriter.toString()
+facturaXmlString = facturaXmlString.replaceAll("[^\\x00-\\xFF]", "")
 xmlWriter.close()
 
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())

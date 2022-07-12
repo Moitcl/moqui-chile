@@ -120,7 +120,7 @@ fos.close();*/
 createMap = [fiscalTaxDocumentTypeEnumId:'Ftdt-Rcof', fiscalTaxDocumentId:tmst, fiscalTaxDocumentNumber:tmst, issuerPartyId:organizationPartyId, issuerPartyIdValue:rutEmisor,issuerPartyIdTypeEnumId:'PtidNationalTaxId',receiverPartyId:receiverPartyId, statusId:"Ftd-Issued", sentAuthStatusId:"Ftd-NotSentAuth", sentRecStatusId:"Ftd-NotSentRec", fechaInicio:fechaInicio, fechaFin:fechaFin, date:ts]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call())
 
-xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/RCOF-${idDocumento}.xml"
+xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/RCOF/RCOF-${idDocumento}.xml"
 
 // Creacion de registros en FiscalTaxDocumentContent
 createMapBase = [fiscalTaxDocumentId:tmst, contentDte:tmst]

@@ -92,22 +92,6 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
     </service>
 
-    <service verb="generaEnvio" noun="Boletas" type="script" location="component://MoquiChile/service/mchile/DTEServices/generaEnvioBoletas.groovy">
-        <description>
-            Generación de envio documento a partir de facturas ya generadas.
-        </description>
-        <in-parameters>
-            <parameter name="recepS"/>
-            <parameter name="enviadorS" required="true"/>
-            <parameter name="organizationPartyId" required="true"/>
-            <parameter name="documentIdList" required="true" type="List"/>
-            <parameter name="saveSinFirma" type="Boolean" default="false"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="archivoEnvio"/>
-        </out-parameters>
-    </service>
-
     <service verb="enviaSII" noun="Documento"  type="script" location="component://MoquiChile/service/mchile/DTEServices/enviaSiiDocumento.groovy">
         <description>
             Envio documento a partir de documento envio ya generado
@@ -123,146 +107,6 @@ along with this software (see the LICENSE.md file). If not, see
         <out-parameters>
             <parameter name="trackId"/>
         </out-parameters>
-    </service>
-
-    <service verb="enviarDirecto" noun="SII">
-        <description>
-            Servicio para enviar boleta de forma directa al SII, sin armar un envio nuevo
-        </description>
-        <in-parameters>
-            <parameter name="fiscalTaxDocumentId" required="true"/>
-            <parameter name="organizationPartyId" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="trackId"/>
-        </out-parameters>
-        <actions>
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="contentEv">
-                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
-                <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
-                <select-field field-name="contentLocation"/>
-            </entity-find-one>
-
-            <if condition="!contentEv">
-                <return error="true" message="Boleta no tiene XML asociado"/>
-            </if>
-
-            <set field="contentLocation" from="contentEv.contentLocation"/>
-
-            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                <econdition field-name="partyId" from="organizationPartyId"/>
-                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
-            </entity-find>
-
-            <if condition="!partyIdentificationList.idValue[0]">
-                <return error="true" message="Organización $organizationPartyId no tiene RUT definido"/>
-            </if>
-            <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
-
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-
-            <service-call name="mchile.DTEServices.enviaSII#Boleta" in-map="[compaS:rutEmisor, enviadorS:rutEnvia, documentoS:contentLocation, organizationPartyId:organizationPartyId]" out-map="context"/>
-            <!-- TODO: Eliminar archivo temporal -->
-            <!-- Marcar boleta como enviada -->
-            <!-- Se marca DTE como enviada -->
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteEv" for-update="true">
-                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
-            </entity-find-one>
-            <set field="dteEv.fiscalTaxDocumentSentStatusEnumId" value="Ftdt-Sent"/>
-            <set field="dteEv.trackId" from="trackId"/>
-            <entity-update value-field="dteEv"/>
-        </actions>
-    </service>
-
-    <service verb="enviaSIIDeprecated" noun="Boleta">
-        <description>
-            Envio boleta a partir de documento envio ya generado
-            compaS: rut de compañía que envía
-            enviadorS: rut de persona que envía
-            documentoS: nombre de documento a enviar (que puede contener varios)
-        </description>
-        <in-parameters>
-            <parameter name="compaS" required="true"/>
-            <parameter name="enviadorS" required="true"/>
-            <parameter name="documentContentLocation" required="true"/>
-            <parameter name="organizationPartyId" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="trackId"/>
-        </out-parameters>
-        <actions>
-            <!-- Validación rut -->
-            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/>
-
-            <return error="true" message="pppp"/>
-
-            <service-call name="mchile.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-            <set field="certData" from="certData"/>
-            <set field="passS" from="passCert"/>
-
-            <set field="trackId" value=""/>
-            <script>
-                import java.io.File
-                import java.io.FileInputStream
-                import java.security.KeyStore
-                import java.security.PrivateKey
-                import java.security.cert.X509Certificate
-                import cl.nic.dte.net.ConexionSiiBoleta
-                import cl.nic.dte.util.Utilities
-                import org.json.simple.JSONObject
-                import org.moqui.resource.ResourceReference
-
-                ConexionSiiBoleta con = new ConexionSiiBoleta()
-                // leo certificado y llave privada del archivo pkcs12
-                KeyStore ks = KeyStore.getInstance("PKCS12")
-                ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
-                String alias = ks.aliases().nextElement()
-                //logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
-
-                X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
-                PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray())
-
-
-                String enviadorS = Utilities.getRutFromCertificate(x509)
-
-                ResourceReference documentoRr = ec.resource.getLocationReference(documentContentLocation)
-                JSONObject recp
-                if (dteSystemIsProduction) {
-                    String token = con.getToken(pKey, x509)
-                    recp = con.uploadEnvioProduccion(enviadorS, compaS, documentoRr.openStream(), token)
-                } else {
-                    String token = con.getTokenCert(pKey, x509)
-                    recp = con.uploadEnvioCertificacion(enviadorS, compaS, documentoRr.openStream(), token)
-                }
-
-                String estado = (String) recp.get("estado")
-                trackId = String.valueOf(recp.get("trackid"))
-
-                if (estado.equals("REC")) {
-                    logger.warn("Boleta rechazada: " + recp.toString())
-                } else if (estado.equals("RPR")) {
-                    logger.warn("Boleta aceptada con reparos")
-                } else if (estado.equals(RFR)) {
-                    logger.warn("Boleta con error en firma")
-                } else {
-                    logger.warn("Boleta recibida con trackid" + trackId)
-                }
-
-            </script>
-            <if condition="estado.equals('REC')">
-                <then>
-                    <return message="Error al enviar al SII"/>
-                </then>
-                <else-if condition="estado.equals('RFR')">
-                    <return message="Error en Firma"/>
-                </else-if>
-                <else>
-                    <return message="Recibo con exito"/>
-                </else>
-            </if>
-        </actions>
     </service>
 
     <service verb="marcarEnviados" noun="Documentos">
@@ -2767,7 +2611,6 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find-one>
             <if condition="giroField == null">
                 <then>
-
                     <entity-find-one entity-name="mchile.dte.PartyGiro" value-field="giroField">
                         <field-map field-name="partyId" from="partyId"/>
                     </entity-find-one>
@@ -3606,7 +3449,6 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="creditMemo.statusId" value="InvoiceApproved"/>
             <entity-update value-field="creditMemo"/>
             <service-call name="mchile.sii.DTEServices.create#DteFromInvoice" in-map="context+[fiscalTaxDocumentTypeEnumId:'Ftdt-61']" out-map="context"/>
-
         </actions>
     </service>
 
@@ -3632,33 +3474,6 @@ along with this software (see the LICENSE.md file). If not, see
             </iterate>
 
             <if condition="rs1.equals(rs2)"><set field="equivalent" from="true"/><return/></if>
-        </actions>
-    </service>
-
-    <service verb="check" noun="DiscrepantInvoices">
-        <actions>
-            <entity-find entity-name="mchile.dte.FiscalTaxDocumentAndInvoice" list="dteList">
-                <econdition field-name="dteAmount" operator="not-equals" to-field-name="invoiceTotal"/>
-            </entity-find>
-            <log message="Found ${dteList.size()} discrepant invoices"/>
-            <set field="betweenItemCountAndQuantity" from="0"/>
-            <iterate list="dteList" entry="dte">
-                <set field="invoiceTotal" from="dte.invoiceTotal" type="BigDecimal"/>
-                <set field="dteAmount" from="dte.dteAmount" type="BigDecimal"/>
-                <!--<log message="processing dte, invoiceTotal ${invoiceTotal}, dteAmount ${dteAmount}"/>-->
-                <set field="difference" from="invoiceTotal-dteAmount"/>
-                <entity-find-count entity-name="mantle.account.invoice.InvoiceItem" count-field="itemCount">
-                    <econdition field-name="invoiceId" from="dte.invoiceId"/>
-                </entity-find-count>
-                <set field="itemCount" from="0" type="Integer"/>
-                <!--
-                <log message="DTE ${dte.fiscalTaxDocumentId}, invoice ${dte.invoiceId}: diff ${difference}, total quantity: ${totalQuantity}"/>
-                -->
-                <if condition="difference &gt; 2*itemCount"><then>
-                    <log message="dte.fiscalTaxDocumentId}, invoice ${dte.invoiceId}: Difference is ${ec.l10n.format(difference/dteAmount, '##.##%')}"/>
-                </then></if>
-            </iterate>
-            <log message="More than itemCount, less than totalQuantity: ${betweenItemCountAndQuantity}"/>
         </actions>
     </service>
 
