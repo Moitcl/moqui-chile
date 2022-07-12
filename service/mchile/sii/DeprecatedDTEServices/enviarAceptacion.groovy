@@ -34,7 +34,6 @@ rutResponde = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").p
 
 // Recuperacion de parametros de la organizacion
 ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameter("partyId", organizationPartyId).call())
-passS = passCert
 
 // Se guarda aceptacion para obtener el aceptacionDteId
 createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nombreContacto:nombreContacto, fonoContacto:fonoContacto, mailContacto:mailContacto, issuerPartyId:organizationPartyId]
@@ -88,13 +87,13 @@ if(!rutContribuyente.equals(envio.getEnvioDTE().getSetDTE().getCaratula().getRut
 
 // certificado y llave privada del pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
-ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
+ks.load(new ByteArrayInputStream(certData.decodeBase64()), passCert.toCharArray())
 String alias = ks.aliases().nextElement()
 cert = (X509Certificate) ks.getCertificate(alias)
 String rutCertificado = Utilities.getRutFromCertificate(cert)
 ec.logger.warn("Usando certificado ${alias} con Rut ${rutCertificado}")
 
-key = (PrivateKey) ks.getKey(alias, passS.toCharArray())
+key = (PrivateKey) ks.getKey(alias, passCert.toCharArray())
 
 ArrayList<RecepcionDTE> arrRecepcionDTE = new ArrayList<RecepcionDTE>()
 ArrayList<ResultadoDTE> resultados = new ArrayList<ResultadoDTE>()
