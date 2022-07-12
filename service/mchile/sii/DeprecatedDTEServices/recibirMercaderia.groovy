@@ -29,8 +29,6 @@ rutResponde = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").p
 // Recuperacion de parametros de la organizacion -->
 ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
 
-rutEnviador = rutEnvia
-
 // Se guarda aceptacion para obtener el aceptacionDteId
 createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, rutResponde:rutResponde, rutRecibe:rutRecibe, nombreContacto:nombreContacto,
         fonoContacto:fonoContacto, mailContacto:mailContacto, issuerPartyId:organizationPartyId]
@@ -84,7 +82,7 @@ if(!rutContribuyente.equals(envio.getEnvioDTE().getSetDTE().getCaratula().getRut
 
 // leo certificado y llave privada del pkcs12
 KeyStore ks = KeyStore.getInstance("PKCS12")
-//ks.load(new FileInputStream(certS), passCert.toCharArray())
+//ks.load(new FileInputStream(certData), passCert.toCharArray())
 ks.load(new ByteArrayInputStream(certData.decodeBase64()), passCert.toCharArray())
 String alias = ks.aliases().nextElement()
 cert = (X509Certificate) ks.getCertificate(alias)

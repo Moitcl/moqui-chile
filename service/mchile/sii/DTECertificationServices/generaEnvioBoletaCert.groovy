@@ -60,7 +60,7 @@ xmlBuilder.EnvioBOLETA(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://w
     SetDTE(ID: idEnvio) {
         Caratula(version: '1.0') {
             RutEmisor(rutEmisor)
-            RutEnvia(rutEnvia)
+            RutEnvia(rutEnviador)
             //RutReceptor(rutReceptor)
             RutReceptor("60803000-K")
             FchResol(fechaResolucionSii)

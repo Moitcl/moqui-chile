@@ -43,7 +43,7 @@ locationReference = ec.resource.getLocationReference(envio.documentLocation)
 ec.logger.info("Enviando directo, envío ${envioId} a uri ${uploadUrl}")
 boundary = "MoitCl-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-DTE"
 
-rutEnviaMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEnvia).call()
+rutEnviaMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEnviador).call()
 rutEmisorMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEmisor).call()
 fileBytes = locationReference.openStream().readAllBytes()
 fileName = locationReference.getFileName()

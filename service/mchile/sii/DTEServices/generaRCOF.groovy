@@ -42,7 +42,7 @@ xmlBuilder.ConsumoFolios(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http:/
     DocumentoConsumoFolios(ID: idDocumento) {
         Caratula(version: '1.0') {
             RutEmisor(rutEmisor)
-            RutEnvia(rutEnvia)
+            RutEnvia(rutEnviador)
             FchResol(fechaResolucionSii)
             // NroResol is 0 in Certification
             //NroResol(0)

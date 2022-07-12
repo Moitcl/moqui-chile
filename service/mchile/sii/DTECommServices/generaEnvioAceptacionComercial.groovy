@@ -68,7 +68,7 @@ reciboBuilder.Recibo(xmlns:"http://www.sii.cl/SiiDte", version:"1.0") {
         RUTRecep(dte.receiverPartyIdValue)
         MntTotal(invoice.invoiceTotal)
         Recinto()
-        RutFirma(rutEnvia)
+        RutFirma(rutEnviador)
         Declaracion(declaracion)
         TmstFirmaRecibo(tmstFirmaRecibo)
     }

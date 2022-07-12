@@ -22,7 +22,7 @@ ExecutionContext ec = context.ec
 String token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameter("isProduction", isProduction).parameter("partyId", partyIdEmisor).call().token
 
 System.out.println("***************************************************************\n Enviando contenido, token: " + token + ", url: " + urlEnvio + " rut: "+rutCompania.substring(0, (rutCompania).length() - 2) + " Host envio: " + hostEnvio);
-System.out.println("rutEnvia: "+rutEnvia);
+System.out.println("rutEnviador: "+rutEnviador);
 System.out.println("***************************************************************\n");
 
 
@@ -46,8 +46,8 @@ post.addHeader(new BasicHeader("User-Agent", "Mozilla/4.0 ( compatible; PROG 1.0
 MultipartEntityBuilder builder = MultipartEntityBuilder.create();
 builder.setMode(HttpMultipartMode.BROWSER_COMPATIBLE);
 
-builder.addPart("rutSender", new StringBody(rutEnvia.substring(0, rutEnvia.length() - 2)));
-builder.addPart("dvSender", new StringBody(rutEnvia.substring(rutEnvia.length() - 1, rutEnvia.length())));
+builder.addPart("rutSender", new StringBody(rutEnviador.substring(0, rutEnviador.length() - 2)));
+builder.addPart("dvSender", new StringBody(rutEnviador.substring(rutEnviador.length() - 1, rutEnviador.length())));
 builder.addPart("rutCompany", new StringBody(rutCompania.substring(0, (rutCompania).length() - 2)));
 builder.addPart("dvCompany", new StringBody(rutCompania.substring(rutCompania.length() - 1, rutCompania.length())));
 builder.addBinaryBody("archivo", inputStream, ContentType.DEFAULT_BINARY, "archivo");
