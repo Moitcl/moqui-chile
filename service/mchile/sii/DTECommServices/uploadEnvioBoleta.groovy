@@ -19,6 +19,8 @@ import org.apache.http.entity.ContentType;
 
 ExecutionContext ec = context.ec
 
+String token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameter("isProduction", isProduction).parameter("partyId", partyIdEmisor).call().token
+
 System.out.println("***************************************************************\n Enviando contenido, token: " + token + ", url: " + urlEnvio + " rut: "+rutCompania.substring(0, (rutCompania).length() - 2) + " Host envio: " + hostEnvio);
 System.out.println("rutEnvia: "+rutEnvia);
 System.out.println("***************************************************************\n");
