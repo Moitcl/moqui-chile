@@ -147,11 +147,13 @@ public class RemoteXmlsoapServiceRunner implements ServiceRunner {
                 succeeded = true
             } catch (SOAPException e) {
                 logger.warn("Received exception in SOAP call: ${e.message}")
-                if (attempt <= reattemptAmount)
+                if (attempt <= reattemptAmount) {
                     logger.warn("Will reattempt SOAP call after ${reattemptPauseMilliseconds} ms")
-                else
-                    logger.error("Giving up on SOAP call after ${attempt} attempt${attempt > 1? 's': ''}")
-                Thread.sleep(reattemptPauseMilliseconds)
+                    Thread.sleep(reattemptPauseMilliseconds)
+                } else {
+                    logger.error("Giving up on SOAP call after ${attempt} attempt${attempt > 1 ? 's' : ''}")
+                    return
+                }
             }
             attempt++
         }

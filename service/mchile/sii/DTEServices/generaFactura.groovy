@@ -491,8 +491,7 @@ dteEv.sentAuthStatusId = "Ftd-NotSentAuth"
 dteEv.sentRecStatusId = "Ftd-NotSentRec"
 dteEv.invoiceId = invoiceId
 dteEv.shipmentId = shipmentId
-Date date = new Date()
-Timestamp ts = new Timestamp(date.getTime())
+Timestamp ts = new Timestamp(fechaEmision.time)
 dteEv.date = ts
 dteEv.update()
 
