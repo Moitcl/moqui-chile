@@ -248,6 +248,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="template" from="pdfTemplate"/>
             <set field="giro" from="giroEmisor"/>
             <set field="pdfTemplateBoleta" from="pdfTemplateBoleta"/>
+            <set field="pdfTemplateBoleta" from="pdfTemplate"/>
             <set field="pdfTemplateBoletaContinua" from="pdfTemplateBoletaContinua"/>
 
             <if condition="boleta">
@@ -1107,13 +1108,12 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:issuerPartyId]" out-map="context"/>
 
             <if condition="dteIdList">
-                <log message="Creating new envio for dteIdList: ${dteIdList}"/>
                 <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[organizationPartyId:issuerPartyId, documentIdList:dteIdList]" out-map="envio" transaction="force-new" ignore-error="true"/>
-                <script>if (envio?.envioId) enviosAEnviar.add(envio.envioId)</script>
+                <if condition="envio?.envioId">
+                    <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:envio.envioId, organizationPartyId:issuerPartyId]" out-map="context" transaction="force-new" ignore-error="true"/>
+                </if>
             </if>
             <if condition="boletaIdList">
-                <service-call name="mchile.sii.DTECommServices.genera#EnvioBoleta" in-map="[rutReceptor:recepS, organizationPartyId:issuerPartyId, documentIdList:boletaIdList]" out-map="envio"/>
-                <service-call name="mchile.sii.DTECommServices.enviaSII#EnvioBoleta" in-map="[envioId:envio.envioId, organizationPartyId:issuerPartyId]" out-map="context"/>
                 <!-- TODO: este update debiera ir en uploadEnvioBoleta.groovy -->
                 <!-- Marcar boletas enviadas solo si se recibe envio -->
                 <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteSentList" for-update="true">
@@ -1124,11 +1124,11 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="dte.trackId" from="trackId"/>
                     <entity-update value-field="dte"/>
                 </iterate>
+                <service-call name="mchile.sii.DTECommServices.genera#EnvioBoleta" in-map="[organizationPartyId:issuerPartyId, documentIdList:boletaIdList]" out-map="envio"/>
+                <if condition="envio?.envioId">
+                    <service-call name="mchile.sii.DTECommServices.enviaSII#EnvioBoleta" in-map="[envioId:envio.envioId, organizationPartyId:issuerPartyId]" out-map="context"/>
+                </if>
             </if>
-            <iterate list="enviosAEnviar" entry="envioId">
-                <log message="Sending envío ${envioId}"/>
-                <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:envioId, organizationPartyId:issuerPartyId]" out-map="context" transaction="force-new" ignore-error="true"/>
-            </iterate>
         </actions>
     </service>
 
