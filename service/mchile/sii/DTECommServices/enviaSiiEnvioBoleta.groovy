@@ -38,7 +38,7 @@ String token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBolet
 locationReference = ec.resource.getLocationReference(envio.documentLocation)
 
 // Prepare restClient
-ec.logger.info("Enviando directo, envío ${envioId} a uri ${uploadUrl}")
+ec.logger.info("Subiendo envío ${envioId} a uri ${uploadUrl}")
 boundary = "MoitCl-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-DTE"
 
 rutEnviaMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEnviador).call()
