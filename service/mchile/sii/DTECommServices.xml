@@ -162,10 +162,18 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="lastAttempt" operator="less-equals" from="ec.user.nowTimestamp.time-(secondsBeforeRetry*1000)" ignore="secondsBeforeRetry == null" ignore-if-empty="true" or-null="true"/>
             </entity-find>
             <iterate list="envioList" entry="envio">
-                <if condition="envio.rutReceptor == '60803000-K'"><then>
-                    <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio"/>
+                <if condition="envio.envioTypeEnumId == 'Ftde-EnvioBoleta'"><then>
+                    <if condition="envio.rutReceptor == '60803000-K'"><then>
+                        <service-call name="mcihle.sii.DTECommServices.enviaSII#EnvioBoleta" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio"/>
+                    </then><else>
+                        <message type="danger">Not sending EnvioBoleta ${envio.envioId} with rut not matching SII</message>
+                    </else></if>
                 </then><else>
-                    <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDteReceiver" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio"/>
+                    <if condition="envio.rutReceptor == '60803000-K'"><then>
+                        <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio"/>
+                    </then><else>
+                        <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDteReceiver" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio"/>
+                    </else></if>
                 </else></if>
             </iterate>
         </actions>
@@ -975,7 +983,11 @@ along with this software (see the LICENSE.md file). If not, see
                 <script>Thread.sleep(initialDelaySeconds*1000L)</script>
                 <log message="Starting attempt ${attempt}"/>
                 <iterate list="envioList" entry="envio">
-                    <service-call name="mchile.sii.DTECommServices.verifica#EnvioEnSii" in-map="[envioId:envio.envioId]" transaction="force-new" out-map="checkMap" ignore-error="true"/>
+                    <if condition="envio.envioTypeEnumId == 'Ftde-EnvioBoleta'"><then>
+                        <service-call name="mchile.sii.DTECommServices.verifica#EnvioBoletaEnSii" in-map="[envioId:envio.envioId]" transaction="force-new" out-map="checkMap" ignore-error="true"/>
+                    </then><else>
+                        <service-call name="mchile.sii.DTECommServices.verifica#EnvioEnSii" in-map="[envioId:envio.envioId]" transaction="force-new" out-map="checkMap" ignore-error="true"/>
+                    </else></if>
                     <set field="totalAcceptedDocs" from="totalAcceptedDocs + (checkMap.documentosAceptados?:0)"/>
                     <if condition="checkMap.hasError"><then>
                         <script>reattemptList.add(envio)</script>
@@ -1329,10 +1341,21 @@ TrackId Token']" type="Map"/>
         </out-parameters>
     </service>
 
-    <service verb="enviaSII" noun="EnvioBoleta">
+    <service verb="enviaSII" noun="EnvioBoleta"  type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/enviaSiiEnvioBoleta.groovy">
         <description>
-            Envio boletas en grupo
+            Envio al SII envio ya generado
+            envioId: ID de envío
         </description>
+        <in-parameters>
+            <parameter name="envioId" required="true"/>
+            <parameter name="maxFail" type="Integer" default="3"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="trackId"/>
+        </out-parameters>
+    </service>
+
+    <service verb="enviaSII" noun="EnvioBoletaOld">
         <in-parameters>
             <parameter name="rutReceptor" default-value="60803000-K"><description>El receptor del envio es el SII</description></parameter>
             <parameter name="organizationPartyId" required="true"/>
@@ -1412,7 +1435,6 @@ TrackId Token']" type="Map"/>
         </actions>
     </service>
 
-
     <service verb="verifica" noun="EnvioBoletaEnSii">
         <description>
             Verificación en el SII de envioBoleta con rut y trackid
@@ -1426,6 +1448,8 @@ TrackId Token']" type="Map"/>
         <out-parameters>
             <parameter name="errorCode" required="true"/>
             <parameter name="glosaError" required="true"/>
+            <parameter name="hasError" type="Boolean"/>
+            <parameter name="newStatusId"/>
         </out-parameters>
         <actions>
             <set field="statusSii" value=""/>
@@ -1725,7 +1749,8 @@ TrackId Token']" type="Map"/>
     <service verb="get" noun="Seed">
         <in-parameters>
             <parameter name="dteIsProduction" type="Boolean"/>
-            <parameter name="partyId"/>
+            <parameter name="boletaIsProduction" type="Boolean"/>
+            <parameter name="partyId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="estado"/>
@@ -1733,9 +1758,6 @@ TrackId Token']" type="Map"/>
         </out-parameters>
         <actions>
             <if condition="dteIsProduction == null">
-                <if condition="partyId == null">
-                    <return error="true" message="Need to specify dteIsProduction or partyId"/>
-                </if>
                 <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
                 <set field="dteIsProduction" from="dteIsProductionByPartyId[partyId]"/>
             </if>
@@ -1781,6 +1803,8 @@ TrackId Token']" type="Map"/>
         <in-parameters>
             <parameter name="partyId" required="true"/>
             <parameter name="dteIsProduction" type="Boolean"/>
+            <parameter name="boletaIsProduction" type="Boolean"/>
+            <parameter name="boleta" type="Boolean"/>
         </in-parameters>
         <out-parameters>
             <parameter name="token"/>
@@ -1788,11 +1812,19 @@ TrackId Token']" type="Map"/>
             <parameter name="glosa"/>
         </out-parameters>
         <actions>
-            <if condition="dteIsProduction == null">
-                <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
-                <set field="dteIsProduction" from="dteIsProductionByPartyId[partyId]"/>
-            </if>
-            <service-call name="mchile.sii.DTECommServices.get#Seed" in-map="context" out-map="seed"/>
+            <if condition="boleta"><then>
+                <if condition="boletaIsProduction == null">
+                    <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+                    <set field="boletaIsProduction" from="boletaIsProductionByPartyId[partyId]"/>
+                </if>
+                <service-call name="mchile.sii.DTECommServices.get#SeedBoleta" in-map="context" out-map="seed"/>
+            </then><else>
+                <if condition="dteIsProduction == null">
+                    <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+                    <set field="dteIsProduction" from="dteIsProductionByPartyId[partyId]"/>
+                </if>
+                <service-call name="mchile.sii.DTECommServices.get#Seed" in-map="context" out-map="seed"/>
+            </else></if>
             <if condition="seed.estado != '00'">
                 <return error="true" message="Estado inválido al obtener semilla: ${seed.estado}"/>
             </if>
@@ -1814,10 +1846,18 @@ TrackId Token']" type="Map"/>
                 byte[] signedXmlBytes = MoquiDTEUtils.sign(doc, "", pkey, certificate, "", "")
                 String signedXml = new String(signedXmlBytes)
             ]]></script>
-            <if condition="dteIsProduction"><then>
-                <service-call name="mchile.sii.DTECommServices.get#TokenProduction" in-map="[pszXml:signedXml]" out-map="context"/>
+            <if condition="boleta"><then>
+                <if condition="boletaIsProduction"><then>
+                    <service-call name="mchile.sii.DTECommServices.get#TokenBoletaProduction" in-map="[pszXml:signedXml]" out-map="context"/>
+                </then><else>
+                    <service-call name="mchile.sii.DTECommServices.get#TokenBoletaCertification" in-map="[pszXml:signedXml]" out-map="context"/>
+                </else></if>
             </then><else>
-                <service-call name="mchile.sii.DTECommServices.get#TokenCertification" in-map="[pszXml:signedXml]" out-map="context"/>
+                <if condition="dteIsProduction"><then>
+                    <service-call name="mchile.sii.DTECommServices.get#TokenProduction" in-map="[pszXml:signedXml]" out-map="context"/>
+                </then><else>
+                    <service-call name="mchile.sii.DTECommServices.get#TokenCertification" in-map="[pszXml:signedXml]" out-map="context"/>
+                </else></if>
             </else></if>
             <script><![CDATA[
                 tokenReturn = getTokenResponse?.getTokenReturn
@@ -1892,7 +1932,7 @@ TrackId Token']" type="Map"/>
             <parameter name="partyId"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="seed"/>
+            <parameter name="semilla"/>
         </out-parameters>
         <actions>
             <if condition="boletaIsProduction == null">
@@ -1916,7 +1956,7 @@ TrackId Token']" type="Map"/>
             <parameter name="hostEnvio" required="true" default-value="apicert.sii.cl"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="seed"/>
+            <parameter name="semilla"/>
         </out-parameters>
     </service>
 
@@ -1926,7 +1966,7 @@ TrackId Token']" type="Map"/>
             <parameter name="hostEnvio" required="true" default-value="api.sii.cl"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="seed"/>
+            <parameter name="semilla"/>
         </out-parameters>
     </service>
 
@@ -1945,11 +1985,9 @@ TrackId Token']" type="Map"/>
             </if>
             <if condition="boletaIsProduction"><then>
                 <set field="urlSolicitud" value="https://api.sii.cl/recursos/v1/boleta.electronica.token"/>
-                <set field="hostEnvio" value="api.sii.cl"/>
-                <service-call name="mchile.sii.DTECommServices.get#TokenBoletaProduction" out-map="context" in-map="[partyId:partyId, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]"/>
+                <service-call name="mchile.sii.DTECommServices.get#TokenBoletaInternal" out-map="context" in-map="[partyId:partyId, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]"/>
             </then><else>
                 <set field="urlSolicitud" value="https://apicert.sii.cl/recursos/v1/boleta.electronica.token"/>
-                <set field="hostEnvio" value="apicert.sii.cl"/>
                 <service-call name="mchile.sii.DTECommServices.get#TokenBoletaInternal" out-map="context" in-map="[partyId:partyId, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]"/>
             </else></if>
         </actions>
@@ -1958,75 +1996,11 @@ TrackId Token']" type="Map"/>
     <service verb="get" noun="TokenBoletaInternal" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/getTokenBoleta.groovy">
         <in-parameters>
             <parameter name="urlSolicitud" required="true"/>
-            <parameter name="hostEnvio" required="true"/>
             <parameter name="partyId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="token"/>
         </out-parameters>
-    </service>
-
-    <service verb="upload" noun="EnvioBoleta">
-        <in-parameters>
-            <parameter name="partyId" required="true"/>
-            <parameter name="boletaIsProduction" type="Boolean"/>
-            <parameter name="rutEnviador" required="true"/>
-            <parameter name="rutCompania" required="true"/>
-            <parameter name="envioId" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="respSII"/>
-        </out-parameters>
-        <actions>
-            <if condition="boletaIsProduction == null">
-                <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
-                <set field="boletaIsProduction" from="dteIsProductionByPartyId[partyId]"/>
-            </if>
-            <if condition="boletaIsProduction"><then>
-                <service-call name="mchile.sii.DTECommServices.upload#EnvioBoletaProduccion" out-map="context" in-map="context"/>
-            </then><else>
-                <service-call name="mchile.sii.DTECommServices.upload#EnvioBoletaCertificacion" out-map="context" in-map="context"/>
-            </else></if>
-        </actions>
-    </service>
-
-    <service verb="upload" noun="EnvioBoletaCertificacion" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/uploadEnvioBoleta.groovy">
-        <in-parameters>
-            <parameter name="urlEnvio" required="true" default-value="https://pangal.sii.cl/recursos/v1/boleta.electronica.envio"/>
-            <parameter name="hostEnvio" required="true" default-value="pangal.sii.cl"/>
-            <parameter name="rutEnviador" required="true"/>
-            <parameter name="rutCompania" required="true"/>
-            <parameter name="envioId" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="respSII"/>
-        </out-parameters>
-    </service>
-
-    <service verb="upload" noun="EnvioBoletaProduccion" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/uploadEnvioBoleta.groovy">
-        <in-parameters>
-            <parameter name="urlEnvio" required="true" default-value="https://rahue.sii.cl/recursos/v1/boleta.electronica.envio"/>
-            <parameter name="hostEnvio" required="true" default-value="rahue.sii.cl"/>
-            <parameter name="boletaIsProduction" type="Boolean"/>
-            <parameter name="rutEnviador" required="true"/>
-            <parameter name="rutCompania" required="true"/>
-            <parameter name="envioId" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="respSII"/>
-        </out-parameters>
-    </service>
-
-
-    <service verb="get" noun="SeedCertification">
-        <out-parameters>
-            <parameter name="getSeedResponse" type="Map">
-                <parameter name="getSeedReturn"/>
-            </parameter>
-        </out-parameters>
-        <actions>
-
-        </actions>
     </service>
 
     <service verb="get" noun="EstadoEnvioBoleta" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/getEstadoEnvioBoleta.groovy">

@@ -224,6 +224,8 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="boletaIsProduction &amp;&amp; !dteIsProduction">
                 <return error="true" message="Error de configuración, definido en producción para Boleta pero no para DTE"/>
             </if>
+            <set field="tokenBoleta"/>
+            <set field="tokenBoletaLastUsage"/>
         </actions>
     </service>
 
@@ -1096,7 +1098,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <log level="warn" message="Not sending FiscalTaxDocument ${dte.fiscalTaxDocumentId} with sentAuthStatus ${dte.sentAuthStatusId}"/>
                 </then><else-if condition="dte.fiscalTaxDocumentId in documentosConEnvio">
                     <script>enviosAEnviar.addAll((envioFtdList.findAll { it -> it.fiscalTaxDocumentId == dte.fiscalTaxDocumentId }).collect { return it.envioId })</script>
-                </else-if><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftd-39', 'Ftd-41']">
+                </else-if><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41']">
                     <script>boletaIdList.add(dte.fiscalTaxDocumentId)</script>
                 </else-if><else>
                     <script>dteIdList.add(dte.fiscalTaxDocumentId)</script>
@@ -1114,19 +1116,9 @@ along with this software (see the LICENSE.md file). If not, see
                 </if>
             </if>
             <if condition="boletaIdList">
-                <!-- TODO: este update debiera ir en uploadEnvioBoleta.groovy -->
-                <!-- Marcar boletas enviadas solo si se recibe envio -->
-                <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteSentList" for-update="true">
-                    <econdition field-name="fiscalTaxDocumentId" operator="in" from="boletaIdList"/>
-                </entity-find>
-                <iterate list="dteSentList" entry="dte">
-                    <set field="dte.sentAuthStatusId" value="Ftd-SentAuthUnverified"/>
-                    <set field="dte.trackId" from="trackId"/>
-                    <entity-update value-field="dte"/>
-                </iterate>
-                <service-call name="mchile.sii.DTECommServices.genera#EnvioBoleta" in-map="[organizationPartyId:issuerPartyId, documentIdList:boletaIdList]" out-map="envio"/>
+                <service-call name="mchile.sii.DTECommServices.genera#EnvioBoleta" in-map="[organizationPartyId:issuerPartyId, documentIdList:boletaIdList]" out-map="envio" transaction="force-new" ignore-error="true"/>
                 <if condition="envio?.envioId">
-                    <service-call name="mchile.sii.DTECommServices.enviaSII#EnvioBoleta" in-map="[envioId:envio.envioId, organizationPartyId:issuerPartyId]" out-map="context"/>
+                    <service-call name="mchile.sii.DTECommServices.enviaSII#EnvioBoleta" in-map="[envioId:envio.envioId, organizationPartyId:issuerPartyId]" out-map="context" transaction="force-new" ignore-error="true"/>
                 </if>
             </if>
         </actions>
