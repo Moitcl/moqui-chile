@@ -1,14 +1,6 @@
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.impl.client.DefaultHttpClient;
-import org.w3c.dom.*;
-import javax.xml.parsers.*;
-import java.io.*;
-import javax.xml.crypto.dsig.*;
-import javax.xml.crypto.dsig.dom.*;
-import javax.xml.crypto.dsig.spec.*;
-import javax.xml.crypto.dsig.keyinfo.*;
-import java.util.*;
 import org.moqui.context.ExecutionContext
 import org.apache.http.util.EntityUtils;
 import org.apache.http.client.methods.HttpGet;
@@ -18,9 +10,7 @@ import org.apache.http.protocol.BasicHttpContext;
 import org.apache.http.protocol.HttpContext;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.HttpEntity;
-import org.apache.http.client.CookieStore;
 import org.apache.http.client.params.ClientPNames;
-import org.apache.http.client.params.CookiePolicy;
 import org.apache.http.client.protocol.ClientContext;
 
 ExecutionContext ec = context.ec
