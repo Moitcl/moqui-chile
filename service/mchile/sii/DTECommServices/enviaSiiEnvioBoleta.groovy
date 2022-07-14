@@ -48,11 +48,13 @@ String token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBolet
 locationReference = ec.resource.getLocationReference(envio.documentLocation)
 
 HttpClient client = new DefaultHttpClient()
+/*
 useProxy = true
 if (useProxy) {
     org.apache.http.HttpHost proxy = new org.apache.http.HttpHost("192.168.1.50", 9090)
     client.getParams().setParameter(org.apache.http.conn.params.ConnRoutePNames.DEFAULT_PROXY,proxy)
 }
+ */
 HttpPost post = new HttpPost(uploadUrl)
 
 post.addHeader("Accept", "application/json")
