@@ -271,4 +271,37 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="resend" noun="XmlDteToReceiver">
+        <out-parameters>
+            <parameter name="foundEnvios"/>
+        </out-parameters>
+        <actions>
+            <entity-find entity-name="mantle.party.PartyRole" list="internalOrgList">
+                <econdition field-name="roleTypeId" value="OrgInternal"/>
+            </entity-find>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentList">
+                <econdition field-name="partyId" operator="in" from="internalOrgList.partyId"/>
+                <econdition field-name="partyIdTypeEnumId" operator="in" value="PtidNationalTaxId,PtidUniqueNationalId"/>
+            </entity-find>
+            <set field="internalRutList" from="partyIdentList.idValue"/>
+            <log message="internalRutList: ${internalRutList}"/>
+            <set field="dateThreshold" from="ec.l10n.parseTimestamp('2022-07-12', 'yyyy-MM-dd')"/>
+            <entity-find entity-name="mchile.dte.DteEnvio" list="envioList" for-update="true">
+                <econdition field-name="envioTypeEnumId" value="Ftde-EnvioDte"/>
+                <econdition field-name="rutEmisor" operator="in" from="internalRutList"/>
+                <econdition field-name="rutReceptor" operator="not-in" from="internalRutList"/>
+                <econdition field-name="rutReceptor" operator="not-equals" value="60803000-K"/>
+                <econdition field-name="emailMessageId" operator="is-null"/>
+                <econdition field-name="registerDate" operator="greater-equals" from="dateThreshold"/>
+                <order-by field-name="registerDate"/>
+            </entity-find>
+            <set field="foundEnvios" from="envioList.size()"/>
+            <iterate list="envioList" entry="envio">
+                <log message="Envio ${envio.envioId}, from ${envio.registerDate}"/>
+                <set field="envio.statusId" value="Ftde-Created"/>
+                <entity-update value-field="envio"/>
+            </iterate>
+        </actions>
+    </service>
+
 </services>
