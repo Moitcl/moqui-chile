@@ -24,7 +24,7 @@ dteEvList.each { dte ->
         issuerPartyId = dte.issuerPartyId
     if (receiverPartyId != 'CL_SII' && receiverPartyId != null && receiverPartyId != dte.receiverPartyId)
         ec.message.addError("No se pueden incluir documentos para diferentes receptores si envío es hacia el receptor (${issuerPartyId} y ${dte.issuerPrtyId})")
-    else
+    else if (receiverPartyId == null)
         receiverPartyId = dte.receiverPartyId
     tipoDte = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameter("fiscalTaxDocumentTypeEnumId", dte.fiscalTaxDocumentTypeEnumId).call().siiCode
     contentLocation = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).one()?.contentLocation
