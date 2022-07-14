@@ -1001,8 +1001,10 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="newStatusByEnvioId" from="[:]"/>
             <set field="totalAcceptedDocs" from="0"/>
             <set field="attempt" from="1"/>
+
             <while condition="envioList &amp;&amp; attempt &lt;= maxAttempts">
                 <set field="reattemptList" from="[]"/>
+
                 <script>Thread.sleep(initialDelaySeconds*1000L)</script>
                 <log message="Starting attempt ${attempt}"/>
                 <iterate list="envioList" entry="envio">
@@ -1463,10 +1465,7 @@ TrackId Token']" type="Map"/>
             Verificación en el SII de envioBoleta con rut y trackid
         </description>
         <in-parameters>
-            <parameter name="fiscalTaxDocumentId" required="true"/>
-            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
-            <parameter name="organizationPartyId" required="true"/>
-            <parameter name="trackId"/>
+            <parameter name="envioId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="errorCode" required="true"/>
@@ -1475,19 +1474,12 @@ TrackId Token']" type="Map"/>
             <parameter name="newStatusId"/>
         </out-parameters>
         <actions>
-            <set field="statusSii" value=""/>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
 
-            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:envio.issuerPartyId]" out-map="context"/>
             <set field="certData" from="certData"/>
 
-            <service-call name="mchile.sii.DTEServices.get#DteContent"
-                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
-
-            <if condition="!content">
-                <return error="true" message="DTE no existe"/>
-            </if>
-            <set field="envio" from="content"/>
-
+            <set field="statusSii" value=""/>
             <set field="salida" value=""/>
             <set field="statusXML" value=""/>
             <set field="token" default-value="0"/>
@@ -1495,11 +1487,6 @@ TrackId Token']" type="Map"/>
 
 
             <script>
-                import java.io.FileInputStream
-                import java.security.KeyStore
-                import java.security.PrivateKey
-                import java.security.cert.X509Certificate
-                import java.util.HashMap
                 import groovy.json.JsonSlurper;
 
                 System.out.println("Enviador: " + rutEnviador + ", rutEmisor "+rutEmisor+ ", token: " + token)
@@ -1507,11 +1494,11 @@ TrackId Token']" type="Map"/>
                 // Ejecutar GET https://apicert.sii.cl/boleta.electronica.envio/{rut}-{dv}-{trackid}
                 if (boletaIsProduction) {
                     logger.warn("Consultando envio Boleta en produccion")
-                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([boletaIsProduction:'yes',  partyId:organizationPartyId]).call().token
+                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([boletaIsProduction:'yes',  partyId:envio.issuerPartyId]).call().token
                     resp = ec.service.sync().name("mchile.sii.DTECommServices.get#EstadoEnvioBoletaProduccion").parameters([rutCompany:rutEmisor, trackId:trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]).call().respSII
                 } else {
                     logger.warn("Consultando envio en Certificacion")
-                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([boletaIsProduction:'',  partyId:organizationPartyId]).call().token
+                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([boletaIsProduction:'',  partyId:envio.issuerPartyId]).call().token
                     resp = ec.service.sync().name("mchile.sii.DTECommServices.get#EstadoEnvioBoletaCertificacion").parameters([rutCompany:rutEmisor, trackId:trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]).call().respSII
                 }
 

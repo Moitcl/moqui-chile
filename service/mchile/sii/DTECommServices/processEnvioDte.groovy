@@ -9,7 +9,7 @@ import org.w3c.dom.Document
 import cl.moit.dte.MoquiDTEUtils
 
 Integer estadoRecepEnv = 0
-dteEnvioEv = ec.entity.find("mchile.dte.DteEnvio").condition("envioId", envioId).one()
+dteEnvioEv = ec.entity.find("mchile.dte.DteEnvio").condition("envioId", envioId).forUpdate(true).one()
 if (dteEnvioEv.statusId != 'Ftde-Received') {
     ec.logger.error("Estado inválido para procesar envío ${envioId}: ${dteEnvioEv.statusId}")
     return
@@ -83,7 +83,8 @@ if (receiverPartyId == issuerPartyId) {
     return
 }
 
-envioRespuestaId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-RespuestaDte', statusId:'Ftde-Created', rutEmisor:rutReceptorCaratula, rutReceptor:rutEmisorCaratula, fechaEnvio:ec.user.nowTimestamp, internalId:idRecepcionDte]).call().envioId
+envioRespuestaId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-RespuestaDte', statusId:'Ftde-Created', rutEmisor:rutReceptorCaratula, rutReceptor:rutEmisorCaratula,
+                                                                                    issuerPartyId:receiverPartyId, receiverPartyId:issuerPartyId, fechaEnvio:ec.user.nowTimestamp, internalId:idRecepcionDte]).call().envioId
 withResponse = envioRespuestaId != null
 
 EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()
@@ -196,6 +197,10 @@ if (MoquiDTEUtils.verifySignature(doc2, "/sii:RespuestaDTE/sii:Resultado", "./si
 xmlContentRr = ec.resource.getLocationReference(xmlContentLocation)
 xmlContentRr.putBytes(salida)
 ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioRespuestaId, documentLocation:xmlContentLocation, internalId:idAcuseRecibo, fileName:xmlContentRr.fileName]).call()
+
+dteEnvioEv.receiverPartyId = receiverPartyId
+dteEnvioEv.issuerPartyId = issuerPartyId
+dteEnvioEv.update()
 
 processed = (processedItems == totalItems)
 

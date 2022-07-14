@@ -53,7 +53,8 @@ declaracion = 'El acuse de recibo que se declara en este acto, de acuerdo a lo d
 dteContentEv = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).selectField("contentLocation").one()
 String dteXmlLocation = dteContentEv.contentLocation
 
-envioReciboId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-EnvioRecibos', statusId:'Ftde-Created', rutEmisor:dte.receiverPartyIdValue, rutReceptor:dte.issuerPartyIdValue, fechaEnvio:ec.user.nowTimestamp]).call().envioId
+envioReciboId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-EnvioRecibos', statusId:'Ftde-Created', rutEmisor:dte.receiverPartyIdValue, issuerPartyId:dte.receiverPartyId,
+                                                                                 rutReceptor:dte.issuerPartyIdValue, receiverPartyId:dte.issuerPartyId, fechaEnvio:ec.user.nowTimestamp]).call().envioId
 
 idRecibo = "Recibo-" + dte.fiscalTaxDocumentId
 StringWriter writer = new StringWriter()

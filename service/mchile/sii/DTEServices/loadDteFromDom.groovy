@@ -707,8 +707,17 @@ referenciasList.each { groovy.util.Node referencia ->
 
 }
 
-if (envioId)
+if (envioId) {
     ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
+    envio = ec.entity.find("mchile.dte.DteEnvio").condition("envioId", envioId).forUpdate(true).one()
+    if (envio.envioTypeEnumId == 'Ftde-EnvioDte') {
+        if (envio.issuerPartyId == null)
+            envio.issuerPartyId = issuerPartyId
+        if (envio.receiverPartyId == null)
+            envio.receiverPartyId = receiverPartyId
+        envio.update()
+    }
+}
 if (envioRespuestaId)
     ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioRespuestaId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
 

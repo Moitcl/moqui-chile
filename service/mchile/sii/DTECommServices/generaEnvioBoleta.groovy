@@ -15,7 +15,13 @@ ResourceReference[] DTEList = new ResourceReference[documentIdList.size()]
 docNumberByType = [:]
 dteEvList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("fiscalTaxDocumentId", "in", documentIdList).list()
 dteList = []
+issuerPartyId = null
+receiverPartyId = (rutReceptor == '60803000-K' ? 'CL_SII' : null)
 dteEvList.each { dte ->
+    if (issuerPartyId != null && issuerPartyId != dte.issuerPartyId)
+        ec.message.addError("No se pueden incluir documentos de diferentes emisores (${issuerPartyId} y ${dte.issuerPrtyId})")
+    else
+        issuerPartyId = dte.issuerPartyId
     tipoDte = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameter("fiscalTaxDocumentTypeEnumId", dte.fiscalTaxDocumentTypeEnumId).call().siiCode
     contentLocation = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).one()?.contentLocation
     if (contentLocation == null) {
@@ -108,8 +114,8 @@ if (MoquiDTEUtils.verifySignature(doc, "/sii:EnvioBOLETA/sii:SetDTE", "./sii:Car
     ec.logger.warn("Error al generar envio")
 }
 
-envioId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-EnvioBoleta', statusId:'Ftde-Created', internalId:idEnvio, rutEmisor:rutEmisor, rutReceptor:rutReceptor,
-                                                                 registerDate:ec.user.nowTimestamp, documentLocation:xmlContentLocation, fileName:fileName]).call().envioId
+envioId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-EnvioBoleta', statusId:'Ftde-Created', internalId:idEnvio, rutEmisor:rutEmisor, issuerPartyId:issuerPartyId,
+                                                                           rutReceptor:rutReceptor, receiverPartyId:'CL_SII', registerDate:ec.user.nowTimestamp, documentLocation:xmlContentLocation, fileName:fileName]).call().envioId
 documentIdList.each { documentId ->
     ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters([fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Envio', contentLocation:xmlContentLocation, contentDate:ts]).call()
     ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([fiscalTaxDocumentId:documentId, envioId:envioId]).call()
