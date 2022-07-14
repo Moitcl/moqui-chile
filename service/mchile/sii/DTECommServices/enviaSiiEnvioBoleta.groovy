@@ -1,9 +1,19 @@
+import org.apache.http.HttpResponse
+import org.apache.http.client.HttpClient
+import org.apache.http.impl.client.DefaultHttpClient
 import org.moqui.context.ExecutionContext
-import org.moqui.util.RestClient
-import org.moqui.util.RestClient.RestResponse
-import org.eclipse.jetty.http.HttpField
-import org.eclipse.jetty.http.HttpHeader
-import org.moqui.util.StringUtilities
+import org.apache.http.util.EntityUtils
+import org.apache.http.client.methods.HttpPost
+import org.apache.http.impl.cookie.BasicClientCookie
+import org.apache.http.impl.client.BasicCookieStore
+import org.apache.http.protocol.BasicHttpContext
+import org.apache.http.protocol.HttpContext
+import org.apache.http.message.BasicHeader
+import org.apache.http.HttpEntity
+import org.apache.http.client.protocol.ClientContext
+import org.apache.http.entity.mime.MultipartEntityBuilder
+import org.apache.http.entity.ContentType
+import org.apache.http.entity.mime.content.StringBody
 
 ExecutionContext ec = context.ec
 
@@ -37,76 +47,78 @@ String token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBolet
 
 locationReference = ec.resource.getLocationReference(envio.documentLocation)
 
-// Prepare restClient
-ec.logger.info("Subiendo envío ${envioId} a uri ${uploadUrl}")
-boundary = "MoitCl-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-DTE"
+HttpClient client = new DefaultHttpClient()
+useProxy = true
+if (useProxy) {
+    org.apache.http.HttpHost proxy = new org.apache.http.HttpHost("192.168.1.50", 9090)
+    client.getParams().setParameter(org.apache.http.conn.params.ConnRoutePNames.DEFAULT_PROXY,proxy)
+}
+HttpPost post = new HttpPost(uploadUrl)
+
+post.addHeader("Accept", "application/json")
+post.addHeader(new BasicHeader("User-Agent", "Mozilla/4.0 ( compatible; PROG 1.0; Windows NT)"))
+
+MultipartEntityBuilder builder = MultipartEntityBuilder.create()
+//builder.setMode(HttpMultipartMode.BROWSER_COMPATIBLE)
 
 rutEnviaMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEnviador).call()
 rutEmisorMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEmisor).call()
-fileBytes = locationReference.openStream().readAllBytes()
-fileName = locationReference.getFileName()
-body = """--${boundary}\r
-Content-Disposition: form-data; name="rutSender"\r
-\r
-${rutEnviaMap.rut}\r
---${boundary}\r
-Content-Disposition: form-data; name="dvSender"\r
-\r
-${rutEnviaMap.dv}\r
---${boundary}\r
-Content-Disposition: form-data; name="rutCompany"\r
-\r
-${rutEmisorMap.rut}\r
---${boundary}\r
-Content-Disposition: form-data; name="dvCompany"\r
-\r
-${rutEmisorMap.dv}\r
---${boundary}\r
-Content-Type: application/octet-stream\r
-Content-Disposition: form-data; name="archivo"; filename="archivo"\\r
-\r
-${new String(fileBytes, "ISO-8859-1")}\r
---${boundary}--\r
-"""
+builder.addPart("rutSender", new StringBody(rutEnviaMap.rut))
+builder.addPart("dvSender", new StringBody(rutEnviaMap.dv as String))
+builder.addPart("rutCompany", new StringBody(rutEmisorMap.rut))
+builder.addPart("dvCompany", new StringBody(rutEmisorMap.dv as String))
+builder.addBinaryBody("archivo", locationReference.openStream(), ContentType.DEFAULT_BINARY, "archivo")
+builder.setBoundary(boundary)
 
-RestClient restClient = new RestClient().uri(uploadUrl).method("POST")
-RestClient.RequestFactory requestFactory = new cl.moit.net.ProxyRequestFactory("192.168.1.50", 9090)
-requestFactory.getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 ( compatible; PROG 1.0; Windows NT)"))
-restClient.withRequestFactory(requestFactory)
-restClient.getDefaultRequestFactory().getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 ( compatible; PROG 1.0; Windows NT)"))
-//ec.logger.info("Setting Host header to ${uploadUrl.getHost()}")
-//restClient.addHeader("Host", uploadUrl.getHost())
-if (proxyHost != null && proxyPort != 0) {
-    restClient.withRequestFactory(new cl.moit.net.ProxyRequestFactory(proxyHost, proxyPort))
-}
-ec.logger.info("setting token cookie as ${token}")
-restClient.addHeader("Cookie", "TOKEN=${token}").acceptContentType("application/json").contentType("multipart/form-data; boundary=${boundary}")
-restClient.text(body).encoding("ISO-8859-1")
+HttpEntity entity = builder.build()
 
-RestResponse response = restClient.call()
-jsonResponse = response.text()
-ec.logger.info("jsonResponse: ${jsonResponse}")
-responseMap = new groovy.json.JsonSlurper().parseText(jsonResponse)
+post.setEntity(entity)
 
-status = responseMap.estado
+BasicClientCookie cookie = new BasicClientCookie("TOKEN", token)
+cookie.setPath("/")
+cookie.setDomain(uploadUrl.getHost())
+cookie.setSecure(true)
+cookie.setVersion(1)
 
-trackId = null
+BasicCookieStore cookieStore = new BasicCookieStore()
+cookieStore.addCookie(cookie)
+
+//client.getParams().setParameter(ClientPNames.COOKIE_POLICY, CookiePolicy.RFC_2109)
+//post.getParams().setParameter(ClientPNames.COOKIE_POLICY, CookiePolicy.BROWSER_COMPATIBILITY)
+
+HttpContext localContext = new BasicHttpContext()
+localContext.setAttribute(ClientContext.COOKIE_STORE, cookieStore)
+
+HttpResponse response = client.execute(post, localContext)
+
+
+HttpEntity resEntity = response.getEntity()
+responseText = EntityUtils.toString(resEntity)
+
 attemptCount = (envio.attemptCount?:0) + 1
-if (status == 'REC') {
-    trackId = responseMap.trackid
-    ec.logger.warn("EnvioBoleta enviado correctamente con trackId " + trackId)
-    ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioId, trackId:trackId, statusId:'Ftde-Sent', attemptCount:attemptCount, lastAttempt:ec.user.nowTimestamp]).call()
-    ec.service.special().name("mchile.sii.DTECommServices.start#ValidaEnvioServiceJob").parameters([envioId: envioId, initialDelaySeconds:5, checkDelaySeconds:30, checkAttempts:4, minSecondsBetweenAttempts: 0]).registerOnCommit()
-    envioFtdList = ec.entity.find("mchile.dte.DteEnvioFiscalTaxDocument").condition("envioId", envioId).list()
-    if (envioFtdList)
-        ec.service.sync().name("mchile.sii.DTECommServices.marcarEnviados#Documentos").parameters([trackId:trackId, documentIdList:envioFtdList.fiscalTaxDocumentId]).call()
-} else {
-    ec.message.addMessage("Error "+ status + " al enviar DTE", "danger")
-    if (attemptCount <= maxFail)
-        statusId = envio.statusId
-    else
-        statusId = 'Ftde-Failed'
-    ec.service.sync().name("update#mchile.dte.DteEnvio").requireNewTransaction(true).parameters([envioId:envioId, statusId:statusId, attemptCount:attemptCount, lastAttempt:ec.user.nowTimestamp]).call()
+if (response.getStatusLine().getStatusCode() == 200) {
+    responseMap = new groovy.json.JsonSlurper().parseText(responseText)
+
+    status = responseMap.estado
+
+    trackId = null
+    if (status == 'REC') {
+        trackId = responseMap.trackid
+        ec.logger.warn("EnvioBoleta enviado correctamente con trackId " + trackId)
+        ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioId, trackId:trackId, statusId:'Ftde-Sent', attemptCount:attemptCount, lastAttempt:ec.user.nowTimestamp]).call()
+        ec.service.special().name("mchile.sii.DTECommServices.start#ValidaEnvioServiceJob").parameters([envioId: envioId, initialDelaySeconds:5, checkDelaySeconds:30, checkAttempts:4, minSecondsBetweenAttempts: 0]).registerOnCommit()
+        envioFtdList = ec.entity.find("mchile.dte.DteEnvioFiscalTaxDocument").condition("envioId", envioId).list()
+        if (envioFtdList)
+            ec.service.sync().name("mchile.sii.DTECommServices.marcarEnviados#Documentos").parameters([trackId:trackId, documentIdList:envioFtdList.fiscalTaxDocumentId]).call()
+        return
+    }
 }
+
+ec.message.addMessage("Error " + response.getStatusLine() + " al enviar Boleta. response: ${responseText}", "danger")
+if (attemptCount <= maxFail)
+    statusId = envio.statusId
+else
+    statusId = 'Ftde-Failed'
+ec.service.sync().name("update#mchile.dte.DteEnvio").requireNewTransaction(true).parameters([envioId: envioId, statusId: statusId, attemptCount: attemptCount, lastAttempt: ec.user.nowTimestamp]).call()
 
 return
