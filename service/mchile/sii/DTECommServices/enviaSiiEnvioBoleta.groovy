@@ -62,18 +62,24 @@ Content-Disposition: form-data; name="dvCompany"\r
 \r
 ${rutEmisorMap.dv}\r
 --${boundary}\r
-Content-Disposition: form-data; name="archivo"; filename="${fileName}"\r
+Content-Type: application/octet-stream\r
+Content-Disposition: form-data; name="archivo"; filename="archivo"\\r
 \r
 ${new String(fileBytes, "ISO-8859-1")}\r
 --${boundary}--\r
 """
 
 RestClient restClient = new RestClient().uri(uploadUrl).method("POST")
+RestClient.RequestFactory requestFactory = new cl.moit.net.ProxyRequestFactory("192.168.1.50", 9090)
+requestFactory.getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 ( compatible; PROG 1.0; Windows NT)"))
+restClient.withRequestFactory(requestFactory)
 restClient.getDefaultRequestFactory().getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 ( compatible; PROG 1.0; Windows NT)"))
-restClient.addHeader("Host", uploadUrl.getHost())
+//ec.logger.info("Setting Host header to ${uploadUrl.getHost()}")
+//restClient.addHeader("Host", uploadUrl.getHost())
 if (proxyHost != null && proxyPort != 0) {
     restClient.withRequestFactory(new cl.moit.net.ProxyRequestFactory(proxyHost, proxyPort))
 }
+ec.logger.info("setting token cookie as ${token}")
 restClient.addHeader("Cookie", "TOKEN=${token}").acceptContentType("application/json").contentType("multipart/form-data; boundary=${boundary}")
 restClient.text(body).encoding("ISO-8859-1")
 
