@@ -76,6 +76,7 @@
                     <xsl:with-param name="fecha"><xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:FchEmis | Encabezado/IdDoc/FchEmis"/></xsl:with-param>
                     <xsl:with-param name="medioPago"><xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:MedioPago | Encabezado/IdDoc/MedioPago"/></xsl:with-param>
                     <xsl:with-param name="formaPago"><xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:FmaPago | Encabezado/IdDoc/FmaPago"/></xsl:with-param>
+                    <xsl:with-param name="rutReceptor"><xsl:value-of select="siidte:Encabezado/siidte:Receptor/siidte:RUTRecep | Encabezado/Receptor/RUTRecep"/></xsl:with-param>
                 </xsl:apply-templates>
                 <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
                           fox:border-radius="4pt" border-width="0.8pt" border-style="solid">
@@ -351,7 +352,7 @@
                                         <xsl:when test="$tipo=61">NOTA DE CREDITO ELECTRÓNICA</xsl:when>
                                         <xsl:when test="$tipo=110">FACTURA DE EXPORTACION ELECTRÓNICA</xsl:when>
                                         <xsl:when test="$tipo=112">NOTA DE CREDITO EXPORTACION ELECTRÓNICA</xsl:when>
-                                        <xsl:otherwise>CORREGIR EN TEMPLATE XSL</xsl:otherwise>
+                                        <xsl:otherwise>TIPO DTE NO SOPORTADO EN TEMPLATE XSL</xsl:otherwise>
                                     </xsl:choose>
                                 </fo:block>
                                 <fo:block font-size="10.21pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" color="red" text-align="center">N&#176;<xsl:value-of select="$folio"/></fo:block>
@@ -372,6 +373,7 @@
         <xsl:param name="fecha"/>
         <xsl:param name="medioPago"/>
         <xsl:param name="formaPago"/>
+        <xsl:param name="rutReceptor"/>
 
         <fo:block-container absolute-position="auto">
             <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
@@ -385,8 +387,35 @@
                     <fo:table-body>
                         <xsl:choose>
                             <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=39) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=39) or (/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=41) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=41)">
-                                <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Fecha</fo:inline></fo:block></fo:table-cell>
-                                <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
+                                <xsl:choose>
+                                    <xsl:when test="(contains($rutReceptor, '0')) or (contains($rutReceptor, '66666666-6'))">
+                                        <fo:table-row>
+                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Fecha</fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
+                                        </fo:table-row>
+                                    </xsl:when>
+                                    <xsl:otherwise>
+                                        <fo:table-row>
+                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Fecha {</fo:inline><xsl:value-of select="$rutReceptor"/><fo:inline>}</fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Dirección</fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:DirRecep | DirRecep"/></fo:block></fo:table-cell>
+                                        </fo:table-row>
+                                        <fo:table-row>
+                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Señor(es)</fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:value-of select="siidte:RznSocRecep | RznSocRecep"/></fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Comuna</fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:CmnaRecep | CmnaRecep"/></fo:block></fo:table-cell>
+                                        </fo:table-row>
+                                        <fo:table-row>
+                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">RUT</fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt"><xsl:call-template name="RutFormat"><xsl:with-param name="rut">
+                                                <xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param></xsl:call-template></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Ciudad</fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:CiudadRecep | CiudadRecep"/></fo:block></fo:table-cell>
+                                        </fo:table-row>
+                                    </xsl:otherwise>
+                                </xsl:choose>
                             </xsl:when>
                             <xsl:otherwise>
                                 <fo:table-row>
