@@ -229,6 +229,40 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="regenera" noun="PDF">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <econdition field-name="statusId" value="Ftd-Issued"/>
+            </entity-find>
+            <set field="dte" from="dteList.first"/>
+            <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument ${fiscalTaxDocumentId}"/></if>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="xmlList">
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
+            </entity-find>
+            <set field="xmlLocation" from="xmlList.first.contentLocation"/>
+            <if condition="!xmlLocation"><return error="true" message="No XML Found, cannot generate PDF"/></if>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="xmlList">
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Pdf"/>
+            </entity-find>
+            <if condition="xmlList"><then>
+                <set field="contentLocation" from="xmlList.first.contentLocation"/>
+            </then><else>
+                <service-call name="mchile.sii.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId]" out-map="siiCodeMap"/>
+                <set field="tipoDte" from="siiCodeMap.siiCode"/>
+                <set field="contentLocation" value="dbresource://moit/erp/dte/${dte.issuerPartyIdValue}/DTE-${tipoDte}-${dte.fiscalTaxDocumentNumber}.pdf"/>
+                <service-call name="create#mchile.dte.FiscalTaxDocumentContent" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocation]"/>
+            </else></if>
+            <service-call name="mchile.sii.DTEServices.genera#PDF" in-map="[xmlLocation:xmlLocation, issuerPartyId:dte.issuerPartyId]" out-map="context"/>
+            <script>ec.resource.getLocationReference(contentLocation).putBytes(pdfBytes)</script>
+        </actions>
+    </service>
+
     <service verb="genera" noun="PDF">
         <description>
             Genera archivo PDF de Factura/Boleta (envio).
