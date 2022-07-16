@@ -1494,6 +1494,7 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteEv" for-update="true">
                 <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
             </entity-find-one>
+            <if condition="dteEv.statusId != 'Ftd-Issued'"><return error="true" message="No se puede eliminar DTE que no ha sido emitido"/></if>
             <if condition="dteEv.sentRecStatusId == 'Ftd-SentRec'"><return error="true" message="No se puede eliminar DTE enviada a receptor"/></if>
             <if condition="dteEv.sentAuthStatusId in ['Ftd-SentAuthAccepted', 'Ftd-SentAuthUnverified']"><return error="true" message="No se puede eliminar DTE enviada al SII"/></if>
 
@@ -1531,34 +1532,36 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Se verifica si la DTE es de un tercero -->
 
             <set field="issuerId" from="dteEv.issuerPartyId"/>
-            <if condition="issuerId == organizationPartyId">
-                <then>
-                    <set field="dteEv.statusId" value="Ftd-NotIssued"/>
-                    <set field="dteEv.receiverPartyId" from="null"/>
-                    <set field="dteEv.receiverPartyIdTypeEnumId" from="null"/>
-                    <set field="dteEv.receiverPartyIdValue" from="null"/>
-                    <set field="dteEv.invoiceId" from="null"/>
-                    <set field="dteEv.trackId" from="null"/>
-                    <!-- TODO: Revisar que dejar receiverPartyID tal cual no afecte -->
-                    <!--set field="dteEv.receiverPartyId" value=""/-->
-                    <entity-update value-field="dteEv"/>
-                </then>
-                <else><!-- DTE de tercero -->
-                    <!-- Si hay una aceptación creada debe borrarse -->
-                    <entity-find entity-name="mchile.dte.AceptacionDte" list="aceptacionList" for-update="true">
-                        <econdition field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
-                    </entity-find>
-                    <iterate list="aceptacionList" entry="aceptacionEntry">
-                        <entity-find-one entity-name="mchile.dte.AceptacionDte" value-field="aceptacionToDelete">
-                            <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
-                            <field-map field-name="aceptacionDteId" from="aceptacionEntry.aceptacionDteId"/>
-                        </entity-find-one>
-                        <entity-delete value-field="aceptacionToDelete"/>
-                    </iterate>
-                    <entity-delete value-field="dteEv"/>
-                </else>
-            </if>
-
+            <if condition="issuerId == organizationPartyId"><then>
+                <if condition="dteEv.invoiceId">
+                    <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice" auto-field-map="[invoiceId:dteEv.invoiceId]" for-update="true"/>
+                    <set field="invoice.statusId" value="InvoiceInProcess"/>
+                    <entity-update value-field="invoice"/>
+                </if>
+                <set field="invoiceId" from="dteEv.invoiceId"/>
+                <set field="dteEv.statusId" value="Ftd-NotIssued"/>
+                <set field="dteEv.receiverPartyId" from="null"/>
+                <set field="dteEv.receiverPartyIdTypeEnumId" from="null"/>
+                <set field="dteEv.receiverPartyIdValue" from="null"/>
+                <set field="dteEv.invoiceId" from="null"/>
+                <set field="dteEv.trackId" from="null"/>
+                <!-- TODO: Revisar que dejar receiverPartyID tal cual no afecte -->
+                <!--set field="dteEv.receiverPartyId" value=""/-->
+                <entity-update value-field="dteEv"/>
+            </then><else><!-- DTE de tercero -->
+                <!-- Si hay una aceptación creada debe borrarse -->
+                <entity-find entity-name="mchile.dte.AceptacionDte" list="aceptacionList" for-update="true">
+                    <econdition field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+                </entity-find>
+                <iterate list="aceptacionList" entry="aceptacionEntry">
+                    <entity-find-one entity-name="mchile.dte.AceptacionDte" value-field="aceptacionToDelete">
+                        <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+                        <field-map field-name="aceptacionDteId" from="aceptacionEntry.aceptacionDteId"/>
+                    </entity-find-one>
+                    <entity-delete value-field="aceptacionToDelete"/>
+                </iterate>
+                <entity-delete value-field="dteEv"/>
+            </else></if>
         </actions>
     </service>
 
