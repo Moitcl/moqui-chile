@@ -57,7 +57,7 @@ if (useProxy) {
 HttpPost post = new HttpPost(uploadUrl)
 
 post.addHeader("Accept", "*/*")
-post.addHeader(new BasicHeader("User-Agent", "Mozilla/4.0 (compatible; PROG 1.0; Windows NT 5.0; YComp 5.0.2.4)"))
+post.addHeader(new BasicHeader("User-Agent", "Mozilla/4.0 ( compatible; PROG 1.0; Windows NT)"))
 
 MultipartEntityBuilder builder = MultipartEntityBuilder.create()
 //builder.setMode(HttpMultipartMode.BROWSER_COMPATIBLE)
