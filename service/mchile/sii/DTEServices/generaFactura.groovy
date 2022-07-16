@@ -61,6 +61,8 @@ else
 //Obtención de folio y CAF -->
 folioResult = ec.service.sync().name("mchile.sii.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call()
 folio = folioResult.folio
+if (folio == null)
+    return
 codRef = 0 as Integer
 
 // Indicador Servicio

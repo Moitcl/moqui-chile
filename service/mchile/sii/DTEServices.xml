@@ -472,7 +472,21 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="!cafEntryList">
                 <return error="true" message="No existe CAF activo para DTE tipo ${fiscalTaxDocumentTypeEnumId}"/>
             </if>
+            <script>
+                Calendar cal = Calendar.instance
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.add(Calendar.MONTH, -6)
+                maximaFechaAutorizacion = new Timestamp(cal.timeInMillis)
+            </script>
             <iterate list="cafEntryList" entry="cafEntry">
+                <if condition="cafEntry.fechaAutorizacion.before(maximaFechaAutorizacion)">
+                    <message type="warning">CAF ${cafEntry.cafId} expirado, marcando como inactivo</message>
+                    <service-call name="mchile.sii.DTEServices.desactivar#Caf" in-map="[cafId:cafEntry.cafId]"/>
+                    <continue/>
+                </if>
                 <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="reservedList" for-update="true">
                     <econdition field-name="fiscalTaxDocumentTypeEnumId" value="${fiscalTaxDocumentTypeEnumId}"/>
                     <econdition field-name="issuerPartyId" from="partyId"/>
@@ -497,8 +511,8 @@ along with this software (see the LICENSE.md file). If not, see
                     <return/>
                 </then><else>
                     <!-- No folio available, mark as inactive -->
-                    <set field="cafEntry.activo" value=""/>
-                    <entity-update value-field="cafEntry"/>
+                    <message>CAF ${cafEntry.cafId} utilizado completo, marcando como inactivo</message>
+                    <service-call name="mchile.sii.DTEServices.desactivar#Caf" in-map="[cafId:cafEntry.cafId]"/>
                 </else></if>
             </iterate>
             <return error="true" message="No hay folios disponibles para DTE tipo ${fiscalTaxDocumentTypeEnumId}"/>
@@ -601,7 +615,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="thruDate" from="null"/>
             </entity-find>
 
-            <if condition="!postalPcmList">
+            <if condition="!postalPcmList &amp;&amp; !(fiscalTaxDocumentTypeEnumId in ['Ftdt-39','Ftdt-41'])">
                 <return error="true" message="Receiver ${receiverPartyId} has no active postal tax address"/>
             </if>
             <set field="contactMechId" from="postalPcmList[0].contactMechId"/>
@@ -3333,10 +3347,10 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="creditMemo" for-update="true"/>
             <if condition="creditMemo.invoiceTypeEnumId != 'InvoiceCreditMemo'"><return error="true" message="Cannot find Credit Memo with ID ${invoiceId}"/></if>
-            <if condition="!(creditMemo.statusId in ['InvoiceIncoming','InvoiceApproved','InvoicePmtSent','InvoiceReceived','InvoiceBilledThrough'])"><return error="true" message="Invalid statusId for creditMemo: ${creditMemo.statusId}"/></if>
+            <if condition="!(creditMemo.statusId in ['InvoiceIncoming','InvoiceInProcess','InvoiceApproved','InvoicePmtSent','InvoiceReceived','InvoiceBilledThrough'])"><return error="true" message="Invalid statusId for creditMemo: ${creditMemo.statusId}"/></if>
 
             <set field="creditMemo.statusId" value="InvoiceApproved"/>
-            <entity-update value-field="creditMemo"/>
+                <entity-update value-field="creditMemo"/>
             <service-call name="mchile.sii.DTEServices.create#DteFromInvoice" in-map="context+[fiscalTaxDocumentTypeEnumId:'Ftdt-61']" out-map="context"/>
         </actions>
     </service>
