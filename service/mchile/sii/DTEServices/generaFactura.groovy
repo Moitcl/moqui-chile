@@ -154,7 +154,7 @@ if (tipoDte == 33) {
     folioAnulaBoleta = refMap.folioAnulaBoleta
     codRef = referenciaList[0].codigo
 
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", codRef)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", codRef as Integer)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
     totalExento = detMap.totalExento
