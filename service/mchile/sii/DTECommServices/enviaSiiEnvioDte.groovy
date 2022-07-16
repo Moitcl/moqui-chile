@@ -81,7 +81,7 @@ BasicClientCookie cookie = new BasicClientCookie("TOKEN", token)
 cookie.setPath("/")
 cookie.setDomain(uploadUrl.getHost())
 cookie.setSecure(true)
-cookie.setVersion(1)
+//cookie.setVersion(1)
 
 BasicCookieStore cookieStore = new BasicCookieStore()
 cookieStore.addCookie(cookie)
