@@ -396,7 +396,7 @@
                                     </xsl:when>
                                     <xsl:otherwise>
                                         <fo:table-row>
-                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Fecha {</fo:inline><xsl:value-of select="$rutReceptor"/><fo:inline>}</fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Fecha</fo:inline></fo:block></fo:table-cell>
                                             <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
                                             <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Dirección</fo:inline></fo:block></fo:table-cell>
                                             <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:DirRecep | DirRecep"/></fo:block></fo:table-cell>
