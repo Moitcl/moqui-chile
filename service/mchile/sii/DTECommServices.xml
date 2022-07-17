@@ -911,6 +911,37 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="genera" noun="Envio">
+        <in-parameters>
+            <parameter name="rutReceptor" default-value="60803000-K"><description>El receptor del envio es el SII</description></parameter>
+            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="documentIdList" required="true" type="List"/>
+            <parameter name="saveSinFirma" type="Boolean" default="false"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="envioId"/>
+        </out-parameters>
+        <actions>
+            <set field="isBoleta" from="null" type="Boolean"/>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList">
+                <econdition field-name="fiscalTaxDocumentId" operator="in" from="documentIdList"/>
+            </entity-find>
+            <if condition="!ftdList"><return error="true" message="Could not find any FiscalTaxDocument"/></if>
+            <iterate list="ftdList" entry="ftd">
+                <if condition="isBoleta == null"><then>
+                    <set field="isBoleta" from="ftd.fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41']"/>
+                </then><else-if condition="!isBoleta &amp;&amp; ftd.fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41']">
+                    <return error="true" message="Cannot create Envio with Boleta and non-Boleta documents"/>
+                </else-if></if>
+            </iterate>
+            <if condition="isBoleta"><then>
+                <service-call name="mchile.sii.DTECommServices.genera#EnvioBoleta" in-map="context" out-map="context"/>
+            </then><else>
+                <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="context" out-map="context"/>
+            </else></if>
+        </actions>
+    </service>
+
     <service verb="genera" noun="EnvioDte" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/generaEnvioDte.groovy">
         <description>Generación de envio documento a partir de facturas ya generadas.</description>
         <in-parameters>
