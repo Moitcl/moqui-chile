@@ -871,12 +871,13 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="trackId" from="resultado.IDENTIFICACION.TRACKID.text()"/>
             <set field="dteList" from="resultado.REVISIONENVIO.REVISIONDTE"/>
             <set field="totalItems" from="0" type="Integer"/>
-            <set field="itemSubtotalList" from="resultado.ESTADISTICA.SUBTOTAL.INFORMADO"/>
+            <set field="itemSubtotalList" from="resultado.ESTADISTICA.SUBTOTAL"/>
             <iterate list="itemSubtotalList" entry="subtotal">
-                <set field="totalItems" from="totalItems + (subtotal.text() as Integer)"/>
+                <set field="totalItems" from="totalItems + ((subtotal.INFORMADO.text() ?:0) as Integer)"/>
             </iterate>
             <set field="processedItems" from="0"/>
-            <if condition="estadoResultado == 'EPR - Envio Procesado'">
+            <set field="processedFiscalTaxDocumentIds" from="[]"/>
+            <if condition="estadoResultado == 'EPR - Envio Procesado'"><then>
                 <iterate list="dteList" entry="dte">
                     <set field="folio" from="dte.FOLIO.text()" type="Integer"/>
                     <set field="tipoDte" from="dte.TIPODTE.text()"/>
@@ -888,7 +889,7 @@ along with this software (see the LICENSE.md file). If not, see
                         <econdition field-name="fiscalTaxDocumentNumber" from="folio"/>
                         <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
                         <econdition field-name="trackId"/>
-                        <econdition field-name="sentAuthStatusId" value="Ftd-SentAuthUnverified"/>
+                        <econdition field-name="sentAuthStatusId" operator="in" value="Ftd-SentAuthUnverified,Ftd-SentAuthRejected"/>
                     </entity-find>
                     <set field="ftd" from="ftdList.first"/>
                     <if condition="ftd">
@@ -904,10 +905,33 @@ along with this software (see the LICENSE.md file). If not, see
                         <service-call name="store#mchile.dte.DteEnvioFiscalTaxDocument" in-map="[fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, envioId:envioId]"/>
                     </if>
                     <set field="processedItems" from="processedItems+1"/>
+                    <script>processedFiscalTaxDocumentIds.add(ftd.fiscalTaxDocumentId)</script>
                 </iterate>
-            </if>
+                <!-- When all are accepted, no detail by document is sent, have to mark all others as accepted -->
+                <entity-find entity-name="DteEnvioAndFiscalTaxDocument" list="otherFtdList">
+                    <econdition field-name="envioTrackId" operator="not-null"/>
+                    <econdition field-name="envioTrackId" from="trackId"/>
+                    <econdition field-name="ftdTrackId" operator="not-null"/>
+                    <econdition field-name="ftdTrackId" from="trackId"/>
+                    <econdition field-name="fiscalTaxDocumentId" operator="not-in" from="processedFiscalTaxDocumentIds"/>
+                </entity-find>
+                <iterate list="otherFtdList" entry="ftd">
+                    <if condition="ftd.ftdStatusId in ['Ftd-SentAuthUnverified', 'Ftd-SentAuthAccepted']"><then>
+                        <message error="true">FiscalTaxDocument {ftd.fiscalTaxDocumentId} should be marked as Accepted but is currently in status ${ftd.ftdStatusId}</message>
+                    </then><else>
+                        <service-call name="update#mchile.dte.FiscalTaxDocument" in-map="[fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, sentAuthStatusId:'Ftd-SentAuthAccepted']"/>
+                    </else></if>
+                    <set field="processedItems" from="processedItems+1"/>
+                </iterate>
+            </then><else>
+                <message error="true">Unknown estado for resultado envioId ${envioId}: ${estadoResultado}</message>
+            </else></if>
             <entity-update value-field="envio"/>
-            <set field="processed" from="totalItems == processedItems"/>
+            <if condition="totalItems == processedItems"><then>
+                <set field="processed" from="true"/>
+            </then><else>
+                <message error="true" message="Itemes procesados: ${processedItems}, indicados en resultado: ${totalItems}"/>
+            </else></if>
         </actions>
     </service>
 
