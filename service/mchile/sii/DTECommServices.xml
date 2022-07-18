@@ -129,6 +129,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="triggerSend" type="Boolean" default="true"/>
         </in-parameters>
         <actions>
+            <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
             <log message="Creating envio for fiscalTaxDocumentId: ${fiscalTaxDocumentId}"/>
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" for-update="true"/>
             <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument with id ${fiscalTaxDocumentId}"/></if>
@@ -139,10 +140,11 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="contentList.size() != 1"><return error="true" message="Found ${contentList.size()} XML content for fiscalTaxDocumentId ${fiscalTaxDocumentId}, expected 1"/></if>
             <set field="content" from="ec.resource.getLocationReference(contentList.first.contentLocation)"/>
             <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[rutReceptor:dte.receiverPartyIdValue, organizationPartyId:dte.issuerPartyId, documentIdList:[dte.fiscalTaxDocumentId]]" out-map="envio"/>
-            <script>
-                if (triggerSend)
+
+            <script><![CDATA[
+                if (triggerSend && systemIsProduction)
                     ec.service.special().name("mchile.sii.DTECommServices.send#PendingEnvioDteReceiver").parameter("envioId", envio.envioId).registerOnCommit()
-            </script>
+            ]]></script>
         </actions>
     </service>
 
@@ -991,10 +993,14 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <actions>
             <script>
-                job = ec.service.job("sii_dte_EnviaEnvioDteToSii")
-                if (envioId)
-                    job.parameter("envioId", envioId)
-                job.run()
+                if (ec.user.context.dteSystemIsProduction) {
+                    job = ec.service.job("sii_dte_EnviaEnvioDteToSii")
+                    if (envioId)
+                        job.parameter("envioId", envioId)
+                    job.run()
+                } else {
+                    ec.logger.warn("System is not production, not sending automatically to SII")
+                }
             </script>
         </actions>
     </service>
