@@ -401,7 +401,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                 //FchVencim()
                 if (detalle.uom)
                     UnmdItem(uom)
-                PrcItem(Math.round(detalle.priceItem*1000000)/1000000)
+                PrcItem((detalle.priceItem ?: 0 as BigDecimal).setScale(6, java.math.RoundingMode.HALF_UP))
                 //OtrMnda{}
                 if (detalle.porcentajeDescuento)
                     DescuentoPct(detalle.porcentajeDescuento)
