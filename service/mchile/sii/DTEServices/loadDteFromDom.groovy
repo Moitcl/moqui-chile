@@ -164,8 +164,7 @@ if (rutReceptorCaratula != null && rutReceptorCaratula != rutReceptor) {
     discrepancyMessages.add("Rut mismatch: carátula indica Rut receptor ${rutEmisorCaratula}, pero documento indica ${rutEmisor}")
 }
 
-mapOut = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameter("siiCode", tipoDte).call()
-tipoDteEnumId = mapOut.fiscalTaxDocumentTypeEnumId
+tipoDteEnumId = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameter("siiCode", tipoDte).call().enumId
 existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([issuerPartyIdValue:rutEmisor, fiscalTaxDocumenTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte])
         .disableAuthz().list()
 isDuplicated = false
@@ -597,6 +596,17 @@ if (invoiceId) {
     }
 }
 
+if (tipoDteEnumId == 'Ftdt-52') {
+    if (!indTraslado)
+        errorMessages.add("Guía de despacho no indica tipo de traslado (IndTraslado): ${indTraslado}")
+    else {
+        indTrasladoEnumId = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameters([siiCode:indTraslado, enumTypeId:'IndTraslado']).call().enumId
+        if (!indTrasladoEnumId) {
+            errorMessages.add("Guía de despacho indica tipo de traslado (IndTraslado) desconocido: ${indTraslado}")
+        }
+    }
+}
+
 if (errorMessages.size() > 0) {
     estadoRecepDte = 2
     recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
@@ -638,17 +648,9 @@ createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalT
              sentAuthStatusId:'Ftd-SentAuthAccepted', sentRecStatusId:sentRecStatusId]
 mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call()
 fiscalTaxDocumentId = mapOut.fiscalTaxDocumentId
+
 if (tipoDteEnumId == 'Ftdt-52') {
-    if (!indTraslado)
-        errorMessages.add("Guía de despacho no indica tipo de traslado (IndTraslado): ${indTraslado}")
-    else {
-        indTrasladoEnumId = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameters([siiCode:indTraslado, enumTypeId:'IndTraslado']).call().fiscalTaxDocumentTypeEnumId
-        if (!indTrasladoEnumId)
-            errorMessages.add("Guía de despacho indica tipo de traslado (IndTraslado) desconocido: ${indTraslado}")
-        else {
-            ec.service.sync().name("store#mchile.dte.GuiaDespacho").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, indTrasladoEnumId:indTrasladoEnumId]).call()
-        }
-    }
+    ec.service.sync().name("store#mchile.dte.GuiaDespacho").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, indTrasladoEnumId:indTrasladoEnumId]).call()
 }
 
 createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, date:ec.user.nowTimestamp, amount:montoTotal, montoNeto:montoNeto, montoExento:montoExento, tasaImpuesto:tasaIva, tipoImpuesto:1, montoIvaRecuperable:montoIva, montoIvaNoRecuperable:0,
@@ -684,8 +686,7 @@ referenciasList.each { groovy.util.Node referencia ->
     }
     if (nroLinRef != nroRef)
         errorMessages.add("Valor inesperado en referencia, campo NroLinRef, esperado ${nroRef}, recibido ${referencia.NroLinRef.text()}")
-    mapOut = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameter("siiCode", referencia.TpoDocRef.text()).call()
-    tipoDteEnumId = mapOut.fiscalTaxDocumentTypeEnumId
+    tipoDteEnumId = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameter("siiCode", referencia.TpoDocRef.text()).call().enumId
     Date refDate = null
     try {
         refDate = formatter.parse(fechaEmision)
