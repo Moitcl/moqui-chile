@@ -642,7 +642,7 @@ if (tipoDteEnumId == 'Ftdt-52') {
     if (!indTraslado)
         errorMessages.add("Guía de despacho no indica tipo de traslado (IndTraslado): ${indTraslado}")
     else {
-        indTrasladoEnumId = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameters([fiscalTaxDocumentTypeEnumId:indTrasladoEnumId, enumTypeId:'IndTraslado']).call().fiscalTaxDocumentTypeEnumId
+        indTrasladoEnumId = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameters([siiCode:indTraslado, enumTypeId:'IndTraslado']).call().fiscalTaxDocumentTypeEnumId
         if (!indTrasladoEnumId)
             errorMessages.add("Guía de despacho indica tipo de traslado (IndTraslado) desconocido: ${indTraslado}")
         else {
