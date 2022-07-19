@@ -185,13 +185,15 @@ if (existingDteList) {
         contentList = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml'])
                 .disableAuthz().list()
         if (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-ReceiverAccept'] && contentList) {
-            ec.logger.error("Contenido existe, DTE está aprobado")
+            ec.logger.warn("Contenido existe, DTE está aprobado, enviando aceptación")
             xmlInDb = ec.resource.getLocationReference(contentList.first().contentLocation).openStream().readAllBytes()
             if (xmlInDb == dteXml) {
                 estadoRecepDte = 0
                 recepDteGlosa = 'ACEPTADO OK'
                 sentRecStatusId = 'Ftde-DuplicateNotProcessed'
                 fechaEmision = ec.l10n.format(dte.date, 'yyyy-MM-dd')
+                if (envioId)
+                    ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioId, fiscalTaxDocumentId:dte.fiscalTaxDocumentId]).call()
                 isDuplicated = true
                 return
             }
