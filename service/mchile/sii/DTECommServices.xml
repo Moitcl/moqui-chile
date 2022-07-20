@@ -956,7 +956,38 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="process" noun="ResultadoConsumoFolios">
         <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
         <actions>
-            <set field="processed" from="false"/>
+            <set field="withResponse" from="false"/>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>
+            <if condition="envio.rutEmisor == '60803000-K'"><then>
+                <set field="envio.issuerPartyId" value="CL_SII"/>
+            </then><else>
+                <return error="true" message="Rut de emisor de envío ${envioId} (${rutEmisorEnvio}) de tipo ResultadoEnvio no es del SII"/>
+            </else></if>
+            <set field="envioRr" from="ec.resource.getLocationReference(envio.documentLocation)"/>
+            <set field="resultado" from=" new groovy.xml.XmlParser(false, false).parse(envioRr.openStream()).DocumentoResultadoConsumoFolios"/>
+            <set field="rutEmisor" from="resultado.Identificacion.Envio.RutEmisor.text().toUpperCase()"/>
+            <set field="estadoResultado" from="resultado.Resultado.Estado.text()"/>
+            <set field="trackId" from="resultado.Identificacion.Envio.TrackId.text()"/>
+            <if condition="estadoResultado == 'CORRECTO'"><then>
+                <entity-find entity-name="mchile.dte.DteEnvio" list="rcofList" for-update="true">
+                    <econdition field-name="trackId"/>
+                    <econdition field-name="rutEmisor"/>
+                    <econdition field-name="rutReceptor" value="60803000-K"/>
+                    <econdition field-name="statusId" operator="in" value="Ftde-Sent,Ftde-Processed"/>
+                </entity-find>
+                <message error="true">Encontrado envio ${rcofList.first?.envioId} </message>
+                <if condition="!rcofList">
+                    <message type="warning">No se encuentra envío referenciado en envío ${envioId} con trackId ${trackId}</message>
+                    <return/>
+                </if>
+                <set field="rcof" from="rcof.first"/>
+                <set field="rcof.statusId" value="Ftde-Procesed"/>
+                <set field="envio.receiverPartyId" from="rcof.issuerPartyId"/>
+                <set field="processed" from="true"/>
+            </then><else>
+                <message error="true">Unknown estado for resultado envioId ${envioId}: ${estadoResultado}</message>
+            </else></if>
+            <entity-update value-field="envio"/>
         </actions>
     </service>
 
