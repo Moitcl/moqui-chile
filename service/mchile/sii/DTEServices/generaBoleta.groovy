@@ -1,6 +1,5 @@
 import org.w3c.dom.Document
 
-import org.moqui.BaseArtifactException
 import org.moqui.entity.EntityValue
 import org.moqui.context.ExecutionContext
 
@@ -220,11 +219,13 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
             //RUTSolicita()
             //Transporte{}
             Totales {
-                MntNeto(Math.round(totalNeto))
+                if (totalNeto)
+                    MntNeto(Math.round(totalNeto))
                 if (totalExento != null && totalExento > 0)
                     MntExe(totalExento)
                 //TasaIVA(ec.l10n.format(vatTaxRate*100, "##"))
-                IVA(Math.round(totalNeto * vatTaxRate))
+                if (totalNeto)
+                    IVA(Math.round((totalNeto?:0) * vatTaxRate))
                 //IVAProp()
                 //IVATerc()
                 //ImptoReten{}
