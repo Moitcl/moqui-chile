@@ -61,6 +61,8 @@ else
 //Obtención de folio y CAF -->
 folioResult = ec.service.sync().name("mchile.sii.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call()
 folio = folioResult.folio
+if (folio == null)
+    return
 codRef = 0 as Integer
 
 // Indicador Servicio
@@ -154,7 +156,7 @@ if (tipoDte == 33) {
     folioAnulaBoleta = refMap.folioAnulaBoleta
     codRef = referenciaList[0].codigo
 
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", codRef)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", codRef as Integer)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
     totalExento = detMap.totalExento
@@ -399,7 +401,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                 //FchVencim()
                 if (detalle.uom)
                     UnmdItem(uom)
-                PrcItem(Math.round(detalle.priceItem*1000000)/1000000)
+                PrcItem((detalle.priceItem ?: 0 as BigDecimal).setScale(6, java.math.RoundingMode.HALF_UP))
                 //OtrMnda{}
                 if (detalle.porcentajeDescuento)
                     DescuentoPct(detalle.porcentajeDescuento)

@@ -113,8 +113,7 @@ for (int i = 0; i < boletaArray.size(); i++) {
         ec.message.addError("Razón social en XML no coindice con la registrada: $razonSocialEmisor != $razonSocialMoqui")
         return
     }
-    mapOut = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameters([siiCode:tipoDte]).call()
-    tipoDteEnumId = mapOut.fiscalTaxDocumentTypeEnumId
+    tipoDteEnumId = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameters([siiCode:tipoDte]).call().enumId
     // Creación de orden de compra
     purchaseOutMap = ec.service.sync().name("mchile.PurchaseServices.create#Purchase").parameters([vendorPartyId:issuerPartyId]).call()
     itemDescription = ""

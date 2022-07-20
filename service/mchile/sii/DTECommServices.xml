@@ -12,7 +12,7 @@ You should have received a copy of the CC0 Public Domain Dedication
 along with this software (see the LICENSE.md file). If not, see
 <http://creativecommons.org/publicdomain/zero/1.0/>.
 -->
-<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
 
     <service verb="create" noun="PendingEnvioDteForReceivers" authenticate="anonymous-all">
         <in-parameters>
@@ -129,6 +129,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="triggerSend" type="Boolean" default="true"/>
         </in-parameters>
         <actions>
+            <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
             <log message="Creating envio for fiscalTaxDocumentId: ${fiscalTaxDocumentId}"/>
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" for-update="true"/>
             <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument with id ${fiscalTaxDocumentId}"/></if>
@@ -139,10 +140,11 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="contentList.size() != 1"><return error="true" message="Found ${contentList.size()} XML content for fiscalTaxDocumentId ${fiscalTaxDocumentId}, expected 1"/></if>
             <set field="content" from="ec.resource.getLocationReference(contentList.first.contentLocation)"/>
             <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[rutReceptor:dte.receiverPartyIdValue, organizationPartyId:dte.issuerPartyId, documentIdList:[dte.fiscalTaxDocumentId]]" out-map="envio"/>
-            <script>
-                if (triggerSend)
+
+            <script><![CDATA[
+                if (triggerSend && systemIsProduction)
                     ec.service.special().name("mchile.sii.DTECommServices.send#PendingEnvioDteReceiver").parameter("envioId", envio.envioId).registerOnCommit()
-            </script>
+            ]]></script>
         </actions>
     </service>
 
@@ -162,10 +164,18 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="lastAttempt" operator="less-equals" from="ec.user.nowTimestamp.time-(secondsBeforeRetry*1000)" ignore="secondsBeforeRetry == null" ignore-if-empty="true" or-null="true"/>
             </entity-find>
             <iterate list="envioList" entry="envio">
-                <if condition="envio.rutReceptor == '60803000-K'"><then>
-                    <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio"/>
+                <if condition="envio.envioTypeEnumId == 'Ftde-EnvioBoleta'"><then>
+                    <if condition="envio.rutReceptor == '60803000-K'"><then>
+                        <service-call name="mchile.sii.DTECommServices.enviaSII#EnvioBoleta" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio"/>
+                    </then><else>
+                        <message type="danger">Not sending EnvioBoleta ${envio.envioId} with rut not matching SII</message>
+                    </else></if>
                 </then><else>
-                    <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDteReceiver" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio"/>
+                    <if condition="envio.rutReceptor == '60803000-K'"><then>
+                        <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio"/>
+                    </then><else>
+                        <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDteReceiver" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio"/>
+                    </else></if>
                 </else></if>
             </iterate>
         </actions>
@@ -237,7 +247,8 @@ along with this software (see the LICENSE.md file). If not, see
                     <return error="true" message="Unsupported envioTypeEnumId ${envio.envioTypeEnumId}"/>
                 </else></if>
                 <entity-find-one entity-name="mantle.party.PartyRole" value-field="issuerRoleInternal" auto-field-map="[partyId:issuerPartyId, roleId:'OrgInternal']"/>
-                <if condition="issuerRoleInternal"><then>
+                <entity-find-one entity-name="mantle.party.PartyRole" value-field="receiverRoleInternal" auto-field-map="[partyId:receiverPartyId, roleId:'OrgInternal']"/>
+                <if condition="envio.rutEmisor == envio.rutReceptor &amp;&amp; envio.rutEmisor != null"><then>
                     <set field="sent" from="true"/>
                 </then><else>
                     <set field="envioContent" from="ec.resource.getLocationReference(envio.documentLocation)"/>
@@ -254,7 +265,7 @@ along with this software (see the LICENSE.md file). If not, see
                         <entity-find-one entity-name="moqui.basic.email.EmailTemplate" value-field="emailTemplate" auto-field-map="[emailTemplateId:'MchDteSendEnvio']"/>
                         <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" in-map="[toAddresses:xmlReceptionEmailAddress, emailTemplateId:'MchDteSendEnvio', emailTypeEnumId:emailTypeEnumId,
                     attachments:[xmlAttachment], bodyParameters:bodyParameters, subject:subject]" out-map="context"/>
-                        <set field="sent" from="true"/>
+                        <set field="sent" from="emailMessageId != null"/>
                     </then><else>
                         <log level="error" message="No se encuentra dirección de mail para envío tipo ${tipoEnvioEv.description}: ${envio.envioId}"/>
                         <set field="sent" from="false"/>
@@ -431,6 +442,14 @@ along with this software (see the LICENSE.md file). If not, see
                     generalSignedXPath = "/sii:RespuestaDTE/sii:Resultado"
                     generalDateXPath = "./sii:Caratula/sii:TmstFirmaResp/text()"
                      */
+                } else if (firstTag == 'ResultadoConsumoFolios') {
+                    // Consumo Folios recibido en SII
+                    envioTypeEnumId = 'Ftde-ResultadoConsumoFolios'
+                    identificacion = envio.IDENTIFICACION
+                    rutReceptorCaratula = identificacion.RUTEMISOR.text()
+                    rutEmisorCaratula = "60803000-K" // Rut del SII
+                    fechaEnvio = ec.l10n.parseTimestamp(identificacion.TMSTRECEPCION.text(), "dd/MM/yyyy HH:mm:ss")
+                    internalId = identificacion.TRACKID.text()
                 } else {
                     ec.logger.error("Unrecognized content with filename ${fileName} for email ${messageId}, firstTag: ${firstTag}")
                     return
@@ -508,7 +527,7 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="process" noun="EnvioInterface">
+    <service verb="process" noun="EnvioInterface" type="interface">
         <in-parameters>
             <parameter name="envioId" required="true"/>
         </in-parameters>
@@ -537,6 +556,8 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="processed" from="false"/>
             <set field="withResponse" from="false"/>
             <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>
+            <set field="rutEmisorEnvio" from="envio.rutEmisor"/>
+            <set field="rutReceptorEnvio" from="envio.rutReceptor"/>
             <set field="envioRr" from="ec.resource.getLocationReference(envio.documentLocation)"/>
             <set field="respuesta" from=" new groovy.xml.XmlParser(false, false).parse(envioRr.openStream())"/>
             <set field="caratula" from="respuesta.Resultado.Caratula"/>
@@ -627,27 +648,27 @@ along with this software (see the LICENSE.md file). If not, see
                         </script>
                         <set field="estadoDte" from="dte.EstadoRecepDTE.text()"/>
                         <set field="estadoDteGlosa" from="dte.RecepDTEGlosa.text()"/>
-                        <service-call name="mchile.sii.DTECommServices.process#DteInRespuestaDte" in-map="context" out-map="processDte"/>
+                        <service-call name="mchile.sii.DTECommServices.process#DteInRespuestaDte" in-map="context" out-map="processDte" out-map-add-to-existing="false"/>
                         <if condition="processDte.processed"><then>
                             <set field="processedItems" from="processedItems+1"/>
                         </then><else-if condition="processDte.processedWithErrors">
                             <set field="itemsWithErrors" from="itemsWithErrors+1"/>
                         </else-if></if>
+                        <if condition="processDte.envioIssuerPartyId">
+                            <if condition="envio.issuerPartyId == null"><then>
+                                <set field="envio.issuerPartyId" from="processDte.envioIssuerPartyId"/>
+                            </then><else-if condition="envio.issuerPartyId != processDte.envioIssuerPartyId">
+                                <return error="true" message="IssuerPartyId mismatch: previously ${envio.issuerPartyId}, for tipo DTE ${tipoDte}, folio ${folio}: ${processDte.envioIssuerPartyId}"/>
+                            </else-if></if>
+                        </if>
+                        <if condition="processDte.envioReceiverPartyId">
+                            <if condition="envio.receiverPartyId == null"><then>
+                                <set field="envio.receiverPartyId" from="processDte.envioReceiverPartyId"/>
+                            </then><else-if condition="envio.receiverPartyId != processDte.envioReceiverPartyId">
+                                <return error="true" message="ReceiverPartyId mismatch: previously ${envio.receiverPartyId}, for tipo DTE ${tipoDte}, folio ${folio}: ${processDte.envioReceiverPartyId}"/>
+                            </else-if></if>
+                        </if>
                     </iterate>
-                    <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dbDteList" for-update="true">
-                        <econdition field-name="fiscalTaxDocumentId" operator="in" from="envioFtdList.fiscalTaxDocumentId"/>
-                        <econdition field-name="sentRecStatusId" value="Ftd-SentRec"/>
-                    </entity-find>
-                    <if condition="dbDteList">
-                        <if condition="dbDteList.size() == nroDte - processedItems"><then>
-                            <iterate list="dbDteList" entry="dbDte">
-                                <set field="dbDte.sentRecStatusId" value="Ftd-ReceiverAck"/>
-                                <entity-update value-field="dbDte"/>
-                            </iterate>
-                        </then><else>
-                            <return error="true" message="Number of documents (${nroDte}) minus processed documents (${processedItems}) does not match found DTEs in DB associated to envioDte (${dbDteList.size()}), so not processing"/>
-                        </else></if>
-                    </if>
                     <set field="totalItems" from="totalItems + nroDte"/>
                 </iterate>
                 <set field="processed" from="(processedItems + itemsWithErrors) == totalItems"/>
@@ -680,6 +701,20 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="estadoDte" from="resultadoDte.EstadoDTE.text()"/>
                     <set field="estadoDteGlosa" from="resultadoDte.EstadoDTEGlosa.text()"/>
                     <service-call name="mchile.sii.DTECommServices.process#DteInRespuestaDte" in-map="context" out-map="processDte"/>
+                    <if condition="processDte.envioIssuerPartyId">
+                        <if condition="envio.issuerPartyId == null"><then>
+                            <set field="envio.issuerPartyId" from="processDte.envioIssuerPartyId"/>
+                        </then><else-if condition="envio.issuerPartyId != processDte.envioIssuerPartyId">
+                            <return error="true" message="IssuerPartyId mismatch: previously ${envio.issuerPartyId}, for tipo DTE ${tipoDte}, folio ${folio}: ${processDte.envioIssuerPartyId}"/>
+                        </else-if></if>
+                    </if>
+                    <if condition="processDte.envioReceiverPartyId">
+                        <if condition="envio.receiverPartyId == null"><then>
+                            <set field="envio.receiverPartyId" from="processDte.envioReceiverPartyId"/>
+                        </then><else-if condition="envio.receiverPartyId != processDte.envioReceiverPartyId">
+                            <return error="true" message="ReceiverPartyId mismatch: previously ${envio.receiverPartyId}, for tipo DTE ${tipoDte}, folio ${folio}: ${processDte.envioReceiverPartyId}"/>
+                        </else-if></if>
+                    </if>
                     <if condition="processDte.processed"><then>
                         <set field="processedItems" from="processedItems+1"/>
                     </then><else-if condition="processDte.processedWithErrors">
@@ -689,7 +724,7 @@ along with this software (see the LICENSE.md file). If not, see
                     </else></if>
                 </iterate>
             </if>
-
+            <entity-update value-field="envio"/>
         </actions>
     </service>
     <service verb="process" noun="DteInRespuestaDte">
@@ -710,20 +745,22 @@ along with this software (see the LICENSE.md file). If not, see
         <out-parameters>
             <parameter name="processed" type="Boolean"/>
             <parameter name="processedWithErrors" type="Boolean"/>
+            <parameter name="envioIssuerPartyId"/>
+            <parameter name="envioReceiverPartyId"/>
         </out-parameters>
         <actions>
             <set field="process" from="true" type="Boolean"/>
             <set field="processed" from="false" type="Boolean"/>
             <set field="processedWithErrors" from="false" type="Boolean"/>
-            <if condition="rutEmisorEnvio != null &amp;&amp; rutEmisorEnvio != rutEmisor">
-                <log level="warn" message="Rut mismatch en envío ${envioId} rut emisor indicado en inicio: ${rutEmisorEnvio}, en documento tipo ${tipoDte} folio ${folio} es ${rutEmisor}"/>
+            <if condition="rutEmisorEnvio != null &amp;&amp; rutEmisorEnvio != rutReceptor">
+                <log level="warn" message="Rut mismatch en envío ${envioId} rut emisor indicado en inicio: ${rutEmisorEnvio}, en documento tipo ${tipoDte} folio ${folio} receptor es ${rutReceptor}"/>
                 <if condition="estadoDte == '3'">
                     <set field="processedWithErrors" from="true"/>
                 </if>
                 <set field="process" from="false" type="Boolean"/>
             </if>
-            <if condition="rutReceptorEnvio != null &amp;&amp; rutReceptorEnvio != rutReceptor">
-                <log level="warn" message="Rut mismatch en envío ${envioId} rut receptor indicado en inicio: ${rutReceptorEnvio}, en documento tipo ${tipoDte} folio ${folio} es ${rutReceptor}"/>
+            <if condition="rutReceptorEnvio != null &amp;&amp; rutReceptorEnvio != rutEmisor">
+                <log level="warn" message="Rut mismatch en envío ${envioId} rut receptor indicado en inicio: ${rutReceptorEnvio}, en documento tipo ${tipoDte} folio ${folio} emisor es ${rutEmisor}"/>
                 <set field="processedWithErrors" from="true"/>
                 <set field="process" from="false" type="Boolean"/>
             </if>
@@ -732,7 +769,8 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="process" from="false" type="Boolean"/>
             </if>
             <if condition="process">
-                <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="context"/>
+                <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="moquiCode"/>
+                <set field="fiscalTaxDocumentTypeEnumId" from="moquiCode.enumId"/>
                 <entity-find entity-name="mchile.dte.FiscalTaxDocumentAndInvoice" list="dbDteList">
                     <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
                     <econdition field-name="fiscalTaxDocumentNumber" from="folio"/>
@@ -744,6 +782,9 @@ along with this software (see the LICENSE.md file). If not, see
                 </entity-find>
                 <if condition="dbDteList"><then>
                     <set field="dbDte" from="dbDteList.first"/>
+                    <!-- set issuerParty to be set at envio to the receiver of the DTE and vice verssa -->
+                    <set field="envioIssuerPartyId" from="dbDte.receiverPartyId"/>
+                    <set field="envioReceiverPartyId" from="dbDte.issuerPartyId"/>
                     <entity-find-one entity-name="mchile.dte.DteEnvioFiscalTaxDocument" value-field="dteEnvioFtd" auto-field-map="[fiscalTaxDocumentId:dbDte.fiscalTaxDocumentId, envioId:envioId]"/>
                     <if condition="validFiscalTaxDocumentIdList == null || dbDte.fiscalTaxDocumentId in validFiscalTaxDocumentIdList"><then>
                         <if condition="dbDte.sentRecStatusId == 'Ftd-SentRec' &amp;&amp; estadoDte == '0'">
@@ -783,7 +824,8 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="rutFirma" from="recibo.RutFirma.text()"/>
                 <set field="declaracion" from="recibo.Declaracion.text()"/>
                 <set field="timestampFirma" from="recibo.TmstFirmaRecibo.text()"/>
-                <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="context"/>
+                <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="moquiCode"/>
+                <set field="fiscalTaxDocumentTypeEnumId" from="moquiCode.enumId"/>
                 <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList" for-update="true">
                     <econdition field-name="issuerPartyIdValue" from="rutEmisor"/>
                     <econdition field-name="receiverPartyIdValue" from="rutReceptor"/>
@@ -795,6 +837,16 @@ along with this software (see the LICENSE.md file). If not, see
                 </entity-find>
                 <if condition="dteList"><then>
                     <set field="dte" from="dteList.first"/>
+                    <if condition="envio.issuerPartyId == null"><then>
+                        <set field="envio.issuerPartyId" from="dte.receiverPartyId"/>
+                    </then><else-if condition="envio.issuerPartyId != dte.receiverPartyId">
+                        <return error="true" message="IssuerPartyId mismatch: previously ${envio.issuerPartyId}, for tipo DTE ${tipoDte}, folio ${folio}: ${dte.receiverPartyId}"/>
+                    </else-if></if>
+                    <if condition="envio.receiverPartyId == null"><then>
+                        <set field="envio.receiverPartyId" from="dte.issuerPartyId"/>
+                    </then><else-if condition="envio.receiverPartyId != dte.issuerPartyId">
+                        <return error="true" message="ReceiverPartyId mismatch: previously ${envio.receiverPartyId}, for tipo DTE ${tipoDte}, folio ${folio}: ${dte.issuerPartyId}"/>
+                    </else-if></if>
                     <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAttributes" value-field="attributes" auto-field-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId]"/>
                     <if condition="attributes.amount == montoTotal"><then>
                         <set field="dte.sentRecStatusId" value="Ftd-ReceiverAccept"/>
@@ -810,6 +862,7 @@ along with this software (see the LICENSE.md file). If not, see
                 </else></if>
             </iterate>
             <set field="processed" from="true"/>
+            <entity-update value-field="envio"/>
         </actions>
     </service>
 
@@ -817,7 +870,12 @@ along with this software (see the LICENSE.md file). If not, see
         <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
         <actions>
             <set field="withResponse" from="false"/>
-            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>
+            <if condition="envio.rutEmisor == '60803000-K'"><then>
+                <set field="envio.issuerPartyId" value="CL_SII"/>
+            </then><else>
+                <return error="true" message="Rut de emisor de envío ${envioId} (${rutEmisorEnvio}) de tipo ResultadoEnvio no es del SII"/>
+            </else></if>
             <set field="envioRr" from="ec.resource.getLocationReference(envio.documentLocation)"/>
             <set field="resultado" from=" new groovy.xml.XmlParser(false, false).parse(envioRr.openStream())"/>
             <set field="rutEmisor" from="resultado.IDENTIFICACION.RUTEMISOR.text().toUpperCase()"/>
@@ -825,50 +883,142 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="trackId" from="resultado.IDENTIFICACION.TRACKID.text()"/>
             <set field="dteList" from="resultado.REVISIONENVIO.REVISIONDTE"/>
             <set field="totalItems" from="0" type="Integer"/>
-            <set field="itemSubtotalList" from="resultado.ESTADISTICA.SUBTOTAL.INFORMADO"/>
+            <set field="itemSubtotalList" from="resultado.ESTADISTICA.SUBTOTAL"/>
             <iterate list="itemSubtotalList" entry="subtotal">
-                <set field="totalItems" from="totalItems + (subtotal.text() as Integer)"/>
+                <set field="totalItems" from="totalItems + ((subtotal.INFORMADO.text() ?:0) as Integer)"/>
             </iterate>
             <set field="processedItems" from="0"/>
-            <if condition="estadoResultado == 'EPR - Envio Procesado'">
+            <set field="processedFiscalTaxDocumentIds" from="[]"/>
+            <if condition="estadoResultado == 'EPR - Envio Procesado'"><then>
                 <iterate list="dteList" entry="dte">
                     <set field="folio" from="dte.FOLIO.text()" type="Integer"/>
                     <set field="tipoDte" from="dte.TIPODTE.text()"/>
                     <set field="estadoDte" from="dte.ESTADO.text()"/>
                     <set field="detalle" from="dte.DETALLE.text()"/>
-                    <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="context"/>
+                    <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="moquiCode"/>
+                    <set field="fiscalTaxDocumentTypeEnumId" from="moquiCode.enumId"/>
                     <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" for-update="true">
                         <econdition field-name="issuerPartyIdValue" from="rutEmisor"/>
                         <econdition field-name="fiscalTaxDocumentNumber" from="folio"/>
                         <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
                         <econdition field-name="trackId"/>
-                        <econdition field-name="sentAuthStatusId" value="Ftd-SentAuthUnverified"/>
+                        <econdition field-name="sentAuthStatusId" operator="in" value="Ftd-SentAuthUnverified,Ftd-SentAuthRejected"/>
                     </entity-find>
                     <set field="ftd" from="ftdList.first"/>
                     <if condition="ftd">
+                        <if condition="envio.receiverPartyId == null"><then>
+                            <set field="envio.receiverPartyId" from="ftd.issuerPartyId"/>
+                        </then><else-if condition="envio.receiverPartyId != ftd.issuerPartyId">
+                            <return error="true" message="ReceiverPartyId mismatch: previously ${envio.receiverPartyId}, for tipo DTE ${tipoDte}, folio ${folio}: ${ftd.issuerPartyId}"/>
+                        </else-if></if>
                         <if condition="estadoDte.startsWith('RCH')"><then>
                             <set field="ftd.sentAuthStatusId" value="Ftd-SentAuthRejected"/>
                         </then></if>
-                        <log message="Changing status of FTD ${ftd.fiscalTaxDocumentId} to ${ftd.sentAuthStatusId}"/>
                         <entity-update value-field="ftd"/>
+                        <service-call name="store#mchile.dte.DteEnvioFiscalTaxDocument" in-map="[fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, envioId:envioId]"/>
                     </if>
                     <set field="processedItems" from="processedItems+1"/>
+                    <script>processedFiscalTaxDocumentIds.add(ftd.fiscalTaxDocumentId)</script>
                 </iterate>
-                <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" for-update="true">
-                    <econdition field-name="trackId"/>
-                    <econdition field-name="sentAuthStatusId" operator="in" value="Ftd-SentAuthUnverified,Ftd-SentAuthAccepted"/>
+                <!-- When all are accepted, no detail by document is sent, have to mark all others as accepted -->
+                <entity-find entity-name="mchile.dte.DteEnvioAndFiscalTaxDocument" list="otherFtdList">
+                    <econdition field-name="envioTrackId" operator="is-not-null"/>
+                    <econdition field-name="envioTrackId" from="trackId"/>
+                    <econdition field-name="ftdTrackId" operator="is-not-null"/>
+                    <econdition field-name="ftdTrackId" from="trackId"/>
+                    <econdition field-name="fiscalTaxDocumentId" operator="not-in" from="processedFiscalTaxDocumentIds"/>
                 </entity-find>
-                <iterate list="ftdList" entry="dte">
-                    <if condition="dte.sentAuthStatusId == 'Ftd-SentAuthUnverified'"><then>
-                        <service-call name="mchile.sii.DTECommServices.verifica#DocumentoEnSii" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId,
-                                                                                                     organizationPartyId:ftd.issuerPartyId]" out-map="verificaRes"/>
-                        <if condition="verificaRes.errCode == '0'"><set field="processedItems" from="processedItems+1"/></if>
+                <iterate list="otherFtdList" entry="ftd">
+                    <if condition="envio.receiverPartyId == null"><then>
+                        <set field="envio.receiverPartyId" from="ftd.ftdIssuerPartyId"/>
+                    </then><else-if condition="envio.receiverPartyId != ftd.issuerPartyId">
+                        <return error="true" message="ReceiverPartyId mismatch: previously ${envio.receiverPartyId}, for tipo DTE ${tipoDte}, folio ${folio}: ${ftd.issuerPartyId}"/>
+                    </else-if></if>
+                    <if condition="ftd.ftdStatusId in ['Ftd-SentAuthUnverified', 'Ftd-SentAuthAccepted']"><then>
+                        <message error="true">FiscalTaxDocument {ftd.fiscalTaxDocumentId} should be marked as Accepted but is currently in status ${ftd.ftdStatusId}</message>
                     </then><else>
-                        <set field="processedItems" from="processedItems+1"/>
+                        <service-call name="update#mchile.dte.FiscalTaxDocument" in-map="[fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, sentAuthStatusId:'Ftd-SentAuthAccepted']"/>
                     </else></if>
+                    <set field="processedItems" from="processedItems+1"/>
                 </iterate>
-            </if>
-            <set field="processed" from="totalItems == processedItems"/>
+            </then><else>
+                <message error="true">Unknown estado for resultado envioId ${envioId}: ${estadoResultado}</message>
+            </else></if>
+            <entity-update value-field="envio"/>
+            <if condition="totalItems == processedItems"><then>
+                <set field="processed" from="true"/>
+            </then><else>
+                <message error="true">Itemes procesados: ${processedItems}, indicados en resultado: ${totalItems}</message>
+            </else></if>
+        </actions>
+    </service>
+
+    <service verb="process" noun="ResultadoConsumoFolios">
+        <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
+        <actions>
+            <set field="withResponse" from="false"/>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>
+            <if condition="envio.rutEmisor == '60803000-K'"><then>
+                <set field="envio.issuerPartyId" value="CL_SII"/>
+            </then><else>
+                <return error="true" message="Rut de emisor de envío ${envioId} (${rutEmisorEnvio}) de tipo ResultadoEnvio no es del SII"/>
+            </else></if>
+            <set field="envioRr" from="ec.resource.getLocationReference(envio.documentLocation)"/>
+            <set field="resultado" from=" new groovy.xml.XmlParser(false, false).parse(envioRr.openStream()).DocumentoResultadoConsumoFolios"/>
+            <set field="rutEmisor" from="resultado.Identificacion.Envio.RutEmisor.text().toUpperCase()"/>
+            <set field="estadoResultado" from="resultado.Resultado.Estado.text()"/>
+            <set field="trackId" from="resultado.Identificacion.Envio.TrackId.text()"/>
+            <if condition="estadoResultado == 'CORRECTO'"><then>
+                <entity-find entity-name="mchile.dte.DteEnvio" list="rcofList" for-update="true">
+                    <econdition field-name="trackId"/>
+                    <econdition field-name="rutEmisor"/>
+                    <econdition field-name="rutReceptor" value="60803000-K"/>
+                    <econdition field-name="statusId" operator="in" value="Ftde-Sent,Ftde-Processed"/>
+                </entity-find>
+                <message error="true">Encontrado envio ${rcofList.first?.envioId} </message>
+                <if condition="!rcofList">
+                    <message type="warning">No se encuentra envío referenciado en envío ${envioId} con trackId ${trackId}</message>
+                    <return/>
+                </if>
+                <set field="rcof" from="rcof.first"/>
+                <set field="rcof.statusId" value="Ftde-Procesed"/>
+                <set field="envio.receiverPartyId" from="rcof.issuerPartyId"/>
+                <set field="processed" from="true"/>
+            </then><else>
+                <message error="true">Unknown estado for resultado envioId ${envioId}: ${estadoResultado}</message>
+            </else></if>
+            <entity-update value-field="envio"/>
+        </actions>
+    </service>
+
+    <service verb="genera" noun="Envio">
+        <in-parameters>
+            <parameter name="rutReceptor" default-value="60803000-K"><description>El receptor del envio es el SII</description></parameter>
+            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="documentIdList" required="true" type="List"/>
+            <parameter name="saveSinFirma" type="Boolean" default="false"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="envioId"/>
+        </out-parameters>
+        <actions>
+            <set field="isBoleta" from="null" type="Boolean"/>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList">
+                <econdition field-name="fiscalTaxDocumentId" operator="in" from="documentIdList"/>
+            </entity-find>
+            <if condition="!ftdList"><return error="true" message="Could not find any FiscalTaxDocument"/></if>
+            <iterate list="ftdList" entry="ftd">
+                <if condition="isBoleta == null"><then>
+                    <set field="isBoleta" from="ftd.fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41']"/>
+                </then><else-if condition="!isBoleta &amp;&amp; ftd.fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41']">
+                    <return error="true" message="Cannot create Envio with Boleta and non-Boleta documents"/>
+                </else-if></if>
+            </iterate>
+            <if condition="isBoleta"><then>
+                <service-call name="mchile.sii.DTECommServices.genera#EnvioBoleta" in-map="context" out-map="context"/>
+            </then><else>
+                <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="context" out-map="context"/>
+            </else></if>
         </actions>
     </service>
 
@@ -931,7 +1081,29 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="enviaSII" noun="Envio"  type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/enviaSiiEnvio.groovy">
+    <service verb="enviaSII" noun="Envio">
+        <description>
+            Envio al SII envio ya generado
+            envioId: ID de envío
+        </description>
+        <in-parameters>
+            <parameter name="envioId" required="true"/>
+            <parameter name="maxFail" type="Integer" default="3"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="trackId"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
+            <if condition="envio.envioTypeEnumId == 'Ftde-EnvioBoleta'"><then>
+                <service-call name="mchile.sii.DTECommServices.enviaSII#EnvioBoleta" in-map="context" out-map="context"/>
+            </then><else>
+                <service-call name="mchile.sii.DTECommServices.enviaSII#EnvioDte" in-map="context" out-map="context"/>
+            </else></if>
+        </actions>
+    </service>
+
+    <service verb="enviaSII" noun="EnvioDte"  type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/enviaSiiEnvioDte.groovy">
         <description>
             Envio al SII envio ya generado
             envioId: ID de envío
@@ -970,12 +1142,18 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="newStatusByEnvioId" from="[:]"/>
             <set field="totalAcceptedDocs" from="0"/>
             <set field="attempt" from="1"/>
+
             <while condition="envioList &amp;&amp; attempt &lt;= maxAttempts">
                 <set field="reattemptList" from="[]"/>
+
                 <script>Thread.sleep(initialDelaySeconds*1000L)</script>
                 <log message="Starting attempt ${attempt}"/>
                 <iterate list="envioList" entry="envio">
-                    <service-call name="mchile.sii.DTECommServices.verifica#EnvioEnSii" in-map="[envioId:envio.envioId]" transaction="force-new" out-map="checkMap" ignore-error="true"/>
+                    <if condition="envio.envioTypeEnumId == 'Ftde-EnvioBoleta'"><then>
+                        <service-call name="mchile.sii.DTECommServices.verifica#EnvioBoletaEnSii" in-map="[envioId:envio.envioId]" transaction="force-new" out-map="checkMap" ignore-error="true"/>
+                    </then><else>
+                        <service-call name="mchile.sii.DTECommServices.verifica#EnvioEnSii" in-map="[envioId:envio.envioId]" transaction="force-new" out-map="checkMap" ignore-error="true"/>
+                    </else></if>
                     <set field="totalAcceptedDocs" from="totalAcceptedDocs + (checkMap.documentosAceptados?:0)"/>
                     <if condition="checkMap.hasError"><then>
                         <script>reattemptList.add(envio)</script>
@@ -1004,50 +1182,6 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="triggerEnvioToReceiver &amp;&amp; totalAcceptedDocs &gt; 0">
                 <script>ec.service.job("sii_dte_CreateEnvioDteReceiver").run()</script>
             </if>
-        </actions>
-    </service>
-
-    <service verb="enviarDirecto" noun="SII">
-        <description>
-            Servicio para enviar boleta de forma directa al SII, sin armar un envio nuevo
-        </description>
-        <in-parameters>
-            <parameter name="fiscalTaxDocumentId" required="true"/>
-            <parameter name="organizationPartyId" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="trackId"/>
-        </out-parameters>
-        <actions>
-            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="contentEv">
-                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
-                <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
-                <select-field field-name="contentLocation"/>
-            </entity-find-one>
-
-            <set field="contentLocation" from="contentEv.contentLocation"/>
-
-            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                <econdition field-name="partyId" from="organizationPartyId"/>
-                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
-            </entity-find>
-
-            <if condition="!partyIdentificationList.idValue[0]">
-                <return error="true" message="Organización $organizationPartyId no tiene RUT definido"/>
-            </if>
-            <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
-
-            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-
-            <service-call name="mchile.sii.DTECommServices.enviaSII#Boleta" in-map="[compaS:rutEmisor, enviadorS:rutEnvia, documentContentLocation:contentLocation, organizationPartyId:organizationPartyId, fiscalTaxDocumentId:fiscalTaxDocumentId]" out-map="context"/>
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteEv" for-update="true">
-                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
-            </entity-find-one>
-            <set field="dteEv.sentAuthStatusId" value="Ftd-SentAuthUnverified"/>
-            <set field="dteEv.trackId" from="trackId"/>
-            <entity-update value-field="dteEv"/>
         </actions>
     </service>
 
@@ -1122,10 +1256,9 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="FolioDte" from="dte.fiscalTaxDocumentNumber"/>
             <set field="FechaEmisionDte" from="ec.l10n.format(dte.date, 'ddMMyyyy')"/>
             <set field="MontoDte" from="ec.l10n.format(dte.amount, '###')"/>
-            <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
-            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[isProduction:isProduction, partyId:dte.issuerPartyId]" out-map="tokenMap"/>
+            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[dteIsProduction:dteIsProduction, partyId:dte.issuerPartyId]" out-map="tokenMap"/>
             <set field="Token" from="tokenMap.token"/>
-            <if condition="isProduction"><then>
+            <if condition="dteIsProduction"><then>
                 <service-call name="mchile.sii.DTECommServices.verifica#DocumentoEnSiiProduction" in-map="context" out-map="context"/>
             </then><else>
                 <service-call name="mchile.sii.DTECommServices.verifica#DocumentoEnSiiCertification" in-map="context" out-map="context"/>
@@ -1228,7 +1361,6 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:envio.rutEmisor]" out-map="rutMap"/>
             <set field="RutCompania" from="rutMap.rut"/>
             <set field="DvCompania" from="rutMap.dv"/>
-            <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
             <entity-find entity-name="mantle.party.PartyIdentification" list="idList">
                 <econdition field-name="idValue" from="envio.rutEmisor"/>
                 <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
@@ -1240,10 +1372,10 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <if condition="issuerPartyId == null"><return error="true" message="No se encuentra partyId para el rut ${envio.rutEmisor}"/></if>
             <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:issuerPartyId]" out-map="context"/>
-            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[isProduction:isProduction, partyId:issuerPartyId]" out-map="tokenMap"/>
+            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[dteIsProduction:dteIsProduction, partyId:issuerPartyId]" out-map="tokenMap"/>
             <set field="Token" from="tokenMap.token"/>
             <set field="TrackId" from="envio.trackId"/>
-            <if condition="isProduction"><then>
+            <if condition="dteIsProduction"><then>
                 <service-call name="mchile.sii.DTECommServices.verifica#EnvioEnSiiProduction" in-map="context" out-map="context"/>
             </then><else>
                 <service-call name="mchile.sii.DTECommServices.verifica#EnvioEnSiiCertification" in-map="context" out-map="context"/>
@@ -1375,238 +1507,40 @@ TrackId Token']" type="Map"/>
         </out-parameters>
     </service>
 
-    <service verb="enviaSII" noun="Boleta">
+    <service verb="enviaSII" noun="EnvioBoleta"  type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/enviaSiiEnvioBoleta.groovy">
         <description>
-            Envio boleta a partir de documento envio ya generado y de forma individual
-            compaS: rut de compañía que envía
-            enviadorS: rut de persona que envía
-            documentoS: nombre de documento a enviar (que puede contener varios)
+            Envio al SII envio ya generado
+            envioId: ID de envío
         </description>
         <in-parameters>
-            <parameter name="compaS" required="true"/>
-            <parameter name="enviadorS" required="true"/>
-            <parameter name="documentContentLocation" required="true"/>
-            <parameter name="organizationPartyId" required="true"/>
-            <parameter name="fiscalTaxDocumentId" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="trackId"/>
-        </out-parameters>
-        <actions>
-            <!-- Validación rut -->
-            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:enviadorS]"/>
-
-            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-            <set field="certData" from="certData"/>
-            <set field="passS" from="passCert"/>
-
-
-            <!-- Creacion de envioBoleta -->
-            <log message="Creating envio for fiscalTaxDocumentId: ${fiscalTaxDocumentId}"/>
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" for-update="true"/>
-            <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument with id ${fiscalTaxDocumentId}"/></if>
-            <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="contentList">
-                <econdition field-name="fiscalTaxDocumentId"/>
-                <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
-            </entity-find>
-            <if condition="contentList.size() != 1"><return error="true" message="Found ${contentList.size()} XML content for fiscalTaxDocumentId ${fiscalTaxDocumentId}, expected 1"/></if>
-            <set field="content" from="ec.resource.getLocationReference(contentList.first.contentLocation)"/>
-            <service-call name="mchile.sii.DTECommServices.genera#EnvioBoleta" in-map="[rutReceptor:dte.receiverPartyIdValue, organizationPartyId:dte.issuerPartyId, documentIdList:[dte.fiscalTaxDocumentId]]" out-map="envio"/>
-            <!-- Obtencion de envioBoleta ya creado -->
-            <set field="envioId" from="envio.envioId"/>
-
-            <script>
-            dteEnvioEv = ec.entity.find("mchile.dte.DteEnvio").condition("envioId", envioId).one()
-            if (dteEnvioEv.statusId != 'Ftde-Created') {
-                ec.logger.error("Estado inválido para procesar envío ${envioId}: ${dteEnvioEv.statusId}")
-                return
-            }
-
-            inputStream = ec.resource.getLocationReference(dteEnvioEv.documentLocation).openStream()
-            </script>
-            <!--return error="true" message="envio: $envio aaaaa $inputStream"/-->
-            <!--message type="warning">$envio aaaaa $inputStream \n ******************************</message-->
-
-            <!--script>
-                ec.service.special().name("mchile.sii.DTECommServices.send#PendingEnvioBoletaReceiver").parameter("envioIdList", [envio.envioId]).registerOnCommit()
-            </script-->
-            <set field="trackId" value=""/>
-            <set field="rutCertificado" from="cl.moit.dte.MoquiDTEUtils.getRutFromCertificate(certificate)"/>
-            <script>
-                import java.io.File
-                import java.io.FileInputStream
-                import java.security.KeyStore
-                import java.security.PrivateKey
-                import java.security.cert.X509Certificate
-                import org.json.simple.JSONObject
-                import org.moqui.resource.ResourceReference
-                import groovy.json.JsonSlurper;
-
-                KeyStore ks = KeyStore.getInstance("PKCS12")
-                ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
-                String alias = ks.aliases().nextElement()
-                //logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
-
-                X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
-                PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray())
-
-                ResourceReference documentoRr = ec.resource.getLocationReference(dteEnvioEv.documentLocation)
-
-                if (dteSystemIsProduction) {
-                    logger.warn("Enviando envioBoleta a produccion")
-                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([isProduction:'yes',  organizationPartyId:organizationPartyId]).call().token
-                    resp = ec.service.sync().name("mchile.sii.DTECommServices.upload#EnvioBoletaProduccion").parameters([rutEnvia:rutCertificado, rutCompania:compaS, envioId:envioId, token:token]).call().respSII
-                } else {
-                    logger.warn("Enviando envioBoleta a Certificacion")
-                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([isProduction:'',  organizationPartyId:organizationPartyId]).call().token
-                    resp = ec.service.sync().name("mchile.sii.DTECommServices.upload#EnvioBoletaCertificacion").parameters([rutEnvia:rutCertificado, rutCompania:compaS, envioId:envioId, token:token]).call().respSII
-                }
-                salida = resp.toString()
-                logger.warn("Salida JSON: " + salida)
-
-                def jsonSlurper = new JsonSlurper()
-                def object = jsonSlurper.parseText(resp)
-                assert object instanceof Map
-                glosa = object.descripcion
-                trackId = object.trackid
-
-        </script>
-        <set field="errorCode" value="0"/>
-        <set field="glosaError" value="$glosa"/>
-
-        </actions>
-    </service>
-
-    <service verb="enviaSII" noun="EnvioBoleta">
-        <description>
-            Envio boletas en grupo
-        </description>
-        <in-parameters>
-            <parameter name="rutReceptor" default-value="60803000-K"><description>El receptor del envio es el SII</description></parameter>
-            <parameter name="organizationPartyId" required="true"/>
-            <parameter name="saveSinFirma" type="Boolean" default="false"/>
             <parameter name="envioId" required="true"/>
+            <parameter name="maxFail" type="Integer" default="3"/>
         </in-parameters>
         <out-parameters>
             <parameter name="trackId"/>
         </out-parameters>
-        <actions>
-            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-            <set field="certData" from="certData"/>
-            <set field="passS" from="passCert"/>
-
-            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                <econdition field-name="partyId" from="organizationPartyId"/>
-                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
-            </entity-find>
-
-            <if condition="!partyIdentificationList.idValue[0]">
-                <return error="true" message="Organización $organizationPartyId no tiene RUT definido"/>
-            </if>
-            <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
-            <set field="rutCertificado" from="cl.moit.dte.MoquiDTEUtils.getRutFromCertificate(certificate)"/>
-            <script>
-                dteEnvioEv = ec.entity.find("mchile.dte.DteEnvio").condition("envioId", envioId).one()
-                //if (dteEnvioEv.statusId != 'Ftde-Received') { // Boletas no se envian
-                if (dteEnvioEv.statusId != 'Ftde-Created') {
-                    ec.logger.error("Estado inválido para procesar envío ${envioId}: ${dteEnvioEv.statusId}")
-                    return
-                }
-
-                inputStream = ec.resource.getLocationReference(dteEnvioEv.documentLocation).openStream()
-                //Map processingParameters = new JsonSlurper().parseText(dteEnvioEv.processingParameters)
-            </script>
-            <!--return error="true" message="envio: $envio aaaaa $inputStream"/-->
-            <!--message type="warning">$envio aaaaa $inputStream \n ******************************</message-->
-
-            <!--script>
-                ec.service.special().name("mchile.sii.DTECommServices.send#PendingEnvioBoletaReceiver").parameter("envioIdList", [envio.envioId]).registerOnCommit()
-            </script-->
-            <set field="trackId" value=""/>
-            <script>
-                import java.io.File
-                import java.io.FileInputStream
-                import java.security.KeyStore
-                import java.security.PrivateKey
-                import java.security.cert.X509Certificate
-                import org.json.simple.JSONObject
-                import org.moqui.resource.ResourceReference
-                import groovy.json.JsonSlurper;
-
-                // leo certificado y llave privada del archivo pkcs12
-                KeyStore ks = KeyStore.getInstance("PKCS12")
-                ks.load(new ByteArrayInputStream(certData.decodeBase64()), passS.toCharArray())
-                String alias = ks.aliases().nextElement()
-                //logger.warn("Usando certificado " + alias + " del archivo PKCS12: " + certS)
-
-                X509Certificate x509 = (X509Certificate) ks.getCertificate(alias)
-                PrivateKey pKey = (PrivateKey) ks.getKey(alias, passS.toCharArray())
-
-                ResourceReference documentoRr = ec.resource.getLocationReference(dteEnvioEv.documentLocation)
-                //if (dteSystemIsProduction) {
-                //    String token = con.getToken(pKey, x509)
-                //    recp = con.uploadEnvioProduccion(enviadorS, compaS, documentoRr.openStream(), token)
-                //} else {
-                //String token = con.getTokenCert(pKey, x509)
-                //recp = con.uploadEnvioCertificacion("12857517-0", rutEmisor, documentoRr.openStream(), token)
-                //}
-
-                if (dteSystemIsProduction) { // aaaaaaaaaaaa
-                    logger.warn("Enviando envioBoleta a produccion")
-                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([isProduction:'yes',  organizationPartyId:organizationPartyId]).call().token
-                    resp = ec.service.sync().name("mchile.sii.DTECommServices.upload#EnvioBoletaProduccion").parameters([rutEnvia:rutCertificado, rutCompania:rutEmisor, documentoRr:documentoRr.openStream(), token:token, envioId:envioId]).call().respSII
-                } else {
-                    logger.warn("Enviando envioBoleta a Certificacion")
-                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([isProduction:'',  organizationPartyId:organizationPartyId]).call().token
-                    resp = ec.service.sync().name("mchile.sii.DTECommServices.upload#EnvioBoletaCertificacion").parameters([rutEnvia:rutCertificado, rutCompania:rutEmisor, documentoRr:documentoRr.openStream(), token:token, envioId:envioId]).call().respSII
-                }
-
-                salida = resp.toString()
-                logger.warn("Salida JSON: " + salida)
-
-                def jsonSlurper = new JsonSlurper()
-                def object = jsonSlurper.parseText(resp)
-                assert object instanceof Map
-                trackId = object.trackid
-
-            </script>
-
-            <set field="errorCode" value="0"/>
-            <set field="glosaError" value="$glosa"/>
-
-        </actions>
     </service>
 
-
-    <service verb="verificaEnSII" noun="EnvioBoleta">
+    <service verb="verifica" noun="EnvioBoletaEnSii">
         <description>
             Verificación en el SII de envioBoleta con rut y trackid
         </description>
         <in-parameters>
-            <parameter name="fiscalTaxDocumentId" required="true"/>
-            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
-            <parameter name="organizationPartyId" required="true"/>
-            <parameter name="trackId"/>
+            <parameter name="envioId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="errorCode" required="true"/>
             <parameter name="glosaError" required="true"/>
+            <parameter name="hasError" type="Boolean"/>
+            <parameter name="newStatusId"/>
         </out-parameters>
         <actions>
-            <set field="statusSii" value=""/>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
 
-            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:envio.issuerPartyId]" out-map="context"/>
             <set field="certData" from="certData"/>
-            <set field="passS" from="passCert"/>
 
-            <service-call name="mchile.sii.DTEServices.get#DteContent"
-                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
-
-            <if condition="!content">
-                <return error="true" message="DTE no existe"/>
-            </if>
-            <set field="envio" from="content"/>
-
+            <set field="statusSii" value=""/>
             <set field="salida" value=""/>
             <set field="statusXML" value=""/>
             <set field="token" default-value="0"/>
@@ -1614,24 +1548,18 @@ TrackId Token']" type="Map"/>
 
 
             <script>
-                import java.io.FileInputStream
-                import java.security.KeyStore
-                import java.security.PrivateKey
-                import java.security.cert.X509Certificate
-                import java.util.HashMap
-                import org.apache.xmlbeans.XmlOptions
                 import groovy.json.JsonSlurper;
 
-                System.out.println("Enviador: " + rutEnvia + ", rutEmisor "+rutEmisor+ ", token: " + token)
+                System.out.println("Enviador: " + rutEnviador + ", rutEmisor "+rutEmisor+ ", token: " + token)
 
                 // Ejecutar GET https://apicert.sii.cl/boleta.electronica.envio/{rut}-{dv}-{trackid}
-                if (dteSystemIsProduction) {
+                if (boletaIsProduction) {
                     logger.warn("Consultando envio Boleta en produccion")
-                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([isProduction:'yes',  organizationPartyId:organizationPartyId]).call().token
+                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([boletaIsProduction:'yes',  partyId:envio.issuerPartyId]).call().token
                     resp = ec.service.sync().name("mchile.sii.DTECommServices.get#EstadoEnvioBoletaProduccion").parameters([rutCompany:rutEmisor, trackId:trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]).call().respSII
                 } else {
                     logger.warn("Consultando envio en Certificacion")
-                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([isProduction:'',  organizationPartyId:organizationPartyId]).call().token
+                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([boletaIsProduction:'',  partyId:envio.issuerPartyId]).call().token
                     resp = ec.service.sync().name("mchile.sii.DTECommServices.get#EstadoEnvioBoletaCertificacion").parameters([rutCompany:rutEmisor, trackId:trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]).call().respSII
                 }
 
@@ -1652,7 +1580,7 @@ TrackId Token']" type="Map"/>
         </actions>
     </service>
 
-    <service verb="verificaEnSII" noun="Boleta">
+    <service verb="verifica" noun="BoletaEnSii">
         <description>
             Verificación en el SII de boleta especifica usando rut empresa, tipo y folio
         </description>
@@ -1668,7 +1596,6 @@ TrackId Token']" type="Map"/>
         <actions>
             <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
             <set field="certData" from="certData"/>
-            <set field="passS" from="passCert"/>
 
             <service-call name="mchile.sii.DTEServices.get#DteContent"
                           in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
@@ -1729,6 +1656,12 @@ TrackId Token']" type="Map"/>
                 import java.text.DateFormat
                 import java.text.SimpleDateFormat
                 import java.util.Date
+                import java.io.FileInputStream
+                import java.security.KeyStore
+                import java.security.PrivateKey
+                import java.security.cert.X509Certificate
+                import java.util.HashMap
+                import groovy.json.JsonSlurper;
 
                 // Correccion de rut
                 rutEmisor = rutEmisor.replace(".","")
@@ -1755,35 +1688,16 @@ TrackId Token']" type="Map"/>
                 Date date1 = sourceFmt.parse(fechaEmision)
                 fechaEmision = targetFmt.format(date1)
 
-            </script>
-
-            <script>
-                import java.io.FileInputStream
-                import java.security.KeyStore
-                import java.security.PrivateKey
-                import java.security.cert.X509Certificate
-                import java.util.HashMap
-                import org.apache.xmlbeans.XmlOptions
-                import groovy.json.JsonSlurper;
-
                 System.out.println("Folio: " + folio + ", token: " + token)
 
                 // Ejecutar GET https://apicert.sii.cl/boleta.electronica.envio/{rut}-{dv}-{trackid}
-                /*if (dteSystemIsProduction) {
-                    String token = con.getToken(pkey, certificate)
-                    resp = con.getEstadoBOLETAProduccion(rutEmisor, rutReceptor, monto, fechaEmision, ""+folio, tipo, token)
-                } else {
-                    String token = con.getTokenCert(pkey, certificate)
-                    resp = con.getEstadoBOLETACertificacion(rutEmisor, rutReceptor, monto, fechaEmision, ""+folio, tipo, token)
-                }*/
-
-                if (dteSystemIsProduction) {
+                if (boletaIsProduction) {
                     logger.warn("Consultando Boleta en produccion")
-                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([isProduction:'yes',  organizationPartyId:organizationPartyId]).call().token
-                    resp = ec.service.sync().name("mchile.sii.DTECommServices.get#EstadoBoletaProduccion").parameters([rutCompany:rutEmisor, , rutReceptor:rutReceptor, monto:monto, fechaEmision:fechaEmision, folio:folio, tipo:tipo, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]).call().respSII
+                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([boletaIsProduction:'yes',  partyId:organizationPartyId]).call().token
+                    resp = ec.service.sync().name("mchile.sii.DTECommServices.get#EstadoBoletaProduccion").parameters([rutCompany:rutEmisor, rutReceptor:rutReceptor, monto:monto, fechaEmision:fechaEmision, folio:folio, tipo:tipo, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]).call().respSII
                 } else {
                     logger.warn("Consultando Boleta en Certificacion")
-                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([isProduction:'',  organizationPartyId:organizationPartyId]).call().token
+                    token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([boletaIsProduction:'',  partyId:organizationPartyId]).call().token
                     resp = ec.service.sync().name("mchile.sii.DTECommServices.get#EstadoBoletaCertificacion").parameters([rutCompany:rutEmisor, rutReceptor:rutReceptor, monto:monto, fechaEmision:fechaEmision, folio:folio, tipo:tipo, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]).call().respSII
                 }
 
@@ -1905,17 +1819,20 @@ TrackId Token']" type="Map"/>
 
     <service verb="get" noun="Seed">
         <in-parameters>
-            <parameter name="isProduction" type="Boolean"/>
+            <parameter name="dteIsProduction" type="Boolean"/>
+            <parameter name="boletaIsProduction" type="Boolean"/>
+            <parameter name="partyId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="estado"/>
             <parameter name="semilla"/>
         </out-parameters>
         <actions>
-            <if condition="isProduction == null">
+            <if condition="dteIsProduction == null">
                 <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+                <set field="dteIsProduction" from="dteIsProductionByPartyId[partyId]"/>
             </if>
-            <if condition="isProduction"><then>
+            <if condition="dteIsProduction"><then>
                 <service-call name="mchile.sii.DTECommServices.get#SeedProduction" out-map="context"/>
             </then><else>
                 <service-call name="mchile.sii.DTECommServices.get#SeedCertification" out-map="context"/>
@@ -1956,7 +1873,9 @@ TrackId Token']" type="Map"/>
     <service verb="get" noun="Token">
         <in-parameters>
             <parameter name="partyId" required="true"/>
-            <parameter name="isProduction" type="Boolean"/>
+            <parameter name="dteIsProduction" type="Boolean"/>
+            <parameter name="boletaIsProduction" type="Boolean"/>
+            <parameter name="boleta" type="Boolean"/>
         </in-parameters>
         <out-parameters>
             <parameter name="token"/>
@@ -1964,10 +1883,19 @@ TrackId Token']" type="Map"/>
             <parameter name="glosa"/>
         </out-parameters>
         <actions>
-            <if condition="isProduction == null">
-                <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
-            </if>
-            <service-call name="mchile.sii.DTECommServices.get#Seed" in-map="context" out-map="seed"/>
+            <if condition="boleta"><then>
+                <if condition="boletaIsProduction == null">
+                    <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+                    <set field="boletaIsProduction" from="boletaIsProductionByPartyId[partyId]"/>
+                </if>
+                <service-call name="mchile.sii.DTECommServices.get#SeedBoleta" in-map="context" out-map="seed"/>
+            </then><else>
+                <if condition="dteIsProduction == null">
+                    <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+                    <set field="dteIsProduction" from="dteIsProductionByPartyId[partyId]"/>
+                </if>
+                <service-call name="mchile.sii.DTECommServices.get#Seed" in-map="context" out-map="seed"/>
+            </else></if>
             <if condition="seed.estado != '00'">
                 <return error="true" message="Estado inválido al obtener semilla: ${seed.estado}"/>
             </if>
@@ -1989,10 +1917,18 @@ TrackId Token']" type="Map"/>
                 byte[] signedXmlBytes = MoquiDTEUtils.sign(doc, "", pkey, certificate, "", "")
                 String signedXml = new String(signedXmlBytes)
             ]]></script>
-            <if condition="isProduction"><then>
-                <service-call name="mchile.sii.DTECommServices.get#TokenProduction" in-map="[pszXml:signedXml]" out-map="context"/>
+            <if condition="boleta"><then>
+                <if condition="boletaIsProduction"><then>
+                    <service-call name="mchile.sii.DTECommServices.get#TokenBoletaProduction" in-map="[pszXml:signedXml]" out-map="context"/>
+                </then><else>
+                    <service-call name="mchile.sii.DTECommServices.get#TokenBoletaCertification" in-map="[pszXml:signedXml]" out-map="context"/>
+                </else></if>
             </then><else>
-                <service-call name="mchile.sii.DTECommServices.get#TokenCertification" in-map="[pszXml:signedXml]" out-map="context"/>
+                <if condition="dteIsProduction"><then>
+                    <service-call name="mchile.sii.DTECommServices.get#TokenProduction" in-map="[pszXml:signedXml]" out-map="context"/>
+                </then><else>
+                    <service-call name="mchile.sii.DTECommServices.get#TokenCertification" in-map="[pszXml:signedXml]" out-map="context"/>
+                </else></if>
             </else></if>
             <script><![CDATA[
                 tokenReturn = getTokenResponse?.getTokenReturn
@@ -2063,16 +1999,21 @@ TrackId Token']" type="Map"/>
 
     <service verb="get" noun="SeedBoleta">
         <in-parameters>
-            <parameter name="isProduction" type="Boolean"/>
+            <parameter name="boletaIsProduction" type="Boolean"/>
+            <parameter name="partyId"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="seed"/>
+            <parameter name="semilla"/>
         </out-parameters>
         <actions>
-            <if condition="isProduction == null">
+            <if condition="boletaIsProduction == null">
+                <if condition="partyId == null">
+                    <return error="true" message="Need to specify boletaIsProduction or partyId"/>
+                </if>
                 <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+                <set field="boletaIsProduction" from="boletaIsProductionByPartyId[partyId]"/>
             </if>
-            <if condition="isProduction"><then>
+            <if condition="boletaIsProduction"><then>
                 <service-call name="mchile.sii.DTECommServices.get#SeedBoletaProduction" out-map="context"/>
             </then><else>
                 <service-call name="mchile.sii.DTECommServices.get#SeedBoletaCertification" out-map="context"/>
@@ -2086,125 +2027,51 @@ TrackId Token']" type="Map"/>
             <parameter name="hostEnvio" required="true" default-value="apicert.sii.cl"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="seed"/>
+            <parameter name="semilla"/>
         </out-parameters>
     </service>
 
     <service verb="get" noun="SeedBoletaProduction" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/getSeedBoleta.groovy">
         <in-parameters>
-            <parameter name="urlSolicitud" required="true" default-value="https://apicert.sii.cl/recursos/v1/boleta.electronica.semilla"/>
-            <parameter name="hostEnvio" required="true" default-value="apicert.sii.cl"/>
+            <parameter name="urlSolicitud" required="true" default-value="https://api.sii.cl/recursos/v1/boleta.electronica.semilla"/>
+            <parameter name="hostEnvio" required="true" default-value="api.sii.cl"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="seed"/>
+            <parameter name="semilla"/>
         </out-parameters>
     </service>
 
     <service verb="get" noun="TokenBoleta">
         <in-parameters>
-            <parameter name="isProduction" type="Boolean"/>
-            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="boletaIsProduction" type="Boolean"/>
+            <parameter name="partyId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="token"/>
         </out-parameters>
         <actions>
-            <if condition="isProduction == null">
+            <if condition="boletaIsProduction == null">
                 <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
+                <set field="boletaIsProduction" from="boletaIsProductionByPartyId[partyId]"/>
             </if>
-            <if condition="isProduction"><then>
-                <service-call name="mchile.sii.DTECommServices.get#TokenBoletaProduction" out-map="context" in-map="[organizationPartyId:organizationParyId]"/>
+            <if condition="boletaIsProduction"><then>
+                <set field="urlSolicitud" value="https://api.sii.cl/recursos/v1/boleta.electronica.token"/>
+                <service-call name="mchile.sii.DTECommServices.get#TokenBoletaInternal" out-map="context" in-map="[partyId:partyId, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]"/>
             </then><else>
-                <service-call name="mchile.sii.DTECommServices.get#TokenBoletaCertification" out-map="context" in-map="[organizationPartyId:organizationPartyId]"/>
+                <set field="urlSolicitud" value="https://apicert.sii.cl/recursos/v1/boleta.electronica.token"/>
+                <service-call name="mchile.sii.DTECommServices.get#TokenBoletaInternal" out-map="context" in-map="[partyId:partyId, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]"/>
             </else></if>
         </actions>
     </service>
 
-    <service verb="get" noun="TokenBoletaCertification" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/getTokenBoleta.groovy">
+    <service verb="get" noun="TokenBoletaInternal" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/getTokenBoleta.groovy">
         <in-parameters>
-            <parameter name="urlSolicitud" required="true" default-value="https://apicert.sii.cl/recursos/v1/boleta.electronica.token"/>
-            <parameter name="hostEnvio" required="true" default-value="apicert.sii.cl"/>
-            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="urlSolicitud" required="true"/>
+            <parameter name="partyId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="token"/>
         </out-parameters>
-    </service>
-
-    <service verb="get" noun="TokenBoletaProduction" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/getTokenBoleta.groovy">
-        <in-parameters>
-            <parameter name="urlSolicitud" required="true" default-value="https://apicert.sii.cl/recursos/v1/boleta.electronica.token"/>
-            <parameter name="hostEnvio" required="true" default-value="apicert.sii.cl"/>
-            <parameter name="organizationPartyId" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="token"/>
-        </out-parameters>
-    </service>
-
-
-    <service verb="upload" noun="EnvioBoleta">
-        <in-parameters>
-            <parameter name="isProduction" type="Boolean"/>
-            <parameter name="rutEnvia" required="true"/>
-            <parameter name="rutCompania" required="true"/>
-            <parameter name="envioId" required="true"/>
-            <parameter name="token" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="respSII"/>
-        </out-parameters>
-        <actions>
-            <if condition="isProduction == null">
-                <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
-            </if>
-            <if condition="isProduction"><then>
-                <service-call name="mchile.sii.DTECommServices.upload#EnvioBoletaProduccion" out-map="context" in-map="[organizationPartyId:organizationParyId]"/>
-            </then><else>
-                <service-call name="mchile.sii.DTECommServices.upload#EnvioBoletaCertificacion" out-map="context" in-map="[organizationPartyId:organizationPartyId]"/>
-            </else></if>
-        </actions>
-    </service>
-
-    <service verb="upload" noun="EnvioBoletaCertificacion" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/uploadEnvioBoleta.groovy">
-        <in-parameters>
-            <parameter name="urlEnvio" required="true" default-value="https://pangal.sii.cl/recursos/v1/boleta.electronica.envio"/>
-            <parameter name="hostEnvio" required="true" default-value="pangal.sii.cl"/>
-            <parameter name="rutEnvia" required="true"/>
-            <parameter name="rutCompania" required="true"/>
-            <parameter name="envioId" required="true"/>
-            <parameter name="token" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="respSII"/>
-        </out-parameters>
-    </service>
-
-    <service verb="upload" noun="EnvioBoletaProduccion" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/uploadEnvioBoleta.groovy">
-        <in-parameters>
-            <parameter name="urlEnvio" required="true" default-value="https://pangal.sii.cl/recursos/v1/boleta.electronica.envio"/>
-            <parameter name="hostEnvio" required="true" default-value="pangal.sii.cl"/>
-            <parameter name="isProduction" type="Boolean"/>
-            <parameter name="rutEnvia" required="true"/>
-            <parameter name="rutCompania" required="true"/>
-            <parameter name="envioId" required="true"/>
-            <parameter name="token" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="respSII"/>
-        </out-parameters>
-    </service>
-
-
-    <service verb="get" noun="SeedCertification">
-        <out-parameters>
-            <parameter name="getSeedResponse" type="Map">
-                <parameter name="getSeedReturn"/>
-            </parameter>
-        </out-parameters>
-        <actions>
-
-        </actions>
     </service>
 
     <service verb="get" noun="EstadoEnvioBoleta" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/getEstadoEnvioBoleta.groovy">
@@ -2256,9 +2123,8 @@ TrackId Token']" type="Map"/>
             <set field="urlSolicitud"/>
             <set field="hostEnvio"/>
             <script>
-                // Cambiar a url y host produccion
-                urlSolicitud = "https://apicert.sii.cl/recursos/v1/boleta.electronica.envio";
-                hostEnvio = "apicert.sii.cl";
+                urlSolicitud = "https://api.sii.cl/recursos/v1/boleta.electronica.envio";
+                hostEnvio = "api.sii.cl";
             </script>
             <service-call name="mchile.sii.DTECommServices.get#EstadoEnvioBoleta" out-map="respuesta"
                           in-map="[rutCompany:rutCompany, trackId:trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]"/>
@@ -2315,8 +2181,8 @@ TrackId Token']" type="Map"/>
             <parameter name="tipo" required="true"/>
             <parameter name="fechaEmision" required="true"/>
             <parameter name="token" required="true"/>
-            <parameter name="urlSolicitud" default-value="https://apicert.sii.cl/recursos/v1/boleta.electronica"/>
-            <parameter name="hostEnvio"  default-value="apicert.sii.cl"/>
+            <parameter name="urlSolicitud" default-value="https://api.sii.cl/recursos/v1/boleta.electronica"/>
+            <parameter name="hostEnvio"  default-value="api.sii.cl"/>
         </in-parameters>
         <out-parameters>
             <parameter name="respSII"/>
@@ -2342,6 +2208,24 @@ TrackId Token']" type="Map"/>
             </if>
             <set field="envio" from="envioList.first"/>
             <set field="envio.statusId" value="Ftde-Received"/>
+            <entity-update value-field="envio"/>
+        </actions>
+    </service>
+
+    <service verb="reenable" noun="EnvioFailedToSend">
+        <in-parameters>
+            <parameter name="envioId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.DteEnvio" list="envioList" for-update="true">
+                <econdition field-name="envioId"/>
+                <econdition field-name="statusId" value="Ftde-Failed"/>
+            </entity-find>
+            <if condition="!envioList">
+                <return error="true" message="No se encuentra envío con fallas de procesamiento ${envioId}"/>
+            </if>
+            <set field="envio" from="envioList.first"/>
+            <set field="envio.statusId" value="Ftde-Created"/>
             <entity-update value-field="envio"/>
         </actions>
     </service>

@@ -12,7 +12,7 @@ You should have received a copy of the CC0 Public Domain Dedication
 along with this software (see the LICENSE.md file). If not, see
 <http://creativecommons.org/publicdomain/zero/1.0/>.
 -->
-<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
 
     <service verb="unscramble" noun="PartyIdentification">
         <actions>
@@ -183,4 +183,162 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="add" noun="PartyIdsToDteEnvio">
+        <actions>
+            <entity-find entity-name="mchile.dte.DteEnvio" list="envioList" for-update="true">
+                <econditions combine="or">
+                    <econdition field-name="issuerPartyId" operator="is-null"/>
+                    <econdition field-name="receiverPartyId" operator="is-null"/>
+                </econditions>
+            </entity-find>
+            <entity-find entity-name="mantle.party.PartyRole" list="internalOrgList">
+                <econdition field-name="roleTypeId" value="OrgInternal"/>
+            </entity-find>
+            <entity-find entity-name="mchile.dte.PartyDteParams" list="dtePartyList">
+                <econdition field-name="partyId" operator="in" from="internalOrgList.partyId"/>
+            </entity-find>
+            <set field="dtePartyIdList" from="dtePartyList.partyId"/>
+            <set field="enviosSinDocs" from="0"/>
+            <iterate list="envioList" entry="envio">
+                <set field="expectedDteReceiverPartyId" from="null"/>
+                <set field="expectedDteIssuerPartyId" from="null"/>
+                <set field="expectedDteReceiverPartyIdValue" from="null"/>
+                <set field="expectedDteIssuerPartyIdValue" from="null"/>
+                <entity-find entity-name="mchile.dte.DteEnvioAndFiscalTaxDocument" list="dteftdList">
+                    <econdition field-name="envioId" from="envio.envioId"/>
+                </entity-find>
+                <if condition="dteftdList.size() == 0">
+                    <message>Envio ${envio.envioTypeEnumId} sin docs: ${envio.envioId}</message>
+                    <set field="enviosSinDocs" from="enviosSinDocs+1"/>
+                    <continue/>
+                </if>
+                <if condition="envio.envioTypeEnumId in ['Ftde-RespuestaDte', 'Ftde-EnvioRecibos']"><then>
+                    <set field="expectedDteIssuerPartyId" from="dteftdList.first.ftdIssuerPartyId"/>
+                    <set field="expectedDteReceiverPartyId" from="dteftdList.first.ftdReceiverPartyId"/>
+                    <set field="expectedDteIssuerPartyIdValue" from="envio.rutReceptor"/>
+                    <set field="expectedDteReceiverPartyIdValue" from="envio.rutEmisor"/>
+                    <set field="envioReceiverPartyId" from="dteftdList.first.ftdIssuerPartyId"/>
+                    <set field="envioIssuerPartyId" from="dteftdList.first.ftdReceiverPartyId"/>
+                </then><else-if condition="envio.envioTypeEnumId == 'Ftde-ResultadoEnvio'">
+                    <set field="envioReceiverPartyId" from="dteftdList.first.ftdIssuerPartyId"/>
+                    <set field="expectedDteIssuerPartyId" from="dteftdList.first.ftdIssuerPartyId"/>
+                    <set field="expectedDteIssuerPartyIdValue" from="envio.rutReceptor"/>
+                    <set field="envioIssuerPartyId" from="CL_SII"/>
+                </else-if><else-if condition="envio.envioTypeEnumId == 'Ftde-EnvioBoleta'">
+                    <if condition="envio.rutReceptor != '60803000-K'"><return error="true" message="Envio Boleta ${envio.envioId} dirigido a receptor distinto del SII"/></if>
+                    <set field="envioReceiverPartyId" from="CL_SII"/>
+                    <set field="envioIssuerPartyId" from="dteftdList.first.ftdIssuerPartyId"/>
+                    <set field="expectedDteIssuerPartyIdValue" from="envio.rutEmisor"/>
+                    <set field="expectedDteIssuerPartyId" from="dteftdList.first.ftdIssuerPartyId"/>
+                </else-if><else>
+                    <!-- Ftde-EnvioDte -->
+                    <if condition="envio.rutReceptor == '60803000-K'"><then>
+                        <set field="envioReceiverPartyId" from="CL_SII"/>
+                        <set field="envioIssuerPartyId" from="dteftdList.first.ftdIssuerPartyId"/>
+                        <set field="expectedDteIssuerPartyIdValue" from="envio.rutEmisor"/>
+                        <set field="expectedDteIssuerPartyId" from="dteftdList.first.ftdIssuerPartyId"/>
+                    </then><else>
+                        <set field="envioIssuerPartyId" from="dteftdList.first.ftdIssuerPartyId"/>
+                        <set field="envioReceiverPartyId" from="dteftdList.first.ftdReceiverPartyId"/>
+                        <set field="expectedDteIssuerPartyIdValue" from="envio.rutEmisor"/>
+                        <set field="expectedDteReceiverPartyIdValue" from="envio.rutReceptor"/>
+                        <set field="expectedDteIssuerPartyId" from="dteftdList.first.ftdIssuerPartyId"/>
+                        <set field="expectedDteReceiverPartyId" from="dteftdList.first.ftdReceiverPartyId"/>
+                    </else></if>
+                </else></if>
+
+                <iterate list="dteftdList" entry="dteftd">
+                    <if condition="expectedDteIssuerPartyIdValue &amp;&amp; expectedDteIssuerPartyIdValue != dteftd.issuerPartyIdValue">
+                        <message type="warning">expectedDteIssuerPartyIdValue for envio ${envio.envioId} and DTE ${dteftd.fiscalTaxDocumentId}: ${expectedDteIssuerPartyIdValue}, is ${dteftd.issuerPartyIdValue}</message>
+                    </if>
+                    <if condition="expectedDteReceiverPartyIdValue &amp;&amp; expectedDteReceiverPartyIdValue != dteftd.receiverPartyIdValue">
+                        <message type="warning">expectedDteReceiverPartyIdValue for envio ${envio.envioId} and DTE ${dteftd.fiscalTaxDocumentId}: ${expectedDteReceiverPartyIdValue}, is ${dteftd.receiverPartyIdValue}</message>
+                    </if>
+                    <if condition="expectedDteIssuerPartyId &amp;&amp; expectedDteIssuerPartyId != dteftd.ftdIssuerPartyId">
+                        <message type="warning">expectedDteIssuerPartyId for envio ${envio.envioId} and DTE ${dteftd.fiscalTaxDocumentId}: ${expectedDteIssuerPartyId}, is ${dteftd.ftdIssuerPartyId}</message>
+                    </if>
+                    <if condition="expectedDteReceiverPartyId &amp;&amp; expectedDteReceiverPartyId != dteftd.ftdReceiverPartyId">
+                        <message type="warning">expectedDteReceiverPartyId for envio ${envio.envioId} and DTE ${dteftd.fiscalTaxDocumentId}: ${expectedDteReceiverPartyId}, is ${dteftd.ftdReceiverPartyId}</message>
+                    </if>
+                </iterate>
+                <log message="Setting envioReceiverPartyId to ${envioReceiverPartyId}"/>
+                <set field="envio.receiverPartyId" from="envioReceiverPartyId"/>
+                <log message="Setting envioIssuerPartyId to ${envioIssuerPartyId}"/>
+                <set field="envio.issuerPartyId" from="envioIssuerPartyId"/>
+                <entity-update value-field="envio"/>
+            </iterate>
+            <log message="Processed ${envioList.size()} envios, ${enviosSinDocs} envíos sin docs"/>
+        </actions>
+    </service>
+
+    <service verb="resend" noun="XmlDteToReceiver">
+        <out-parameters>
+            <parameter name="foundEnvios"/>
+        </out-parameters>
+        <actions>
+            <entity-find entity-name="mantle.party.PartyRole" list="internalOrgList">
+                <econdition field-name="roleTypeId" value="OrgInternal"/>
+            </entity-find>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentList">
+                <econdition field-name="partyId" operator="in" from="internalOrgList.partyId"/>
+                <econdition field-name="partyIdTypeEnumId" operator="in" value="PtidNationalTaxId,PtidUniqueNationalId"/>
+            </entity-find>
+            <set field="internalRutList" from="partyIdentList.idValue"/>
+            <log message="internalRutList: ${internalRutList}"/>
+            <set field="dateThreshold" from="ec.l10n.parseTimestamp('2022-07-12', 'yyyy-MM-dd')"/>
+            <entity-find entity-name="mchile.dte.DteEnvio" list="envioList" for-update="true">
+                <econdition field-name="envioTypeEnumId" value="Ftde-EnvioDte"/>
+                <econdition field-name="rutEmisor" operator="in" from="internalRutList"/>
+                <econdition field-name="rutReceptor" operator="not-in" from="internalRutList"/>
+                <econdition field-name="rutReceptor" operator="not-equals" value="60803000-K"/>
+                <econdition field-name="emailMessageId" operator="is-null"/>
+                <econdition field-name="registerDate" operator="greater-equals" from="dateThreshold"/>
+                <order-by field-name="registerDate"/>
+            </entity-find>
+            <set field="foundEnvios" from="envioList.size()"/>
+            <iterate list="envioList" entry="envio">
+                <log message="Envio ${envio.envioId}, from ${envio.registerDate}"/>
+                <set field="envio.statusId" value="Ftde-Created"/>
+                <entity-update value-field="envio"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="update" noun="LastFolioUsed">
+        <actions>
+            <entity-find entity-name="mchile.dte.Caf" list="cafList" for-update="true">
+                <econdition field-name="lastFolioUsed" operator="is-null"/>
+            </entity-find>
+            <iterate list="cafList" entry="caf">
+                <set field="caf.lastFolioUsed" from="caf.siguienteFolio"/>
+                <entity-update value-field="caf"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="find" noun="RepeatedRuts">
+        <actions>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="idList">
+                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+                <order-by field-name="idValue"/>
+            </entity-find>
+            <set field="lastId" from="null"/>
+            <set field="repeatedByIdValue" from="[:]"/>
+            <iterate list="idList" entry="id">
+                <if condition="id.idValue == lastId?.idValue">
+                    <set field="repeatedList" from="repeatedByIdValue[id.idValue]"/>
+                    <if condition="repeatedList == null">
+                        <set field="repeatedList" from="[lastId.partyId]"/>
+                        <set field="repeatedByIdValue[id.idValue]" from="repeatedList"/>
+                    </if>
+                    <script>repeatedList.add(id.partyId)</script>
+                </if>
+                <set field="lastId" from="id"/>
+            </iterate>
+            <log level="warn" message="Rut repetidos: ${repeatedByIdValue.size()}"/>
+            <iterate list="repeatedByIdValue" entry="partyIdList" key="idValue">
+                <log message="Repetidos con RUT ${idValue} (${partyIdList.size()}): ${partyIdList.join(', ')}"/>
+            </iterate>
+        </actions>
+    </service>
 </services>

@@ -76,6 +76,7 @@
                     <xsl:with-param name="fecha"><xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:FchEmis | Encabezado/IdDoc/FchEmis"/></xsl:with-param>
                     <xsl:with-param name="medioPago"><xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:MedioPago | Encabezado/IdDoc/MedioPago"/></xsl:with-param>
                     <xsl:with-param name="formaPago"><xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:FmaPago | Encabezado/IdDoc/FmaPago"/></xsl:with-param>
+                    <xsl:with-param name="rutReceptor"><xsl:value-of select="siidte:Encabezado/siidte:Receptor/siidte:RUTRecep | Encabezado/Receptor/RUTRecep"/></xsl:with-param>
                 </xsl:apply-templates>
                 <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
                           fox:border-radius="4pt" border-width="0.8pt" border-style="solid">
@@ -298,7 +299,7 @@
 
                         <fo:block font-size="10.81pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" text-align="left">
                             <xsl:attribute name="color"><xsl:value-of select="$vendorNameColor"/></xsl:attribute>
-                            <xsl:value-of select="siidte:RznSoc | RznSoc"/>
+                            <xsl:value-of select="siidte:RznSoc | RznSoc | siidte:RznSocEmisor | RznSocEmisor"/>
                         </fo:block>
 
                         <xsl:if test="siidte:Sucursal | Sucursal">
@@ -308,7 +309,7 @@
                         </xsl:if>
 
                         <fo:block font-size="9.01pt" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left">
-                            <xsl:value-of select="siidte:GiroEmis | GiroEmis"/>
+                            <xsl:value-of select="siidte:GiroEmis | GiroEmis | siidte:GiroEmisor | GiroEmisor"/>
                         </fo:block>
 
                         <fo:block font-size="8.4pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left">
@@ -344,12 +345,14 @@
                                     <xsl:choose>
                                         <xsl:when test="$tipo=33">FACTURA ELECTRÓNICA</xsl:when>
                                         <xsl:when test="$tipo=34">FACTURA ELECTRÓNICA EXENTA</xsl:when>
+                                        <xsl:when test="$tipo=39">BOLETA ELECTRÓNICA</xsl:when>
+                                        <xsl:when test="$tipo=41">BOLETA ELECTRÓNICA EXENTA</xsl:when>
                                         <xsl:when test="$tipo=52">GUIA DE DESPACHO ELECTRÓNICA</xsl:when>
                                         <xsl:when test="$tipo=56">NOTA DE DEBITO ELECTRÓNICA</xsl:when>
                                         <xsl:when test="$tipo=61">NOTA DE CREDITO ELECTRÓNICA</xsl:when>
                                         <xsl:when test="$tipo=110">FACTURA DE EXPORTACION ELECTRÓNICA</xsl:when>
                                         <xsl:when test="$tipo=112">NOTA DE CREDITO EXPORTACION ELECTRÓNICA</xsl:when>
-                                        <xsl:otherwise>CORREGIR EN TEMPLATE XSL</xsl:otherwise>
+                                        <xsl:otherwise>TIPO DTE NO SOPORTADO EN TEMPLATE XSL</xsl:otherwise>
                                     </xsl:choose>
                                 </fo:block>
                                 <fo:block font-size="10.21pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" color="red" text-align="center">N&#176;<xsl:value-of select="$folio"/></fo:block>
@@ -370,6 +373,7 @@
         <xsl:param name="fecha"/>
         <xsl:param name="medioPago"/>
         <xsl:param name="formaPago"/>
+        <xsl:param name="rutReceptor"/>
 
         <fo:block-container absolute-position="auto">
             <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
@@ -381,73 +385,108 @@
                     <fo:table-column column-width="2cm"/>
                     <fo:table-column column-width="6.6cm"/>
                     <fo:table-body>
-                        <fo:table-row>
-                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Señor(es)</fo:inline></fo:block></fo:table-cell>
-                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:value-of select="siidte:RznSocRecep | RznSocRecep"/></fo:inline></fo:block></fo:table-cell>
-                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Fecha</fo:inline></fo:block></fo:table-cell>
-                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
-                        </fo:table-row>
-                        <fo:table-row>
-                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">RUT</fo:inline></fo:block></fo:table-cell>
-                            <fo:table-cell><fo:block margin-top="4pt"><xsl:call-template name="RutFormat"><xsl:with-param name="rut">
-                                <xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param></xsl:call-template></fo:block></fo:table-cell>
-                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Dirección</fo:inline></fo:block></fo:table-cell>
-                            <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:DirRecep | DirRecep"/></fo:block></fo:table-cell>
-                        </fo:table-row>
-                        <fo:table-row>
-                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Giro</fo:inline></fo:block></fo:table-cell>
-                            <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:GiroRecep | GiroRecep"/></fo:block></fo:table-cell>
-                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Comuna</fo:inline></fo:block></fo:table-cell>
-                            <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:CmnaRecep | CmnaRecep"/></fo:block></fo:table-cell>
-                        </fo:table-row>
-                        <fo:table-row>
-                            <xsl:choose><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=52) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=52)">
-                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Tipo de Traslado</fo:inline></fo:block></fo:table-cell>
-                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline>
-                                    <xsl:choose>
-                                        <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=1) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=1)">Operación constituye venta</xsl:when>
-                                        <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=2) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=2)">Ventas por efectuar</xsl:when>
-                                        <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=3) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=3)">Consignaciones</xsl:when>
-                                        <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=4) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=4)">Entrega gratuita</xsl:when>
-                                        <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=5) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=5)">Traslados internos</xsl:when>
-                                        <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=6) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=6)">Otros traslados no venta</xsl:when>
-                                        <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=7) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=7)">Guía de devolución</xsl:when>
-                                        <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=8) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=8)">Traslado para exportación (no venta)</xsl:when>
-                                        <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=9) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=9)">Venta para exportación</xsl:when>
-                                        <xsl:otherwise>Desconocido</xsl:otherwise>
-                                    </xsl:choose>
-                                </fo:inline></fo:block></fo:table-cell>
-                            </xsl:when><xsl:otherwise>
-                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Contacto</fo:inline></fo:block></fo:table-cell>
-                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Receptor/siidte:Contacto | /DTE/Documento/Encabezado/Receptor/Contacto"/></fo:inline></fo:block></fo:table-cell>
-                            </xsl:otherwise></xsl:choose>
-                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Ciudad</fo:inline></fo:block></fo:table-cell>
-                            <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:CiudadRecep | CiudadRecep"/></fo:block></fo:table-cell>
-                        </fo:table-row>
-                        <fo:table-row>
-                            <xsl:choose><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=61) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=61) or (/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=56) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=56)">
-                                <fo:table-cell><fo:block margin-top="4pt"/></fo:table-cell>
-                                <fo:table-cell><fo:block margin-top="4pt"/></fo:table-cell>
-                            </xsl:when><xsl:otherwise>
-                                <fo:table-cell>
-                                    <fo:block margin-top="4pt"><fo:inline font-weight="bold">Condiciones de pago</fo:inline></fo:block>
-                                </fo:table-cell>
-                                <fo:table-cell><fo:block margin-top="4pt"><xsl:call-template name="PagoFormat">
-                                    <xsl:with-param name="medioPago"><xsl:value-of select="$medioPago"/></xsl:with-param>
-                                    <xsl:with-param name="formaPago"><xsl:value-of select="$formaPago"/></xsl:with-param>
-                                </xsl:call-template></fo:block></fo:table-cell>
-                            </xsl:otherwise></xsl:choose>
-                            <xsl:choose><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=52) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=52)">
-                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Contacto</fo:inline></fo:block></fo:table-cell>
-                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Receptor/siidte:Contacto | /DTE/Documento/Encabezado/Receptor/Contacto"/></fo:inline></fo:block></fo:table-cell>
-                            </xsl:when><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=61) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=61) or (/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=56) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=56)">
-                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold"></fo:inline></fo:block></fo:table-cell>
-                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline></fo:inline></fo:block></fo:table-cell>
-                            </xsl:when><xsl:otherwise>
-                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Vencimiento</fo:inline></fo:block></fo:table-cell>
-                                <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:FchVenc | /DTE/Documento/Encabezado/IdDoc/FchVenc"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
-                            </xsl:otherwise></xsl:choose>
-                        </fo:table-row>
+                        <xsl:choose>
+                            <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=39) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=39) or (/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=41) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=41)">
+                                <xsl:choose>
+                                    <xsl:when test="(contains($rutReceptor, '0')) or (contains($rutReceptor, '66666666-6'))">
+                                        <fo:table-row>
+                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Fecha</fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
+                                        </fo:table-row>
+                                    </xsl:when>
+                                    <xsl:otherwise>
+                                        <fo:table-row>
+                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Fecha</fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Dirección</fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:DirRecep | DirRecep"/></fo:block></fo:table-cell>
+                                        </fo:table-row>
+                                        <fo:table-row>
+                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Señor(es)</fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:value-of select="siidte:RznSocRecep | RznSocRecep"/></fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Comuna</fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:CmnaRecep | CmnaRecep"/></fo:block></fo:table-cell>
+                                        </fo:table-row>
+                                        <fo:table-row>
+                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">RUT</fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt"><xsl:call-template name="RutFormat"><xsl:with-param name="rut">
+                                                <xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param></xsl:call-template></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Ciudad</fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:CiudadRecep | CiudadRecep"/></fo:block></fo:table-cell>
+                                        </fo:table-row>
+                                    </xsl:otherwise>
+                                </xsl:choose>
+                            </xsl:when>
+                            <xsl:otherwise>
+                                <fo:table-row>
+                                    <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Señor(es)</fo:inline></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:value-of select="siidte:RznSocRecep | RznSocRecep"/></fo:inline></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Fecha</fo:inline></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
+                                </fo:table-row>
+                                <fo:table-row>
+                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">RUT</fo:inline></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:call-template name="RutFormat"><xsl:with-param name="rut">
+                                        <xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param></xsl:call-template></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Dirección</fo:inline></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:DirRecep | DirRecep"/></fo:block></fo:table-cell>
+                                </fo:table-row>
+                                <fo:table-row>
+                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Giro</fo:inline></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:GiroRecep | GiroRecep"/></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Comuna</fo:inline></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:CmnaRecep | CmnaRecep"/></fo:block></fo:table-cell>
+                                </fo:table-row>
+                                <fo:table-row>
+                                    <xsl:choose><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=52) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=52)">
+                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Tipo de Traslado</fo:inline></fo:block></fo:table-cell>
+                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline>
+                                            <xsl:choose>
+                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=1) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=1)">Operación constituye venta</xsl:when>
+                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=2) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=2)">Ventas por efectuar</xsl:when>
+                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=3) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=3)">Consignaciones</xsl:when>
+                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=4) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=4)">Entrega gratuita</xsl:when>
+                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=5) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=5)">Traslados internos</xsl:when>
+                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=6) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=6)">Otros traslados no venta</xsl:when>
+                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=7) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=7)">Guía de devolución</xsl:when>
+                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=8) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=8)">Traslado para exportación (no venta)</xsl:when>
+                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=9) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=9)">Venta para exportación</xsl:when>
+                                                <xsl:otherwise>Desconocido</xsl:otherwise>
+                                            </xsl:choose>
+                                        </fo:inline></fo:block></fo:table-cell>
+                                    </xsl:when><xsl:otherwise>
+                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Contacto</fo:inline></fo:block></fo:table-cell>
+                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Receptor/siidte:Contacto | /DTE/Documento/Encabezado/Receptor/Contacto"/></fo:inline></fo:block></fo:table-cell>
+                                    </xsl:otherwise></xsl:choose>
+                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Ciudad</fo:inline></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:CiudadRecep | CiudadRecep"/></fo:block></fo:table-cell>
+                                </fo:table-row>
+                                <fo:table-row>
+                                    <xsl:choose><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=61) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=61) or (/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=56) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=56)">
+                                        <fo:table-cell><fo:block margin-top="4pt"/></fo:table-cell>
+                                        <fo:table-cell><fo:block margin-top="4pt"/></fo:table-cell>
+                                    </xsl:when><xsl:otherwise>
+                                        <fo:table-cell>
+                                            <fo:block margin-top="4pt"><fo:inline font-weight="bold">Condiciones de pago</fo:inline></fo:block>
+                                        </fo:table-cell>
+                                        <fo:table-cell><fo:block margin-top="4pt"><xsl:call-template name="PagoFormat">
+                                            <xsl:with-param name="medioPago"><xsl:value-of select="$medioPago"/></xsl:with-param>
+                                            <xsl:with-param name="formaPago"><xsl:value-of select="$formaPago"/></xsl:with-param>
+                                        </xsl:call-template></fo:block></fo:table-cell>
+                                    </xsl:otherwise></xsl:choose>
+                                    <xsl:choose><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=52) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=52)">
+                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Contacto</fo:inline></fo:block></fo:table-cell>
+                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Receptor/siidte:Contacto | /DTE/Documento/Encabezado/Receptor/Contacto"/></fo:inline></fo:block></fo:table-cell>
+                                    </xsl:when><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=61) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=61) or (/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=56) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=56)">
+                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold"></fo:inline></fo:block></fo:table-cell>
+                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline></fo:inline></fo:block></fo:table-cell>
+                                    </xsl:when><xsl:otherwise>
+                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Vencimiento</fo:inline></fo:block></fo:table-cell>
+                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:FchVenc | /DTE/Documento/Encabezado/IdDoc/FchVenc"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
+                                    </xsl:otherwise></xsl:choose>
+                                </fo:table-row>
+                            </xsl:otherwise>
+                        </xsl:choose>
                     </fo:table-body>
                 </fo:table>
             </fo:block>

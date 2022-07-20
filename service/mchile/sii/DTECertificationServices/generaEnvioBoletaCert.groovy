@@ -6,22 +6,19 @@ import groovy.xml.MarkupBuilder
 import cl.moit.dte.MoquiDTEUtils
 
 ExecutionContext ec = context.ec
-
 // Recuperacion de parametros de la organizacion
-ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:activeOrgId]).call())
+
+// : [39-76222457-42] fiscalTaxDocumentId
+documentIdList = ['39-76222457-42']
+ec.logger.warn("tamanno: " + documentIdList.size())
 
 ResourceReference[] DTEList = new ResourceReference[documentIdList.size()]
 
 docNumberByType = [:]
 dteEvList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("fiscalTaxDocumentId", "in", documentIdList).list()
 dteList = []
-issuerPartyId = null
-receiverPartyId = (rutReceptor == '60803000-K' ? 'CL_SII' : null)
 dteEvList.each { dte ->
-    if (issuerPartyId != null && issuerPartyId != dte.issuerPartyId)
-        ec.message.addError("No se pueden incluir documentos de diferentes emisores (${issuerPartyId} y ${dte.issuerPrtyId})")
-    else
-        issuerPartyId = dte.issuerPartyId
     tipoDte = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameter("fiscalTaxDocumentTypeEnumId", dte.fiscalTaxDocumentTypeEnumId).call().siiCode
     contentLocation = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).one()?.contentLocation
     if (contentLocation == null) {
@@ -86,39 +83,21 @@ xml = xmlWriter.toString()
 
 if (saveSinFirma) {
     ResourceReference xmlContentReference = ec.resource.getLocationReference("dbresource://moit/erp/dte/EnvioDte-sinfirma/${rutEmisor}/${idEnvio}-sinfirma.xml")
-    //envioBoletaDocument.save(xmlContentReference.outputStream, opts)
 }
 Document doc = MoquiDTEUtils.parseDocument(xmlWriter.toString().getBytes())
 
 byte[] salida = MoquiDTEUtils.sign(doc, "#" + idEnvio, pkey, certificate, "#" + idEnvio, "SetDTE")
 doc = MoquiDTEUtils.parseDocument(salida)
 
-try {
-    MoquiDTEUtils.validateDocumentSii(ec, salida, schemaLocation)
-} catch (Exception e) {
-    ec.message.addError("Failed validation: " + e.getMessage())
-}
+// Se deja archivo en /tmp
 
-ts = ec.user.nowTimestamp
-if (MoquiDTEUtils.verifySignature(doc, "/sii:EnvioBOLETA/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()")) {
-    xmlContentLocation = "dbresource://moit/erp/dte/EnvioDte/${rutEmisor}/${idEnvio}.xml"
-    envioRr = ec.resource.getLocationReference(xmlContentLocation)
-    envioRr.putBytes(salida)
-    fileName = envioRr.fileName
-    ec.logger.warn("Envio generado OK")
-} else {
-    xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/${idEnvio}-mala.xml"
-    envioRr = ec.resource.getLocationReference(xmlContentLocation)
-    envioRr.putBytes(salida)
-    fileName = envioRr.fileName
-    ec.logger.warn("Error al generar envio")
-}
+dirSalida = '/tmp/envioBoleta.xml'
 
-envioId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-EnvioBoleta', statusId:'Ftde-Created', internalId:idEnvio, rutEmisor:rutEmisor, issuerPartyId:issuerPartyId,
-                                                                           rutReceptor:rutReceptor, receiverPartyId:'CL_SII', registerDate:ec.user.nowTimestamp, documentLocation:xmlContentLocation, fileName:fileName]).call().envioId
-documentIdList.each { documentId ->
-    ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters([fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Envio', contentLocation:xmlContentLocation, contentDate:ts]).call()
-    ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([fiscalTaxDocumentId:documentId, envioId:envioId]).call()
-}
+File file = new File(dirSalida);
+
+OutputStream os = new FileOutputStream(file);
+os.write(salida);
+os.close();
+
 
 return

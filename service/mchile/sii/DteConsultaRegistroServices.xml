@@ -12,7 +12,7 @@ You should have received a copy of the CC0 Public Domain Dedication
 along with this software (see the LICENSE.md file). If not, see
 <http://creativecommons.org/publicdomain/zero/1.0/>.
 -->
-<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
 
     <service verb="consultar" noun="DocDteCedible">
         <in-parameters>
@@ -42,7 +42,8 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="organizationPartyId" from="dte.issuerPartyId"/>
             </if>
             <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
-            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[isProduction:isProduction, partyId:organizationPartyId]" out-map="tokenMap"/>
+            <set field="dteIsProduction" from="dteIsProductionByPartyId[organizationPartyId]"/>
+            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[dteIsProduction:dteIsProduction, partyId:organizationPartyId]" out-map="tokenMap"/>
             <set field="token" value="TOKEN=${tokenMap.token}"/>
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:dte.issuerPartyIdValue]" out-map="rutMap"/>
             <set field="rutEmisor" from="rutMap.rut"/>
@@ -51,7 +52,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="tipoDoc" from="siiCode"/>
             <set field="folio" from="dte.fiscalTaxDocumentNumber"/>
             <set field="xmlRpcServiceParams" from="[debug:false, mimeHeaders:[cookie:token], methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio']" type="Map"/>
-            <if condition="isProduction"><then>
+            <if condition="dteIsProduction"><then>
                 <service-call name="mchile.sii.DteConsultaRegistroServices.consultar#DocDteCedibleProduction" in-map="context" out-map="outMap"/>
             </then><else>
                 <service-call name="mchile.sii.DteConsultaRegistroServices.consultar#DocDteCedibleCertification" in-map="context" out-map="outMap"/>
@@ -93,12 +94,14 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
             <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
-            <script>if (!isProduction) cl.moit.proxy.debug.TrustAllTrustManager.init()</script>
+            <set field="partyId" from="activeOrgId?:filterOrgIds[0]"/>
+            <set field="dteIsProduction" from="dteIsProductionByPartyId[partyId]"/>
+            <script>if (!systemIsProduction) cl.moit.proxy.debug.TrustAllTrustManager.init()</script>
             <service-call name="mantle.party.PartyServices.setup#UserOrganizationInfo" out-map="context"/>
-            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[isProduction:isProduction, partyId:(activeOrgId?:filterOrgIds[0])]" out-map="tokenMap"/>
+            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[dteIsProduction:dteIsProduction, partyId:partyId]" out-map="tokenMap"/>
             <set field="token" value="TOKEN=${tokenMap.token}"/>
             <set field="xmlRpcServiceParams" from="[debug:true, mimeHeaders:[cookie:token], methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio']" type="Map"/>
-            <if condition="isProduction"><then>
+            <if condition="dteIsProduction"><then>
                 <service-call name="mchile.sii.DteConsultaRegistroServices.get#VersionProduction" in-map="context" out-map="context"/>
             </then><else>
                 <service-call name="mchile.sii.DteConsultaRegistroServices.get#VersionCertification" in-map="context" out-map="context"/>
@@ -148,7 +151,8 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- ToDo: check dte statusId and evaluate possible actions -->
             <set field="organizationPartyId" from="dte.receiverPartyId"/>
             <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
-            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[isProduction:isProduction, partyId:dte.issuerPartyId]" out-map="tokenMap"/>
+            <set field="dteIsProduction" from="dteIsProductionByPartyId[dte.issuerPartyId]"/>
+            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[dteIsProduction:dteIsProduction, partyId:dte.issuerPartyId]" out-map="tokenMap"/>
             <set field="token" value="TOKEN=${tokenMap.token}"/>
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:dte.issuerPartyIdValue]" out-map="rutMap"/>
             <set field="rutEmisor" from="rutMap.rut"/>
@@ -157,7 +161,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="tipoDoc" from="siiCode"/>
             <set field="folio" from="dte.fiscalTaxDocumentNumber"/>
             <set field="xmlRpcServiceParams" from="[debug:false, mimeHeaders:[cookie:token], methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio']" type="Map"/>
-            <if condition="isProduction"><then>
+            <if condition="dteIsProduction"><then>
                 <service-call name="mchile.sii.DteConsultaRegistroServices.ingresar#AceptacionReclamoDocProduccion" in-map="context" out-map="outMap"/>
             </then><else>
                 <service-call name="mchile.sii.DteConsultaRegistroServices.ingresar#AceptacionReclamoDocCertificacion" in-map="context" out-map="outMap"/>
@@ -223,8 +227,9 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="organizationPartyId" from="dte.issuerPartyId"/>
             </if>
             <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
-            <script>if (!isProduction) cl.moit.proxy.debug.TrustAllTrustManager.init()</script>
-            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[isProduction:isProduction, partyId:organizationPartyId]" out-map="tokenMap"/>
+            <set field="dteIsProduction" from="dteIsProductionByPartyId[organizationPartyId]"/>
+            <script>if (!systemIsProduction) cl.moit.proxy.debug.TrustAllTrustManager.init()</script>
+            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[dteIsProduction:dteIsProduction, partyId:organizationPartyId]" out-map="tokenMap"/>
             <set field="token" value="TOKEN=${tokenMap.token}"/>
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:dte.issuerPartyIdValue]" out-map="rutMap"/>
             <set field="rutEmisor" from="rutMap.rut"/>
@@ -233,7 +238,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="tipoDoc" from="siiCode"/>
             <set field="folio" from="dte.fiscalTaxDocumentNumber"/>
             <set field="xmlRpcServiceParams" from="[debug:true, mimeHeaders:[cookie:token], methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio']" type="Map"/>
-            <if condition="isProduction"><then>
+            <if condition="dteIsProduction"><then>
                 <service-call name="mchile.sii.DteConsultaRegistroServices.get#EventosHistoricosProduction" in-map="context" out-map="outMap"/>
             </then><else>
                 <service-call name="mchile.sii.DteConsultaRegistroServices.get#EventosHistoricosCertification" in-map="context" out-map="outMap"/>
@@ -287,7 +292,8 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="organizationPartyId" from="dte.issuerPartyId"/>
             </if>
             <service-call name="mchile.sii.DTEServices.check#ProductionEnvironment" out-map="context"/>
-            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[isProduction:isProduction, partyId:organizationPartyId]" out-map="tokenMap"/>
+            <set field="dteIsProduction" from="dteIsProductionByPartyId[organizationPartyId]"/>
+            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[dteIsProduction:dteIsProduction, partyId:organizationPartyId]" out-map="tokenMap"/>
             <set field="token" value="TOKEN=${tokenMap.token}"/>
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:dte.issuerPartyIdValue]" out-map="rutMap"/>
             <set field="rutEmisor" from="rutMap.rut"/>
@@ -296,7 +302,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="tipoDoc" from="siiCode"/>
             <set field="folio" from="dte.fiscalTaxDocumentNumber"/>
             <set field="xmlRpcServiceParams" from="[debug:false, mimeHeaders:[cookie:token], methodNamespace:'http://ws.registroreclamodte.diii.sdi.sii.cl', methodNamespacePrefix:'ws', parameterOrder:'rutEmisor dvEmisor tipoDoc folio']" type="Map"/>
-            <if condition="isProduction"><then>
+            <if condition="dteIsProduction"><then>
                 <service-call name="mchile.sii.DteConsultaRegistroServices.get#FechaRecepcionSiiProduction" in-map="context" out-map="outMap"/>
             </then><else>
                 <service-call name="mchile.sii.DteConsultaRegistroServices.get#FechaRecepcionSiiCertification" in-map="context" out-map="outMap"/>

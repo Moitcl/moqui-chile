@@ -67,7 +67,6 @@ class MoquiDTEUtils {
 
     public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType, Integer codRef) throws BaseArtifactException {
         List detalleList = []
-
         // Text Correction DTEs have no detail list
         if (detailList.size() == 0 && codRef == 2) {
             if (detailType == "InvoiceItem" || detailType == "DebitoItem") {
@@ -102,11 +101,23 @@ class MoquiDTEUtils {
             if (montoDescuento)
                 totalDescuentos += montoDescuento
             String uom = null
-            if (!detailType in ["ShipmentItem"]) {
+            // Solucion parche
+            //if (!detailType in ["ShipmentItem"]) {
+            if (!detailType.equals("ShipmentItem")) {
                 if (detailEntry.quantityUomId.equals('TF_hr'))
                     uom = "Hora"
                 else if (detailEntry.quantityUomId.equals('TF_mon'))
                     uom = "Mes"
+                else if (detailEntry.quantityUomId.equals('WT_kg'))
+                    uom = "Kgs"
+                else if (detailEntry.quantityUomId.equals('WT_g'))
+                    uom = "grms"
+                else if (detailEntry.quantityUomId.equals('LEN_m'))
+                    uom = "Mtr"
+                else if (detailEntry.quantityUomId.equals('VLIQ_L'))
+                    uom = "Ltr"
+                else if (detailEntry.quantityUomId.equals('VLIQ_L'))
+                    uom = "Ltr"
             }
             String itemAfecto = "true"
             if (detailEntry.productId) {
@@ -140,6 +151,8 @@ class MoquiDTEUtils {
                             uom = "Hora"
                         else if (item.quantityUomId.equals('TF_mon'))
                             uom = "Mes"
+                        else if (item.quantityUomId.equals('WT_kg'))
+                            uom = "Kgs"
                     }
                 }
                 if (quantityHandled < quantity) {
@@ -230,9 +243,10 @@ class MoquiDTEUtils {
         int i = 0
         referenciaList.each { referenciaEntry ->
             String folioRef = referenciaEntry.folio
-            Integer codRef = null
+            String codRef = null
             if (referenciaEntry.codigoReferenciaEnumId != null)
-                codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as Integer
+                codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as String
+                //codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as Integer
             Timestamp fechaRef = referenciaEntry.fecha instanceof java.sql.Date? new Timestamp(referenciaEntry.fecha.time) : referenciaEntry.fecha
 
             // Agrego referencias

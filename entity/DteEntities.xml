@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<entities xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/entity-definition-2.1.xsd">
+<entities xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/entity-definition-3.xsd">
 
     <entity entity-name="FiscalTaxDocument" package="mchile.dte">
         <field name="fiscalTaxDocumentId" type="id" is-pk="true"/>
@@ -16,6 +16,10 @@
         <field name="receiverPartyIdValue" type="text-medium" enable-audit-log="update"/>
         <field name="invoiceId" type="id" enable-audit-log="update"/>
         <field name="shipmentId" type="id" enable-audit-log="update"/>
+
+        <field name="fechaInicio" type="text-medium"/>
+        <field name="fechaFin" type="text-medium"/>
+
         <field name="trackId" type="id" enable-audit-log="update"><description>TrackId devuelto por SII al enviar documentos</description></field>
         <field name="date" type="date-time" default="ec.user.nowTimestamp"/>
         <relationship type="many" related="mantle.party.PartyIdentification" fk-name="fiscalTaxDocumentIssuerPartyIdntfctn">
@@ -57,10 +61,12 @@
             <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentAuth" statusId="Ftd-NotSentAuth" statusCode="0" description="DTE not sent"/>
             <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentAuth" statusId="Ftd-SentAuthUnverified" statusCode="1" description="DTE sent waiting for verification"/>
             <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentAuth" statusId="Ftd-SentAuthAccepted" statusCode="2" description="DTE sent and accepted"/>
-            <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentAuth" statusId="Ftd-SentAuthRejected" statusCode="2" description="DTE sent and rejected"/>
-            <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentAuth" statusId="Ftd-SendAuthFailed" statusCode="3" description="DTE failed to send"/>
+            <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentAuth" statusId="Ftd-SentAuthRejected" statusCode="3" description="DTE sent and rejected"/>
+            <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentAuth" statusId="Ftd-SentAuthAcceptedWithDiscrepancies" statusCode="4" description="DTE sent and rejected"/>
+            <moqui.basic.StatusItem statusTypeId="FiscalTaxDocumentSentAuth" statusId="Ftd-SendAuthFailed" statusCode="5" description="DTE failed to send"/>
             <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="Ftd-NotSentAuth" toStatusId="Ftd-SentAuthUnverified"/>
             <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="Ftd-SentAuthUnverified" toStatusId="Ftd-SentAuthAccepted"/>
+            <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="Ftd-SentAuthUnverified" toStatusId="Ftd-SentAuthAcceptedWithDiscrepancies"/>
             <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="Ftd-SentAuthUnverified" toStatusId="Ftd-SendAuthFailed"/>
             <moqui.basic.StatusFlowTransition statusFlowId="Default" statusId="Ftd-SendAuthFailed" toStatusId="Ftd-SentAuthUnverified"/>
 
@@ -155,6 +161,7 @@
             <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentType" enumId="Ftdt-LibroCompras" sequenceNum="240" description="Libro de Compras"/>
             <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentType" enumId="Ftdt-LibroVentas" sequenceNum="240" description="Libro de Ventas"/>
             <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentType" enumId="Ftdt-Redcompra" sequenceNum="30" description="Comprobante Redcompra válido como boleta"/>
+            <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentType" enumId="Ftdt-Rcof" sequenceNum="1000" description="Registro de Consumo de Folios"/>
         </seed-data>
     </entity>
 
@@ -228,7 +235,7 @@
         <field name="fiscalTaxDocumentTypeEnumId" type="text-short"/>
         <field name="fechaAutorizacion" type="date"/>
         <field name="rut" type="text-medium"/>
-        <field name="siguienteFolio" type="number-integer"/>
+        <field name="lastFolioUsed" type="number-integer"/>
         <field name="issuerPartyId" type="id"/>
         <field name="cafData" type="text-very-long" encrypt="true"/>
         <field name="cafFragment" type="text-long"/>
@@ -300,6 +307,8 @@
     <entity entity-name="DteEnvio" package="mchile.dte">
         <field name="envioId" type="id" is-pk="true"/>
         <field name="envioTypeEnumId" type="id" not-null="true" enable-audit-log="true"/>
+        <field name="issuerPartyId" type="id"/>
+        <field name="receiverPartyId" type="id"/>
         <field name="statusId" type="id" not-null="true" enable-audit-log="true"/>
         <field name="internalId" type="text-medium"/>
         <field name="lastAttempt" type="date-time"><description>Last attempt to send (if statusId is Ftde-Created) or to process (if statusId is Ftde-Received)</description></field>
@@ -315,6 +324,12 @@
         <relationship type="one" related="moqui.basic.Enumeration" title="DteEnvioType">
             <key-map field-name="envioTypeEnumId" related="enumId"/>
         </relationship>
+        <relationship type="one" related="mantle.party.Party" fk-name="DteEnvioIssuerPartyId">
+            <key-map field-name="issuerPartyId" related="partyId"/>
+        </relationship>
+        <relationship type="one" related="mantle.party.Party" fk-name="DteEnvioReceiverPartyId">
+            <key-map field-name="receiverPartyId" related="partyId"/>
+        </relationship>
         <relationship type="one" related="moqui.basic.StatusItem" title="DteEnvio">
             <key-map field-name="statusId"/>
         </relationship>
@@ -325,6 +340,8 @@
             <moqui.basic.Enumeration enumTypeId="DteEnvioType" enumId="Ftde-RespuestaDte" description="Respuesta a envío DTE" enumCode="RespuestaDte"/>
             <moqui.basic.Enumeration enumTypeId="DteEnvioType" enumId="Ftde-EnvioRecibos" description="Aceptación / Acuse de Recibo que da pie a título ejecutivo de factura" enumCode="EnvioRecibo"/>
             <moqui.basic.Enumeration enumTypeId="DteEnvioType" enumId="Ftde-ResultadoEnvio" description="Resultado Envio del SII" enumCode="ResultadoEnvio"/>
+            <moqui.basic.Enumeration enumTypeId="DteEnvioType" enumId="Ftde-EnvioBoleta" description="Envío Boleta" enumCode="EnviaBoleta"/>
+            <moqui.basic.Enumeration enumTypeId="DteEnvioType" enumId="Ftde-ResultadoConsumoFolios" description="Resultado Consumo de Folios" enumCode="ResultadoConsumoFolios"/>
             <moqui.basic.StatusType statusTypeId="DteEnvio" description="Envío de datos de Factura Electrónica"/>
             <moqui.basic.StatusItem statusTypeId="DteEnvio" statusId="Ftde-Created" statusCode="0" description="Envío Creado"/>
             <moqui.basic.StatusItem statusTypeId="DteEnvio" statusId="Ftde-Sent" statusCode="1" description="Envío Enviado"/>
@@ -426,6 +443,8 @@
         <field name="detailHeaderSepColor" type="text-short"/>
         <field name="tableBorderColor" type="text-short"/>
         <field name="vendorNameColor" type="text-short"/>
+        <field name="tokenBoleta" type="text-short"/>
+        <field name="tokenBoletaLastUsage" type="date-time"/>
         <relationship type="one" related="mantle.party.Party" title="PartyId">
             <key-map field-name="partyId"/>
         </relationship>
@@ -511,15 +530,23 @@
         <alias-all entity-alias="DE">
             <exclude field="statusId"/>
             <exclude field="trackId"/>
+            <exclude field="issuerPartyId"/>
+            <exclude field="receiverPartyId"/>
         </alias-all>
         <alias-all entity-alias="FTD">
             <exclude field="statusId"/>
             <exclude field="trackId"/>
+            <exclude field="issuerPartyId"/>
+            <exclude field="receiverPartyId"/>
         </alias-all>
         <alias name="envioStatusId" entity-alias="DE" field="statusId"/>
         <alias name="envioTrackId" entity-alias="DE" field="trackId"/>
+        <alias name="envioIssuerPartyId" entity-alias="DE" field="issuerPartyId"/>
+        <alias name="envioReceiverPartyId" entity-alias="DE" field="receiverPartyId"/>
         <alias name="ftdTrackId" entity-alias="FTD" field="trackId"/>
         <alias name="ftdStatusId" entity-alias="FTD" field="statusId"/>
+        <alias name="ftdIssuerPartyId" entity-alias="FTD" field="issuerPartyId"/>
+        <alias name="ftdReceiverPartyId" entity-alias="FTD" field="receiverPartyId"/>
     </view-entity>
 
     <extend-entity entity-name="InvoiceItem" package="mantle.account.invoice">

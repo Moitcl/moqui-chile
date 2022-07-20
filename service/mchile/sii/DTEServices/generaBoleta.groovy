@@ -10,7 +10,7 @@ import groovy.xml.MarkupBuilder
 
 ExecutionContext ec = context.ec
 
-dteConstituyeVentaTypeList = ['Ftdt-39', 'Ftdt-41']
+dteConstituyeVentaTypeList = ['Ftdt-101', 'Ftdt-102', 'Ftdt-109', 'Ftdt-110', 'Ftdt-30', 'Ftdt-32', 'Ftdt-33', 'Ftdt-34', 'Ftdt-35', 'Ftdt-38', 'Ftdt-39', 'Ftd-41']
 if (invoiceId != null && fiscalTaxDocumentTypeEnumId in dteConstituyeVentaTypeList) {
     existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("invoiceId", invoiceId).condition("fiscalTaxDocumentTypeEnumId", "in", dteConstituyeVentaTypeList).list()
     // deshabilitado para pruebas
@@ -34,8 +34,9 @@ if (giroOutMap == null) {
     return
 }
 giroEmisor = giroOutMap.description
+
 // Recuperación del código SII de DTE -->
-codeOut = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameter("fiscalTaxDocumentTypeEnumId", fiscalTaxDocumentTypeEnumId).call()
+codeOut = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]).call()
 tipoDte = codeOut.siiCode
 
 // Formas de pago
@@ -104,11 +105,15 @@ if (invoiceId) {
 if (tipoDte == 39) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     detalleList = detMap.detalleList
+    //throw new BaseArtifactException("Lista:"+detMap.totalExento)
     totalNeto = detMap.totalNeto
+    if(detMap.totalExento)
+        totalExento = detMap.totalExento
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
+
     if (numberAfectos == 0 && numberExentos > 0)
-        throw new BaseArtifactException("Factura afecta tiene solamente ítemes exentos")
+        throw new BaseArtifactException("Boleta afecta tiene solamente ítemes exentos")
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
 } else if (tipoDte == 41) {
@@ -117,7 +122,7 @@ if (tipoDte == 39) {
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
     if (numberAfectos > 0)
-        throw new BaseArtifactException("Factura exenta tiene ítemes afectos")
+        throw new BaseArtifactException("Boleta exenta tiene ítemes afectos")
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
 }
@@ -134,10 +139,10 @@ if (totalNeto != null) {
 
 // Chequeo de valores entre Invoice y calculados
 if (invoice) {
-    if (invoice.invoiceTotal != totalInvoice) {
+    /*if (invoice.invoiceTotal != totalInvoice) {
         ec.message.addError("No coinciden valores totales, calculado: ${totalInvoice}, en invoice ${invoiceId}: ${invoice.invoiceTotal}")
         return
-    }
+    }*/
 }
 
 idDocumento = "Bol-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
@@ -153,16 +158,11 @@ razonSocialReceptorTimbre = razonSocialReceptor.length() > 39? razonSocialRecept
 // Timbre
 String detalleIt1 = detalleList.get(0).nombreItem
 
-
-
 if (detalleIt1.length() > 40)
     detalleIt1 = detalleIt1.substring(0, 40)
 datosTed = "<DD><RE>${rutEmisor}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptorTimbre}</RSR><MNT>${totalInvoice}</MNT><IT1>${detalleIt1}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
 
-//String schemaLocation = 'http://www.sii.cl/SiiDte EnvioBOLETA_v11.xsd'
 String schemaLocation = ''
-//xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation) {
-//xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0') {
 xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
     Documento(ID: idDocumento) {
         Encabezado {
@@ -185,41 +185,16 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                     MntCancel(montoCancelacion)
                 if (saldoInsoluto)
                     SaldoInsol(saldoInsoluto)
-                //MntPagos{}
-                //PeriodoDesde()
-                //PeriodoHasta()
-                //MedioPago(medioPago?:'PE')
-                //TpoCtaPago()
-                //NumCtaPago()
-                //BcoPago()
-                //TermPagoCdg
-                //if (glosaPagos)
-                //    TermPagoGlosa(glosaPagos)
-                //TermPagoDias
-                //if (fechaVencimiento)
-                //    FchVenc(ec.l10n.format(fechaVencimiento, "yyyy-MM-dd"))
-
             }
             Emisor {
                 RUTEmisor(rutEmisor)
-                //RznSocEmisor(razonSocialEmisor)
-                RznSocEmisor("Moit SPA")
+                RznSocEmisor(razonSocialEmisor)
                 GiroEmisor(giroEmisor)
-                //Telefono(fonoContacto)
-                //CorreoEmisor(mailContacto)
-                //codigosActividadEconomica.split(',').each { codigoActividad ->
-                //    Acteco(codigoActividad)
-                //}
-                //Sucursal(sucursal)
                 if (codigoSucursalSii)
                     CdgSIISucur(codigoSucursalSii)
                 DirOrigen(direccionOrigen)
                 CmnaOrigen(comunaOrigen)
                 CiudadOrigen(ciudadOrigen)
-                //if (codigoVendedor)
-                //    CdgVendedor(codigoVendedor)
-                //if (identificadorAdicionalEmisor)
-                //    IdAdicEmisor(identificadorAdicionalEmisor)
             }
             Receptor {
                 RUTRecep(rutReceptor)
@@ -234,9 +209,6 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 DirRecep(direccionReceptor)
                 CmnaRecep(comunaReceptor)
                 CiudadRecep(ciudadReceptor)
-                //DirPostal
-                //CmnaPostal
-                //CiudadPostal
             }
             //RUTSolicita()
             //Transporte{}
@@ -244,8 +216,6 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 MntNeto(Math.round(totalNeto))
                 if (totalExento != null && totalExento > 0)
                     MntExe(totalExento)
-                //MntBase()
-                //MntMargenCom()
                 //TasaIVA(ec.l10n.format(vatTaxRate*100, "##"))
                 IVA(Math.round(totalNeto * vatTaxRate))
                 //IVAProp()
@@ -275,34 +245,31 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 }
                 if (detalle.indicadorExento)
                     IndExe(detalle.indicadorExento)
-                //Retenedor{}
                 NmbItem(detalle.nombreItem)
                 if (detalle.descripcionItem)
                     DscItem(detalle.descripcionItem)
-                //QtyRef()
-                //UnmdRef()
-                //PrcRef()
                 if (detalle.quantity != null)
                     QtyItem(detalle.quantity)
                 //Subcantidad{}
                 //FchElabor()
                 //FchVencim()
                 if (detalle.uom)
-                    UnmdItem(uom)
+                    UnmdItem(detalle.uom)
                 //PrcItem(detalle.priceItem)
-                PrcItem(detalle.priceItem + Math.round(detalle.priceItem * vatTaxRate))
+                if(detalle.indicadorExento)
+                    PrcItem(Math.round(detalle.priceItem))
+                if(!detalle.indicadorExento)
+                    PrcItem(Math.round(detalle.priceItem + Math.round(detalle.priceItem * vatTaxRate)))
                 //OtrMnda{}
-                if (detalle.porcentajeDescuento)
-                    DescuentoPct(detalle.porcentajeDescuento)
-                if (detalle.montoDescuento)
-                    DescuentoMonto(detalle.montoDescuento)
-                //SubDscto{}
-                //RecargoPct()
-                //RecargoMonto()
-                //SubRecargo{}
-                //CodImpAdic()
-                //MontoItem(detalle.montoItem)
-                MontoItem(detalle.montoItem + Math.round(detalle.montoItem * vatTaxRate))
+                //if (detalle.porcentajeDescuento)
+                   // DescuentoPct(detalle.porcentajeDescuento)
+                //if (detalle.montoDescuento)
+                    //DescuentoMonto(detalle.montoDescuento)
+
+                if(detalle.indicadorExento)
+                    MontoItem(Math.round(detalle.montoItem))
+                if(!detalle.indicadorExento)
+                    MontoItem(Math.round(detalle.montoItem + Math.round(detalle.montoItem * vatTaxRate)))
             }
         }
         //SubTotInfo{}
@@ -320,13 +287,12 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
         referenciaList.each { referencia ->
             Referencia {
                 NroLinRef(referencia.numeroLinea)
-                TpoDocRef(referencia.tipoDocumento)
-                //IndGlobal()
-                FolioRef(referencia.folio)
-                if (referencia.rutOtro)
-                    RUTOtr(referencia.rutOtro)
-                if (referencia.fecha)
-                    FchRef(ec.l10n.format(referencia.fecha, "yyyy-MM-dd"))
+                //TpoDocRef(referencia.tipoDocumento)
+                //FolioRef(referencia.folio)
+                //if (referencia.rutOtro)
+                    //RUTOtr(referencia.rutOtro)
+                //if (referencia.fecha)
+                    //FchRef(ec.l10n.format(referencia.fecha, "yyyy-MM-dd"))
                 if (referencia.codigo)
                     CodRef(referencia.codigo)
                 if (referencia.razon)
@@ -345,23 +311,26 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
 uri = "#" + idDocumento
 
 String facturaXmlString = xmlWriter.toString()
+facturaXmlString = facturaXmlString.replaceAll("[^\\x00-\\xFF]", "")
 xmlWriter.close()
 
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
 
-//try {
-//    MoquiDTEUtils.validateDocumentSii(ec, facturaXml, schemaLocation)
-//} catch (Exception e) {
-//    ec.message.addError("Failed validation: " + e.getMessage())
-//}
+
+// Validacion siempre fallara por estructura de boletas (deben ir en un envio siempre)
+/*try {
+    MoquiDTEUtils.validateDocumentSii(ec, facturaXml, schemaLocation)
+} catch (Exception e) {
+    ec.message.addError("Failed validation: " + e.getMessage())
+}*/
 
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
-//if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
-//    ec.logger.warn("Boleta folio ${folio} generada OK")
-//} else {
-//    ec.message.addError("Error al generar Boleta folio ${folio}: firma inválida")
-//}
+if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
+    ec.logger.warn("Boleta folio ${folio} generada OK")
+} else {
+    ec.message.addError("Error al generar Boleta folio ${folio}: firma inválida")
+}
 
 if (ec.message.hasError())
     return
@@ -394,10 +363,9 @@ createMapBase = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, contentDte:ts]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlContentLocation]).call())
 ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
 
-// TODO
-//ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.genera#PDF").parameters([xmlLocation:xmlContentLocation, issuerPartyId:issuerPartyId, invoiceMessage:invoiceMessage]).call())
-//ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfContentLocation]).call())
-//ec.resource.getLocationReference(pdfContentLocation).putBytes(pdfBytes)
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.genera#PDF").parameters([xmlLocation:xmlContentLocation, issuerPartyId:issuerPartyId, invoiceMessage:invoiceMessage, boleta:'true']).call())
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfContentLocation]).call())
+ec.resource.getLocationReference(pdfContentLocation).putBytes(pdfBytes)
 // TODO ?
 //if ((fiscalTaxDocumentTypeEnumId as String) in dteConstituyeVentaTypeList) {
 //    ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedibleContentLocation]).call())
@@ -405,8 +373,9 @@ ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
 //}
 
 // Creación de registro en FiscalTaxDocumentAttributes
+ec.logger.warn("******************************* Monto neto:" + totalNeto);
 fechaEmisionString = ec.l10n.format(fechaEmision, "yyyy-MM-dd")
-createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:totalInvoice, fechaEmision:fechaEmisionString, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:montoNeto, tasaImpuesto:19,
-             montoExento:montoExento, montoIVARecuperable:montoIVARecuperable]
+createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:totalInvoice, fechaEmision:fechaEmisionString, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:totalNeto, tasaImpuesto:19,
+             montoExento:totalExento, montoIVARecuperable:montoIVARecuperable]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call())
 fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId
