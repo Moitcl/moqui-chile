@@ -59,9 +59,6 @@ else if (settlementTermId == "3")
 else
     formaPago = 2 // Credito (usar GlosaPagos)
 
-//Obtención de folio y CAF -->
-folioResult = ec.service.sync().name("mchile.sii.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call()
-folio = folioResult.folio
 codRef = 0 as Integer
 
 // Indicador Servicio
@@ -112,8 +109,11 @@ if (tipoDte == 39) {
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
 
-    if (numberAfectos == 0 && numberExentos > 0)
-        throw new BaseArtifactException("Boleta afecta tiene solamente ítemes exentos")
+    if (numberAfectos == 0 && numberExentos > 0) {
+        ec.message.addMessage("Boleta Electrónica solamente tiene ítemes exentos, cambiando tipo a Boleta Electrónica Exenta")
+        tipoDte = 41
+        fiscalTaxDocumentTypeEnumId = 'Ftdt-41'
+    }
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
 } else if (tipoDte == 41) {
@@ -121,11 +121,18 @@ if (tipoDte == 39) {
     detalleList = detMap.detalleList
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
-    if (numberAfectos > 0)
-        throw new BaseArtifactException("Boleta exenta tiene ítemes afectos")
+    if (numberAfectos > 0) {
+        ec.message.addMessage("Boleta Electrónica Exenta tiene ítemes afectos, cambiando tipo a Boleta Electrónica")
+        tipoDte = 39
+        fiscalTaxDocumentTypeEnumId = 'Ftdt-39'
+    }
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
 }
+
+//Obtención de folio y CAF -->
+folioResult = ec.service.sync().name("mchile.sii.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call()
+folio = folioResult.folio
 
 // Descuento Global (no va en Boletas)
 

@@ -35,8 +35,7 @@ if (giroOutMap == null) {
 giroEmisor = giroOutMap.description
 
 // Recuperación del código SII de DTE -->
-codeOut = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]).call()
-tipoDte = codeOut.siiCode
+tipoDte = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]).call().siiCode
 
 // Formas de pago
 if (settlementTermId.equals('Immediate'))
@@ -57,12 +56,6 @@ else if (settlementTermId == "3")
     formaPago = 3 // Sin costo
 else
     formaPago = 2 // Credito (usar GlosaPagos)
-
-//Obtención de folio y CAF -->
-folioResult = ec.service.sync().name("mchile.sii.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call()
-folio = folioResult.folio
-if (folio == null)
-    return
 codRef = 0 as Integer
 
 // Indicador Servicio
@@ -130,8 +123,11 @@ if (tipoDte == 33) {
     totalExento = detMap.totalExento
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
-    if (numberAfectos == 0 && numberExentos > 0)
-        throw new BaseArtifactException("Factura afecta tiene solamente ítemes exentos")
+    if (numberAfectos == 0 && numberExentos > 0) {
+        ec.message.addMessage("Factura Electrónica solamente tiene ítemes exentos, cambiando tipo a Factura Electrónica Exenta")
+        tipoDte = 34
+        fiscalTaxDocumentTypeEnumId = 'Ftdt-34'
+    }
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
     totalDescuentos = detMap.totalDescuentos
@@ -142,8 +138,11 @@ if (tipoDte == 33) {
     totalExento = detMap.totalExento
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
-    if (numberAfectos > 0)
-        throw new BaseArtifactException("Factura exenta tiene ítemes afectos")
+    if (numberAfectos > 0) {
+        ec.message.addMessage("Factura Electrónica Exenta tiene ítemes afectos, cambiando tipo a Factura Electrónica")
+        tipoDte = 33
+        fiscalTaxDocumentTypeEnumId = 'Ftdt-33'
+    }
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
     totalDescuentos = detMap.totalDescuentos
@@ -218,6 +217,12 @@ if (tipoDte == 33) {
     totalExento = detMap.totalExento
     totalDescuentos = detMap.totalDescuentos
 }
+
+//Obtención de folio y CAF -->
+folioResult = ec.service.sync().name("mchile.sii.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call()
+folio = folioResult.folio
+if (folio == null)
+    return
 
 descuentoORecargoGlobalList.each {
     if (it.tipo == 'D') {
