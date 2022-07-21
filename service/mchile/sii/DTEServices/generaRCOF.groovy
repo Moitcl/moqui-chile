@@ -1,9 +1,6 @@
 import org.w3c.dom.Document
-
 import org.moqui.context.ExecutionContext
-
 import cl.moit.dte.MoquiDTEUtils
-
 import groovy.xml.MarkupBuilder
 
 ExecutionContext ec = context.ec
@@ -104,26 +101,18 @@ xmlBuilder.ConsumoFolios(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http:/
 
 uri = "#" + idDocumento
 
-String facturaXmlString = xmlWriter.toString()
-ec.logger.warn("Salida: "+facturaXmlString)
+String rcofString = xmlWriter.toString()
+//ec.logger.warn("Salida: "+rcofString)
 
 xmlWriter.close()
-Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
-byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "DocumentoConsumoFolios")
-
-// Just in case you need to create xml outside of Moqui
-/*FileOutputStream fos = new FileOutputStream("/home/cherrera/moit/cowork/moqui-framework/runtime/component/moquichile/DTE/TEMP/RCOF-"+tmst+".xml")
-fos.write(facturaXml);
-fos.close();*/
-
-// Creación de registro en FiscalTaxDocument -->
-createMap = [fiscalTaxDocumentTypeEnumId:'Ftdt-Rcof', fiscalTaxDocumentId:tmst, fiscalTaxDocumentNumber:tmst, issuerPartyId:organizationPartyId, issuerPartyIdValue:rutEmisor,issuerPartyIdTypeEnumId:'PtidNationalTaxId',receiverPartyId:receiverPartyId, statusId:"Ftd-Issued", sentAuthStatusId:"Ftd-NotSentAuth", sentRecStatusId:"Ftd-NotSentRec", fechaInicio:fechaInicio, fechaFin:fechaFin, date:ts]
-ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call())
+Document doc2 = MoquiDTEUtils.parseDocument(rcofString.getBytes())
+byte[] rcofXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "DocumentoConsumoFolios")
 
 xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/RCOF/RCOF-${idDocumento}.xml"
+createMap = [envioTypeEnumId:'Ftdt-Rcof', issuerPartyId:organizationPartyId, rutEmisor:rutEmisor, receiverPartyId:receiverPartyId, statusId:"Ftde-Created", registerDate:ts, documentLocation:xmlContentLocation]
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.DteEnvio").parameters(createMap).call())
+ec.context.putAll(ec.service.sync().name("create#mchile.dte.RCof").parameters([envioId:envioId, fechaInicio:fechaInicio, fechaFin:fechaFin]).call())
 
-// Creacion de registros en FiscalTaxDocumentContent
-createMapBase = [fiscalTaxDocumentId:tmst, contentDte:tmst]
-ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlContentLocation]).call())
-ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
+ec.resource.getLocationReference(xmlContentLocation).putBytes(rcofXml)
 
+return
