@@ -4,11 +4,10 @@
         default-menu-index="52">
 
     <transition name="editInvoice">
-        <default-response url="/vapps/PopcAdmin/Accounting/Invoice/EditInvoice"/>
+        <default-response url="//marble/Accounting/Invoice/EditInvoice"/>
     </transition>
 
     <transition name="envioSII">
-        <parameter name="activeOrgId" from="activeOrgId"/>
         <actions>
             <script><![CDATA[
                     documentIds = new StringBuilder()
@@ -27,41 +26,15 @@
         <default-response url="."/>
     </transition>
 
-
-    <transition name="enviarDirectoSII">
-        <parameter name="fiscalTaxDocumentId"/>
-        <parameter name="activeOrgId"/>
-        <actions>
-            <service-call name="mchile.sii.DTECommServices.enviarDirecto#SII" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, organizationPartyId:activeOrgId]"/>
-        </actions>
-        <default-response url="."/>
-    </transition>
-
-    <transition name="eliminarDTE">
-        <parameter name="fiscalTaxDocumentId"/>
-        <parameter name="activeOrgId"/>
-        <actions>
-            <service-call name="mchile.sii.DTEServices.eliminar#DTE" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, organizationPartyId:activeOrgId]"/>
-        </actions>
-        <default-response url="."/>
-    </transition>
-
     <transition name="xml" read-only="true">
-        <parameter name="fiscalTaxDocumentId"/>
+        <parameter name="envioId"/>
         <actions>
-            <set field="extraPathNameList" from="sri.screenUrlInfo.extraPathNameList"/>
-
-            <if condition="extraPathNameList &amp;&amp; !fiscalTaxDocumentId">
-                <set field="fiscalTaxDocumentId" from="extraPathNameList[0]"/></if>
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="document" cache="false">
-                <field-map field-name="fiscalTaxDocumentId"/>
-                <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
-            </entity-find-one>
-            <if condition="document == null"><then>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
+            <if condition="envio == null"><then>
                 <!-- NOTE: consider returning a default image instead of 404 -->
                 <script>ec.web.sendError(404, null, null)</script>
             </then><else>
-                <script>ec.web.sendResourceResponse(document.contentLocation, true)</script>
+                <script>ec.web.sendResourceResponse(envio.documentLocation, true)</script>
             </else></if>
         </actions>
         <default-response type="none"/>
@@ -81,20 +54,14 @@
         <default-response url="."/>
     </transition>
 
-
     <transition-include name="downloadDocumentInternal" location="component://MoquiChile/template/dte/DteTransitions.xml"/>
 
     <transition-include name="searchPartyList" location="component://SimpleScreens/template/party/PartyForms.xml"/>
 
     <actions>
-        <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
-            <search-form-inputs/>
-            <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in"
-                        from="['Ftdt-Rcof']"/>
-            <econdition field-name="issuerPartyId" operator="equals" value="${activeOrgId}"/>
-            <econdition field-name="statusId" operator="in" value="Ftd-Issued,Ftd-Cancelled"/>
-            <econdition field-name="sentAuthStatusId" value="Ftd-NotSentAuth"/>
-            <order-by field-name="-date"/>
+        <entity-find entity-name="mchile.dte.DteEnvio" list="envioList">
+            <search-form-inputs default-order-by="-registerDate"/>
+            <econdition field-name="envioTypeEnumId" operator="in" from="['Ftdt-Rcof']"/>
         </entity-find>
     </actions>
     <widgets>
@@ -119,33 +86,18 @@
 
         <link url="genDailyRCOF" text="Generar RCOF Diario" parameter-map="[activeOrgId:activeOrgId]" link-type="auto"/>
 
-        <form-list name="DteForm" list="dteList" show-pdf-button="true" show-csv-button="true" header-dialog="true" saved-finds="true" multi="true" transition="envioSII">
-            <row-actions>
-                <!-- Se busca ubicación de XML y PDF -->
-                <service-call name="mchile.sii.DTEServices.get#DteContent"
-                              in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
-                <set field="xmlFilename" from="content"/>
-
-                <service-call name="mchile.sii.DTEServices.get#DteContent"
-                              in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf']" out-map="context"/>
-                <set field="pdfFilename" from="content"/>
-
-            </row-actions>
+        <form-list name="RcofForm" list="envioList" show-pdf-button="true" show-csv-button="true" header-dialog="true" saved-finds="true" multi="true" transition="envioSII">
             <field name="_useRowSubmit"><default-field><hidden default-value="true"/></default-field></field>
-            <field name="fiscalTaxDocumentId"><default-field><hidden default-value="true"/></default-field></field>
-            <field name="activeOrgId"><default-field><hidden default-value="true"/></default-field></field>
-            <field name="fiscalTaxDocumentId">
+            <field name="envioId">
                 <header-field show-order-by="true"><text-line size="6"/></header-field>
-                <default-field>
-                    <display/>
-                </default-field>
+                <default-field><display/></default-field>
             </field>
-            <field name="fiscalTaxDocumentTypeEnumId">
+            <field name="envioTypeEnumId">
                 <header-field title="Type" show-order-by="true">
                     <drop-down allow-empty="true" allow-multiple="true">
                         <entity-options key="${enumId}">
                             <entity-find entity-name="moqui.basic.Enumeration">
-                                <econdition field-name="enumTypeId" value="FiscalTaxDocumentType"/>
+                                <econdition field-name="enumTypeId" value="DteEnvioType"/>
                             </entity-find>
                         </entity-options>
                     </drop-down>
@@ -168,12 +120,7 @@
             </field>
             <field name="xml">
                 <default-field title=" ">
-                    <link url="downloadDocumentInternal" parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fileType:'Ftdct-Xml']" text="XML" link-type="anchor"/>
-                </default-field>
-            </field>
-            <field name="eliminar">
-                <default-field title=" ">
-                    <link url="eliminarDTE" tooltip="Eliminar RCOF"  parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" text="Eliminar RCOF" confirmation="¿Desea continuar?"/>
+                    <link url="downloadDocumentInternal" parameter-map="[envioId:envioId]" text="XML" link-type="anchor"/>
                 </default-field>
             </field>
         </form-list>
