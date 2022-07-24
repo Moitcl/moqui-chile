@@ -66,35 +66,6 @@ xmlBuilder.ConsumoFolios(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http:/
                     setFinal(rangoField[1])
                 }
             }
-            RangoAnulados {
-                mapBoleta.rangosFoliosAnulados.each { rangoField ->
-                    setInicial(rangoField[0])
-                    setFinal(rangoField[1])
-                }
-            }
-        }
-        Resumen {
-            TipoDocumento(41)
-            MntNeto(mapBoletaExenta.totalMontoNeto)
-            MntIva(mapBoletaExenta.totalMontoIva)
-            TasaIVA(19)
-            MntExento(mapBoletaExenta.totalMontoExento)
-            MntTotal(mapBoletaExenta.totalMontoTotal)
-            FoliosEmitidos(mapBoletaExenta.cantDocEmitidos)
-            FoliosAnulados(mapBoletaExenta.cantFoliosAnulados)
-            FoliosUtilizados(mapBoletaExenta.cantDocUtilizados)
-            RangoUtilizados {
-                mapBoletaExenta.rangosFoliosUtilizados.each { rangoField ->
-                    setInicial(rangoField[0])
-                    setFinal(rangoField[1])
-                }
-            }
-            RangoAnulados {
-                mapBoleta.rangosFoliosAnulados.each { rangoField ->
-                    setInicial(rangoField[0])
-                    setFinal(rangoField[1])
-                }
-            }
         }
     }
 }
