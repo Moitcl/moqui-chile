@@ -19,11 +19,11 @@ issuerPartyId = null
 receiverPartyId = (rutReceptor == '60803000-K' ? 'CL_SII' : null)
 dteEvList.each { dte ->
     if (issuerPartyId != null && issuerPartyId != dte.issuerPartyId)
-        ec.message.addError("No se pueden incluir documentos de diferentes emisores (${issuerPartyId} y ${dte.issuerPrtyId})")
+        ec.message.addError("No se pueden incluir documentos de diferentes emisores (${issuerPartyId} y ${dte.issuerPartyId})")
     else
         issuerPartyId = dte.issuerPartyId
     if (receiverPartyId != 'CL_SII' && receiverPartyId != null && receiverPartyId != dte.receiverPartyId)
-        ec.message.addError("No se pueden incluir documentos para diferentes receptores si envío es hacia el receptor (${issuerPartyId} y ${dte.issuerPrtyId})")
+        ec.message.addError("No se pueden incluir documentos para diferentes receptores si envío es hacia el receptor (${receiverPartyId} y ${dte.receiverPartyId})")
     else if (receiverPartyId == null)
         receiverPartyId = dte.receiverPartyId
     tipoDte = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameter("fiscalTaxDocumentTypeEnumId", dte.fiscalTaxDocumentTypeEnumId).call().siiCode

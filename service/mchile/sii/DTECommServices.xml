@@ -46,28 +46,30 @@ along with this software (see the LICENSE.md file). If not, see
                         <script>envioIdsToSend.add(envio.envioId)</script>
                     </if>
                 </then><else>
-                    <set field="ungeneratedDocumentIdsByReceiverPartyIdValue" from="ungeneratedDocumentIdsByIssuerPartyId[dte.issuerPartyId]"/>
-                    <if condition="ungeneratedDocumentIdsByReceiverPartyIdValue == null">
-                        <set field="ungeneratedDocumentIdsByReceiverPartyIdValue" from="[:]"/>
-                        <set field="ungeneratedDocumentIdsByIssuerPartyId[dte.issuerPartyId]" from="ungeneratedDocumentIdsByReceiverPartyIdValue"/>
+                    <set field="ungeneratedDocumentIdsByReceiverPartyId" from="ungeneratedDocumentIdsByIssuerPartyId[dte.issuerPartyId]"/>
+                    <if condition="ungeneratedDocumentIdsByReceiverPartyId == null">
+                        <set field="ungeneratedDocumentIdsByReceiverPartyId" from="[:]"/>
+                        <set field="ungeneratedDocumentIdsByIssuerPartyId[dte.issuerPartyId]" from="ungeneratedDocumentIdsByReceiverPartyId"/>
                     </if>
-                    <set field="ungeneratedDocumentIdList" from="ungeneratedDocumentIdsByReceiverPartyIdValue[dte.receiverPartyIdValue]"/>
-                    <if condition="ungeneratedDocumentIdList == null">
-                        <set field="ungeneratedDocumentIdList" from="[]"/>
-                        <set field="ungeneratedDocumentIdsByReceiverPartyIdValue[dte.receiverPartyIdValue]" from="ungeneratedDocumentIdList"/>
+                    <set field="ungeneratedDocumentIdMap" from="ungeneratedDocumentIdsByReceiverPartyId[dte.receiverPartyId]"/>
+                    <if condition="ungeneratedDocumentIdMap == null">
+                        <set field="ungeneratedDocumentIdMap" from="[:]"/>
+                        <set field="ungeneratedDocumentIdMap.receiverPartyIdValue" from="dte.receiverPartyIdValue"/>
+                        <set field="ungeneratedDocumentIdMap.list" from="[]"/>
+                        <set field="ungeneratedDocumentIdsByReceiverPartyId[dte.receiverPartyIdValue]" from="ungeneratedDocumentIdMap"/>
                     </if>
-                    <script>ungeneratedDocumentIdList.add(dte.fiscalTaxDocumentId)</script>
+                    <script>ungeneratedDocumentIdMap.list.add(dte.fiscalTaxDocumentId)</script>
                 </else></if>
             </iterate>
-            <iterate list="ungeneratedDocumentIdsByIssuerPartyId" entry="ungeneratedDocumentIdsByReceiverPartyIdValue" key="issuerPartyId">
-                <iterate list="ungeneratedDocumentIdsByReceiverPartyIdValue" entry="ungeneratedDocumentIdList" key="receiverPartyIdValue">
-                    <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[rutReceptor:receiverPartyIdValue, organizationPartyId:issuerPartyId, documentIdList:ungeneratedDocumentIdList]" out-map="envio"/>
+            <iterate list="ungeneratedDocumentIdsByIssuerPartyId" entry="ungeneratedDocumentIdsByReceiverPartyId" key="issuerPartyId">
+                <iterate list="ungeneratedDocumentIdsByReceiverPartyId" entry="ungeneratedDocumentIdMap" key="receiverPartyId">
+                    <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[rutReceptor:ungeneratedDocumentIdMap.receiverPartyIdValue, organizationPartyId:issuerPartyId, documentIdList:ungeneratedDocumentIdMap.list]" out-map="envio" transaction="force-new"/>
                     <script>envioIdsToSend.add(envio.envioId)</script>
                     <log message="Generated envio ${envio.envioId}"/>
                 </iterate>
             </iterate>
             <if condition="envioIdsToSend &amp;&amp; triggerSend">
-                <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDte" in-map="[envioIdList:envioIdsToSend]"/>
+                <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDte" in-map="[envioIdList:envioIdsToSend]" transaction="force-new"/>
             </if>
         </actions>
     </service>
