@@ -1559,42 +1559,50 @@ TrackId Token']" type="Map"/>
             <if condition="envio?.trackId == null">
                 <return error="true" message="Envio ${envioId} no tiene trackId, no se puede verificar"/>
             </if>
+            <set field="trackId" from="envio.trackId"/>
 
             <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:envio.issuerPartyId]" out-map="context"/>
-            <set field="certData" from="certData"/>
 
-            <set field="statusSii" value=""/>
-            <set field="salida" value=""/>
-            <set field="statusXML" value=""/>
-            <set field="token" default-value="0"/>
-            <set field="resp" default-value="0"/>
+            <service-call name="mchile.sii.DTECommServices.get#TokenBoleta" in-map="[boletaIsProduction:boletaIsProduction,  partyId:envio.issuerPartyId]" out-map="tokenMap"/>
+            <set field="token" from="tokenMap.token"/>
+            <set field="urlSolicitud" from="boletaIsProduction? 'https://api.sii.cl/recursos/v1/boleta.electronica.envio': 'https://apicert.sii.cl/recursos/v1/boleta.electronica.envio'"/>
 
+            <script><![CDATA[
+                import org.moqui.context.ExecutionContext
+                import org.moqui.util.RestClient
+                import org.eclipse.jetty.http.HttpHeader
+                import org.eclipse.jetty.http.HttpField
+                import groovy.json.JsonSlurper
 
-            <script>
-                import groovy.json.JsonSlurper;
+                ExecutionContext ec = context.ec
 
-                // Ejecutar GET https://apicert.sii.cl/boleta.electronica.envio/{rut}-{dv}-{trackid}
-                token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([boletaIsProduction:boletaIsProduction,  partyId:envio.issuerPartyId]).call().token
-                if (boletaIsProduction) {
-                    logger.warn("Consultando envio Boleta en produccion")
-                    resp = ec.service.sync().name("mchile.sii.DTECommServices.get#EstadoEnvioBoletaProduccion").parameters([rutCompany:rutEmisor, trackId:envio.trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]).call().respSII
-                } else {
-                    logger.warn("Consultando envio en Certificacion")
-                    resp = ec.service.sync().name("mchile.sii.DTECommServices.get#EstadoEnvioBoletaCertificacion").parameters([rutCompany:rutEmisor, trackId:envio.trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]).call().respSII
+                URI requestUrl = new URI(urlSolicitud + "/" +  rutEmisor + "-" + trackId)
+
+                RestClient restClient = new RestClient().uri(requestUrl).method("GET")
+                restClient.getDefaultRequestFactory().getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 (compatible; PROG 1.0; Windows NT 5.0; YComp 5.0.2.4)"))
+                restClient.addHeader("Host", requestUrl.getHost())
+                restClient.addHeader("Cookie", "TOKEN=${token}")
+                if (proxyHost != null && proxyPort != 0) {
+                    restClient.withRequestFactory(new cl.moit.net.ProxyRequestFactory(proxyHost, proxyPort))
                 }
+                restClient.acceptContentType("application/json")
 
-                salida = resp.toString()
-                logger.warn("Salida JSON: " + salida)
+                RestClient.RestResponse response = restClient.call()
+                respSII = response.text()
 
 
                 def jsonSlurper = new JsonSlurper()
-                def object = jsonSlurper.parseText(resp)
-                assert object instanceof Map
-                glosa = object.estadistica
-                //glosa = object.detalle_rep_rech.descripcion
-
-            </script>
-            <set field="errorCode" value="0"/><!-- aaaaa -->
+                try {
+                    respuesta = jsonSlurper.parseText(respSII)
+                } catch (Exception e) {
+                    ec.message.addError("Error parsing response from SII: ${e.getMessage()}\nrespuesta SII: ${respSII}")
+                }
+            ]]></script>
+            <log message="respuesta: ${respuesta}"/>
+            <iterate list="respuesta.detalle_rep_rech" entry="rechazoItem">
+                <log message="processing rechazo: ${rechazoItem}"/>
+            </iterate>
+            <set field="errorCode" value="0"/>
             <!-- TODO: better message for status -->
             <set field="glosaError" value="$glosa"/>
         </actions>
@@ -2086,64 +2094,6 @@ TrackId Token']" type="Map"/>
         <out-parameters>
             <parameter name="token"/>
         </out-parameters>
-    </service>
-
-    <service verb="get" noun="EstadoEnvioBoleta" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/getEstadoEnvioBoleta.groovy">
-        <description>Verificacion del estado de un EnvioBoleta</description>
-        <in-parameters>
-            <parameter name="rutCompany" required="true"/>
-            <parameter name="trackId" required="true"/>
-            <parameter name="token" required="true"/>
-            <parameter name="urlSolicitud" required="true"/>
-            <parameter name="hostEnvio" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="respSII"/>
-        </out-parameters>
-    </service>
-
-    <service verb="get" noun="EstadoEnvioBoletaCertificacion">
-        <in-parameters>
-            <parameter name="rutCompany" required="true"/>
-            <parameter name="trackId" required="true"/>
-            <parameter name="token" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="respSII"/>
-        </out-parameters>
-        <actions>
-            <set field="urlSolicitud"/>
-            <set field="hostEnvio"/>
-            <script>
-            urlSolicitud = "https://apicert.sii.cl/recursos/v1/boleta.electronica.envio";
-            hostEnvio = "apicert.sii.cl";
-            </script>
-            <service-call name="mchile.sii.DTECommServices.get#EstadoEnvioBoleta" out-map="respuesta"
-                          in-map="[rutCompany:rutCompany, trackId:trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]"/>
-            <set field="respSII" from="respuesta.respSII"/>
-        </actions>
-    </service>
-
-    <service verb="get" noun="EstadoEnvioBoletaProduccion">
-        <in-parameters>
-            <parameter name="rutCompany" required="true"/>
-            <parameter name="trackId" required="true"/>
-            <parameter name="token" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="respSII"/>
-        </out-parameters>
-        <actions>
-            <set field="urlSolicitud"/>
-            <set field="hostEnvio"/>
-            <script>
-                urlSolicitud = "https://api.sii.cl/recursos/v1/boleta.electronica.envio";
-                hostEnvio = "api.sii.cl";
-            </script>
-            <service-call name="mchile.sii.DTECommServices.get#EstadoEnvioBoleta" out-map="respuesta"
-                          in-map="[rutCompany:rutCompany, trackId:trackId, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]"/>
-            <set field="respSII" from="respuesta.respSII"/>
-        </actions>
     </service>
 
     <service verb="get" noun="EstadoBoleta" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/getEstadoBoleta.groovy">
