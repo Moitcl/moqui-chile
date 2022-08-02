@@ -174,7 +174,7 @@ along with this software (see the LICENSE.md file). If not, see
                     </else></if>
                 </then><else>
                     <if condition="envio.rutReceptor == '60803000-K'"><then>
-                        <service-call name="mchile.sii.DTECommServices.enviaSII#Envio" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio"/>
+                        <service-call name="mchile.sii.DTECommServices.enviaSII#EnvioDte" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio"/>
                     </then><else>
                         <service-call name="mchile.sii.DTECommServices.send#PendingEnvioDteReceiver" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio"/>
                     </else></if>
@@ -1005,26 +1005,31 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="saveSinFirma" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="envioId"/>
+            <parameter name="envioIdList"/>
         </out-parameters>
         <actions>
-            <set field="isBoleta" from="null" type="Boolean"/>
             <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList">
                 <econdition field-name="fiscalTaxDocumentId" operator="in" from="documentIdList"/>
             </entity-find>
             <if condition="!ftdList"><return error="true" message="Could not find any FiscalTaxDocument"/></if>
+            <set field="boletaIdList" from="[]"/>
+            <set field="facturaIdList" from="[]"/>
             <iterate list="ftdList" entry="ftd">
-                <if condition="isBoleta == null"><then>
-                    <set field="isBoleta" from="ftd.fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41']"/>
-                </then><else-if condition="!isBoleta &amp;&amp; ftd.fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41']">
-                    <return error="true" message="Cannot create Envio with Boleta and non-Boleta documents"/>
-                </else-if></if>
+                <if condition="ftd.fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41']"><then>
+                    <script>boletaIdList.add(ftd.fiscalTaxDocumentId)</script>
+                </then><else>
+                    <script>facturaIdList.add(ftd.fiscalTaxDocumentId)</script>
+                </else></if>
             </iterate>
-            <if condition="isBoleta"><then>
-                <service-call name="mchile.sii.DTECommServices.genera#EnvioBoleta" in-map="context" out-map="context"/>
-            </then><else>
-                <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="context" out-map="context"/>
-            </else></if>
+            <set field="envioIdList" from="[]"/>
+            <if condition="boletaIdList">
+                <service-call name="mchile.sii.DTECommServices.genera#EnvioBoleta" in-map="context+[documentIdList:boletaIdList]" out-map="envioBoleta"/>
+                <script>envioIdList.add(envioBoleta.envioId)</script>
+            </if>
+            <if condition="facturaIdList">
+                <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="context+[documentIdList:facturaIdList]" out-map="envioFactura"/>
+                <script>envioIdList.add(envioFactura.envioId)</script>
+            </if>
         </actions>
     </service>
 
@@ -1049,13 +1054,13 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="start" noun="EnviaEnvioDteToSiiJob" authenticate="anonymous-all">
         <in-parameters>
-            <parameter name="envioId"/>
+            <parameter name="envioIdList"/>
         </in-parameters>
         <actions>
             <script>
                 job = ec.service.job("sii_dte_EnviaEnvioDteToSii")
                 if (envioId)
-                    job.parameter("envioId", envioId)
+                    job.parameter("envioIdList", envioIdList)
                 job.run()
             </script>
         </actions>
@@ -1093,19 +1098,27 @@ along with this software (see the LICENSE.md file). If not, see
             envioId: ID de envío
         </description>
         <in-parameters>
-            <parameter name="envioId" required="true"/>
+            <parameter name="envioIdList" required="true"/>
             <parameter name="maxFail" type="Integer" default="3"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="trackId"/>
+            <parameter name="trackIdList" type="List"/>
         </out-parameters>
         <actions>
-            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
-            <if condition="envio.envioTypeEnumId == 'Ftde-EnvioBoleta'"><then>
-                <service-call name="mchile.sii.DTECommServices.enviaSII#EnvioBoleta" in-map="context" out-map="context"/>
-            </then><else>
-                <service-call name="mchile.sii.DTECommServices.enviaSII#EnvioDte" in-map="context" out-map="context"/>
-            </else></if>
+            <entity-find entity-name="mchile.dte.DteEnvio" list="envioList">
+                <econdition field-name="envioId" operator="in" from="envioIdList"/>
+            </entity-find>
+            <set field="trackIdList" from="[]"/>
+            <iterate list="envioList" entry="envio">
+                <set field="envioId" from="envio.envioId"/>
+                <if condition="envio.envioTypeEnumId == 'Ftde-EnvioBoleta'"><then>
+                    <service-call name="mchile.sii.DTECommServices.enviaSII#EnvioBoleta" in-map="context" out-map="envioResult" out-map-add-to-existing="false"/>
+                    <script>trackIdList.add(envioResult.trackId)</script>
+                </then><else>
+                    <service-call name="mchile.sii.DTECommServices.enviaSII#EnvioDte" in-map="context" out-map="envioResult" out-map-add-to-existing="false"/>
+                    <script>trackIdList.add(envioResult.trackId)</script>
+                </else></if>
+            </iterate>
         </actions>
     </service>
 
