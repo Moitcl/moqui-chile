@@ -32,7 +32,6 @@ xmlBuilder.getToken(xmlns: 'http://www.sii.cl/SiiDte') {
 String xmlString = xmlWriter.toString()
 xmlWriter.close()
 org.w3c.dom.Document doc = MoquiDTEUtils.parseDocument(xmlString.getBytes())
-ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameter("partyId", partyId).call())
 byte[] signedXmlBytes = MoquiDTEUtils.sign(doc, "", pkey, certificate, "", "")
 String signedXml = new String(signedXmlBytes)
 
@@ -57,6 +56,8 @@ estado = header.ESTADO.text()
 glosa = header.GLOSA.text()
 //ec.logger.info("estado: ${estado}")
 //ec.logger.info("glosa: ${glosa}")
-ec.service.sync().name("update#mchile.dte.PartyDteParams").parameters([partyId:partyId, tokenBoleta:token, tokenBoletaLastUsage:ec.user.nowTimestamp]).call()
+ec.logger.info("Got token from ${uploadUrl.host}: ${token}")
+if (token != null && token.length() > 0)
+    ec.service.sync().name("update#mchile.dte.PartyDteParams").parameters([partyId:partyId, tokenBoleta:token, tokenBoletaLastUsage:ec.user.nowTimestamp]).call()
 
 return
