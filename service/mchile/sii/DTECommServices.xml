@@ -1174,7 +1174,7 @@ along with this software (see the LICENSE.md file). If not, see
                         <service-call name="mchile.sii.DTECommServices.verifica#EnvioEnSii" in-map="[envioId:envio.envioId]" transaction="force-new" out-map="checkMap" ignore-error="true"/>
                     </else></if>
                     <set field="totalAcceptedDocs" from="totalAcceptedDocs + (checkMap.documentosAceptados?:0)"/>
-                    <if condition="checkMap.hasError"><then>
+                    <if condition="checkMap.hasError != false"><then>
                         <script>reattemptList.add(envio)</script>
                     </then><else>
                         <service-call name="update#mchile.dte.DteEnvio" in-map="[envioId:envio.envioId, statusId:'Ftde-Processed', lastAttempt:ec.user.nowTimestamp, attemptCount:((envio.attemptCount?:0)+1)]" transaction="force-new" ignore-error="true"/>
@@ -1554,7 +1554,11 @@ TrackId Token']" type="Map"/>
             <parameter name="newStatusId"/>
         </out-parameters>
         <actions>
+            <set field="hasError" from="true"/>
             <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
+            <if condition="envio?.trackId == null">
+                <return error="true" message="Envio ${envioId} no tiene trackId, no se puede verificar"/>
+            </if>
 
             <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:envio.issuerPartyId]" out-map="context"/>
             <set field="certData" from="certData"/>
@@ -1568,8 +1572,6 @@ TrackId Token']" type="Map"/>
 
             <script>
                 import groovy.json.JsonSlurper;
-
-                System.out.println("Enviador: " + rutEnviador + ", rutEmisor "+rutEmisor+ ", token: " + token)
 
                 // Ejecutar GET https://apicert.sii.cl/boleta.electronica.envio/{rut}-{dv}-{trackid}
                 if (boletaIsProduction) {
@@ -1616,8 +1618,7 @@ TrackId Token']" type="Map"/>
             <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
             <set field="certData" from="certData"/>
 
-            <service-call name="mchile.sii.DTEServices.get#DteContent"
-                          in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.get#DteContent" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
 
             <if condition="!content">
                 <return error="true" message="DTE no existe"/>
