@@ -1276,31 +1276,42 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="FolioDte" from="dte.fiscalTaxDocumentNumber"/>
             <set field="FechaEmisionDte" from="ec.l10n.format(dte.date, 'ddMMyyyy')"/>
             <set field="MontoDte" from="ec.l10n.format(dte.amount, '###')"/>
-            <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[dteIsProduction:dteIsProduction, partyId:dte.issuerPartyId]" out-map="tokenMap"/>
-            <set field="Token" from="tokenMap.token"/>
-            <if condition="dteIsProduction"><then>
-                <service-call name="mchile.sii.DTECommServices.verifica#DocumentoEnSiiProduction" in-map="context" out-map="context"/>
+            <if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41']"><then>
+                <service-call name="mchile.sii.DTECommServices.verifica#BoletaEnSii" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" out-map="boletaVer"/>
+                <if condition="boletaVer.hasError == true"><then>
+                    <set field="errorCode" value="0"/>
+                    <set field="glosa" from="boletaVer.glosaError"/>
+                </then><else>
+                    <set field="errorCode" from="boletaVer.errorCode"/>
+                    <set field="glosaError" from="boletaVer.glosaError"/>
+                </else></if>
             </then><else>
-                <service-call name="mchile.sii.DTECommServices.verifica#DocumentoEnSiiCertification" in-map="context" out-map="context"/>
-            </else></if>
-            <script><![CDATA[
-                salida = getEstDteResponse.getEstDteReturn
-                ec.logger.info("salida: ${salida}")
-                xmlDoc = new groovy.xml.XmlParser(false, false).parseText(salida)
-                header = xmlDoc.'SII:RESP_HDR'
-                status = header.ESTADO.text()
-                glosa = header.GLOSA_ESTADO.text()
-                errorCode = header.ERR_CODE.text()
-                glosaError = header.GLOSA_ERR.text()
-                numeroAtencion = header.NUM_ATENCION.text()
-            ]]></script>
-            <if condition="errorCode == '0'">
-                <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" for-update="true"/>
-                <if condition="dte.sentAuthStatusId == 'Ftd-SentAuthUnverified'">
-                    <set field="dte.sentAuthStatusId" value="Ftd-SentAuthAccepted"/>
-                    <entity-update value-field="dte"/>
+                <service-call name="mchile.sii.DTECommServices.get#Token" in-map="[dteIsProduction:dteIsProduction, partyId:dte.issuerPartyId]" out-map="tokenMap"/>
+                <set field="Token" from="tokenMap.token"/>
+                <if condition="dteIsProduction"><then>
+                    <service-call name="mchile.sii.DTECommServices.verifica#DocumentoEnSiiProduction" in-map="context" out-map="context"/>
+                </then><else>
+                    <service-call name="mchile.sii.DTECommServices.verifica#DocumentoEnSiiCertification" in-map="context" out-map="context"/>
+                </else></if>
+                <script><![CDATA[
+                    salida = getEstDteResponse.getEstDteReturn
+                    ec.logger.info("salida: ${salida}")
+                    xmlDoc = new groovy.xml.XmlParser(false, false).parseText(salida)
+                    header = xmlDoc.'SII:RESP_HDR'
+                    status = header.ESTADO.text()
+                    glosa = header.GLOSA_ESTADO.text()
+                    errorCode = header.ERR_CODE.text()
+                    glosaError = header.GLOSA_ERR.text()
+                    numeroAtencion = header.NUM_ATENCION.text()
+                    ]]></script>
+                <if condition="errorCode == '0'">
+                    <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" for-update="true"/>
+                    <if condition="dte.sentAuthStatusId == 'Ftd-SentAuthUnverified'">
+                        <set field="dte.sentAuthStatusId" value="Ftd-SentAuthAccepted"/>
+                        <entity-update value-field="dte"/>
+                    </if>
                 </if>
-            </if>
+            </else></if>
         </actions>
     </service>
 
@@ -1599,7 +1610,6 @@ TrackId Token']" type="Map"/>
                     ec.message.addError("Error parsing response from SII: ${e.getMessage()}\nrespuesta SII: ${respSII}")
                 }
             ]]></script>
-            <log message="respuesta: ${respuesta}"/>
             <entity-find entity-name="mchile.dte.DteEnvioAndFiscalTaxDocument" list="dteAndEnvioList">
                 <econdition field-name="envioId"/>
             </entity-find>
@@ -1662,130 +1672,82 @@ TrackId Token']" type="Map"/>
         </description>
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
-            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
-            <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
         <out-parameters>
+            <parameter name="hasError" type="Boolean"/>
             <parameter name="errorCode" required="true"/>
             <parameter name="glosaError" required="true"/>
         </out-parameters>
         <actions>
-            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="context"/>
-            <set field="certData" from="certData"/>
-
-            <service-call name="mchile.sii.DTEServices.get#DteContent" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml']" out-map="context"/>
-
-            <if condition="!content">
-                <return error="true" message="DTE no existe"/>
+            <set field="hasError" from="true"/>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAndInvoice" value-field="boleta"/>
+            <if condition="boleta == null"><return error="true" message="Could not find FiscalTaxDocument ${fiscalTaxDocumentId}"/></if>
+            <if condition="!(boleta.sentAuthStatusId in ['Ftd-SentAuthUnverified', 'Ftd-SentAuthAccepted'])">
+                <return error="true" message="Documento está en estado ${boleta.sentAuthStatusId}, no se puede validar"/>
             </if>
-            <set field="envio" from="content"/>
+            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:boleta.issuerPartyId]" out-map="context"/>
 
-            <set field="salida" value=""/>
-            <set field="statusXML" value=""/>
-            <set field="token" value="0"/>
+            <service-call name="mchile.sii.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:boleta.fiscalTaxDocumentTypeEnumId]" out-map="siiCodeMap"/>
+            <set field="tipo" from="siiCodeMap.siiCode"/>
+            <set field="folio" from="boleta.fiscalTaxDocumentNumber"/>
 
-            <set field="tipo" value="39"/>
-            <if condition="fiscalTaxDocumentTypeEnumId.equals('Ftdt-41')">
-                <set field="tipo" value="41"/>
-            </if>
+            <set field="issuerPartyIdValue" from="boleta.issuerPartyIdValue"/>
 
-            <!-- Recuperar folio -->
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="boletaField">
-                <select-field field-name="fiscalTaxDocumentNumber"/>
-                <select-field field-name="receiverPartyId"/>
-                <select-field field-name="receiverPartyIdTypeEnumId"/>
-            </entity-find-one>
+            <set field="monto" from="boleta.dteAmount" type="String"/>
+            <set field="fechaEmision" from="ec.l10n.format(boleta.date, 'dd-MM-yyyy')"/>
 
-            <set field="folio" from="boletaField.fiscalTaxDocumentNumber" type="String"/>
-            <set field="receiverPartyId" from="boletaField.receiverPartyId"/>
-            <set field="receiverPartyIdTypeEnumId" from="boletaField.receiverPartyIdTypeEnumId"/>
-            <set field="invoiceId" from="boletaField.invoiceId"/>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:boleta.receiverPartyIdValue]" out-map="rutMap"/>
+            <set field="rutReceptor" from="rutMap.rut" type="String"/>
+            <set field="dvReceptor" from="rutMap.dv" type="String"/>
 
+            <service-call name="mchile.sii.DTECommServices.get#TokenBoleta" in-map="[boletaIsProduction:boletaIsProduction,  partyId:boleta.issuerPartyId]" out-map="tokenMap"/>
+            <set field="token" from="tokenMap.token"/>
+            <set field="urlSolicitud" from="boletaIsProduction? 'https://api.sii.cl/recursos/v1/boleta.electronica': 'https://apicert.sii.cl/recursos/v1/boleta.electronica'"/>
 
-            <!-- Recuperacion de rut receptor -->
-            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                <econdition field-name="partyId" from="receiverPartyId"/>
-                <econdition field-name="partyIdTypeEnumId" from="receiverPartyIdTypeEnumId"/>
-            </entity-find>
+            <script><![CDATA[
+                import org.moqui.context.ExecutionContext
+                import org.moqui.util.RestClient
+                import org.eclipse.jetty.http.HttpHeader
+                import org.eclipse.jetty.http.HttpField
+                import groovy.json.JsonSlurper
 
-            <if condition="!partyIdentificationList.idValue[0]">
-                <return error="true" message="No existe organización receptora definida en el sistema"/>
-            </if>
-            <set field="rutReceptor" from="partyIdentificationList.idValue[0]"/>
+                ExecutionContext ec = context.ec
 
-            <!-- Obtencion de monto desde invoiceId -->
-            <set field="monto" value="0"/>
-            <set field="fechaEmision" value="23-11-2020"/>
+                URI requestUrl = new URI(urlSolicitud + "/" + issuerPartyIdValue + "-" + tipo + "-" + folio + "/estado")
 
-            <!-- Recuperacion de xml para parsear -->
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="contentField">
-                <select-field field-name="contentLocation"/>
-            </entity-find-one>
-            <if condition="!contentField">
-                <return error="true" message="Boleta no tiene XML generado"/>
-            </if>
-            <set field="xmlDataRef" from="ec.resource.getLocationReference(contentField.contentLocation)"/>
-            <script>
-                import javax.xml.parsers.*
-                import org.w3c.dom.*
-                import java.text.DateFormat
-                import java.text.SimpleDateFormat
-                import java.util.Date
-                import java.io.FileInputStream
-                import java.security.KeyStore
-                import java.security.PrivateKey
-                import java.security.cert.X509Certificate
-                import java.util.HashMap
-                import groovy.json.JsonSlurper;
-
-                // Correccion de rut
-                rutEmisor = rutEmisor.replace(".","")
-
-                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance()
-                DocumentBuilder builder = null
-                Document document = null
-
-                builder = factory.newDocumentBuilder()
-                document = builder.parse(xmlDataRef.openStream())
-                document.getDocumentElement().normalize()
-                Element root = document.getDocumentElement()
-
-                NodeList nList = document.getElementsByTagName("MntTotal")
-                monto = nList.item(0).getTextContent()
-
-                nList = document.getElementsByTagName("FchEmis")
-                fechaEmision = nList.item(0).getTextContent()
-
-                // Formateo de fecha desde YYYY-MM-DD a DD-MM-YYYY
-                SimpleDateFormat sourceFmt = new SimpleDateFormat("yyyy-MM-dd")
-                SimpleDateFormat targetFmt = new SimpleDateFormat("dd-MM-yyyy")
-
-                Date date1 = sourceFmt.parse(fechaEmision)
-                fechaEmision = targetFmt.format(date1)
-
-                System.out.println("Folio: " + folio + ", token: " + token)
-
-                // Ejecutar GET https://apicert.sii.cl/boleta.electronica.envio/{rut}-{dv}-{trackid}
-                token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([boletaIsProduction:boletaIsProduction,  partyId:organizationPartyId]).call().token
-                if (boletaIsProduction) {
-                    logger.warn("Consultando Boleta en produccion")
-                    resp = ec.service.sync().name("mchile.sii.DTECommServices.get#EstadoBoletaProduccion").parameters([rutCompany:rutEmisor, rutReceptor:rutReceptor, monto:monto, fechaEmision:fechaEmision, folio:folio, tipo:tipo, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]).call().respSII
-                } else {
-                    logger.warn("Consultando Boleta en Certificacion")
-                    resp = ec.service.sync().name("mchile.sii.DTECommServices.get#EstadoBoletaCertificacion").parameters([rutCompany:rutEmisor, rutReceptor:rutReceptor, monto:monto, fechaEmision:fechaEmision, folio:folio, tipo:tipo, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]).call().respSII
+                RestClient restClient = new RestClient().uri(requestUrl).method("GET")
+                restClient.getDefaultRequestFactory().getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 (compatible; PROG 1.0; Windows NT 5.0; YComp 5.0.2.4)"))
+                restClient.addHeader("Host", requestUrl.getHost())
+                restClient.addHeader("Cookie", "TOKEN=${token}")
+                restClient.addBodyParameters([rut_receptor:rutReceptor, dv_receptor:dvReceptor, monto:monto, fechaEmision:fechaEmision])
+                if (proxyHost != null && proxyPort != 0) {
+                    restClient.withRequestFactory(new cl.moit.net.ProxyRequestFactory(proxyHost, proxyPort))
                 }
+                restClient.acceptContentType("application/json")
 
-                salida = resp.toString()
-                logger.warn("Salida JSON: " + salida)
+                RestClient.RestResponse response = restClient.call()
+                respSII = response.text()
 
                 def jsonSlurper = new JsonSlurper()
-                def object = jsonSlurper.parseText(resp)
-                assert object instanceof Map
-                glosa = object.descripcion
+                try {
+                    respuesta = jsonSlurper.parseText(respSII)
+                } catch (Exception e) {
+                    ec.message.addError("Error parsing response from SII: ${e.getMessage()}\nrespuesta SII: ${respSII}")
+                }
+            ]]></script>
 
-            </script>
-            <set field="errorCode" value="0"/>
-            <set field="glosaError" value="$glosa"/>
+            <set field="errorCode" from="respuesta.codigo"/>
+            <set field="glosaError" from="respuesta.descripcion"/>
+            <if condition="respuesta.codigo in ['DOK', 'TMD', 'TMC', 'MMD', 'MMC', 'AND', 'ANC']"><then>
+                <!-- OK -->
+                <service-call name="update#mchile.dte.FiscalTaxDocument" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, sentAuthStatusId:'Ftd-SentAuthAccepted']"/>
+                <set field="hasError" from="false"/>
+            </then><else-if condition="respuesta.codigo == 'FAU'">
+                <message type="warning">Documento no recibido (aún) en SII</message>
+            </else-if><else>
+                <return error="true" message="${respuesta}"/>
+            </else></if>
+
         </actions>
     </service>
 
@@ -2142,68 +2104,6 @@ TrackId Token']" type="Map"/>
         <out-parameters>
             <parameter name="token"/>
         </out-parameters>
-    </service>
-
-    <service verb="get" noun="EstadoBoleta" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/getEstadoBoleta.groovy">
-        <description>Verificacion del estado de una Boleta</description>
-        <in-parameters>
-            <parameter name="rutCompany" required="true"/>
-            <parameter name="rutReceptor" required="true"/>
-            <parameter name="monto" required="true"/>
-            <parameter name="folio" required="true"/>
-            <parameter name="tipo" required="true"/>
-            <parameter name="fechaEmision" required="true"/>
-            <parameter name="token" required="true"/>
-            <parameter name="urlSolicitud" required="true"/>
-            <parameter name="hostEnvio" required="true"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="respSII"/>
-        </out-parameters>
-    </service>
-
-    <service verb="get" noun="EstadoBoletaCertificacion">
-        <in-parameters>
-            <parameter name="rutCompany" required="true"/>
-            <parameter name="rutReceptor" required="true"/>
-            <parameter name="monto" required="true"/>
-            <parameter name="folio" required="true"/>
-            <parameter name="tipo" required="true"/>
-            <parameter name="fechaEmision" required="true"/>
-            <parameter name="token" required="true"/>
-            <parameter name="urlSolicitud" default-value="https://apicert.sii.cl/recursos/v1/boleta.electronica"/>
-            <parameter name="hostEnvio"  default-value="apicert.sii.cl"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="respSII"/>
-        </out-parameters>
-        <actions>
-            <service-call name="mchile.sii.DTECommServices.get#EstadoBoleta" out-map="respuesta"
-                          in-map="[rutCompany:rutCompany, rutReceptor:rutReceptor, monto:monto, folio:folio, tipo:tipo, fechaEmision:fechaEmision, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]"/>
-            <set field="respSII" from="respuesta.respSII"/>
-        </actions>
-    </service>
-
-    <service verb="get" noun="EstadoBoletaProduccion">
-        <in-parameters>
-            <parameter name="rutCompany" required="true"/>
-            <parameter name="rutReceptor" required="true"/>
-            <parameter name="monto" required="true"/>
-            <parameter name="folio" required="true"/>
-            <parameter name="tipo" required="true"/>
-            <parameter name="fechaEmision" required="true"/>
-            <parameter name="token" required="true"/>
-            <parameter name="urlSolicitud" default-value="https://api.sii.cl/recursos/v1/boleta.electronica"/>
-            <parameter name="hostEnvio"  default-value="api.sii.cl"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="respSII"/>
-        </out-parameters>
-        <actions>
-            <service-call name="mchile.sii.DTECommServices.get#EstadoBoleta" out-map="respuesta"
-                          in-map="[rutCompany:rutCompany, rutReceptor:rutReceptor, monto:monto, folio:folio, tipo:tipo, fechaEmision:fechaEmision, token:token, urlSolicitud:urlSolicitud, hostEnvio:hostEnvio]"/>
-            <set field="respSII" from="respuesta.respSII"/>
-        </actions>
     </service>
 
     <service verb="reenable" noun="EnvioFailedToProcess">
