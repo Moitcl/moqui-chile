@@ -10,7 +10,7 @@ import org.apache.http.protocol.BasicHttpContext
 import org.apache.http.protocol.HttpContext
 import org.apache.http.message.BasicHeader
 import org.apache.http.HttpEntity
-import org.apache.http.client.protocol.ClientContext
+import org.apache.http.client.protocol.HttpClientContext
 import org.apache.http.entity.mime.MultipartEntityBuilder
 import org.apache.http.entity.ContentType
 import org.apache.http.entity.mime.content.StringBody
@@ -35,11 +35,11 @@ if (rutEmisorEnvio != rutEmisor) {
     return
 }
 
-URI uploadUrl
+URI requestUrl
 if (boletaIsProduction) {
-    uploadUrl = new URI("https://rahue.sii.cl/recursos/v1/boleta.electronica.envio")
+    requestUrl = new URI("https://rahue.sii.cl/recursos/v1/boleta.electronica.envio")
 } else {
-    uploadUrl = new URI("https://pangal.sii.cl/recursos/v1/boleta.electronica.envio")
+    requestUrl = new URI("https://pangal.sii.cl/recursos/v1/boleta.electronica.envio")
 }
 
 // Get token
@@ -55,7 +55,7 @@ if (useProxy) {
     client.getParams().setParameter(org.apache.http.conn.params.ConnRoutePNames.DEFAULT_PROXY,proxy)
 }
  */
-HttpPost post = new HttpPost(uploadUrl)
+HttpPost post = new HttpPost(requestUrl)
 
 post.addHeader("Accept", "application/json")
 post.addHeader(new BasicHeader("User-Agent", "Mozilla/4.0 ( compatible; PROG 1.0; Windows NT)"))
@@ -78,7 +78,7 @@ post.setEntity(entity)
 
 BasicClientCookie cookie = new BasicClientCookie("TOKEN", token)
 cookie.setPath("/")
-cookie.setDomain(uploadUrl.getHost())
+cookie.setDomain(requestUrl.getHost())
 cookie.setSecure(true)
 cookie.setVersion(1)
 
@@ -89,7 +89,7 @@ cookieStore.addCookie(cookie)
 //post.getParams().setParameter(ClientPNames.COOKIE_POLICY, CookiePolicy.BROWSER_COMPATIBILITY)
 
 HttpContext localContext = new BasicHttpContext()
-localContext.setAttribute(ClientContext.COOKIE_STORE, cookieStore)
+localContext.setAttribute(HttpClientContext.COOKIE_STORE, cookieStore)
 
 HttpResponse response = client.execute(post, localContext)
 
