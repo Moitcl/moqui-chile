@@ -1599,12 +1599,59 @@ TrackId Token']" type="Map"/>
                 }
             ]]></script>
             <log message="respuesta: ${respuesta}"/>
-            <iterate list="respuesta.detalle_rep_rech" entry="rechazoItem">
-                <log message="processing rechazo: ${rechazoItem}"/>
+            <entity-find entity-name="mchile.dte.DteEnvioAndFiscalTaxDocument" list="dteAndEnvioList">
+                <econdition field-name="envioId"/>
+            </entity-find>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList" for-update="true">
+                <econdition field-name="fiscalTaxDocumentId" operator="in" from="dteAndEnvioList.fiscalTaxDocumentId"/>
+            </entity-find>
+            <set field="rechazoPorTipo" from="[:]"/>
+            <set field="reparoPorTipo" from="[:]"/>
+            <iterate list="respuesta.detalle_rep_rech" entry="reparoRechazo">
+                <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:reparoRechazo.tipo]" out-map="moquiCode"/>
+                <set field="fiscalTaxDocumentTypeEnumId" from="moquiCode.enumId"/>
+                <set field="dte" from="dteList.find { it.fiscalTaxDocumentNumber == reparoRechazo.folio &amp;&amp; it.fiscalTaxDocumentTypeEnumId == fiscalTaxDocumentTypeEnumId
+                    &amp;&amp; it.sentAuthStatusId in ['Ftd-SentAuthRejected', 'Ftd-SentAuthUnverified'] }"/>
+                <if condition="dte"><then>
+                    <if condition="reparoRechazo.estado == 'RCH'"><then>
+                        <set field="dte.sentAuthStatusId" value="Ftd-SentAuthRejected"/>
+                        <set field="rechazoPorTipo[reparoRechazo.tipo]" from="(rechazoPorTipo[reparoRechazo.tipo]?:0) + 1"/>
+                    </then><else-if condition="reparoRechazo.estado == 'RPR'">
+                        <set field="dte.sentAuthStatusId" value="Ftd-SentAuthAcceptedWithDiscrepancies"/>
+                        <set field="reparoPorTipo[reparoRechazo.tipo]" from="(reparoPorTipo[reparoRechazo.tipo]?:0) + 1"/>
+                    </else-if><else>
+                        <message error="true">Unknown status for reparo o rechazo: ${reparoRechazo.estado}</message>
+                    </else></if>
+                    <set field="dte.authComment" from="groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(reparoRechazo.error))"/>
+                    <entity-update value-field="dte"/>
+                </then><else>
+                    <message error="true">Did not find DTE for reparo o rechazo: ${reparoRechazo}</message>
+                </else></if>
             </iterate>
-            <set field="errorCode" value="0"/>
-            <!-- TODO: better message for status -->
-            <set field="glosaError" value="$glosa"/>
+            <iterate list="respuesta.estadistica" entry="tipoItem">
+                <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoItem.tipo]" out-map="moquiCode"/>
+                <set field="fiscalTaxDocumentTypeEnumId" from="moquiCode.enumId"/>
+                <set field="tipo" from="tipoItem.tipo"/>
+                <set field="rechazosProcesados" from="rechazoPorTipo[tipo]?:0"/>
+                <set field="reparosProcesados" from="reparoPorTipo[tipo]?:0"/>
+                <set field="totalPorTipo" from="dteList.findAll { it.fiscalTaxDocumentTypeEnumId == fiscalTaxDocumentTypeEnumId }.size()"/>
+                <if condition="tipoItem.informados != (tipoItem.aceptados + tipoItem.rechazados + tipoItem.reparos)">
+                    <message error="true">Error in response (informados != aceptados + rechazados + reparos): ${tipoItem}</message>
+                </if>
+                <if condition="tipoItem.informados != totalPorTipo"><message error="true">Informados mismatch, response says ${tipoItem.informados}, DB has ${totalPorTipo}</message></if>
+                <if condition="tipoItem.rechazados != rechazosProcesados"><message error="true">Rechazados mismatch, response says ${tipoItem.rechazados}, we processed ${rechazosProcesados}</message></if>
+                <if condition="tipoItem.reparos != reparosProcesados"><message error="true">Reparos mismatch, response says ${tipoItem.reparos}, we processed ${reparosProcesados}</message></if>
+                <set field="aceptadosList" from="dteList.findAll { it.fiscalTaxDocumentTypeEnumId == fiscalTaxDocumentTypeEnumId &amp;&amp; it.sentAuthStatusId in ['Ftd-SentAuthUnverified', 'Ftd-SentAuthAccepted'] }"/>
+                <if condition="aceptadosList.size() == tipoItem.aceptados"><then>
+                    <iterate list="aceptadosList" entry="dteAceptado">
+                        <set field="dteAceptado.sentAuthStatusId" value="Ftd-SentAuthAccepted"/>
+                        <entity-update value-field="dteAceptado"/>
+                    </iterate>
+                </then><else>
+                    <message error="true">Aceptado mismatch for type ${tipo}, response says ${tipoItem.aceptados}, DB has ${aceptadosList.size()}</message>
+                </else></if>
+            </iterate>
+            <set field="hasError" from="ec.message.hasError()"/>
         </actions>
     </service>
 
