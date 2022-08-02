@@ -10,8 +10,9 @@ ExecutionContext ec = context.ec
 
 ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:partyId]).call())
 
-if (tokenBoleta != null && tokenBoletaLastUsage != null && (ec.user.nowTimestamp.time - tokenBoletaLastUsage.time) < 5*60*1000) {
+if (tokenBoleta != null && tokenBoletaLastUsage != null && (ec.user.nowTimestamp.time - tokenBoletaLastUsage.time) < 50*60*1000) {
     token = tokenBoleta
+    ec.service.sync().name("update#mchile.dte.PartyDteParams").parameters([partyId:partyId, tokenBoletaLastUsage:ec.user.nowTimestamp]).call()
     return
 }
 
@@ -56,7 +57,7 @@ estado = header.ESTADO.text()
 glosa = header.GLOSA.text()
 //ec.logger.info("estado: ${estado}")
 //ec.logger.info("glosa: ${glosa}")
-ec.logger.info("Got token from ${uploadUrl.host}: ${token}")
+ec.logger.info("Got new token from ${uploadUrl.host}: ${token}")
 if (token != null && token.length() > 0)
     ec.service.sync().name("update#mchile.dte.PartyDteParams").parameters([partyId:partyId, tokenBoleta:token, tokenBoletaLastUsage:ec.user.nowTimestamp]).call()
 
