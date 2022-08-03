@@ -441,4 +441,68 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="get" noun="DTEsFromSII">
+        <in-parameters>
+            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId"/>
+            <parameter name="date" type="Timestamp"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="dteconfig"/>
+            <set field="loginUrlReferer" value="https://zeusr.sii.cl/AUT2000/InicioAutenticacion/IngresoCertificado.html"/>
+            <set field="loginUrl" value="https://herculesr.sii.cl/cgi_AUT2000/CAutInicio.cgi"/>
+            <set field="baseUrl" value="https://www4.sii.cl/consemitidosinternetui/"/>
+            <script>
+                Calendar cal = Calendar.instance
+                if (date)
+                    cal.setTimeInMillis(date.time)
+                else
+                    cal.add(Calendar.MONTH, -1)
+                periodoMes = ec.l10n.format(cal.get(Calendar.MONTH)+1, "00")
+                periodoAnho = cal.get(Calendar.YEAR)
+            </script>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:dteconfig.rutEmisor]" out-map="rutValido"/>
+            <set field="rut" value="${rutValido.rut}${rutValido.dv}"/>
+            <log message="periodoMes: ${periodoMes}"/>
+            <log message="periodoAnho: ${periodoAnho}"/>
+            <log message="rut: ${rut}"/>
+            <script><![CDATA[
+                import org.moqui.util.RestClient
+                import cl.moit.net.ClientAuthRequestFactory
+
+                ClientAuthRequestFactory requestFactory = new ClientAuthRequestFactory(dteconfig.certData, dteconfig.passCert)
+                RestClient restClient = new RestClient().uri(loginUrl).method("POST").acceptContentType("text/html")
+                        .withRequestFactory(requestFactory).encoding("iso-8859-1").addHeader("Referer", loginUrlReferer).text("referencia=https%3A%2F%2Fmisiir.sii.cl%2Fcgi_misii%2Fsiihome.cgi")
+                java.net.CookieStore cookieStore = requestFactory.getHttpClient().cookieStore
+                response = restClient.call()
+                /*
+                ec.logger.warn("cookies after call")
+                cookieStore.cookies.each { HttpCookie cookie -> ec.logger.info("Cookie ${cookie.name}, value: ${cookie.value}") }
+                 */
+                restClient.method("POST").uri("https://www4.sii.cl/consemitidosinternetui/services/data/facadeService/getDatosInicio")
+                        .addHeader("Referer", "https://www4.sii.cl/consemitidosinternetui/")
+                        .text("periodoMes=${periodoMes}&periodoAnho=${periodoAnho}&rut=${rut}")
+                        .contentType("application/x-www-form-urlencoded")
+                response = restClient.call()
+                responseText = new String(response.bytes(), "iso-8859-1")
+                patternList = [
+                        [name:'tieneAntecedentes', pattern:'<td[^>]*><font class="texto">\nLos antecedentes de la empresa son :<br></font></td>'],
+                        [name:'razonSocial', pattern:'<td[^>]*><font class="texto">\\s*&nbsp;\\s*Raz&oacute;n Social/Nombres\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'fechaResolucion', pattern:'<td[^>]*><font class="texto">\\s*&nbsp;\\s*Fecha Resoluci&oacute;n\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'numeroResolucion', pattern:'<td[^>]*><font class="texto">\\s*&nbsp;\\s*N° Resoluci&oacute;n\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'direccionRegional', pattern:'<td width="200" align="left"><font class="texto">\\s*&nbsp; Direcci&oacute;n Regional\\s*</font></td>\\s*<td width="400" align="left"><font class="texto">\\s*&nbsp;\\s*([^\n]*)\n'],
+                        [name:'autorizaciones', preselectPattern:'El contribuyente tiene autorizada la emisi&oacute;n de los siguientes documentos tributarios electr&oacute;nicos:.*?</table><br>\n<table[^>]*>.*?<tr>.*?</tr>(.*?)</table>',
+                         pattern:'<tr>\\s*<td[^>]*>.*?(\\d+).*?</td>\\s*<td[^>]*><font[^>]*>\\s*(.*?)\\s*</font></td>\\s*<td[^>]*>.*?(\\d+-\\d+-\\d+).*?</td>\\s*<td[^>]*>.*?((?:&nbsp;)|(?:\\d+-\\d+-\\d+)).*?</td>.*?</tr>',
+                         fieldNames:['codigo', 'descripcion', 'autorizado', 'desautorizado']]
+                ]
+                fields = cl.moit.scraping.FieldExtractor.extractFromPatternList(responseText, patternList)
+                fields.autorizaciones.each { autorizacion -> if (autorizacion.desautorizado == '&nbsp;') autorizacion.desautorizado = null}
+                ec.context.putAll(fields)
+                ec.logger.info("Resultado recibido: ${responseText}")
+                if (ec.message.hasError())
+                    ec.message.addError("Resultado recibido: ${responseText}")
+            ]]></script>
+        </actions>
+    </service>
+
 </services>
