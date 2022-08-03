@@ -1,19 +1,9 @@
-import org.apache.http.HttpResponse
-import org.apache.http.client.HttpClient
-import org.apache.http.impl.client.DefaultHttpClient
 import org.moqui.context.ExecutionContext
-import org.apache.http.util.EntityUtils
-import org.apache.http.client.methods.HttpPost
-import org.apache.http.impl.cookie.BasicClientCookie
-import org.apache.http.impl.client.BasicCookieStore
-import org.apache.http.protocol.BasicHttpContext
-import org.apache.http.protocol.HttpContext
-import org.apache.http.message.BasicHeader
-import org.apache.http.HttpEntity
-import org.apache.http.client.protocol.HttpClientContext
-import org.apache.http.entity.mime.MultipartEntityBuilder
-import org.apache.http.entity.ContentType
-import org.apache.http.entity.mime.content.StringBody
+import org.moqui.util.RestClient
+import org.moqui.util.StringUtilities
+import org.eclipse.jetty.http.HttpHeader
+import org.eclipse.jetty.http.HttpField
+import groovy.json.JsonSlurper
 
 ExecutionContext ec = context.ec
 
@@ -27,100 +17,89 @@ if (envio.rutReceptor != '60803000-K') {
     ec.message.addError("Envío ${envioId} tiene Rut de Receptor distinto al SII: ${envio.rutReceptor}, no se puede enviar")
     return
 }
-partyIdEmisor = ec.entity.find("mantle.party.PartyIdentification").condition([partyIdTypeEnumId:'PtidNationalTaxId', idValue:rutEmisorEnvio]).list().first?.partyId
-// Validación rut -->
-ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameter("partyId", partyIdEmisor).call())
-if (rutEmisorEnvio != rutEmisor) {
-    ec.message.addError("Rut Emisor del envío (${rutEmisorEnvio}) no coincide con Rut de organización que envía (${rutEmisor})")
-    return
-}
-
-URI requestUrl
-if (boletaIsProduction) {
-    requestUrl = new URI("https://rahue.sii.cl/recursos/v1/boleta.electronica.envio")
-} else {
-    requestUrl = new URI("https://pangal.sii.cl/recursos/v1/boleta.electronica.envio")
-}
-
-// Get token
-String token = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameter("boletaIsProduction", boletaIsProduction).parameter("partyId", partyIdEmisor).call().token
-
+ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:envio.issuerPartyId]).call())
+tokenMap = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([boletaIsProduction:boletaIsProduction,  partyId:envio.issuerPartyId]).call()
+token = tokenMap.token
+urlSolicitud = boletaIsProduction? 'https://rahue.sii.cl/recursos/v1/boleta.electronica.envio' : 'https://pangal.sii.cl/recursos/v1/boleta.electronica.envio'
 locationReference = ec.resource.getLocationReference(envio.documentLocation)
 
-HttpClient client = new DefaultHttpClient()
-/*
-useProxy = true
-if (useProxy) {
-    org.apache.http.HttpHost proxy = new org.apache.http.HttpHost("192.168.1.50", 9090)
-    client.getParams().setParameter(org.apache.http.conn.params.ConnRoutePNames.DEFAULT_PROXY,proxy)
-}
- */
-HttpPost post = new HttpPost(requestUrl)
+URI requestUrl = new URI(urlSolicitud)
 
-post.addHeader("Accept", "application/json")
-post.addHeader(new BasicHeader("User-Agent", "Mozilla/4.0 ( compatible; PROG 1.0; Windows NT)"))
-
-MultipartEntityBuilder builder = MultipartEntityBuilder.create()
-//builder.setMode(HttpMultipartMode.BROWSER_COMPATIBLE)
+boundary = "MoitCl-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-DTE"
 
 rutEnviaMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEnviador).call()
 rutEmisorMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEmisor).call()
-builder.addPart("rutSender", new StringBody(rutEnviaMap.rut))
-builder.addPart("dvSender", new StringBody(rutEnviaMap.dv as String))
-builder.addPart("rutCompany", new StringBody(rutEmisorMap.rut))
-builder.addPart("dvCompany", new StringBody(rutEmisorMap.dv as String))
-builder.addBinaryBody("archivo", locationReference.openStream(), ContentType.DEFAULT_BINARY, "archivo")
-builder.setBoundary(boundary)
+fileBytes = locationReference.openStream().readAllBytes()
+fileName = locationReference.getFileName()
+body = """--${boundary}\r
+Content-Disposition: form-data; name="rutSender"\r
+\r
+${rutEnviaMap.rut}\r
+--${boundary}\r
+Content-Disposition: form-data; name="dvSender"\r
+\r
+${rutEnviaMap.dv}\r
+--${boundary}\r
+Content-Disposition: form-data; name="rutCompany"\r
+\r
+${rutEmisorMap.rut}\r
+--${boundary}\r
+Content-Disposition: form-data; name="dvCompany"\r
+\r
+${rutEmisorMap.dv}\r
+--${boundary}\r
+Content-Disposition: form-data; name="archivo"; filename="${fileName}"\r
+Content-Type: text/xml
+\r
+${new String(fileBytes, "ISO-8859-1")}\r
+--${boundary}--\r
+"""
 
-HttpEntity entity = builder.build()
+RestClient.RequestFactory requestFactory = new RestClient.SimpleRequestFactory(false, false)
+requestFactory.getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 ( compatible; PROG 1.0; Windows NT)"))
+RestClient restClient = new RestClient().uri(requestUrl).method("POST").withRequestFactory(requestFactory)
+restClient.addHeader("Host", requestUrl.getHost()).addHeader("Cookie", "TOKEN=${token}").acceptContentType("application/json").contentType("multipart/form-data; boundary=${boundary}")
+restClient.text(body).encoding("ISO-8859-1")
 
-post.setEntity(entity)
-
-BasicClientCookie cookie = new BasicClientCookie("TOKEN", token)
-cookie.setPath("/")
-cookie.setDomain(requestUrl.getHost())
-cookie.setSecure(true)
-cookie.setVersion(1)
-
-BasicCookieStore cookieStore = new BasicCookieStore()
-cookieStore.addCookie(cookie)
-
-//client.getParams().setParameter(ClientPNames.COOKIE_POLICY, CookiePolicy.RFC_2109)
-//post.getParams().setParameter(ClientPNames.COOKIE_POLICY, CookiePolicy.BROWSER_COMPATIBILITY)
-
-HttpContext localContext = new BasicHttpContext()
-localContext.setAttribute(HttpClientContext.COOKIE_STORE, cookieStore)
-
-HttpResponse response = client.execute(post, localContext)
-
-
-HttpEntity resEntity = response.getEntity()
-responseText = EntityUtils.toString(resEntity)
-
-attemptCount = (envio.attemptCount?:0) + 1
-if (response.getStatusLine().getStatusCode() == 200) {
-    responseMap = new groovy.json.JsonSlurper().parseText(responseText)
-
-    status = responseMap.estado
-
-    trackId = null
-    if (status == 'REC') {
-        trackId = responseMap.trackid
-        ec.logger.warn("EnvioBoleta enviado correctamente con trackId " + trackId)
-        ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioId, trackId:trackId, statusId:'Ftde-Sent', attemptCount:attemptCount, lastAttempt:ec.user.nowTimestamp]).call()
-        ec.service.special().name("mchile.sii.DTECommServices.start#ValidaEnvioServiceJob").parameters([envioId: envioId, initialDelaySeconds:5, checkDelaySeconds:30, checkAttempts:4, minSecondsBetweenAttempts: 0]).registerOnCommit()
-        envioFtdList = ec.entity.find("mchile.dte.DteEnvioFiscalTaxDocument").condition("envioId", envioId).list()
-        if (envioFtdList)
-            ec.service.sync().name("mchile.sii.DTECommServices.marcarEnviados#Documentos").parameters([trackId:trackId, documentIdList:envioFtdList.fiscalTaxDocumentId]).call()
-        return
-    }
+//proxyHost = "192.168.26.56"
+//proxyPort = 9090
+if (proxyHost != null && proxyPort != 0) {
+    cl.moit.net.ProxyRequestFactory rf = new cl.moit.net.ProxyRequestFactory(proxyHost, proxyPort)
+    rf.getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 ( compatible; PROG 1.0; Windows NT)"))
+    restClient.withRequestFactory(rf)
 }
 
-ec.message.addMessage("Error " + response.getStatusLine() + " al enviar Boleta. response: ${responseText}", "danger")
-if (attemptCount <= maxFail)
-    statusId = envio.statusId
-else
-    statusId = 'Ftde-Failed'
-ec.service.sync().name("update#mchile.dte.DteEnvio").requireNewTransaction(true).parameters([envioId: envioId, statusId: statusId, attemptCount: attemptCount, lastAttempt: ec.user.nowTimestamp]).call()
+RestClient.RestResponse response = restClient.call()
+respSII = response.text()
+
+def jsonSlurper = new JsonSlurper()
+try {
+    respuesta = jsonSlurper.parseText(respSII)
+} catch (Exception e) {
+    ec.message.addError("Error parsing response from SII: ${e.getMessage()}\nrespuesta SII: ${respSII}")
+}
+trackId = respuesta.trackid
+estado = respuesta.estado
+
+attemptCount = (envio.attemptCount ?: 0) + 1
+
+if (estado == 'REC') {
+    ec.logger.warn("DTE Enviada correctamente con trackId " + trackId)
+    attemptCount
+    ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioId, trackId:trackId, statusId:'Ftde-Sent', attemptCount:attemptCount, lastAttempt:ec.user.nowTimestamp]).call()
+    ec.service.special().name("mchile.sii.DTECommServices.start#ValidaEnvioServiceJob").parameters([envioId: envioId, initialDelaySeconds:5, checkDelaySeconds:30, checkAttempts:4, minSecondsBetweenAttempts: 0]).registerOnCommit()
+    envioFtdList = ec.entity.find("mchile.dte.DteEnvioFiscalTaxDocument").condition("envioId", envioId).list()
+    if (envioFtdList)
+        ec.service.sync().name("mchile.sii.DTECommServices.marcarEnviados#Documentos").parameters([trackId:trackId, documentIdList:envioFtdList.fiscalTaxDocumentId]).call()
+
+} else {
+    ec.message.addMessage("Error "+ status + " al enviar DTE", "danger")
+    ec.logger.info("response: ${respSII}")
+    if (attemptCount <= maxFail)
+        statusId = envio.statusId
+    else
+        statusId = 'Ftde-Failed'
+    ec.service.sync().name("update#mchile.dte.DteEnvio").requireNewTransaction(true).parameters([envioId:envioId, statusId:statusId, attemptCount:attemptCount, lastAttempt:ec.user.nowTimestamp]).call()
+}
 
 return
