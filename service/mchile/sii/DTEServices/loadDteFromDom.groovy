@@ -194,6 +194,7 @@ if (existingDteList) {
                 if (envioId)
                     ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioId, fiscalTaxDocumentId:dte.fiscalTaxDocumentId]).call()
                 isDuplicated = true
+                fiscalTaxDocumentId = dte.fiscalTaxDocumentId
                 return
             }
         }
@@ -639,8 +640,11 @@ if (errorMessages.size() > 0) {
     sentRecStatusId = 'Ftd-ReceiverAck'
 }
 
-if (existingDteList)
+if (existingDteList) {
+    fiscalTaxDocumentId = existingDteList.first.fiscalTaxDocumentId
     return
+}
+
 
 // Se guarda DTE recibido en la base de datos
 createMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rutEmisor, fiscalTaxDocumentTypeEnumId:tipoDteEnumId, fiscalTaxDocumentNumber:folioDte,
