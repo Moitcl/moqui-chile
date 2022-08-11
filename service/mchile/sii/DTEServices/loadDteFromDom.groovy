@@ -183,7 +183,7 @@ if (existingDteList) {
     } else {
         contentList = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml'])
                 .disableAuthz().list()
-        if (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-ReceiverAccept'] && contentList) {
+        if (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-ReceiverAccept'] && contentList && sendResponse) {
             ec.logger.warn("Contenido existe, DTE está aprobado, enviando aceptación")
             xmlInDb = ec.resource.getLocationReference(contentList.first().contentLocation).openStream().readAllBytes()
             if (xmlInDb == dteXml) {
