@@ -18,6 +18,8 @@ class SiiAuthenticator {
     protected String password
     protected String userAgent
     protected RestClient.RequestFactory requestFactory
+    protected String proxyHost = null
+    protected int proxyPort = 0
 
     protected boolean debug = false
 
@@ -35,12 +37,23 @@ class SiiAuthenticator {
 
     public void setDebug(boolean debug) { this.debug = debug }
 
+    public void setProxyHost(String proxyHost) { this.proxyHost = proxyHost }
+
+    public void setProxyPort(int proxyPort) { this.proxyPort = proxyPort }
+
+    public RestClient.RequestFactory getRequestFactory() {
+        return requestFactory
+    }
+
     public RestClient createRestClient() {
         RestClient restClient = new RestClient()
         RestClient.RestResponse response
         String responseText = null
         if (certData != null && certData.size() > 0 && certPass != null && certPass.size() > 0) {
-            requestFactory = new ClientAuthRequestFactory(certData, certPass)
+            requestFactory = new ClientAuthRequestFactory(certData, certPass, proxyHost, proxyPort)
+            if (userAgent != null) {
+                requestFactory.getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 ( compatible; PROG 1.0; Windows NT)"))
+            }
             //requestFactory = new RestClient.SimpleRequestFactory(false, false)
             java.net.CookieStore cookieStore = requestFactory.getHttpClient().getCookieStore()
             restClient.withRequestFactory(requestFactory)

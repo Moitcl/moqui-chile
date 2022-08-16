@@ -1,6 +1,7 @@
 package cl.moit.net;
 
 import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.HttpProxy;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.dynamic.HttpClientTransportDynamic;
 import org.eclipse.jetty.io.ClientConnector;
@@ -20,7 +21,7 @@ public class ClientAuthRequestFactory implements RestClient.RequestFactory {
     private HttpClient httpClient;
     private static final Logger logger = LoggerFactory.getLogger(ClientAuthRequestFactory.class);
 
-    public ClientAuthRequestFactory(String certData, String password) throws KeyStoreException, CertificateException, IOException, NoSuchAlgorithmException {
+    public ClientAuthRequestFactory(String certData, String password, String proxyHost, int proxyPort) throws KeyStoreException, CertificateException, IOException, NoSuchAlgorithmException {
         KeyStore ks = KeyStore.getInstance("PKCS12");
         ks.load(new ByteArrayInputStream(Base64.getDecoder().decode(certData)), password.toCharArray());
         SslContextFactory.Client sslContextFactory = new SslContextFactory.Client();
@@ -34,9 +35,14 @@ public class ClientAuthRequestFactory implements RestClient.RequestFactory {
         clientConnector.setSslContextFactory(sslContextFactory);
 
         httpClient = new HttpClient(new HttpClientTransportDynamic(clientConnector));
+        if (proxyHost != null && proxyPort != 0)
+            httpClient.getProxyConfiguration().getProxies().add(new HttpProxy(proxyHost, proxyPort));
         // use a default idle timeout of 15 seconds, should be lower than server idle timeouts which will vary by server but 30 seconds seems to be common
         httpClient.setIdleTimeout(15000);
         try { httpClient.start(); } catch (Exception e) { throw new BaseException("Error starting HTTP client", e); }
+    }
+    public ClientAuthRequestFactory(String certData, String password) throws KeyStoreException, CertificateException, IOException, NoSuchAlgorithmException {
+        this(certData, password, null, 0);
     }
 
     @Override public Request makeRequest(String uriString) {
