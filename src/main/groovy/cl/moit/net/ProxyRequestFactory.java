@@ -15,7 +15,7 @@ public class ProxyRequestFactory  implements RestClient.RequestFactory {
 
     private HttpClient httpClient;
 
-    private static final Logger logger = LoggerFactory.getLogger(ClientAuthRequestFactory.class);
+    private static final Logger logger = LoggerFactory.getLogger(ProxyRequestFactory.class);
 
     public ProxyRequestFactory(String proxyHost, int proxyPort) {
         SslContextFactory.Client sslContextFactory = new SslContextFactory.Client(true);

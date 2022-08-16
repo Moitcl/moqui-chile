@@ -1,5 +1,7 @@
 package cl.moit.sii
 
+import org.eclipse.jetty.http.HttpField
+import org.eclipse.jetty.http.HttpHeader
 import org.moqui.util.RestClient
 import cl.moit.net.ClientAuthRequestFactory
 import org.slf4j.Logger
@@ -14,7 +16,10 @@ class SiiAuthenticator {
     protected String certPass
     protected String username
     protected String password
+    protected String userAgent
     protected RestClient.RequestFactory requestFactory
+
+    protected boolean debug = false
 
     public SiiAuthenticator() {}
 
@@ -28,6 +33,8 @@ class SiiAuthenticator {
 
     public void setPassword(String password) { this.password = password }
 
+    public void setDebug(boolean debug) { this.debug = debug }
+
     public RestClient createRestClient() {
         RestClient restClient = new RestClient()
         RestClient.RestResponse response
@@ -40,9 +47,11 @@ class SiiAuthenticator {
             restClient.uri("https://herculesr.sii.cl/cgi_AUT2000/CAutInicio.cgi?https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi?DESDE_DONDE_URL=OPCION%3D1%26TIPO%3D4").method("POST").acceptContentType("*/*")
             restClient.text("referencia=https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi?DESDE_DONDE_URL=OPCION%3D1%26TIPO%3D4")
             response = restClient.call()
-            //logger.warn("Cookies after request:")
-            //cookieStore.cookies.each { cookie -> logger.info("Cookie for ${cookie.commentURL}: ${cookie.name} = ${cookie.value}")}
-            //logger.info("response: ${response.text()}")
+            if (debug) {
+                logger.warn("Cookies after request:")
+                cookieStore.cookies.each { cookie -> logger.info("Cookie for ${cookie.commentURL}: ${cookie.name} = ${cookie.value}")}
+                logger.info("response: ${response.text()}")
+            }
             responseText = response.text()
         } else {
             // ToDo: autenticación con user/pass
@@ -53,14 +62,16 @@ class SiiAuthenticator {
             restClient.uri("https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi?DESDE_DONDE_URL=OPCION=1&amp;TIPO=4")
             response = restClient.call() // Segundo llamado lleva a formulario
             responseText = new String(response.bytes(), "iso-8859-1")
-            //logger.info("responseText: ${responseText}")
+            if (debug)
+                logger.info("responseText: ${responseText}")
         }
         if (responseText =~ /location.replace\('https:\/\/www1.sii.cl\/cgi-bin\/Portal001\/mipeSelEmpresa.cgi\?DESDE_DONDE_URL=OPCION=1&TIPO=4'\)/) {
             logger.info("Redirección al origen")
             restClient.uri("https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi?DESDE_DONDE_URL=OPCION=1&amp;TIPO=4")
             response = restClient.call() // Segundo llamado lleva a formulario
             responseText = new String(response.bytes(), "iso-8859-1")
-            //logger.info("responseText: ${responseText}")
+            if (debug)
+                logger.info("responseText: ${responseText}")
         }
         if (responseText =~/Para identificar a la empresa con la que desea trabajar\s*en el Portal de Facturaci&oacute;n\s*Electr&oacute;nica del SII,\s*selecci&oacute;nelo de la lista de empresas que\s*lo han registrado como usuario autorizado/) {
             logger.info("Selección de empresa")
@@ -70,7 +81,8 @@ class SiiAuthenticator {
             restClient.text("RUT_EMP=${rutOrganizacion}&DESDE_DONDE_URL=OPCION%3D1%26TIPO%3D4")
             response = restClient.call()
             responseText = new String(response.bytes(), "iso-8859-1")
-            //logger.info("responseText: ${responseText}")
+            if (debug)
+                logger.info("responseText: ${responseText}")
         }
 
         return restClient
