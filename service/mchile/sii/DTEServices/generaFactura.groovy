@@ -363,7 +363,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                     MntExe(totalExento)
                 //MntBase()
                 //MntMargenCom()
-                TasaIVA(ec.l10n.format(vatTaxRate*100, "##"))
+                if (tipoDte != 34) TasaIVA(ec.l10n.format(vatTaxRate*100, "##"))
                 IVA(Math.round((totalNeto?:0) * vatTaxRate))
                 //IVAProp()
                 //IVATerc()
