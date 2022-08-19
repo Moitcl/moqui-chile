@@ -94,6 +94,10 @@ class MoquiDTEUtils {
                 EntityValue productEv = ec.entity.find("mantle.product.Product").condition("productId", detailEntry.productId).one()
                 nombreItem = productEv? productEv.productName : ''
             }
+            if (nombreItem.length() > 80) {
+                ec.logger.info("Truncando descripción a 80 caracteres")
+                nombreItem = nombreItem.substring(0, 80)
+            }
             BigDecimal quantity = detailEntry.quantity
             BigDecimal montoDescuento = detailEntry.montoDescuento
             BigDecimal porcentajeDescuento = detailEntry.porcentajeDescuento
