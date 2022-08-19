@@ -122,6 +122,9 @@
                         </fo:table-cell></fo:table-body></fo:table>
                     </fo:block>
                 </xsl:if>
+                <xsl:if test="siidte:DscRcgGlobal | DscRcgGlobal">
+                    <xsl:call-template name="DscRcgGlobalTable"/>
+                </xsl:if>
 
                 <fo:table table-layout="fixed">
                     <fo:table-column column-width="14.2cm"/>
@@ -216,13 +219,6 @@
                                     <fo:table-column column-width="3cm"/>
                                     <fo:table-column column-width="2.4cm"/>
                                     <fo:table-body>
-                                        <fo:table-row>
-                                            <fo:table-cell><fo:block font-weight="bold" margin="2pt">Descuento Global</fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block text-align="right" margin="2pt"><xsl:choose>
-                                                <xsl:when test="(siidte:DscRcgGlobal[siidte:NroLinDR=1]) | DscRcgGlobal[NroLinDR=1]"><xsl:value-of select="format-number((siidte:DscRcgGlobal/siidte:ValorDR | DscRcgGlobal/ValorDR), '###.###','european')"/>%</xsl:when>
-                                                <xsl:otherwise>-</xsl:otherwise>
-                                            </xsl:choose></fo:block></fo:table-cell>
-                                        </fo:table-row>
                                         <fo:table-row>
                                             <fo:table-cell><fo:block font-weight="bold" margin="2pt">Monto Neto</fo:block></fo:table-cell>
                                             <fo:table-cell><fo:block text-align="right" margin="2pt"><xsl:choose>
@@ -643,6 +639,42 @@
                     <xsl:when test="(siidte:CodRef | CodRef)=2">Corrige Texto</xsl:when>
                     <xsl:when test="(siidte:CodRef | CodRef)=3">Corrige Montos</xsl:when>
                 </xsl:choose>
+            </fo:block></fo:table-cell>
+        </fo:table-row>
+    </xsl:template>
+
+    <xsl:template name="DscRcgGlobalTable">
+        <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
+                  fox:border-radius="4pt" border-width="0.8pt" border-style="solid">
+            <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
+            <fo:table table-layout="fixed" margin="2pt">
+                <fo:table-column column-width="0.5cm"/>
+                <fo:table-column column-width="2.9cm"/>
+                <fo:table-column column-width="13.4cm"/>
+                <fo:table-column column-width="3cm"/>
+                <fo:table-body>
+                    <xsl:apply-templates select="siidte:DscRcgGlobal | DscRcgGlobal"/>
+                </fo:table-body>
+            </fo:table>
+        </fo:block>
+    </xsl:template>
+
+    <xsl:template match="siidte:DscRcgGlobal | DscRcgGlobal">
+        <fo:table-row>
+            <fo:table-cell><fo:block margin="2pt"><xsl:value-of select="siidte:NroLinDR | NroLinDR"/></fo:block></fo:table-cell>
+            <fo:table-cell><fo:block margin="2pt" font-weight="bold">
+                <xsl:choose>
+                    <xsl:when test="(siidte:TpoMov | TpoMov) = 'D'">Descuento Global</xsl:when>
+                    <xsl:when test="(siidte:TpoMov | TpoMov) = 'R'">Recargo Global</xsl:when>
+                </xsl:choose>
+            </fo:block></fo:table-cell>
+            <fo:table-cell><fo:block margin="2pt"><xsl:value-of select="siidte:GlosaDR | GlosaDR"/></fo:block></fo:table-cell>
+            <fo:table-cell text-align="right"><fo:block margin="2pt">
+                <xsl:if test="(siidte:TpoMov | TpoMov) = 'D'">(</xsl:if>
+                <xsl:if test="(siidte:TpoValor | TpoValor) = '$'">$&#160;</xsl:if>
+                <xsl:value-of select="format-number(siidte:ValorDR | ValorDR, '###.###','european')"/>
+                <xsl:if test="(siidte:TpoValor | TpoValor) = '%'">&#160;%</xsl:if>
+                <xsl:if test="(siidte:TpoMov | TpoMov) = 'D'">)</xsl:if>
             </fo:block></fo:table-cell>
         </fo:table-row>
     </xsl:template>
