@@ -180,7 +180,7 @@ if (tipoDte == 33) {
     dteExenta = refMap.dteExenta
     codRef = referenciaList[0].codigo
 
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "DebitoItem", codRef)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "DebitoItem", codRef as Integer)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
     totalExento = detMap.totalExento
@@ -211,7 +211,7 @@ if (tipoDte == 33) {
     dteExenta = refMap.dteExenta
     codRef = refMap.codigo
 
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "ShipmentItem", codRef)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "ShipmentItem", codRef as Integer)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
     totalExento = detMap.totalExento
