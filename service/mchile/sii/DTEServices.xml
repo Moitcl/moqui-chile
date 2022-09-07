@@ -1501,7 +1501,7 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
 
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteEv" for-update="true">
-                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+                <field-map field-name="fiscalTaxDocumentId"/>
             </entity-find-one>
             <if condition="dteEv.statusId != 'Ftd-Issued'"><return error="true" message="No se puede eliminar DTE que no ha sido emitido"/></if>
             <if condition="dteEv.sentRecStatusId == 'Ftd-SentRec'"><return error="true" message="No se puede eliminar DTE enviada a receptor"/></if>
@@ -1509,14 +1509,14 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Borrado de atributos -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAttributes" value-field="attributesToDelete">
-                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+                <field-map field-name="fiscalTaxDocumentId"/>
             </entity-find-one>
             <if condition="attributesToDelete">
                 <entity-delete value-field="attributesToDelete"/>
             </if>
             <!-- Borrado de XML -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="xmlContentToDelete">
-                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+                <field-map field-name="fiscalTaxDocumentId"/>
                 <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
             </entity-find-one>
             <if condition="xmlContentToDelete">
@@ -1524,7 +1524,7 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <!-- Borrado de PDF -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="pdfContentToDelete">
-                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+                <field-map field-name="fiscalTaxDocumentId"/>
                 <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Pdf"/>
             </entity-find-one>
             <if condition="pdfContentToDelete">
@@ -1532,12 +1532,30 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <!-- Borrado de PDF Cedible -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="pdfContentToDelete">
-                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
+                <field-map field-name="fiscalTaxDocumentId"/>
                 <field-map field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-PdfCedible"/>
             </entity-find-one>
             <if condition="pdfContentToDelete">
                 <entity-delete value-field="pdfContentToDelete"/>
             </if>
+            <!-- Cancelación de Envíos si los hay -->
+            <entity-find entity-name="mchile.dte.DteEnvioFiscalTaxDocument" list="envioList">
+                <econdition field-name="fiscalTaxDocumentId"/>
+            </entity-find>
+            <iterate list="envioList" entry="dteEnvio">
+                <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" auto-field-map="dteEnvio" for-update="true"/>
+                <if condition="envio.statusId in ['Ftde-Created']"><then>
+                    <set field="envio.statusId" value="Ftde-Cancelled"/>
+                    <entity-update value-field="envio"/>
+                </then><else-if condition="envio.statusId in ['Ftde-Failed', 'Ftde-FailedAtReceiver']">
+                    <!-- No es necesario modificar envío -->
+                </else-if><else-if condition="dteEv.sentAuthStatusId == 'Ftd-SentAuthRejected'">
+                    <!-- DTE fue rechazado por el SII, se puede (y debe) eliminar -->
+                </else-if><else>
+                    <return error="true" message="No se puede eliminar DTE ${fiscalTaxDocumentId}, tiene envío asociado en estado ${envio.statusId}"/>
+                </else></if>
+            </iterate>
+
             <!-- Se verifica si la DTE es de un tercero -->
 
             <set field="issuerId" from="dteEv.issuerPartyId"/>
