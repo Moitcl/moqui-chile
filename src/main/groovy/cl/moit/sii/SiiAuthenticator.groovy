@@ -29,6 +29,8 @@ class SiiAuthenticator {
 
     public void setRutOrganizacion(String rutOrganizacion) { this.rutOrganizacion = rutOrganizacion }
 
+    public void setRutRepresentado(String rutRepresentado) { this.rutRepresentado = rutRepresentado }
+
     public void setCertData(String certData) { this.certData = certData }
 
     public void setCertPass(String certPass) { this.certPass = certPass }
@@ -89,6 +91,42 @@ class SiiAuthenticator {
         }
         if (responseText =~ /Debido a que usted ha sido autorizado por otros contribuyentes\s+para que los represente electrónicamente en el sitio web del SII, esta página le permitirá decidir\s+si en esta oportunidad desea realizar trámites propios o representar electrónicamente a otro\s+contribuyente/) {
             logger.info("Selección de representar o continuar")
+            if (rutRepresentado) {
+                // Cambiar a Representar
+                logger.warn("Cambiando a representar")
+                restClient.uri('https://zeusr.sii.cl/cgi_AUT2000/admRPDOBuild.cgi')
+                response = restClient.call()
+                responseText = new String(response.bytes(), "iso-8859-1")
+                // javascript:sendMethodPost('/cgi_AUT2000/admRepresentar.cgi?RUT_RPDO=76514104&APPLS=RPETC&NOMBRE=MOIT%20SPA&APPLSDES=RPETC%20Consulta%20Registro%20Transferencia%20Credito%27);
+                //"rPDOsTo":
+                Pattern pattern = Pattern.compile('\\{"rutRpteRpdo":"([0-9]+)","dvRpteRpdo":"(.)","codAppl":"([^"]+)","descripcion":"([^"]+)","nameRpte":"([^"]+)","nameRpdo":"([^"]+)","marca":([^"]+)}', Pattern.DOTALL)
+                Object matcher = responseText =~ pattern
+                Collection results = matcher.findAll()
+                Map representeeMap
+                results.each { match ->
+                    String rutCandidato = "${match[1]}-${match[2]}"
+                    if (rutRepresentado == rutCandidato) {
+                        representeeMap = [RUT_RPDO:match[1], APPLS:match[3], NOMBRE:match[7], APPLSDES:match[4], ]
+                    }
+                }
+                if (representeeMap == null) {
+                    logger.error("No se pudo encontrar RUT representado")
+                    return null;
+                }
+                restClient.uri('https://zeusr.sii.cl/cgi_AUT2000/admRepresentar.cgi')
+                restClient.contentType("application/x-www-form-urlencoded")
+                restClient.addBodyParameters(representeeMap)
+                org.eclipse.jetty.util.Fields fields = new org.eclipse.jetty.util.Fields()
+                representeeMap.each { key, value ->
+                    fields.add(key, value)
+                }
+                String bodyText = org.eclipse.jetty.client.util.FormRequestContent.convert(fields)
+                restClient.text(bodyText)
+                response = restClient.call()
+                responseText = response.text()
+                if (debug)
+                    logger.info("responseText for representación: ${responseText}")
+            }
             restClient.uri("https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi?DESDE_DONDE_URL=OPCION=1&amp;TIPO=4")
             response = restClient.call() // Segundo llamado lleva a formulario
             responseText = new String(response.bytes(), "iso-8859-1")
