@@ -22,17 +22,18 @@ public class ClientAuthRequestFactory implements RestClient.RequestFactory {
     private static final Logger logger = LoggerFactory.getLogger(ClientAuthRequestFactory.class);
 
     public ClientAuthRequestFactory(String certData, String password, String proxyHost, int proxyPort) throws KeyStoreException, CertificateException, IOException, NoSuchAlgorithmException {
-        KeyStore ks = KeyStore.getInstance("PKCS12");
-        ks.load(new ByteArrayInputStream(Base64.getDecoder().decode(certData)), password.toCharArray());
-        SslContextFactory.Client sslContextFactory = new SslContextFactory.Client();
-        sslContextFactory.setKeyStore(ks);
-        String alias = ks.aliases().nextElement();
-        sslContextFactory.setCertAlias(alias);
-        sslContextFactory.setKeyStorePassword(password);
-        sslContextFactory.setEndpointIdentificationAlgorithm("HTTPS");
-
         ClientConnector clientConnector = new ClientConnector();
-        clientConnector.setSslContextFactory(sslContextFactory);
+        if (certData != null) {
+            KeyStore ks = KeyStore.getInstance("PKCS12");
+            ks.load(new ByteArrayInputStream(Base64.getDecoder().decode(certData)), password.toCharArray());
+            SslContextFactory.Client sslContextFactory = new SslContextFactory.Client();
+            sslContextFactory.setKeyStore(ks);
+            String alias = ks.aliases().nextElement();
+            sslContextFactory.setCertAlias(alias);
+            sslContextFactory.setKeyStorePassword(password);
+            sslContextFactory.setEndpointIdentificationAlgorithm("HTTPS");
+            clientConnector.setSslContextFactory(sslContextFactory);
+        }
 
         httpClient = new HttpClient(new HttpClientTransportDynamic(clientConnector));
         if (proxyHost != null && proxyPort != 0)

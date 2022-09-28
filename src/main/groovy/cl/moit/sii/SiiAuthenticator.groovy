@@ -6,12 +6,14 @@ import org.moqui.util.RestClient
 import cl.moit.net.ClientAuthRequestFactory
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import java.util.regex.Pattern
 
 class SiiAuthenticator {
 
     protected final static Logger logger = LoggerFactory.getLogger(SiiAuthenticator.class)
 
     protected String rutOrganizacion
+    protected String rutRepresentado
     protected String certData
     protected String certPass
     protected String username
@@ -67,8 +69,23 @@ class SiiAuthenticator {
             }
             responseText = response.text()
         } else {
-            // ToDo: autenticación con user/pass
-            requestFactory = new RestClient.SimpleRequestFactory(false, false)
+            logger.warn("Sending user/pass")
+            requestFactory = new ClientAuthRequestFactory(null, null, proxyHost, proxyPort)
+            restClient.withRequestFactory(requestFactory)
+            restClient.uri("https://zeusr.sii.cl/cgi_AUT2000/CAutInicio.cgi").method("POST")
+            restClient.contentType("application/x-www-form-urlencoded")
+            int pos = username.indexOf('-')
+            String rut = null
+            String dv = null
+            if (pos > 0 && pos < username.length()-1) {
+                rut = username.substring(0,pos)
+                dv = username.substring(pos+1)
+                logger.warn("rut: ${rut}, dv: ${dv}")
+            }
+            //restClient.addBodyParameters([rut:rut, dv:dv, referencia:'https%3A%2F%2Fmisiir.sii.cl%2Fcgi_misii%2Fsiihome.cgi', '411':'', rutcntr:username, clave:password])
+            restClient.text("rut=${rut}&dv=${dv}&referencia=https%3A%2F%2Fmisiir.sii.cl%2Fcgi_misii%2Fsiihome.cgi&411=&rutcntr=${username}&&clave=${password}")
+            response = restClient.call()
+            responseText = response.text()
         }
         if (responseText =~ /Debido a que usted ha sido autorizado por otros contribuyentes\s+para que los represente electrónicamente en el sitio web del SII, esta página le permitirá decidir\s+si en esta oportunidad desea realizar trámites propios o representar electrónicamente a otro\s+contribuyente/) {
             logger.info("Selección de representar o continuar")
