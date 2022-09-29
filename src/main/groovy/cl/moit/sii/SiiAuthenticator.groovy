@@ -87,7 +87,6 @@ class SiiAuthenticator {
                 dv = username.substring(pos+1)
                 logger.warn("rut: ${rut}, dv: ${dv}")
             }
-            //restClient.addBodyParameters([rut:rut, dv:dv, referencia:'https%3A%2F%2Fmisiir.sii.cl%2Fcgi_misii%2Fsiihome.cgi', '411':'', rutcntr:username, clave:password])
             restClient.text("rut=${rut}&dv=${dv}&referencia=https%3A%2F%2Fmisiir.sii.cl%2Fcgi_misii%2Fsiihome.cgi&411=&rutcntr=${username}&&clave=${password}")
             response = restClient.call()
             responseText = response.text()
@@ -164,6 +163,7 @@ class SiiAuthenticator {
 
         }
 
+        restClient.removeAllBodyParameters()
         return restClient
     }
 
