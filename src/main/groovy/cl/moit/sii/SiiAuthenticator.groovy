@@ -22,6 +22,7 @@ class SiiAuthenticator {
     protected RestClient.RequestFactory requestFactory
     protected String proxyHost = null
     protected int proxyPort = 0
+    protected boolean portalMipyme = true
 
     protected boolean debug = false
 
@@ -44,6 +45,8 @@ class SiiAuthenticator {
     public void setProxyHost(String proxyHost) { this.proxyHost = proxyHost }
 
     public void setProxyPort(int proxyPort) { this.proxyPort = proxyPort }
+
+    public void setPortalMipyme(boolean portalMipyme) { this.portalMipyme = portalMipyme }
 
     public RestClient.RequestFactory getRequestFactory() {
         return requestFactory
@@ -106,14 +109,18 @@ class SiiAuthenticator {
                 results.each { match ->
                     String rutCandidato = "${match[1]}-${match[2]}"
                     if (rutRepresentado == rutCandidato) {
-                        representeeMap = [RUT_RPDO:match[1], APPLS:match[3], NOMBRE:match[7], APPLSDES:match[4], ]
+                        representeeMap = [RUT_RPDO:match[1], APPLS:match[3], NOMBRE:match[7], APPLSDES:match[4]]
                     }
                 }
                 if (representeeMap == null) {
                     logger.error("No se pudo encontrar RUT representado")
                     return null;
                 }
-                restClient.uri('https://zeusr.sii.cl/cgi_AUT2000/admRepresentar.cgi')
+                if (certData != null && certData.size() > 0 && certPass != null && certPass.size() > 0) {
+                    restClient.uri('https://herculesr.sii.cl/cgi_AUT2000/admRepresentar.cgi')
+                } else {
+                    restClient.uri('https://zeusr.sii.cl/cgi_AUT2000/admRepresentar.cgi')
+                }
                 restClient.contentType("application/x-www-form-urlencoded")
                 restClient.addBodyParameters(representeeMap)
                 org.eclipse.jetty.util.Fields fields = new org.eclipse.jetty.util.Fields()
@@ -127,30 +134,34 @@ class SiiAuthenticator {
                 if (debug)
                     logger.info("responseText for representación: ${responseText}")
             }
+        }
+        if (portalMipyme) {
             restClient.uri("https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi?DESDE_DONDE_URL=OPCION=1&amp;TIPO=4")
             response = restClient.call() // Segundo llamado lleva a formulario
             responseText = new String(response.bytes(), "iso-8859-1")
             if (debug)
                 logger.info("responseText: ${responseText}")
-        }
-        if (responseText =~ /location.replace\('https:\/\/www1.sii.cl\/cgi-bin\/Portal001\/mipeSelEmpresa.cgi\?DESDE_DONDE_URL=OPCION=1&TIPO=4'\)/) {
-            logger.info("Redirección al origen")
-            restClient.uri("https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi?DESDE_DONDE_URL=OPCION=1&amp;TIPO=4")
-            response = restClient.call() // Segundo llamado lleva a formulario
-            responseText = new String(response.bytes(), "iso-8859-1")
-            if (debug)
-                logger.info("responseText: ${responseText}")
-        }
-        if (responseText =~/Para identificar a la empresa con la que desea trabajar\s*en el Portal de Facturaci&oacute;n\s*Electr&oacute;nica del SII,\s*selecci&oacute;nelo de la lista de empresas que\s*lo han registrado como usuario autorizado/) {
-            logger.info("Selección de empresa")
-            restClient.uri("https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi").method("POST")
-            restClient.contentType("application/x-www-form-urlencoded")
-            restClient.addBodyParameters([RUT_EMP:rutOrganizacion, DESDE_DONDE_URL:"OPCION=1&TIPO=4"])
-            restClient.text("RUT_EMP=${rutOrganizacion}&DESDE_DONDE_URL=OPCION%3D1%26TIPO%3D4")
-            response = restClient.call()
-            responseText = new String(response.bytes(), "iso-8859-1")
-            if (debug)
-                logger.info("responseText: ${responseText}")
+
+            if (responseText =~ /location.replace\('https:\/\/www1.sii.cl\/cgi-bin\/Portal001\/mipeSelEmpresa.cgi\?DESDE_DONDE_URL=OPCION=1&TIPO=4'\)/) {
+                logger.info("Redirección al origen")
+                restClient.uri("https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi?DESDE_DONDE_URL=OPCION=1&amp;TIPO=4")
+                response = restClient.call() // Segundo llamado lleva a formulario
+                responseText = new String(response.bytes(), "iso-8859-1")
+                if (debug)
+                    logger.info("responseText: ${responseText}")
+            }
+            if (responseText =~/Para identificar a la empresa con la que desea trabajar\s*en el Portal de Facturaci&oacute;n\s*Electr&oacute;nica del SII,\s*selecci&oacute;nelo de la lista de empresas que\s*lo han registrado como usuario autorizado/) {
+                logger.info("Selección de empresa")
+                restClient.uri("https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi").method("POST")
+                restClient.contentType("application/x-www-form-urlencoded")
+                restClient.addBodyParameters([RUT_EMP:rutOrganizacion, DESDE_DONDE_URL:"OPCION=1&TIPO=4"])
+                restClient.text("RUT_EMP=${rutOrganizacion}&DESDE_DONDE_URL=OPCION%3D1%26TIPO%3D4")
+                response = restClient.call()
+                responseText = new String(response.bytes(), "iso-8859-1")
+                if (debug)
+                    logger.info("responseText: ${responseText}")
+            }
+
         }
 
         return restClient
