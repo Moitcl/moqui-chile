@@ -15,7 +15,7 @@ a[19] = b.substring(start, start+1)
 a[8] = a[13] = a[18] = a[23] = "-";
 String transactionId = a.join("");
 
-ec.logger.warn("transactionId: ${transactionId}")
+//ec.logger.warn("transactionId: ${transactionId}")
 
 dteconfig = ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call()
 
