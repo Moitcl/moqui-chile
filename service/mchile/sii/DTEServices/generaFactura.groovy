@@ -66,8 +66,6 @@ codRef = 0 as Integer
 //iddoc.setIndServicio(BigInteger.valueOf(3))
 
 // Campos para elaboración de libro
-montoNeto = 0 as Long
-montoExento = 0 as Long
 montoIVARecuperable = 0 as Long
 totalNeto = 0 as Long
 totalExento = 0 as Long
@@ -526,7 +524,7 @@ if ((fiscalTaxDocumentTypeEnumId as String) in dteConstituyeVentaTypeList) {
 
 // Creación de registro en FiscalTaxDocumentAttributes
 fechaEmisionString = ec.l10n.format(fechaEmision, "yyyy-MM-dd")
-createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:totalInvoice, fechaEmision:fechaEmisionString, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:montoNeto, tasaImpuesto:19,
-             montoExento:montoExento, montoIVARecuperable:montoIVARecuperable]
+createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:totalInvoice, fechaEmision:fechaEmisionString, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:totalNeto, tasaImpuesto:19,
+             montoExento:totalExento, montoIVARecuperable:montoIVARecuperable]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call())
 fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId
