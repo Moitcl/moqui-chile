@@ -2146,10 +2146,137 @@ TrackId Token']" type="Map"/>
 
     <service verb="validate" noun="LocalVsSiiData">
         <in-parameters>
-            <parameter name="fromDate" type="Timestamp"/>
-            <parameter name="thruDate" type="Timestamp"/>
+            <parameter name="organizationPartyId"/>
+            <parameter name="periodDate" type="Date"/>
         </in-parameters>
         <actions>
+            <service-call name="mchile.sii.DTECommServices.fetch#ResumenEmitidos" in-map="context" out-map="context"/>
+            <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="dteConfig"/>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:dteConfig.rutEmisor]" out-map="rutMap"/>
+            <set field="direction" value="received"/>
+            <iterate list="resumenEmitidos.data?.resumenDte" entry="resumenTipo">
+                <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:resumenTipo.tipoDoc]" out-map="siiCode"/>
+                <set field="fiscalTaxDocumentTypeEnumId" from="siiCode.enumId"/>
+                <if condition="fiscalTaxDocumentTypeEnumId == 'Ftdt-33'">
+                    <service-call name="mchile.sii.DTECommServices.fetch#DetalleEmitidos" in-map="context" out-map="context"/>
+                    <iterate list="detalleEmitidos.dataResp?.detalles" entry="detalles">
+                        <set field="detalles.fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                        <if condition="detalles.rutEmisor == null || detalles.rutEmisor == 'null' || detalles.rutEmisor.length == 0">
+                            <set field="detalles.rutEmisor" from="rutMap.rut"/>
+                        </if>
+                        <if condition="detalles.dvEmisor == null || detalles.dvEmisor == 'null' || detalles.dvEmisor.length == 0">
+                            <set field="detalles.dvEmisor" from="rutMap.dv"/>
+                        </if>
+                        <service-call name="mchile.sii.DTECommServices.check#LocalDte" in-map="detalles"/>
+                    </iterate>
+                </if>
+            </iterate>
+            <service-call name="mchile.sii.DTECommServices.fetch#ResumenRecibidos" in-map="context" out-map="context"/>
+            <set field="direction" value="issued"/>
+            <iterate list="resumenRecibidos.data?.resumenDte" entry="resumenTipo">
+                <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:resumenTipo.tipoDoc]" out-map="siiCode"/>
+                <set field="fiscalTaxDocumentTypeEnumId" from="siiCode.enumId"/>
+                <log message="To Process tipoDoc: ${resumenTipo.tipoDoc} with ${resumenTipo.totalDoc} documents"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="check" noun="LocalDte">
+        <description>To be called from validate#LocalVsSiiData</description>
+        <in-parameters>
+            <parameter name="rutEmisor"/>
+            <parameter name="dvEmisor"/>
+            <parameter name="rznSocEmisor"/>
+            <parameter name="codigoTipoDoc"/>
+            <parameter name="descTipoDoc"/>
+            <parameter name="periodo"/>
+            <parameter name="rutReceptor"/>
+            <parameter name="dvReceptor"/>
+            <parameter name="rznSocRecep"/>
+            <parameter name="folio" required="true" type="Integer"/>
+            <parameter name="fechaEmision"/>
+            <parameter name="fechaEmisionA"/>
+            <parameter name="fechaRecepcion"/>
+            <parameter name="totalReparos"/>
+            <parameter name="mntNeto" type="BigDecimal"/>
+            <parameter name="mntExento" type="BigDecimal"/>
+            <parameter name="mntIva" type="BigDecimal"/>
+            <parameter name="mntTotal" type="BigDecimal"/>
+            <parameter name="tasaImptoIVA" type="BigDecimal"/>
+            <parameter name="dehOrdenEvento"/>
+            <parameter name="dehDescripcion"/>
+            <parameter name="totOtrosImp"/>
+            <parameter name="dhdrCodigo"/>
+            <parameter name="rutFirmante"/>
+            <parameter name="dvFirmante"/>
+            <parameter name="idEnvio"/>
+            <parameter name="dhdrEmiCorreo"/>
+            <parameter name="dhdrEmiTelefono1"/>
+            <parameter name="dehOrdenEventoPublicar"/>
+            <parameter name="diasDiferenciaFchVencimiento"/>
+            <parameter name="esPublicable"/>
+            <parameter name="leyendaNoPub"/>
+            <parameter name="diasDifFchRecep"/>
+            <parameter name="fechaVencimiento"/>
+            <parameter name="fechaRecepcionMas9Dias"/>
+            <parameter name="dpuEliminacion"/>
+            <parameter name="difFchPublicacion"/>
+            <parameter name="difFchEliminacion"/>
+            <parameter name="pub" type="Integer"/>
+            <parameter name="despub" type="Integer"/>
+            <parameter name="estadoPub" type="Integer"/>
+            <parameter name="dpuFchPublicacion"/>
+            <parameter name="derrCodigo"/>
+            <parameter name="derrDescripcion"/>
+            <parameter name="datosExpA"/>
+            <parameter name="datosExpB1"/>
+            <parameter name="datosExpB"/>
+            <parameter name="dtimCodigo"/>
+            <parameter name="createUnknownDte" type="Boolean" default="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="direction"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
+                <econdition field-name="issuerPartyIdValue" value="${rutEmisor}-${dvEmisor}"/>
+                <econdition field-name="fiscalTaxDocumentNumber" from="folio"/>
+            </entity-find>
+            <set field="dte" from="dteList.first"/>
+            <set field="dteMap" from="dte.getMap()"/>
+            <set field="issuerPartyIdValue" value="${rutEmisor}-${dvEmisor}"/>
+            <set field="receiverPartyIdValue" value="${rutReceptor}-${dvReceptor}"/>
+            <if condition="dte"><then>
+                <log message="Checking DTE ${dte.fiscalTaxDocumentId}"/>
+                <set field="dteMap.fechaEmision" from="ec.l10n.format(dte.date, 'dd/MM/yyyy')"/>
+                <set field="dteMap.montoIva" from="(dteMap.montoIVARecuperable?:0) + (dteMap.montoIVANoRecuperable?:0)"/>
+                <set field="checkFields" from="[[name:'issuerPartyIdValue'], [name:'receiverPartyIdValue'], [name:'fechaEmision'], [name:'mntNeto', ftdName:'montoNeto'],
+                            [name:'mntExento', ftdName:'montoExento'], [name:'mntIva', ftdName:'montoIva'], [name:'mntTotal', ftdName:'amount']]"/>
+                <iterate list="checkFields" entry="fieldMap">
+                    <set field="name" from="fieldMap.name"/>
+                    <set field="ftdName" from="fieldMap.ftdName?:fieldMap.name"/>
+                    <if condition="context[name] != dteMap[ftdName]">
+                        <log message="Mismatch in field ${ftdName}, in SII ${context[name]}, in Ftd ${dteMap[ftdName]}"/>
+                    </if>
+                </iterate>
+            </then><else>
+                <if condition="createUnknownDte"><then>
+                    <service-call name="mchile.sii.DTECommServices.get#PartyIdByRut" in-map="[idValue:issuerIdValue, createUnknown:(direction == 'issued'), razonSocial:rznSocEmisor, roleTypeId:'Customer']" out-map="issuerPartyIdMap"/>
+                    <service-call name="mchile.sii.DTECommServices.get#PartyIdByRut" in-map="[idValue:receiverIdValue, createUnknown:(direction == 'received'), razonSocial:rznSocRecep, roleTypeId:'Supplier']" out-map="receiverPartyIdMap"/>
+                    <set field="receiverPartyId" from="receiverPartyIdMap.partyId"/>
+                    <set field="issuerPartyId" from="issuerPartyIdMap.partyId"/>
+                    <set field="ftdMap" from="[issuerPartyId:pidMap.partyId, issuerPartyIdValue:issuerPartyIdValue, receiverPartyId:receiverPartyId, receiverPartyIdValue:receiverPartyIdValue]"/>
+                    <set field="ftdMap.fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                    <set field="ftdMap.fiscalTaxDocumentNumber" from="folio"/>
+                    <set field="ftdMap.statusId" from="Ftd-Issued"/>
+                    <set field="ftdMap.sentAuthStatusId" from="Ftd-SentAuthAccepted"/>
+                    <set field="ftdMap.sentAuthStatusId" from="Ftd-SentAuthAcceptedWithDiscrepancies"/>
+                    <set field="ftdMap.sentAuthStatusId" from="Ftd-SentAuthRejected"/>
+                    <service-call name="create#mchile.dte.FiscalTaxDocument" in-map="ftdMap"/>
+                </then><else>
+                    <!-- ToDo: report error -->
+                    <log level="error" message="Could not find DTE ${folio} by ${rutEmisor}-${dvEmisor}"/>
+                </else></if>
+            </else></if>
         </actions>
     </service>
     
@@ -2159,7 +2286,7 @@ TrackId Token']" type="Map"/>
             <parameter name="periodDate" type="Date"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="result"/>
+            <parameter name="resumenEmitidos" type="Map"/>
         </out-parameters>
         <actions>
             <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="dteConfig"/>
@@ -2169,6 +2296,7 @@ TrackId Token']" type="Map"/>
             <set field="data" from="[periodo: periodo, operacion:'1', rutContribuyente:rutMap.rut, dvContribuyente:rutMap.dv]"/>
             <set field="uri" value="https://www4.sii.cl/consemitidosinternetui/services/data/facadeService/getResumen"/>
             <service-call name="mchile.sii.DteCommServices.fetch#SiiDteData" in-map="context" out-map="context"/>
+            <set field="resumenEmitidos" from="result"/>
         </actions>
     </service>
 
@@ -2178,7 +2306,7 @@ TrackId Token']" type="Map"/>
             <parameter name="periodDate" type="Date"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="result"/>
+            <parameter name="resumenRecibidos"/>
         </out-parameters>
         <actions>
             <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="dteConfig"/>
@@ -2188,6 +2316,7 @@ TrackId Token']" type="Map"/>
             <set field="data" from="[periodo: periodo, operacion:'2', rutContribuyente:rutMap.rut, dvContribuyente:rutMap.dv]"/>
             <set field="uri" value="https://www4.sii.cl/consemitidosinternetui/services/data/facadeService/getResumen"/>
             <service-call name="mchile.sii.DteCommServices.fetch#SiiDteData" in-map="context" out-map="context"/>
+            <set field="resumenRecibidos" from="result"/>
         </actions>
     </service>
 
@@ -2195,18 +2324,29 @@ TrackId Token']" type="Map"/>
         <in-parameters>
             <parameter name="organizationPartyId"/>
             <parameter name="periodDate" type="Date"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" default-value="Ftdt-33"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="result"/>
+            <parameter name="detalleEmitidos" type="Map"/>
         </out-parameters>
         <actions>
+            <if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-33', 'Ftdt-34']"><then>
+                <set field="uri" value="https://www4.sii.cl/consemitidosinternetui/services/data/facadeService/getDetalleEmitidos3334"/>
+                <set field="namespace" value="cl.sii.sdi.lob.diii.consemitidos.data.api.interfaces.FacadeService/getDetalleEmitidos3334"/>
+            </then><else-if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-52']">
+                <set field="uri" value="https://www4.sii.cl/consemitidosinternetui/services/data/facadeService/getDetalle"/>
+                <set field="namespace" value="cl.sii.sdi.lob.diii.consemitidos.data.api.interfaces.FacadeService/getDetalle"/>
+            </else-if><else>
+                <return error="true" message="Tipo no soportado: ${fiscalTaxDocumentTypeEnumId}"/>
+            </else></if>
+            <service-call name="mchile.sii.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" out-map="siiCodeMap"/>
+            <set field="tipoDoc" from="siiCodeMap.siiCode as String"/>
             <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="dteConfig"/>
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:dteConfig.rutEmisor]" out-map="rutMap"/>
-            <set field="namespace" value="cl.sii.sdi.lob.diii.consemitidos.data.api.interfaces.FacadeService/getDetalleEmitidos3334"/>
             <set field="periodo" from="ec.l10n.format(periodDate, 'yyyy-MM')"/>
-            <set field="data" from="[periodo: periodo, operacion:'1', rut:rutMap.rut, dv:rutMap.dv, tipoDoc:'33', derrCodigo:'33', refNCD:'0']"/>
-            <set field="uri" value="https://www4.sii.cl/consemitidosinternetui/services/data/facadeService/getDetalleEmitidos3334"/>
+            <set field="data" from="[periodo: periodo, operacion:'1', rut:rutMap.rut, dv:rutMap.dv, tipoDoc:tipoDoc, derrCodigo:tipoDoc, refNCD:'0']"/>
             <service-call name="mchile.sii.DteCommServices.fetch#SiiDteData" in-map="context" out-map="context"/>
+            <set field="detalleEmitidos" from="result"/>
         </actions>
     </service>
 
@@ -2216,16 +2356,23 @@ TrackId Token']" type="Map"/>
             <parameter name="periodDate" type="Date"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="result"/>
+            <parameter name="detalleRecibidos" type="Map"/>
         </out-parameters>
         <actions>
+            <if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-33', 'Ftdt-34', 'Ftdt-52', 'Ftdt-61']"><then>
+                <set field="uri" value="https://www4.sii.cl/consemitidosinternetui/services/data/facadeService/getDetalleRecibidos"/>
+                <set field="namespace" value="cl.sii.sdi.lob.diii.consemitidos.data.api.interfaces.FacadeService/getDetalleRecibidos"/>
+            </then><else>
+                <return error="true" message="Tipo no soportado: ${fiscalTaxDocumentTypeEnumId}"/>
+            </else></if>
+            <service-call name="mchile.sii.DTEServices.get#SIICode" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" out-map="siiCodeMap"/>
+            <set field="tipoDoc" from="siiCodeMap.siiCode as String"/>
             <service-call name="mchile.sii.DTEServices.load#DTEConfig" in-map="[partyId:organizationPartyId]" out-map="dteConfig"/>
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:dteConfig.rutEmisor]" out-map="rutMap"/>
-            <set field="namespace" value="cl.sii.sdi.lob.diii.consemitidos.data.api.interfaces.FacadeService/getResumen"/>
             <set field="periodo" from="ec.l10n.format(periodDate, 'yyyy-MM')"/>
-            <set field="data" from="[periodo: periodo, operacion:'2', rut:rutMap.rut, dv:rutMap.dv, tipoDoc:'33', derrCodigo:'33', refNCD:'0']"/>
-            <set field="uri" value="https://www4.sii.cl/consemitidosinternetui/services/data/facadeService/getResumen"/>
+            <set field="data" from="[periodo: periodo, operacion:2, rut:rutMap.rut, dv:rutMap.dv, tipoDoc:tipoDoc, derrCodigo:tipoDoc, refNCD:'0']"/>
             <service-call name="mchile.sii.DteCommServices.fetch#SiiDteData" in-map="context" out-map="context"/>
+            <set field="detalleRecibidos" from="result"/>
         </actions>
     </service>
 

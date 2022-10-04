@@ -46,8 +46,6 @@ restClient.jsonObject(jsonMap)
 
 response = restClient.call()
 
-ec.logger.info("response: ${response.text()}")
-
 result = response.jsonObject()
 
-ec.logger.info("result: ${result}")
+return
