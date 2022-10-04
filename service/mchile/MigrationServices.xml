@@ -349,11 +349,22 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <set field="partyIdList" from="partyRoleList.partyId"/>
             <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
-                <econdition field-name="issuerPartyId" operator="in" from="partyIdList"/>
                 <econdition field-name="statusId" value="Ftd-Issued"/>
-                <econdition field-name="montoNeto" from="0"/>
-                <econdition field-name="montoExento" from="0"/>
-                <econdition field-name="amount" operator="greater" from="0"/>
+                <econditions combine="or">
+                    <econditions>
+                        <econdition field-name="issuerPartyId" operator="in" from="partyIdList"/>
+                        <econdition field-name="montoNeto" from="0"/>
+                        <econdition field-name="montoExento" from="0"/>
+                        <econdition field-name="amount" operator="greater" from="0"/>
+                    </econditions>
+                    <econditions>
+                        <econdition field-name="receiverPartyId" operator="in" from="partyIdList"/>
+                        <econdition field-name="montoNeto" operator="greater" from="0"/>
+                        <econdition field-name="montoIVARecuperable" operator="is-null"/>
+                        <econdition field-name="montoIVANoRecuperable" operator="is-null"/>
+                        <econdition field-name="montoIVAUsoComun" operator="is-null"/>
+                    </econditions>
+                </econditions>
             </entity-find>
             <iterate list="dteList" entry="dteView">
                 <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAttributes" value-field="dte" auto-field-map="dteView" for-update="true"/>
@@ -371,6 +382,8 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="docMontoNeto" from="docMontoNetoString? (docMontoNetoString as Integer) : 0"/>
                     <set field="docMontoExentoString" from="dteDom.Documento.Encabezado.Totales.MntExe.text()"/>
                     <set field="docMontoExento" from="docMontoExentoString? (docMontoExentoString as Integer) : 0"/>
+                    <set field="docMontoIvaString" from="dteDom.Documento.Encabezado.Totales.IVA.text()"/>
+                    <set field="docMontoIva" from="docMontoIvaString? (docMontoIvaString as Integer) : 0"/>
                     <log level="warn" message="Found values for ${dte.fiscalTaxDocumentId}, montoNeto ${docMontoNeto}, montoExento ${docMontoExento}"/>
                     <if condition="dte.montoNeto != docMontoNeto">
                         <log message="---> Changing montoNeto from ${dte.montoNeto} to ${docMontoNeto}"/>
@@ -379,6 +392,10 @@ along with this software (see the LICENSE.md file). If not, see
                     <if condition="dte.montoExento != docMontoExento">
                         <log message="---> Changing montoExento from ${dte.montoExento} to ${docMontoExento}"/>
                         <set field="dte.montoExento" from="docMontoExento"/>
+                    </if>
+                    <if condition="dte.montoIVARecuperable == null &amp;&amp; dte.montoIVANoRecuperable == null &amp;&amp; dte.montoIVAUsoComun == null">
+                        <log message="---> Changing montoIVARecuperable from ${dte.montoIVARecuperable} to ${docMontoIva}"/>
+                        <set field="dte.montoIVARecuperable" from="docMontoIva"/>
                     </if>
                     <entity-update value-field="dte"/>
                 </else></if>

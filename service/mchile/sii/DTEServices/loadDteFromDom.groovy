@@ -657,7 +657,7 @@ if (tipoDteEnumId == 'Ftdt-52') {
     ec.service.sync().name("store#mchile.dte.GuiaDespacho").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, indTrasladoEnumId:indTrasladoEnumId]).call()
 }
 
-createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, date:ec.user.nowTimestamp, amount:montoTotal, montoNeto:montoNeto, montoExento:montoExento, tasaImpuesto:tasaIva, tipoImpuesto:1, montoIvaRecuperable:montoIva, montoIvaNoRecuperable:0,
+createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, date:ec.user.nowTimestamp, amount:montoTotal, montoNeto:montoNeto, montoExento:montoExento, tasaImpuesto:tasaIva, tipoImpuesto:1, montoIvaRecuperable:iva, montoIvaNoRecuperable:0,
             fechaEmision:issuedTimestamp]
 mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call()
 
