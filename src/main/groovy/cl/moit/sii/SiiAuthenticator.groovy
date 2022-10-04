@@ -121,13 +121,10 @@ class SiiAuthenticator {
                     restClient.uri('https://zeusr.sii.cl/cgi_AUT2000/admRepresentar.cgi')
                 }
                 restClient.contentType("application/x-www-form-urlencoded")
-                restClient.addBodyParameters(representeeMap)
-                org.eclipse.jetty.util.Fields fields = new org.eclipse.jetty.util.Fields()
                 representeeMap.each { key, value ->
-                    fields.add(key, value)
+                    restClient.addFieldPart(key as String, value as String)
                 }
-                String bodyText = org.eclipse.jetty.client.util.FormRequestContent.convert(fields)
-                restClient.text(bodyText)
+                restClient.text("")
                 response = restClient.call()
                 responseText = response.text()
                 if (debug)
@@ -135,7 +132,7 @@ class SiiAuthenticator {
             }
         }
         if (portalMipyme) {
-            restClient.uri("https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi?DESDE_DONDE_URL=OPCION=1&amp;TIPO=4")
+            restClient.uri("https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi?DESDE_DONDE_URL=OPCION=1&TIPO=4")
             response = restClient.call() // Segundo llamado lleva a formulario
             responseText = new String(response.bytes(), "iso-8859-1")
             if (debug)
