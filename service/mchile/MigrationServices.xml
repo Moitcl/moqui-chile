@@ -341,4 +341,48 @@ along with this software (see the LICENSE.md file). If not, see
             </iterate>
         </actions>
     </service>
+
+    <service verb="fix" noun="MontoNetoInAttributes">
+        <actions>
+            <entity-find entity-name="mantle.party.PartyRole" list="partyRoleList">
+                <econdition field-name="roleTypeId" value="OrgInternal"/>
+            </entity-find>
+            <set field="partyIdList" from="partyRoleList.partyId"/>
+            <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
+                <econdition field-name="issuerPartyId" operator="in" from="partyIdList"/>
+                <econdition field-name="statusId" value="Ftd-Issued"/>
+                <econdition field-name="montoNeto" from="0"/>
+                <econdition field-name="montoExento" from="0"/>
+                <econdition field-name="amount" operator="greater" from="0"/>
+            </entity-find>
+            <iterate list="dteList" entry="dteView">
+                <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAttributes" value-field="dte" auto-field-map="dteView" for-update="true"/>
+                <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="contentList">
+                    <econdition field-name="fiscalTaxDocumentId" from="dte.fiscalTaxDocumentId"/>
+                    <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
+                </entity-find>
+                <set field="contentLocation" from="contentList.first?.contentLocation"/>
+                <if condition="contentLocation == null"><then>
+                    <log message="No content found for fiscalTaxDocumentId ${dte.fiscalTaxDocumentId}, date ${dte.date}"/>
+                </then><else>
+                    <set field="dteXmlString" from="ec.resource.getLocationReference(contentLocation).getText()"/>
+                    <set field="dteDom" from="new groovy.xml.XmlParser(false, false).parseText(dteXmlString)"/>
+                    <set field="docMontoNetoString" from="dteDom.Documento.Encabezado.Totales.MntNeto.text()"/>
+                    <set field="docMontoNeto" from="docMontoNetoString? (docMontoNetoString as Integer) : 0"/>
+                    <set field="docMontoExentoString" from="dteDom.Documento.Encabezado.Totales.MntExe.text()"/>
+                    <set field="docMontoExento" from="docMontoExentoString? (docMontoExentoString as Integer) : 0"/>
+                    <log level="warn" message="Found values for ${dte.fiscalTaxDocumentId}, montoNeto ${docMontoNeto}, montoExento ${docMontoExento}"/>
+                    <if condition="dte.montoNeto != docMontoNeto">
+                        <log message="---> Changing montoNeto from ${dte.montoNeto} to ${docMontoNeto}"/>
+                        <set field="dte.montoNeto" from="docMontoNeto"/>
+                    </if>
+                    <if condition="dte.montoExento != docMontoExento">
+                        <log message="---> Changing montoExento from ${dte.montoExento} to ${docMontoExento}"/>
+                        <set field="dte.montoExento" from="docMontoExento"/>
+                    </if>
+                    <entity-update value-field="dte"/>
+                </else></if>
+            </iterate>
+        </actions>
+    </service>
 </services>
