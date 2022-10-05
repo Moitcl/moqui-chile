@@ -2280,11 +2280,54 @@ TrackId Token']" type="Map"/>
                     <set field="ftdMap.sentAuthStatusId" from="Ftd-SentAuthAccepted"/>
                     <set field="ftdMap.sentAuthStatusId" from="Ftd-SentAuthAcceptedWithDiscrepancies"/>
                     <set field="ftdMap.sentAuthStatusId" from="Ftd-SentAuthRejected"/>
-                    <service-call name="create#mchile.dte.FiscalTaxDocument" in-map="ftdMap"/>
+                    <service-call name="create#mchile.dte.FiscalTaxDocument" in-map="ftdMap" out-map="newDte"/>
+                    <set field="attrMap" from="[fiscalTaxDocumentId:newDte.fiscalTaxDocumentId, amount:mntTotal, montoIVARecuperable:mntIva, montoNeto:mntNeto, montoExento:mntExento]"/>
+                    <service-call name="create#mchile.dte.FiscalTaxDocumentAttributes" in-map="attrMap"/>
+                    <entity-find-one entity-name="mchile.dte.FtdtAttributesView" value-field="dte" auto-field-map="newDte"/>
                 </then><else>
                     <!-- ToDo: report error -->
                     <log level="error" message="Could not find DTE ${folio} by ${rutEmisor}-${dvEmisor}"/>
                 </else></if>
+                <if condition="dte">
+                    <if condition="dehOrdenEvento == null"><then>
+                        <if condition="dehOrdenEvento == '0'"><then>
+                            <!-- Cedida -->
+                            <if condition="dehDescripcion != 'Cedida'"><return error="true" message="Response mismatch, dehOrdenEvento = ${dehOrdenEvento}, dehDescripcion = ${dehDescripcion}"/></if>
+                            <if condition="ftd.factoringStatusId != 'Ftd-Transferred'">
+                                <!-- ToDo: Notify -->
+                                <service-call name="update#mchile.dte.FiscalTaxDocument" in-map="[fiscalTaxDocumentId:ftdMap.fiscalTaxDocumentId, factoringStatusId:'Ftd-Transferred']"/>
+                            </if>
+                        </then><else-if condition="dehOrdenEvento == '1'">
+                            <!-- Reclamado -->
+                            <if condition="dehDescripcion != 'Reclamado'"><return error="true" message="Response mismatch, dehOrdenEvento = ${dehOrdenEvento}, dehDescripcion = ${dehDescripcion}"/></if>
+                            <if condition="ftdMap.sentRecStatusId != 'Ftd-ReceiverReject'">
+                                <!-- ToDo: Notify -->
+                                <service-call name="update#mchile.dte.FiscalTaxDocument" in-map="[fiscalTaxDocumentId:ftdMap.fiscalTaxDocumentId, sentRecStatusId:'Ftd-ReceiverReject']"/>
+                            </if>
+                        </else-if><else-if condition="dehOrdenEvento == '2'">
+                            <!-- Acuse Recibo -->
+                            <if condition="dehDescripcion != 'Acuse Recibo'"><return error="true" message="Response mismatch, dehOrdenEvento = ${dehOrdenEvento}, dehDescripcion = ${dehDescripcion}"/></if>
+                        </else-if><else-if condition="dehOrdenEvento == '3'">
+                            <!-- Contado/Gratuito -->
+                            <if condition="dehDescripcion != 'Contado/Gratuito'"><return error="true" message="Response mismatch, dehOrdenEvento = ${dehOrdenEvento}, dehDescripcion = ${dehDescripcion}"/></if>
+                        </else-if><else-if condition="dehOrdenEvento == '5'">
+                            <!-- Sin Evento -->
+                            <if condition="dehDescripcion != ''"><return error="true" message="Response mismatch, dehOrdenEvento = ${dehOrdenEvento}, dehDescripcion = ${dehDescripcion}"/></if>
+                        </else-if><else-if condition="dehOrdenEvento == '6'">
+                            <!-- Tiene Nota de Crédito -->
+                            <if condition="dehDescripcion != ''"><return error="true" message="Response mismatch, dehOrdenEvento = ${dehOrdenEvento}, dehDescripcion = ${dehDescripcion}"/></if>
+                        </else-if><else-if condition="dehOrdenEvento == '7'">
+                            <!-- Tiene Nota de Crédito que anula el documento -->
+                            <if condition="dehDescripcion != ''"><return error="true" message="Response mismatch, dehOrdenEvento = ${dehOrdenEvento}, dehDescripcion = ${dehDescripcion}"/></if>
+                        </else-if><else>
+                            <return error="true" message="Unhandled dehOrdenEvento value: ${dehOrdenEvento}"/>
+                        </else></if>
+                    </then><else>
+                        <if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-33', 'Ftdt-34']">
+                            <return error="true" message="Expected dehOrdenEvento for DTE folio ${folio}, type ${fiscalTaxDocumentTypeEnumId}"/>
+                        </if>
+                    </else></if>
+                </if>
             </else></if>
         </actions>
     </service>
