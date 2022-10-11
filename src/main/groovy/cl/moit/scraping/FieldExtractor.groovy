@@ -38,7 +38,7 @@ class FieldExtractor {
                     baseText = matcher.findAll().first()[1]
                     //logger.warn("baseText: ${baseText}")
                     //logger.warn("pattern: ${it.pattern}")
-                } else baseText = text
+                } else baseText = ""
             } else baseText = text
 
             pattern = java.util.regex.Pattern.compile(it.pattern, java.util.regex.Pattern.DOTALL)
