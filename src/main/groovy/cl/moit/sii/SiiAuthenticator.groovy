@@ -19,6 +19,7 @@ class SiiAuthenticator {
     protected String username
     protected String password
     protected String userAgent
+    protected RestClient restClient
     protected RestClient.RequestFactory requestFactory
     protected String proxyHost = null
     protected int proxyPort = 0
@@ -50,6 +51,12 @@ class SiiAuthenticator {
 
     public RestClient.RequestFactory getRequestFactory() {
         return requestFactory
+    }
+
+    public RestClient getRestClient() {
+        if (restClient == null)
+            restClient = createRestClient()
+        return restClient
     }
 
     public RestClient createRestClient() {
