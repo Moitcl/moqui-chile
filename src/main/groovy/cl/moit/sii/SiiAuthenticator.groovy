@@ -24,6 +24,7 @@ class SiiAuthenticator {
     protected String proxyHost = null
     protected int proxyPort = 0
     protected boolean portalMipyme = true
+    protected boolean trustAll = false
 
     protected boolean debug = false
 
@@ -49,6 +50,8 @@ class SiiAuthenticator {
 
     public void setPortalMipyme(boolean portalMipyme) { this.portalMipyme = portalMipyme }
 
+    public void setTrustAll(boolean trustAll) { this.trustAll = trustAll }
+
     public RestClient.RequestFactory getRequestFactory() {
         return requestFactory
     }
@@ -65,6 +68,9 @@ class SiiAuthenticator {
         String responseText = null
         if (certData != null && certData.size() > 0 && certPass != null && certPass.size() > 0) {
             requestFactory = new ClientAuthRequestFactory(certData, certPass, proxyHost, proxyPort)
+            if (trustAll) {
+                requestFactory.getHttpClient().sslContextFactory.setTrustAll(true)
+            }
             if (userAgent != null) {
                 requestFactory.getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 ( compatible; PROG 1.0; Windows NT)"))
             }
