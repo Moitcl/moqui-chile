@@ -162,14 +162,19 @@ class SiiAuthenticator {
             }
             if (responseText =~/Para identificar a la empresa con la que desea trabajar\s*en el Portal de Facturaci&oacute;n\s*Electr&oacute;nica del SII,\s*selecci&oacute;nelo de la lista de empresas que\s*lo han registrado como usuario autorizado/) {
                 logger.info("Selección de empresa")
-                restClient.uri("https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi").method("POST")
-                restClient.contentType("application/x-www-form-urlencoded")
-                restClient.addBodyParameters([RUT_EMP:rutOrganizacion, DESDE_DONDE_URL:"OPCION=1&TIPO=4"])
-                restClient.text("RUT_EMP=${rutOrganizacion}&DESDE_DONDE_URL=OPCION%3D1%26TIPO%3D4")
-                response = restClient.call()
-                responseText = new String(response.bytes(), "iso-8859-1")
-                if (debug)
-                    logger.info("responseText: ${responseText}")
+                if (responseText =~/<option value="${rutOrganizacion}">/) {
+                    restClient.uri("https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi").method("POST")
+                    restClient.contentType("application/x-www-form-urlencoded")
+                    restClient.addBodyParameters([RUT_EMP: rutOrganizacion, DESDE_DONDE_URL: "OPCION=1&TIPO=4"])
+                    restClient.text("RUT_EMP=${rutOrganizacion}&DESDE_DONDE_URL=OPCION%3D1%26TIPO%3D4")
+                    response = restClient.call()
+                    logger.info("After call")
+                    responseText = new String(response.bytes(), "iso-8859-1")
+                    if (debug)
+                        logger.info("responseText: ${responseText}")
+                } else {
+                    throw new RuntimeException("Empresa ${rutOrganizacion} no aparece entre las opciones de selección en el SII")
+                }
             }
 
         }
