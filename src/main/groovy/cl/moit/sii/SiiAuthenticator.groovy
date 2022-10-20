@@ -70,6 +70,7 @@ class SiiAuthenticator {
             requestFactory = new ClientAuthRequestFactory(certData, certPass, proxyHost, proxyPort)
             if (trustAll) {
                 requestFactory.getHttpClient().sslContextFactory.setTrustAll(true)
+                requestFactory.getHttpClient().sslContextFactory.setPkixCertPathChecker(null)
             }
             if (userAgent != null) {
                 requestFactory.getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 ( compatible; PROG 1.0; Windows NT)"))
