@@ -703,14 +703,18 @@ referenciasList.each { groovy.util.Node referencia ->
     folio = referencia.FolioRef.text()
     if (!codRefEnumId)
         errorMessages.add("Valor inválido en referencia ${nroRef}, campo CodRef: ${referencia.CodRef.text()}")
-    if (tipoDteEnumId == "Ftdt-801") {
-        // Orden de Compra, va en el Invoice y no en mchile.dte.ReferenciaDte
-        if (invoiceId)
+    if (invoiceId) {
+        if (tipoDteEnumId == "Ftdt-801") {
+            // Orden de Compra, va en el Invoice y no en mchile.dte.ReferenciaDte
             ec.service.sync().name("update#mantle.account.invoice.Invoice").parameters([invoiceId:invoiceId, otherPartyOrderId:folio, otherPartyOrderDate:refDate]).call()
-    } else if (tipoDteEnumId && refDate) {
-        ec.service.sync().name("create#mchile.dte.ReferenciaDte").parameters([invoiceId:invoiceId, referenciaTypeEnumId:'RefDteTypeInvoice', fiscalTaxDocumentTypeEnumId:tipoDteEnumId,
-                                                                              folio:folio, fecha: refDate, codigoReferenciaEnumId:codRefEnumId, razonReferencia:referencia.RazonRef?.text()]).call()
+        } else if (tipoDteEnumId && refDate) {
+            ec.service.sync().name("create#mchile.dte.ReferenciaDte").parameters([invoiceId:invoiceId, referenciaTypeEnumId:'RefDteTypeInvoice', fiscalTaxDocumentTypeEnumId:tipoDteEnumId,
+                                                                                  folio:folio, fecha: refDate, codigoReferenciaEnumId:codRefEnumId, razonReferencia:referencia.RazonRef?.text()]).call()
+        }
     }
+    if (tipoDteEnumId)
+        ec.service.sync().name("create#mchile.dte.ReferenciaDte").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, referenciaTypeEnumId:'RefDteTypeFiscalTaxDocument', fiscalTaxDocumentTypeEnumId:tipoDteEnumId,
+                                                                              folio:folio, fecha: refDate, codigoReferenciaEnumId:codRefEnumId, razonReferencia:referencia.RazonRef?.text()]).call()
 
 }
 
