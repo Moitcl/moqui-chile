@@ -658,7 +658,7 @@ if (tipoDteEnumId == 'Ftdt-52') {
 }
 
 createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, date:ec.user.nowTimestamp, amount:montoTotal, montoNeto:montoNeto, montoExento:montoExento, tasaImpuesto:tasaIva, tipoImpuesto:1, montoIvaRecuperable:iva, montoIvaNoRecuperable:0,
-            fechaEmision:issuedTimestamp]
+            fechaEmision:issuedTimestamp, razonSocialEmisor:razonSocialEmisor, razonSocialReceptor:razonSocialReceptor]
 mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call()
 
 locationReferenceBase = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folioDte}"
