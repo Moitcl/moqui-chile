@@ -784,7 +784,12 @@ class MoquiDTEUtils {
     }
 
     public static String getNamespace(org.w3c.dom.Node node) {
-        Element root = node.getOwnerDocument().getDocumentElement()
+        Element root = null
+        if (node instanceof Document) {
+            root = node.getDocumentElement()
+        } else
+            root = node.getOwnerDocument().getDocumentElement()
+
         HashMap<String, String> namespaces = getAllAttributes(root)
         String prefix = getPrefix(node.getNodeName())
 
@@ -792,7 +797,7 @@ class MoquiDTEUtils {
             return namespaces.get("xmlns")
 
         return namespaces.get("xmlns:" + prefix)
-    }/*w  ww . j av a2  s  .c o m*/
+    }
 
     public static HashMap<String, String> getAllAttributes(org.w3c.dom.Node node) {
         HashMap<String, String> attributes = new HashMap<String, String>()
