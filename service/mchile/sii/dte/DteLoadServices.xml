@@ -55,4 +55,217 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="discrepancyMessages" type="List"/>
         </out-parameters>
     </service>
+
+    <service verb="create" noun="InvoiceFromDte">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="parsedDteXmlMap" type="Map"/>
+            <parameter name="invoiceStatusId" default-value="InvoiceReceived"/>
+            <parameter name="attemptProductMatch" default="false" type="Boolean"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="invoiceId"/>
+            <parameter name="invoiceItemCount" type="Integer"/>
+            <parameter name="discrepancyMessages" type="List"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.FtdtAttributesView" value-field="dte"/>
+            <if condition="dte == null"><return error="true" message="Could not find FiscalTaxDocument ${fiscalTaxDocumentId}"/></if>
+            <set field="discrepancyMessages" from="[]"/>
+            <if condition="dte.fiscalTaxDocumentTypeEnumId == 'Ftdt-61'"><then>
+                <set field="invoiceCreateMap" from="[fromPartyId:dte.receiverPartyId, toPartyId:dte.issuerPartyId, invoiceTypeEnumId:'InvoiceCreditMemo']"/>
+            </then><else>
+                <set field="invoiceCreateMap" from="[fromPartyId:dte.issuerPartyId, toPartyId:dte.receiverPartyId, invoiceTypeEnumId:'InvoiceSales']"/>
+            </else></if>
+            <if condition="parsedDteXmlMap"><then>
+                <set field="detalleList" from="parsedDteXmlMap.detalleList"/>
+                <set field="impuestosMap" from="parsedDteXmlMap.impuestosMap"/>
+                <set field="descuentoRecargoList" from="parsedDteXmlMap.descuentoRecargoList"/>
+                <set field="iva" from="parsedDteXmlMap.iva"/>
+                <set field="montoTotal" from="parsedDteXmlMap.montoTotal"/>
+            </then><else>
+                <return error="true" message="Parsing here is not yet supported"/>
+            </else></if>
+            <set field="invoiceCreateMap.invoiceDate" from="dte.fechaEmision"/>
+            <set field="invoiceCreateMap.currencyUomId" value="CLP"/>
+            <set field="invoiceCreateMap.invoiceStatusId" from="invoiceStatusId"/>
+            <if condition="dte.fechaVencimiento">
+                <set field="invoiceCreateMap.dueDate" from="dte.fechaVencimiento"/>
+            </if>
+            <set field="invoiceItemCount" from="0" type="Integer"/>
+            <if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-101', 'Ftdt-102', 'Ftdt-109', 'Ftdt-110', 'Ftdt-111', 'Ftdt-112', 'Ftdt-30', 'Ftdt-32', 'Ftdt-33', 'Ftdt-34', 'Ftdt-35', 'Ftdt-38', 'Ftdt-39']"><then>
+                <service-call name="mantle.account.InvoiceServices.create#Invoice" in-map="invoiceCreateMap" disable-authz="true" out-map="context"/>
+                <if condition="!invoiceId"><return error="true" message="Error creating Invoice"/></if>
+            </then><else>
+                <return message="Not creating invoice for document type ${dte.fiscalTaxDocumentTypeEnumId}"/>
+            </else></if>
+
+            <iterate list="detalleList" entry="detalle">
+                <set field="itemMap" from="null"/>
+                <if condition="!attemptProductMatch"><then>
+                    <service-call name="mantle.account.InvoiceServices.create#InvoiceItem" in-map="[invoiceId: invoiceId, itemTypeEnumId:'ItemSales', dteQuantity:detalle.dteQuantity, dteAmount:detalle.dteAmount,
+                                                       productId: (detalle.itemExento? 'SRVCEXENTO': null), description: detalle.itemDescription, quantity: detalle.quantity, amount: detalle.amount]" out-map="itemMap"/>
+                    <set field="invoiceItemCount" from="invoiceItemCount + 1"/>
+                </then><else>
+                    <log message="Buscando código item"/>
+                    <set field="k" from="0"/>
+                    <set field="productId" from="null"/>
+                    <iterate list="detalle.codigoList" entry="codigo">
+                        <set field="k" from="k+1"/>
+                        <log message="Leyendo código ${k}, valor: ${codigo}"/>
+                        <if condition="issuerIsInternalOrg"><then>
+                            <entity-find-one entity-name="mantle.product.Product" auto-field-map="[pseudoId:codigo]" value-field="product"/>
+                            <if condition="product">
+                                <set field="productId" from="product.productId"/>
+                                <break/></if>
+                        </then><else>
+                            <entity-find entity-name="mantle.product.ProductParty" list="productPartyList">
+                                <econdition field-name="partyId" from="issuerPartyId"/>
+                                <econdition field-name="otherPartyItemId" from="codigo"/>
+                                <econdition field-name="roleTypeId" value="Supplier"/>
+                                <date-filter valid-date="dte.fechaEmision"/>
+                                <order-by field-name="-fromDate"/>
+                            </entity-find>
+                            <set field="productId" from="productPartyList.first?.partyId"/>
+                            <break/>
+                        </else></if>
+                    </iterate>
+                    <if condition="productId"><then>
+                        <entity-find entity-name="mantle.product.category.ProductCategoryMember" list="exentoList">
+                            <econdition field-name="productId"/>
+                            <date-filter valid-date="dte.fechaEmision"/>
+                        </entity-find>
+                        <set field="exentoBd" from="exentoList.size() > 0"/>
+                        <if condition="exentoBd != detalle.itemExento">
+                            <script>discrepancyMessages.add("Exento mismatch, XML dice ${detalle.itemExento? '' : 'no '} exento, producto en BD dice ${exentoBd? '' : 'no '} exento")</script>
+                        </if>
+                        <entity-find-one entity-name="mantle.product.Product" value-field="product"/>
+                        <if condition="product.productName.toString().trim().toLowerCase() != detalle.itemDescription.trim().toLowerCase()">
+                            <script>discrepancyMessages.add("Description mismatch, XML dice ${detalle.itemDescription}, producto en BD dice ${product.productName}")</script>
+                        </if>
+                        <log message="Agregando producto preexistente ${productId}, cantidad ${detalle.quantity} *************** orderId: ${orderId}"/>
+                    </then><else>
+                        <if condition="detalle.itemExento">
+                            <set field="productId" value="SRVCEXENTO"/>
+                        </if>
+                        <log level="warn" message="Producto ${detalle.itemDescription} no existe en el sistema, se creará como genérico"/>
+                    </else></if>
+                    <service-call name="mantle.account.InvoiceServices.create#InvoiceItem" in-map="[invoiceId: invoiceId, itemTypeEnumId:'ItemSales', dteQuantity:detalle.dteQuantity, dteAmount:detalle.dteAmount,
+                                productId: productId, description: detalle.itemDescription, quantity: detalle.quantity, amount: detalle.amount]" out-map="itemMap"/>
+                    <set field="invoiceItemCount" from="invoiceItemCount+1"/>
+                </else></if>
+                <if condition="detalle.descuentoMonto">
+                    <set field="parentItemSeqId" from="itemMap.invoiceItemSeqId"/>
+                    <service-call name="mantle.account.InvoiceServices.create#InvoiceItem" in-map="[invoiceId: invoiceId, parentItemSeqId:parentItemSeqId, itemTypeEnumId:'ItemDiscount',
+                                    description: 'Descuento', quantity: 1, amount:-detalle.descuentoMonto]"/>
+                    <set field="invoiceItemCount" from="invoiceItemCount+1"/>
+                </if>
+                <if condition="detalle.roundingAdjustmentItemAmount != 0">
+                    <set field="description" value="Ajuste redondeo DTE (precio ${detalle.dteAmount?:detalle.price}, cantidad ${detalle.dteQuantity?:detalle.quantity}, montoItem ${detalle.montoItem}"/>
+                    <if condition="itemMap?.invoiceItemSeqId == null"><then>
+                        <message>Need to add rounding adjustment item but did not create a parent item, itemMap ${itemMap}, invoiceId: ${invoiceId}</message>
+                        <service-call name="mantle.account.InvoiceServices.create#InvoiceItem" in-map="[invoiceId  : invoiceId, itemTypeEnumId: 'ItemDteRoundingAdjust',
+                                                                                                                    description: description, quantity: 1, amount: detalle.roundingAdjustmentItemAmount"/>
+                    </then><else>
+                        <set field="parentItemSeqId" from="itemMap.invoiceItemSeqId"/>
+                        <service-call name="mantle.account.InvoiceServices.create#InvoiceItem" in-map="[invoiceId: invoiceId, parentItemSeqId:parentItemSeqId, itemTypeEnumId:'ItemDteRoundingAdjust',
+                                    description: description, quantity: 1, amount:detalle.roundingAdjustmentItemAmount]"/>
+                    </else></if>
+                </if>
+            </iterate>
+
+            <iterate list="impuestosMap" entry="impuestoMap" key="impuestoCode">
+                <entity-find entity-name="moqui.basic.Enumeration" list="impuestoEnumList">
+                    <econdition field-name="parentEnumId" value="ItemTCChlDte"/>
+                    <econdition field-name="enumCode" from="impuestoCode"/>
+                </entity-find>
+                <set field="impuestoEnum" from="impuestoEnumList.first"/>
+                <if condition="impuestoEnum == null"><then>
+                    <script>internalErrors.add("Did not find impuesto for code ${impuestoCode}")</script>
+                </then><else>
+                    <service-call name="mantle.account.InvoiceServices.create#InvoiceItem" in-map="[invoiceId  : invoiceId, itemTypeEnumId: impuestoEnum.enumId,
+                                description: impuestoEnum.description, quantity: 1, amount: impuestoMap.monto]"/>
+                    <set field="invoiceItemCount" from="invoiceItemCount+1"/>
+                </else></if>
+            </iterate>
+
+            <iterate list="descuentoRecargoList" entry="item">
+                <service-call name="mantle.account.InvoiceServices.create#InvoiceItem" in-map="[invoiceId: invoiceId, itemTypeEnumId: item.itemTypeEnumId, description: item.glosa, quantity: 1,
+                            amount: item.amount]"/>
+                <set field="invoiceItemCount" from="invoiceItemCount+1"/>
+            </iterate>
+
+            <set field="newInvoiceStatusId" from="dteMap.requiresManualIntervention ? 'InvoiceRequiresManualIntervention' : null"/>
+
+            <if condition="iva > 0">
+                <service-call name="mantle.account.InvoiceServices.create#InvoiceItem" in-map="[invoiceId: invoiceId, itemTypeEnumId:'ItemVatTax', description: 'IVA', quantity: 1, amount: dteMap.iva,
+                            taxAuthorityId:'CL_SII']"/>
+            </if>
+
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
+            <if condition="invoice.invoiceTotal != montoTotal">
+                <set field="diff" from="invoice.invoiceTotal - montoTotal"/>
+
+                <if condition="diff == iva && totalExento == montoExento">
+                    <set field="factor" from="1-(diff/invoice.invoiceTotal)"/>
+                    <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="itemList" for-update="true">
+                        <econdition field-name="invoiceId"/>
+                    </entity-find>
+                    <iterate list="itemList" entry="item">
+                        <set field="afecto" from="true"/>
+                        <if condition="item.productId">
+                            <service-call name="mchile.sii.DTEServices.check#Afecto" in-map="[productId:item.productId]" out-map="afectoMap"/>
+                            <set field="afecto" from="afectoMap.afecto"/>
+                        </if>
+                        <if condition="afecto">
+                            <set field="dteAmount" from="it.dteAmount ?: it.amount"/>
+                            <set field="decimals" from="2"/>
+                            <set field="it.amount" from="(it.amount * factor).setScale(decimals, RoundingMode.HALF_UP)"/>
+                            <while condition="decimals > 0 && (it.amount * it.quantity).setScale(0, RoundingMode.HALF_UP) != it.amount * it.quantity">
+                                <set field="decimals" from="decimals-1"/>
+                                <set field="it.amount" from="it.amount.setScale(decimals, RoundingMode.HALF_UP)"/>
+                            </while>
+                            <if condition="(it.amount * it.quantity).setScale(0, RoundingMode.HALF_UP) != it.amount * it.quantity">
+                                <set field="it.dteQuantity" from="it.dteQuantity ?: it.quantity"/>
+                                <set field="it.amount" from="(it.amount * it.quantity).setScale(0, RoundingMode.HALF_UP)"/>
+                                <set field="it.quantity" from="1"/>
+                            </if>
+                        </if>
+                        <entity-update value-field="item"/>
+                    </iterate>
+
+                    <entity-find-one entity-name="mantle.account.invoice.Invoice" auto-field-map="[invoiceId:invoiceId]" value-field="invoice"/>
+                    <set field="diff" from="invoice.invoiceTotal - montoTotal"/>
+                </if>
+
+                <set field="diffAbs" from="(diff < 0) ? -diff : diff"/>
+                <if condition="diffAbs <= invoiceItemCount && totalExento == montoExento"><then>
+                    <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="itemList" for-update="true">
+                        <econdition field-name="invoiceId" from="invoiceId"/>
+                    </entity-find>
+                    <set field="i" from="0"/>
+                    <iterate list="itemList" entry="item">
+                        <set field="increment" from="diff > 0 ? -1 : 1"/>
+                        <set field="diffAbs" from="(diff < 0) ? -diff : diff"/>
+                        <if condition="diffAbs &lt; 1"><set field="increment" from="-diff"/></if>
+                        <set field="parentItemSeqId" from="item.invoiceItemSeqId"/>
+                        <service-call name="mantle.account.InvoiceServices.create#InvoiceItem" in-map="[invoiceId: invoiceId, parentItemSeqId:parentItemSeqId, itemTypeEnumId:'ItemDteRoundingAdjust',
+                                    description: 'Ajuste redondeo DTE', quantity: 1, amount:increment]"/>
+                        <set field="diff" from="diff+increment"/>
+                        <set field="i" from="i+1"/>
+                    </iterate>
+
+                    <entity-find-one entity-name="mantle.account.invoice.Invoice" auto-field-map="[invoiceId:invoiceId]" value-field="invoice"/>
+                    <set field="diff" from="invoice.invoiceTotal - montoTotal"/>
+                    <if condition="diff != 0">
+                        <message error="true">Could not handle diff for document ${documento.Documento.'@ID'.text()}</message>
+                    </if>
+                </then><else>
+                    <!-- No se puede resolver automáticamente la diferencia, se trata como discrepancia -->
+                    <script>discrepancyMessages.add("No coinciden totales, DTE indica total ${montoTotal} y exento ${montoExento}, calculado: total ${invoice.invoiceTotal} y exento ${totalExento}")</script>
+                    <set field="newInvoiceStatusId" value="InvoiceRequiresManualIntervention"/>
+                </else></if>
+            </if>
+        </actions>
+    </service>
 </services>

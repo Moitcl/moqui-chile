@@ -13,7 +13,6 @@ if (domNode == null) {
 errorMessages = []
 discrepancyMessages = []
 internalErrors = []
-Integer invoiceItemCount = 0
 
 Map<String, Object> dteMap = ec.service.sync().name("mchile.sii.dte.DteLoadServices.parse#Dte").parameter("dte", domNode).call()
 if (ec.message.hasError())
@@ -145,17 +144,6 @@ if (issuerPartyId == null)
 if (receiverPartyId == null)
     ec.message.addError("Empty receiverPartyId")
 
-// Creación de orden de cobro
-if (dteMap.tipoDteEnumId == 'Ftdt-61') {
-    // Nota de crédito, se invierten from y to
-    fromPartyId = receiverPartyId
-    toPartyId = issuerPartyId
-    invoiceTypeEnumId = 'InvoiceCreditMemo'
-} else {
-    fromPartyId = issuerPartyId
-    toPartyId = receiverPartyId
-    invoiceTypeEnumId = 'InvoiceSales'
-}
 if (ec.message.hasError()) {
     estadoRecepDte = 2
     recepDteGlosa = 'RECHAZADO, Errores: ' + ec.message.getErrors().join(', ') + ((errorMessages.size() > 0) ? (', ' + errorMessages.join(', ')) : '')
@@ -164,175 +152,9 @@ if (ec.message.hasError()) {
     return
 }
 
-invoiceCreateMap =  [fromPartyId:fromPartyId, toPartyId:toPartyId, invoiceTypeEnumId:invoiceTypeEnumId, invoiceDate:dteMap.fechaEmision, currencyUomId:'CLP', statusId:invoiceStatusId]
-if (dteMap.fechaVencimiento)
-    invoiceCreateMap.dueDate = dteMap.fechaVencimiento
-if (dteMap.tipoDteEnumId in ['Ftdt-101', 'Ftdt-102', 'Ftdt-109', 'Ftdt-110', 'Ftdt-111', 'Ftdt-112', 'Ftdt-30', 'Ftdt-32', 'Ftdt-33', 'Ftdt-34', 'Ftdt-35', 'Ftdt-38', 'Ftdt-39']) {
-    invoiceMap = ec.service.sync().name("mantle.account.InvoiceServices.create#Invoice").parameters(invoiceCreateMap).disableAuthz().call()
-    invoiceId = invoiceMap.invoiceId
-}
+invoiceId = ec.service.sync().name("mchile.sii.dte.DteLoadServices.create#InvoiceFromDte").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, parsedDteXmlMap:dteMap]).call().invoiceId
 
-dteMap.detalleList.each { detalle ->
-    Map itemMap = null
-    if (!attemptProductMatch && invoiceId) {
-        itemMap = ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales', dteQuantity:detalle.dteQuantity, dteAmount:detalle.dteAmount,
-                                                                                                productId: (detalle.itemExento? 'SRVCEXENTO': null), description: detalle.itemDescription, quantity: detalle.quantity, amount: detalle.amount]).call()
-        invoiceItemCount++
-    } else {
-        ec.logger.warn("Buscando código item")
-        String productId
-        detalle.codigoList.each { codigo ->
-            // Check explicit product relation with external ID
-            ec.logger.warn("Leyendo codigo ${k}, valor: ${codigo}")
-            if (issuerIsInternalOrg) {
-                // Look up product directly
-                product = ec.entity.find("mantle.product.Product").condition("pseudoId", codigo).one()
-                if (product) {
-                    productId = product.productId
-                    return
-                }
-            } else {
-                productPartyList = ec.entity.find("mantle.product.ProductParty").condition([partyId: issuerPartyId, otherPartyItemId: codigo, roleTypeId: 'Supplier'])
-                        .conditionDate("fromDate", "thruDate", fechaEmision).orderBy("-fromDate").list()
-                if (productPartyList) {
-                    productId = productPartyList.first.productId
-                    return
-                }
-            }
-            k++
-        }
-
-        // Check Exento category
-        if (productId) {
-            exentoList = ec.entity.find("mantle.product.category.ProductCategoryMember").condition([productCategoryId:'', productId:productId])
-                    .conditionDate("fromDate", "thruDate", fechaEmision).list()
-            exentoBd = exentoList.size() > 0
-            if (exentoBd != detalle.itemExento)
-                discrepancyMessages.add("Exento mismatch, XML dice ${detalle.itemExento? '' : 'no '} exento, producto en BD dice ${exentoBd? '' : 'no '} exento")
-            product = ec.entity.find("mantle.product.Product").condition("productId", productId).one()
-            if (product.productName.toString().trim().toLowerCase() != detalle.itemDescription.trim().toLowerCase())
-                discrepancyMessages.add("Description mismatch, XML dice ${detalle.itemDescription}, producto en BD dice ${product.productName}")
-            ec.logger.info("Agregando producto preexistente ${productId}, cantidad ${detalle.quantity} *************** orderId: ${orderId}")
-        } else {
-            if (detalle.itemExento)
-                productId = 'SRVCEXENTO'
-            ec.logger.warn("Producto ${detalle.itemDescription} no existe en el sistema, se creará como genérico")
-        }
-        if (invoiceId) {
-            itemMap = ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemSales', dteQuantity:detalle.dteQuantity, dteAmount:detalle.dteAmount,
-                                                                                                              productId: productId, description: detalle.itemDescription, quantity: detalle.quantity, amount: detalle.amount]).call()
-            invoiceItemCount++
-        }
-    }
-    if (detalle.descuentoMonto && invoiceId) {
-        parentItemSeqId = itemMap.invoiceItemSeqId
-        ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, parentItemSeqId:parentItemSeqId, itemTypeEnumId:'ItemDiscount',
-                                                                                                description: 'Descuento', quantity: 1, amount:-detalle.descuentoMonto]).call()
-        invoiceItemCount++
-    }
-
-    if (detalle.roundingAdjustmentItemAmount != 0) {
-        description = "Ajuste redondeo DTE (precio ${detalle.dteAmount?:detalle.price}, cantidad ${detalle.dteQuantity?:detalle.quantity}, montoItem ${detalle.montoItem}"
-        if (itemMap?.invoiceItemSeqId == null) {
-            ec.message.addMessage("Need to add rounding adjustment item but did not create a parent item, itemMap ${itemMap}, invoiceId: ${invoiceId}")
-            ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId  : invoiceId, itemTypeEnumId: 'ItemDteRoundingAdjust',
-                                                                                                    description: description, quantity: 1, amount: detalle.roundingAdjustmentItemAmount]).call()
-        } else {
-            parentItemSeqId = itemMap.invoiceItemSeqId
-            ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, parentItemSeqId:parentItemSeqId, itemTypeEnumId:'ItemDteRoundingAdjust',
-                                                                                                    description: description, quantity: 1, amount:detalle.roundingAdjustmentItemAmount]).call()
-        }
-    }
-
-}
-
-dteMap.impuestosMap.each { impuestoCode, impuestoMap ->
-    impuestoEnum = ec.entity.find("moqui.basic.Enumeration").condition([parentEnumId: "ItemTCChlDte", enumCode:impuestoCode]).one()
-    if (impuestoEnum == null)
-        internalErrors.add("Did not find impuesto for code ${impuestoCode}")
-    else if (invoiceId) {
-        ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId  : invoiceId, itemTypeEnumId: impuestoEnum.enumId,
-                                                                                                description: impuestoEnum.description, quantity: 1, amount: impuestoMap.monto]).call()
-        invoiceItemCount++
-    }
-}
-
-//errorMessages.add("Test")
-
-if (invoiceId) {
-    dteMap.descuentoRecargoList.each { item ->
-        ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId: item.itemTypeEnumId, description: item.glosa, quantity: 1,
-                                                                                                amount: item.amount]).call()
-        invoiceItemCount++
-    }
-}
-
-if (dteMap.requiresManualIntervention)
-    newInvoiceStatusId = 'InvoiceRequiresManualIntervention'
-else
-    newInvoiceStatusId = null
-
-if (dteMap.iva > 0 && invoiceId) {
-    ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, itemTypeEnumId:'ItemVatTax', description: 'IVA', quantity: 1, amount: dteMap.iva, taxAuthorityId:'CL_SII']).call()
-}
-
-montoTotal = dteMap.montoTotal
-if (invoiceId) {
-    invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", invoiceId).one()
-    if (invoice.invoiceTotal != montoTotal) {
-        diff = invoice.invoiceTotal - montoTotal
-        if (diff == iva && totalExento == montoExento) {
-            factor = 1-(diff/invoice.invoiceTotal)
-            itemList = ec.entity.find("mantle.account.invoice.InvoiceItem").condition("invoiceId", invoiceId).forUpdate(true).list()
-            itemList.each {
-                boolean afecto = true
-                if (it.productId) {
-                    afectoMap = ec.service.sync().name("mchile.sii.DTEServices.check#Afecto").parameter("productId", it.productId).call()
-                    afecto = afectoMap.afecto
-                }
-                if (afecto) {
-                    dteAmount = it.dteAmount ?: it.amount
-                    decimals = 2
-                    it.amount = (it.amount * factor).setScale(decimals, RoundingMode.HALF_UP)
-                    while (decimals > 0 && (it.amount * it.quantity).setScale(0, RoundingMode.HALF_UP) != it.amount * it.quantity) {
-                        decimals--
-                        it.amount = it.amount.setScale(decimals, RoundingMode.HALF_UP)
-                    }
-                    if ((it.amount * it.quantity).setScale(0, RoundingMode.HALF_UP) != it.amount * it.quantity) {
-                        it.dteQuantity = it.dteQuantity ?: it.quantity
-                        it.amount = (it.amount * it.quantity).setScale(0, RoundingMode.HALF_UP)
-                        it.quantity = 1
-                    }
-                }
-                it.update()
-            }
-            invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", invoiceId).one()
-            diff = invoice.invoiceTotal - montoTotal
-        }
-        diffAbs = (diff < 0) ? -diff : diff
-        if (diffAbs <= invoiceItemCount && totalExento == montoExento) {
-            itemList = ec.entity.find("mantle.account.invoice.InvoiceItem").condition("invoiceId", invoiceId).forUpdate(true).list()
-            for (int i = 0; diff != 0 && i < itemList.size(); i++) {
-                increment = diff > 0 ? -1 : 1
-                diffAbs = (diff < 0) ? -diff : diff
-                if (diffAbs < 1) increment = -diff
-                EntityValue item = itemList.get(i)
-                parentItemSeqId = item.invoiceItemSeqId
-                ec.service.sync().name("mantle.account.InvoiceServices.create#InvoiceItem").parameters([invoiceId: invoiceId, parentItemSeqId:parentItemSeqId, itemTypeEnumId:'ItemDteRoundingAdjust',
-                                                                                                        description: 'Ajuste redondeo DTE', quantity: 1, amount:increment]).call()
-                diff += increment
-            }
-            invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", invoiceId).one()
-            diff = invoice.invoiceTotal - montoTotal
-            if (diff != 0)
-                ec.message.addError("Could not handle diff for document ${documento.Documento.'@ID'.text()}")
-        } else {
-            // No se puede resolver automáticamente la diferencia, se trata como discrepancia
-            discrepancyMessages.add("No coinciden totales, DTE indica total ${montoTotal} y exento ${montoExento}, calculado: total ${invoice.invoiceTotal} y exento ${totalExento}")
-            newInvoiceStatusId = 'InvoiceRequiresManualIntervention'
-        }
-    }
-}
+=========
 
 if (errorMessages.size() > 0) {
     estadoRecepDte = 2
