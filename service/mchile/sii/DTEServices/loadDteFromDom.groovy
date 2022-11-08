@@ -68,8 +68,6 @@ existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([issu
         .disableAuthz().list()
 isDuplicated = false
 
-locationReferenceBase = "dbresource://moit/erp/dte/${dteMap.rutEmisor}/DTE-${dteMap.tipoDte}-${dteMap.fiscalTaxDocumentNumber}"
-
 if (existingDteList) {
     dte = existingDteList.first
     if (dte.sentRecStatusId == 'Ftd-ReceiverReject') {
@@ -96,9 +94,8 @@ if (existingDteList) {
             }
             if (ec.message.hasError())
                 return
-            contentLocationXml = "${locationReferenceBase}.xml"
-            docRrXml = ec.resource.getLocationReference("${locationReferenceBase}.xml")
-            docRrXml.putBytes(dteMap.dteBytes)
+            ec.service.sync().name("mchile.sii.dte.DteContentServices.store#DteContent").parameters([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml',
+                                                                                                     documentContent:dteMap.dteBytes]).call()
             return
         } else {
             if (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-ReceiverAccept'] && contentList && sendResponse) {
@@ -385,18 +382,12 @@ if (dteMap.tipoDteEnumId == 'Ftdt-52') {
 
 mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(attributeCreateMap).call()
 
-contentLocationXml = "${locationReferenceBase}.xml"
-docRrXml = ec.resource.getLocationReference("${locationReferenceBase}.xml")
-docRrXml.putBytes(dteMap.dteBytes)
+ec.service.sync().name("mchile.sii.dte.DteContentServices.store#DteContent").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml',
+                                                                                         documentContent:dteMap.dteBytes]).call()
 
-createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:contentLocationXml, contentDate:dteMap.fechaEmision]
-ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
 if (pdfBytes) {
-    contentLocationPdf = "${locationReferenceBase}.pdf"
-    createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocationPdf, contentDate:dteMap.fechaEmision]
-    docRrPdf = ec.resource.getLocationReference(contentLoationPdf)
-    docRrPdf.putBytes(pdfBytes)
-    ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMap).call())
+    ec.service.sync().name("mchile.sii.dte.DteContentServices.store#DteContent").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf',
+                                                                                             documentContent:dteMap.pdfBytes]).call()
 }
 
 // Se agregan las referencias

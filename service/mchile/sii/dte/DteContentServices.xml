@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+    
+    <service verb="store" noun="DteContent">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="fiscalTaxDocumentContentTypeEnumId" required="true"><description>Content Type Enum ID, e.g. Ftdct-Xml, Ftdct-Pdf</description></parameter>
+            <parameter name="documentContent" type="Object"><description>Content to store, can be a String, byte[] or InputStream</description></parameter>
+            <parameter name="contentDate" type="Timestamp"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="fiscalTaxDocumentContentId"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte"/>
+            <if condition="dte == null"><return error="true" message="Could not find FiscalTaxDocument ${fiscalTaxDocumentId}"/></if>
+            <if condition="contentDate == null"><set field="contentDate" from="dte.date"/></if>
+            <if condition="fiscalTaxDocumentContentTypeEnumId == 'Ftdct-Xml'"><then>
+                <set field="extension" value="xml"/>
+            </then><else-if condition="fiscalTaxDocumentContentTypeEnumId in ['Ftdct-Pdf', 'Ftdct-PdfCedible']">
+                <set field="extension" value="pdf"/>
+            </else-if><else>
+                <return error="true" message="Unknown content type ${fiscalTaxDocumentContentTypeEnumId}"/>
+            </else></if>
+            <set field="tipoDte" from="dte.documentType?.enumCode"/>
+            <set field="contentLocation" value="dbresource://moit/erp/dte/${dte.issuerPartyIdValue}/DTE-${tipoDte}-${dte.fiscalTaxDocumentNumber}.${extension}"/>
+            <set field="contentResourceReference" from="ec.resource.getLocationReference(contentLocation)"/>
+            <service-call name="create#mchile.dte.FiscalTaxDocumentContent" in-map="context" out-map="context"/>
+            <if condition="contentResourceReference.exists"><return error="true" message="Content already exists at ${location}"/></if>
+            <if condition="documentContent instanceof String"><then>
+                <script>contentResourceReference.putText(documentContent)</script>
+            </then><else-if condition="documentContent instanceof byte[]">
+                <script>contentResourceReference.putBytes(documentContent)</script>
+            </else-if><else-if condition="documentContent instanceof InputStream">
+                <script>contentResourceReference.putStream(documentContent)</script>
+            </else-if></if>
+        </actions>
+    </service>
+</services>
