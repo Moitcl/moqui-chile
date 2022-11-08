@@ -116,8 +116,8 @@ if (montoNeto > 0 && tasaIva / 100 != vatTaxRate) errorMessages.add("Tasa IVA no
 
 rutReceptor = encabezado.Receptor.RUTRecep.text()
 tipoDteEnumId = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameter("siiCode", tipoDte).call().enumId
-fechaEmision = ec.l10n.parseTimestamp(encabezado.IdDoc.FchEmis.text(), "yyyy-MM-dd")
-fechaVencimiento = ec.l10n.parseTimestamp(encabezado.IdDoc.FchVenc.text(), "yyyy-MM-dd")
+fechaEmision = ec.l10n.parseDate(encabezado.IdDoc.FchEmis.text(), "yyyy-MM-dd")
+fechaVencimiento = ec.l10n.parseDate(encabezado.IdDoc.FchVenc.text(), "yyyy-MM-dd")
 
 receptor = encabezado.Receptor
 razonSocialReceptor = receptor.RznSocRecep.text()

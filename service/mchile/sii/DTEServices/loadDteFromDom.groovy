@@ -85,7 +85,8 @@ if (existingDteList) {
         if (contentList.size() == 0) {
             attrib = ec.entity.find("mchile.dte.FiscalTaxDocumentAttributes").condition("fiscalTaxDocumentId", fiscalTaxDocumentId).one()
             attributeMap = [amount:'montoTotal', montoNeto:'montoNeto', montoExento:'montoExento', tasaImpuesto:'tasaIva', tipoImpuesto:'tipoImpuesto', montoIvaRecuperable:'iva',
-                            montoIvaNoRecuperable:'montoIvaNoRecuperable', fechaEmision:'fechaEmision', razonSocialEmisor:'razonSocialEmisor', razonSocialReceptor:'razonSocialReceptor']
+                            montoIvaNoRecuperable:'montoIvaNoRecuperable', fechaEmision:'fechaEmision', fechaVencimiento:'fechaVencimiento', razonSocialEmisor:'razonSocialEmisor',
+                            razonSocialReceptor:'razonSocialReceptor']
             dteMap.tipoImpuesto = 1
             dteMap.montoIvaNoRecuperable = 0
             attributeMap.each { entityFieldName, mapFieldName ->
@@ -374,7 +375,7 @@ mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameter
 fiscalTaxDocumentId = mapOut.fiscalTaxDocumentId
 
 attributeCreateMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, date:ec.user.nowTimestamp, amount:dteMap.montoTotal, montoNeto:dteMap.montoNeto, montoExento:dteMap.montoExento, tasaImpuesto:dteMap.tasaIva, tipoImpuesto:1, montoIvaRecuperable:dteMap.iva, montoIvaNoRecuperable:0,
-                      fechaEmision:dteMap.fechaEmision, razonSocialEmisor:dteMap.razonSocialEmisor, razonSocialReceptor:dteMap.razonSocialReceptor]
+                      fechaEmision:dteMap.fechaEmision, fechaVencimiento:dteMap.fechaVencimiento, razonSocialEmisor:dteMap.razonSocialEmisor, razonSocialReceptor:dteMap.razonSocialReceptor]
 
 if (dteMap.tipoDteEnumId == 'Ftdt-52') {
     ec.service.sync().name("store#mchile.dte.GuiaDespacho").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, indTrasladoEnumId:dteMap.indTrasladoEnumId]).call()

@@ -523,8 +523,7 @@ if ((fiscalTaxDocumentTypeEnumId as String) in dteConstituyeVentaTypeList) {
 }
 
 // Creación de registro en FiscalTaxDocumentAttributes
-fechaEmisionString = ec.l10n.format(fechaEmision, "yyyy-MM-dd")
-createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:totalInvoice, fechaEmision:fechaEmisionString, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:totalNeto, tasaImpuesto:19,
+createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:totalInvoice, fechaEmision:fechaEmision, fechaVencimiento:fechaVencimiento, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:totalNeto, tasaImpuesto:19,
              montoExento:totalExento, montoIVARecuperable:montoIVARecuperable, razonSocialEmisor:razonSocialEmisor, razonSocialReceptor:razonSocialReceptor]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call())
 fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId
