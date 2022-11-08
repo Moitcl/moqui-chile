@@ -16,6 +16,8 @@ internalErrors = []
 Integer invoiceItemCount = 0
 
 Map<String, Object> dteMap = ec.service.sync().name("mchile.sii.dte.DteLoadServices.parse#Dte").parameter("dte", domNode).call()
+if (ec.message.hasError())
+    return
 errorMessages.addAll(dteMap.errorMessages)
 discrepancyMessages.addAll(dteMap.discrepancyMessages)
 
@@ -66,6 +68,8 @@ existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([issu
         .disableAuthz().list()
 isDuplicated = false
 
+locationReferenceBase = "dbresource://moit/erp/dte/${dteMap.rutEmisor}/DTE-${dteMap.tipoDte}-${dteMap.fiscalTaxDocumentNumber}"
+
 if (existingDteList) {
     dte = existingDteList.first
     if (dte.sentRecStatusId == 'Ftd-ReceiverReject') {
@@ -80,28 +84,43 @@ if (existingDteList) {
     } else {
         contentList = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml'])
                 .disableAuthz().list()
-        if (contentList.size() > 0) {
-            // TODO: compare data and save XML
-        }
-        if (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-ReceiverAccept'] && contentList && sendResponse) {
-            ec.logger.warn("Contenido existe, DTE está aprobado, enviando aceptación")
-            xmlInDb = ec.resource.getLocationReference(contentList.first().contentLocation).openStream().readAllBytes()
-            if (xmlInDb == dteMap.dteBytes) {
-                estadoRecepDte = 0
-                recepDteGlosa = 'ACEPTADO OK'
-                sentRecStatusId = 'Ftde-DuplicateNotProcessed'
-                if (envioId)
-                    ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioId, fiscalTaxDocumentId:dte.fiscalTaxDocumentId]).call()
+        if (contentList.size() == 0) {
+            attrib = ec.entity.find("mchile.dte.FiscalTaxDocumentAttributes").condition("fiscalTaxDocumentId", fiscalTaxDocumentId).one()
+            attributeMap = [amount:'montoTotal', montoNeto:'montoNeto', montoExento:'montoExento', tasaImpuesto:'tasaIva', tipoImpuesto:'tipoImpuesto', montoIvaRecuperable:'iva',
+                            montoIvaNoRecuperable:'montoIvaNoRecuperable', fechaEmision:'fechaEmision', razonSocialEmisor:'razonSocialEmisor', razonSocialReceptor:'razonSocialReceptor']
+            dteMap.tipoImpuesto = 1
+            dteMap.montoIvaNoRecuperable = 0
+            attributeMap.each { entityFieldName, mapFieldName ->
+                if (attrib[entityFieldName] != dteMap[mapFieldName])
+                    ec.message.addError("Value mismatch for attribute field ${entityFieldName}, XML value: ${dteMap[mapFieldName]}, DB value: ${attrib[entityFieldName]}")
+            }
+            if (ec.message.hasError())
+                return
+            contentLocationXml = "${locationReferenceBase}.xml"
+            docRrXml = ec.resource.getLocationReference("${locationReferenceBase}.xml")
+            docRrXml.putBytes(dteMap.dteBytes)
+            return
+        } else {
+            if (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-ReceiverAccept'] && contentList && sendResponse) {
+                ec.logger.warn("Contenido existe, DTE está aprobado, enviando aceptación")
+                xmlInDb = ec.resource.getLocationReference(contentList.first().contentLocation).openStream().readAllBytes()
+                if (xmlInDb == dteMap.dteBytes) {
+                    estadoRecepDte = 0
+                    recepDteGlosa = 'ACEPTADO OK'
+                    sentRecStatusId = 'Ftde-DuplicateNotProcessed'
+                    if (envioId)
+                        ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioId, fiscalTaxDocumentId:dte.fiscalTaxDocumentId]).call()
                 isDuplicated = true
                 fiscalTaxDocumentId = dte.fiscalTaxDocumentId
                 return
+                }
             }
+            errorMessages.add("Ya existe registrada DTE tipo ${dteMap.tipoDte} para emisor ${dteMap.rutEmisor} y folio ${dteMap.fiscalTaxDocumentNumber}, diferente al recibido")
+            estadoRecepDte = 2
+            recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+            isDuplicated = true
+            return
         }
-        errorMessages.add("Ya existe registrada DTE tipo ${dteMap.tipoDte} para emisor ${dteMap.rutEmisor} y folio ${dteMap.fiscalTaxDocumentNumber}, diferente al recibido")
-        estadoRecepDte = 2
-        recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
-        isDuplicated = true
-        return
     }
 }
 
@@ -366,7 +385,6 @@ if (dteMap.tipoDteEnumId == 'Ftdt-52') {
 
 mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(attributeCreateMap).call()
 
-locationReferenceBase = "dbresource://moit/erp/dte/${dteMap.rutEmisor}/DTE-${tipoDte}-${dteMap.fiscalTaxDocumentNumber}"
 contentLocationXml = "${locationReferenceBase}.xml"
 docRrXml = ec.resource.getLocationReference("${locationReferenceBase}.xml")
 docRrXml.putBytes(dteMap.dteBytes)

@@ -346,6 +346,9 @@ referenciasList.each { groovy.util.Node referencia ->
     } catch (ParseException e) {
         errorMessages.add("Valor inválido en referencia ${nroRef}, campo FchRef: ${referencia.FchRef.text()}")
         return
+    } catch (NullPointerException e) {
+        errorMessages.add("Valor inválido en referencia ${nroRef}, campo FchRef: null")
+        return
     }
     codRefEnum = ec.entity.find("moqui.basic.Enumeration").condition([enumTypeId:"FtdCodigoReferencia", enumCode:referencia.CodRef.text()]).list().first
     codRefEnumId = codRefEnum?.enumId
