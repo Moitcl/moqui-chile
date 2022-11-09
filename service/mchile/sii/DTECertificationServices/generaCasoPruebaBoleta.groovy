@@ -12,7 +12,7 @@ ExecutionContext ec = context.ec
 
 
 // Recuperacion de parametros de la organizacion -->
-ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameter("partyId", issuerPartyId).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInternalServices.load#DteConfig").parameter("partyId", issuerPartyId).call())
 
 /*
 CASO-1
@@ -57,7 +57,7 @@ OBSERVACION: "Se debe informar en el XML Unidad de medida en Kg."
 
 
 //Obtención de folio y CAF Caso 1
-folioResult = ec.service.sync().name("mchile.sii.DTEServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call()
+folioResult = ec.service.sync().name("mchile.sii.dte.DteFolioServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call()
 folio = folioResult.folio
 codRef = 0 as Integer
 
@@ -216,7 +216,7 @@ ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentCon
 ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
 
 // TODO
-//ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.genera#PDF").parameters([xmlLocation:xmlContentLocation, issuerPartyId:issuerPartyId, invoiceMessage:invoiceMessage]).call())
+//ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteContentServices.generate#Pdf").parameters([xmlLocation:xmlContentLocation, issuerPartyId:issuerPartyId, invoiceMessage:invoiceMessage]).call())
 //ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfContentLocation]).call())
 //ec.resource.getLocationReference(pdfContentLocation).putBytes(pdfBytes)
 // TODO ?

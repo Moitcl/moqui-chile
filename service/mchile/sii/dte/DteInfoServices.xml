@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+
+    <service verb="get" noun="DteInfo">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="issuerRut"/>
+            <parameter name="issuerName"/>
+            <parameter name="receiverRut"/>
+            <parameter name="receiverName"/>
+            <parameter name="doctypeName"/>
+            <parameter name="folio"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte"/>
+            <service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:dte.issuerPartyIdValue]" out-map="issuerRutMap"/>
+            <set field="issuerRut" from="issuerRutMap.rut"/>
+            <service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:dte.receiverPartyIdValue]" out-map="receiverRutMap"/>
+            <set field="receiverRut" from="receiverRutMap.rut"/>
+            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="issuer" auto-field-map="[partyId:dte.issuerPartyId]"/>
+            <set field="issuerName" from="issuer.taxOrganizationName?:ec.resource.expand('PartyNameOnlyTemplate', null, issuer)"/>
+            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="receiver" auto-field-map="[partyId:dte.receiverPartyId]"/>
+            <set field="receiverName" from="receiver.taxOrganizationName?:ec.resource.expand('PartyNameOnlyTemplate', null, receiver)"/>
+            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="docTypeEnum" auto-field-map="[enumId:dte.fiscalTaxDocumentTypeEnumId]"/>
+            <set field="doctypeName" from="docTypeEnum.description"/>
+            <set field="folio" from="dte.fiscalTaxDocumentNumber"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="ReceivedDteInfo">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="dte" type="Object"/>
+            <parameter name="referenciaList" type="List"/>
+            <parameter name="xmlContent"/>
+            <parameter name="tieneReclamos" type="Boolean"/>
+            <parameter name="esPagadoContado" type="Boolean"/>
+            <parameter name="mayorOchoDias" type="Boolean"/>
+            <parameter name="tieneReferenciaGuia" type="Boolean"/>
+            <parameter name="pagosList" type="List"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="moit.erp.sii.DteDetail" value-field="dte"/>
+            <entity-find entity-name="mchile.dte.ReferenciaDte" list="referenciaList">
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <econdition field-name="referenciaTypeEnumId" value="RefDteTypeFiscalTaxDocument"/>
+            </entity-find>
+            <!-- ToDo: set tieneReferenciaGuia accordingly -->
+            <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="xmlList">
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
+            </entity-find>
+            <set field="xmlContent" from="xmlList.first"/>
+            <set field="tieneReclamos" from="dte.sentRecStatusId == 'Ftd-ReceiverReject'"/>
+            <set field="esPagadoContado" from="false"/>
+            <script>
+                Calendar cal = Calendar.instance
+                cal.add(Calendar.DAY_OF_MONTH, -8)
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                timestamp8Dias = cal.time
+            </script>
+            <set field="mayorOchoDias" from="dte.date.before(timestamp8Dias)"/>
+            <entity-find entity-name="mchile.dte.DteFactoringAssignment" list="factoringAssignmentList">
+                <econdition field-name="fiscalTaxDocumentId"/>
+            </entity-find>
+            <set field="issuerPaymentAmount" from="dte.amount"/>
+            <set field="pagosList" from="[]"/>
+            <iterate list="factoringAssignmentList" entry="factoringAssignment">
+                <set field="issuerPaymentAmount" from="issuerPaymentAmount - factoringAssignment.assignmentAmount"/>
+                <script>pagosList.add([partyId:factoringAssignment.assigneePartyId, amount:factoringAssignment.assignmentAmount, uom:'CLP'])</script>
+            </iterate>
+            <if condition="issuerPaymentAmount">
+                <script>pagosList.add([partyId:dte.issuerPartyId, amount:issuerPaymentAmount, uom:'CLP'])</script>
+            </if>
+        </actions>
+    </service>
+
+</services>

@@ -1,0 +1,475 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+
+    <service verb="load" noun="Caf">
+        <in-parameters>
+            <parameter name="cafFile" type="org.apache.commons.fileupload.FileItem"/>
+            <parameter name="partyId" required="true"/>
+        </in-parameters>
+        <actions>
+            <set field="filename" from="cafFile.getName()"/>
+            <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="[partyId:partyId]" out-map="context"/>
+            <set field="contentByteArray" from="cafFile.get()"/>
+            <service-call name="mchile.sii.dte.DteFolioServices.load#CafInternal" in-map="context" out-map="context"/>
+        </actions>
+    </service>
+
+    <service verb="load" noun="CafInternal">
+        <description>
+            Carga CAF en Sistema
+        </description>
+        <in-parameters>
+            <parameter name="contentLocation"/>
+            <parameter name="contentByteArray" type="Object"/>
+            <parameter name="filename"/>
+            <parameter name="partyId" required="true"/>
+            <parameter name="activateCaf" type="Boolean" default="false"/>
+            <parameter name="markBlockedUpTo" type="Integer"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="cafId"/>
+        </out-parameters>
+        <actions>
+            <if condition="contentLocation != null &amp;&amp; contentLocation.length() > 0 &amp;&amp; contentByteArray != null &amp;&amp; contentByteArray.size() > 0">
+                <return error="true" message="Specified both, contentLocation and contentByteArray, please specify only one"/>
+            </if>
+            <if condition="contentByteArray == null || contentByteArray.size() == 0">
+                <if condition="contentLocation == null || contentLocation.length() == 0">
+                    <return error="true" message="One of contentByteArray or contentLocation is required"/>
+                </if>
+                <set field="contentRr" from="ec.resource.getLocationReference(contentLocation)"/>
+                <set field="contentByteArray" from="contentRr.openStream().readAllBytes()"/>
+                <set field="filename" from="contentRr.fileName"/>
+            </if>
+            <set field="cafDataString" from="new String(contentByteArray, 'ISO-8859-1')"/>
+            <set field="autorizacion" from="new groovy.xml.XmlParser(false, false).parseText(cafDataString)"/>
+            <set field="privateKey" from="autorizacion.RSASK.text()"/>
+            <if condition="privateKey == null || privateKey.length() == 0"><then>
+                <set field="privateKey" from="autorizacion.DSASK.text()"/>
+                <set field="publicKey" from="autorizacion.DSAPUBK.text()"/>
+                <set field="keyType" value="DSA"/>
+            </then><else>
+                <set field="publicKey" from="autorizacion.RSAPUBK.text()"/>
+                <set field="keyType" value="RSA"/>
+            </else></if>
+            <script><![CDATA[
+                StringWriter writer = new StringWriter()
+                nodePrinter = new groovy.xml.XmlNodePrinter(new PrintWriter(writer))
+                nodePrinter.setPreserveWhitespace(true)
+                nodePrinter.print(autorizacion.CAF[0])
+                writer.close()
+                cafFragment = writer.toString()
+                ]]></script>
+            <set field="datosAutorizacion" from="autorizacion.CAF.DA"/>
+            <set field="rango" from="datosAutorizacion.RNG"/>
+            <set field="desde" from="rango.D.text()"/>
+            <set field="hasta" from="rango.H.text()"/>
+            <set field="fechaAutorizacion" from="ec.l10n.parseDate(datosAutorizacion.FA.text(), 'yyyy-MM-dd')"/>
+            <set field="tipoDte" from="datosAutorizacion.TD.text()"/>
+            <set field="fiscalTaxDocumentTypeEnumId" value="Ftdt-${tipoDte}"/>
+            <set field="rutCaf" from="datosAutorizacion.RE.text()"/>
+
+            <!-- Carga de RUT de empresa -->
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:partyId]" out-map="salidaRut"/>
+            <set field="rut" from="salidaRut.rutSinFormato"/>
+            <set field="rutNoDv" from="salidaRut.rutSinDv"/>
+
+            <if condition="!rutCaf.equals(rut.trim())">
+                <return error="true" message="RUT de archivo CAF no corresponde al registrado en el sistema como emisor: $rutCaf :: $rut"/>
+            </if>
+
+            <set field="createMap"
+                 from="[filename:filename, desde:desde, hasta:hasta, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaAutorizacion:fechaAutorizacion,rut:rut, issuerPartyId:partyId,
+                  cafData:cafDataString, publicKey:publicKey, privateKey:privateKey, keyType:keyType, cafFragment:cafFragment]"/>
+            <service-call name="create#mchile.dte.Caf" out-map="context" in-map="createMap"/>
+
+
+            <!-- Creación de registros para reservar folios -->
+            <script><![CDATA[
+                int inicio = Integer.parseInt(desde)
+                int fin = Integer.parseInt(hasta)
+                if (markBlockedUpTo != null && (markBlockedUpTo < inicio-1 || markBlockedUpTo > fin)) {
+                    ec.message.addError("Valor markBlockedUpTo fuera de rango: ${markBlockedUpTo} no está dentro del rango del CAF de ${inicio} hasta ${fin}")
+                }
+                for (int folio = inicio; folio <= fin; folio++) {
+                    fiscalTaxDocumentId = "$tipoDte-$rutNoDv-$folio"
+                    if (markBlockedUpTo == null || folio > markBlockedUpTo)
+                        statusId = 'Ftd-NotIssued'
+                    else
+                        statusId = 'Ftd-Blocked'
+                    createMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:partyId,
+                                 issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rut, statusId:statusId, sentAuthStatusId:'Ftd-NotSentAuth', sentRecStatusId:'Ftd-NotSentRec']
+                    context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(createMap).call())
+                }
+                ]]></script>
+            <if condition="activateCaf"><service-call name="mchile.sii.dte.DteFolioServices.activate#Caf" in-map="context"/></if>
+        </actions>
+    </service>
+
+    <service verb="get" noun="Folio">
+        <description>
+            Obtiene folio para el tipo de DTE especificado.
+            Busca el folio más bajo disponible
+        </description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="partyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="folio" type="Integer"/>
+            <parameter name="cafFragment"/>
+            <parameter name="keyType"/>
+            <parameter name="privateKey"/>
+        </out-parameters>
+        <actions>
+
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
+                <econdition field-name="partyId"/>
+                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+            </entity-find>
+            <if condition="!partyIdentificationList.idValue[0]">
+                <return error="true" message="Organización $partyId no tiene RUT definido"/>
+            </if>
+            <set field="rutEmisor" from="partyIdentificationList.idValue[0]"/>
+
+            <!-- Se filtra por CAF activo (PK) para el tipo de DTE -->
+            <entity-find entity-name="mchile.dte.Caf" list="cafEntryList" for-update="true">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="issuerPartyId" from="partyId"/>
+                <econdition field-name="activo" value="true"/>
+                <order-by field-name="desde"/>
+            </entity-find>
+
+            <if condition="!cafEntryList">
+                <return error="true" message="No existe CAF activo para DTE tipo ${fiscalTaxDocumentTypeEnumId}"/>
+            </if>
+            <script>
+                Calendar cal = Calendar.instance
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.add(Calendar.MONTH, -6)
+                cal.add(Calendar.DAY_OF_MONTH, -1)
+                maximaFechaAutorizacion = new Timestamp(cal.timeInMillis)
+            </script>
+            <iterate list="cafEntryList" entry="cafEntry">
+                <if condition="cafEntry.fechaAutorizacion.before(maximaFechaAutorizacion)">
+                    <message type="warning">CAF ${cafEntry.cafId} expirado, no se considera</message>
+                    <service-call name="mchile.sii.dte.DteFolioServices.deactivate#Caf" in-map="[cafId:cafEntry.cafId]"/>
+                    <continue/>
+                </if>
+                <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="reservedList" for-update="true">
+                    <econdition field-name="fiscalTaxDocumentTypeEnumId" value="${fiscalTaxDocumentTypeEnumId}"/>
+                    <econdition field-name="issuerPartyId" from="partyId"/>
+                    <econdition field-name="fiscalTaxDocumentNumber" operator="greater-equals" from="cafEntry.desde"/>
+                    <econdition field-name="fiscalTaxDocumentNumber" operator="less-equals" from="cafEntry.hasta"/>
+                    <econdition field-name="statusId" value="Ftd-NotIssued"/>
+                    <select-field field-name="fiscalTaxDocumentNumber"/>
+                    <order-by field-name="fiscalTaxDocumentNumber"/>
+                </entity-find>
+                <if condition="reservedList"><then>
+                    <set field="folio" from="reservedList.first().fiscalTaxDocumentNumber"/>
+                    <set field="cafFragment" from="cafEntry.cafFragment"/>
+                    <set field="privateKey" from="cafEntry.privateKey"/>
+                    <set field="keyType" from="cafEntry.keyType"/>
+                    <set field="rut" from="cafEntry.rut"/>
+                    <set field="razonSocial" from="cafEntry.razonSocial"/>
+                    <set field="desde" from="cafEntry.desde"/>
+                    <set field="hasta" from="cafEntry.hasta"/>
+                    <set field="fechaAutorizacion" from="cafEntry.fechaAutorizacion"/>
+                    <set field="cafEntry.lastFolioUsed" from="folio"/>
+                    <entity-update value-field="cafEntry"/>
+                    <return/>
+                </then><else>
+                    <!-- No folio available, mark as inactive -->
+                    <message>CAF ${cafEntry.cafId} utilizado completo, marcando como inactivo</message>
+                    <service-call name="mchile.sii.dte.DteFolioServices.deactivate#Caf" in-map="[cafId:cafEntry.cafId]"/>
+                </else></if>
+            </iterate>
+            <return error="true" message="No hay folios disponibles para DTE tipo ${fiscalTaxDocumentTypeEnumId}"/>
+        </actions>
+    </service>
+
+    <service verb="activate" noun="Caf">
+        <description>
+            Activa CAF para ser usado
+        </description>
+        <in-parameters>
+            <parameter name="cafId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.Caf" value-field="cafField" for-update="true"/>
+
+            <if condition="!cafField">
+                <return error="true" message="No existe CAF"/>
+            </if>
+
+            <set field="cafField.activo" value="true"/>
+            <entity-update value-field="cafField"/>
+        </actions>
+    </service>
+
+    <service verb="deactivate" noun="Caf">
+        <description>
+            Desactiva CAF para no ser usado
+        </description>
+        <in-parameters>
+            <parameter name="cafId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.Caf" value-field="cafField" for-update="true"/>
+
+            <if condition="!cafField">
+                <return error="true" message="No existe CAF"/>
+            </if>
+
+            <set field="cafField.activo" value=""/>
+            <entity-update value-field="cafField"/>
+        </actions>
+    </service>
+
+    <service verb="block" noun="Folio">
+        <in-parameters>
+            <parameter name="issuerPartyId" required="true"/>
+            <parameter name="issuerPartyIdValue" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" type="Integer" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" for-update="true">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="fiscalTaxDocumentNumber"/>
+                <econdition field-name="issuerPartyId"/>
+                <econdition field-name="issuerPartyIdValue"/>
+                <econdition field-name="statusId" value="Ftd-NotIssued"/>
+            </entity-find>
+            <iterate list="ftdList" entry="ftd">
+                <service-call name="update#mchile.dte.FiscalTaxDocument" in-map="[fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, statusId:'Ftd-Blocked']"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="unblock" noun="Folio">
+        <in-parameters>
+            <parameter name="issuerPartyId" required="true"/>
+            <parameter name="issuerPartyIdValue" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="fiscalTaxDocumentNumber" type="Integer" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" for-update="true">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="fiscalTaxDocumentNumber"/>
+                <econdition field-name="issuerPartyId"/>
+                <econdition field-name="issuerPartyIdValue"/>
+                <econdition field-name="statusId" value="Ftd-Blocked"/>
+            </entity-find>
+            <iterate list="ftdList" entry="ftd">
+                <service-call name="update#mchile.dte.FiscalTaxDocument" in-map="[fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, statusId:'Ftd-NotIssued']"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="fetch" noun="NewCaf">
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="folioAmount" default-value="10" type="Integer"/>
+            <parameter name="activateCaf" type="Boolean" default="false"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mchile.sii.dte.DteInternalServices.check#ProductionEnvironment" out-map="context"/>
+            <if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41']"><then>
+                <set field="isProduction" from="boletaIsProductionByPartyId[partyId]"/>
+            </then><else>
+                <set field="isProduction" from="dteIsProductionByPartyId[partyId]"/>
+            </else></if>
+            <set field="hostName" from="isProduction ? 'palena.sii.cl' : 'maullin.sii.cl'"/>
+            <set field="requestPath" value="/cvc_cgi/dte/of_solicita_folios_dcto"/>
+            <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="[partyId:partyId]" out-map="context"/>
+            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="fiscalTaxDocumentType" auto-field-map="[enumId:fiscalTaxDocumentTypeEnumId]"/>
+            <if condition="fiscalTaxDocumentType == null"><message error="true">No se encuentra fiscalTaxDocumentType con Id ${fiscalTaxDocumentTypeEnumId}</message></if>
+            <set field="rutEmp" from="rutEmisor.substring(0,rutEmisor.length()-2)"/>
+            <set field="dvEmp" from="rutEmisor.substring(rutEmisor.length()-1, rutEmisor.length()).toUpperCase()"/>
+            <set field="codDocto" from="fiscalTaxDocumentType.enumCode"/>
+            <set field="ACEPTAR" value="Solicitar Numeración"/>
+            <script><![CDATA[
+                import org.moqui.util.RestClient
+                import cl.moit.net.ClientAuthRequestFactory
+                import org.eclipse.jetty.client.HttpClient
+
+                ClientAuthRequestFactory requestFactory = new ClientAuthRequestFactory(certData, passCert)
+
+                RestClient restClient = new RestClient().uri("https://${hostName}/cvc_cgi/dte/of_solicita_folios").method("GET").acceptContentType("text/html")
+                        .contentType("application/x-www-form-urlencoded").withRequestFactory(requestFactory).encoding("iso-8859-1")
+                Object cookieStore = requestFactory.getHttpClient().cookieStore
+                response = restClient.call() // Primer llamado lleva a selección de Continuar o representar.
+                // Servidor del SII no especifica encoding pero sabemos que es iso-8859-1 y el default de RestClient es UTF-8
+                responseText = new String(response.bytes(), "iso-8859-1")
+                if (responseText =~ /Debido a que usted ha sido autorizado por otros contribuyentes\s+para que los represente electrónicamente en el sitio web del SII, esta página le permitirá decidir\s+si en esta oportunidad desea realizar trámites propios o representar electrónicamente a otro\s+contribuyente/) {
+                    response = restClient.call() // Segundo llamado lleva a formulario
+                    responseText = new String(response.bytes(), "iso-8859-1")
+                }
+                if (! responseText =~ /Para continuar debe digitar el Rut del Contribuyente que solicita timbrar\s+documentos electrónicos:/) {
+                    ec.message.addError("Se esperaba recibir texto solicitando Rut del Contribuyente para solicitar timrar documentos electrónicos")
+                    ec.logger.error("Texto recibido: ${responseText}")
+                }
+                restClient.method("POST").text("RUT_EMP=${rutEmp}&DV_EMP=${dvEmp}&ACEPTAR=Continuar").uri("https://${hostName}/cvc_cgi/dte/of_solicita_folios_dcto")
+                response = restClient.call()
+                responseText = new String(response.bytes(), "iso-8859-1")
+                paso1 = responseText
+
+                // FOLIO_INICIAL
+                // FACTOR: si es < 1 y > 0, tiene situaciones pendientes.
+                // AFECTO_IVA: si el contribuyente tiene giros afectos
+                // MAX_AUTOR: cantidad máxima de folios a solicitar
+                // CANT_TIMBRAJES: cantidad de CAF activos, si es > 6 no autoriza a solicitar más
+                // CON_AJUSTE: "ajuste asignado", no se puede pedir más que esa cantidad
+                fieldValues = [:]
+                ['FOLIO_INICIAL', 'AFECTO_IVA', 'CON_CREDITO', 'CON_AJUSTE', 'FACTOR', 'MAX_AUTOR', 'CANT_TIMBRAJES', 'FOLIOS_DISP', 'ULT_TIMBRAJE'].each { fieldName ->
+                    matcher = responseText =~ /(?i)<input\s+name="${fieldName}"[^>]*?type="?hidden"?[^>]*?value="([^"]*)"/
+                    fields = matcher.findAll()
+                    if (fields) {
+                        value = fields[0][1]
+                        fieldValues[fieldName] = value
+                    }
+                }
+                if (fieldValues.MAX_AUTOR != null && (fieldValues.MAX_AUTOR as Integer) < folioAmount) {
+                    ec.message.addMessage("Solicitados ${folioAmount} folios, pero SII permite un máximo de ${fieldValues.MAX_AUTOR}")
+                    folioAmount = fieldValues.MAX_AUTOR
+                }
+                if (fieldValues.CANT_TIMBRAJES > 6) {
+                    ec.message.addMessage("Se tienen documentos disponibles no utilizados")
+                }
+                fieldValues.COD_DOCTO = codDocto
+                fieldValues.RUT_EMP = rutEmp
+                fieldValues.DV_EMP = dvEmp
+                fieldValues.CANT_DOCTOS = ""
+                params = fieldValues.collect { key, value -> "${key}=${value}"}.join("&")
+                ec.logger.info("params: ${params}")
+
+                response = restClient.text(params).call()
+                responseText = new String(response.bytes(), "iso-8859-1")
+                paso2 = responseText
+
+                fieldValues = [:]
+                ['FOLIO_INICIAL', 'AFECTO_IVA', 'CON_CREDITO', 'CON_AJUSTE', 'FACTOR', 'MAX_AUTOR', 'CANT_TIMBRAJES', 'FOLIOS_DISP', 'ULT_TIMBRAJE', 'CON_HISTORIA', 'FOLIO_INICRE', 'FOLIO_FINCRE', 'FECHA_ANT', 'ESTADO_TIMBRAJE', 'CONTROL', 'CANT_TIMBRAJES'].each { fieldName ->
+                    matcher = responseText =~ /(?i)<input\s+name="${fieldName}"[^>]*?value\s*=\s*"([^"]*)"/
+                    fields = matcher.findAll()
+                    if (fields) {
+                        value = fields[0][1]
+                        fieldValues[fieldName] = value
+
+                    }
+                }
+                /*
+                if (fieldValues.MAX_AUTOR == null || (Integer.parseInt(fieldValues.MAX_AUTOR) < 1)) {
+                    ec.message.addError("Número máximo de folios autorizados es ${fieldValues.MAX_AUTOR}")
+                }
+                 */
+
+                if (fieldValues.MAX_AUTOR != null && (fieldValues.MAX_AUTOR as Integer) < folioAmount) {
+                    ec.message.addMessage("Solicitados ${folioAmount} folios, pero SII permite un máximo de ${fieldValues.MAX_AUTOR}, ajustando cantidad")
+                    folioAmount = fieldValues.MAX_AUTOR
+                }
+                if (fieldValues.CANT_TIMBRAJES && fieldValues.CANT_TIMBRAJES > 6) {
+                    ec.message.addMessage("Se tienen documentos disponibles no utilizados")
+                }
+                fieldValues.COD_DOCTO = codDocto
+                fieldValues.RUT_EMP = rutEmp
+                fieldValues.DV_EMP = dvEmp
+                fieldValues.DV_EMP = dvEmp
+                fieldValues.CANT_DOCTOS = folioAmount
+                fieldValues.ACEPTAR = "Solicitar+Numeraci%F3n"
+                params = fieldValues.collect { key, value -> "${key}=${value}"}.join("&")
+
+                ec.logger.info("params3: ${params}")
+
+                restClient.text(params).uri("https://${hostName}/cvc_cgi/dte/of_confirma_folio")
+                response = restClient.call()
+                responseText = new String(response.bytes(), "iso-8859-1")
+                paso3 = responseText
+
+                fieldValues = [:]
+                fieldKeys = ['NOMUSU', 'CON_CREDITO', 'CON_AJUSTE', 'FOLIOS_DISP', 'MAX_AUTOR', 'ULT_TIMBRAJE', 'CON_HISTORIA', 'CANT_TIMBRAJES', 'CON_AJUSTE', 'FOLIO_INICRE', 'FOLIO_FINCRE',
+                             'FECHA_ANT', 'ESTADO_TIMBRAJE', 'CONTROL', 'FOLIO_INI', 'FOLIO_FIN', 'DIA', 'MES', 'ANO', 'HORA', 'MINUTO', 'RUT_EMP', 'DV_EMP', 'COD_DOCTO', 'CANT_DOCTOS']
+                fieldKeys.each { fieldName ->
+                    matcher = responseText =~ /(?i)<input\s+name="${fieldName}"[^>]*?value\s*=\s*"([^"]*)"/
+                    fields = matcher.findAll()
+                    if (fields) {
+                        String value = fields[0][1]
+                        fieldValues[fieldName] = value.replaceAll(" ", "+")
+                    }
+                }
+                if (fieldValues.FOLIO_INI == null || fieldValues.FOLIO_FIN == null) {
+                    ec.message.addError("No se recibió datos de confirmación")
+                    ec.logger.info("received paso 2: ${paso2}")
+                    ec.logger.info("received paso 3: ${paso3}")
+                    return
+                }
+                fieldValues.ACEPTAR = "Obtener+Folios"
+                params = fieldValues.collect { key, value -> "${key}=${value}"}.join("&")
+                ec.logger.info("params4: ${params}")
+                restClient.text(params).uri("https://${hostName}/cvc_cgi/dte/of_genera_folio")
+                response = restClient.call()
+                responseText = new String(response.bytes(), "iso-8859-1")
+                paso4 = responseText
+
+                if (! responseText.contains("Para bajar a su PC el archivo con la numeraci&oacute;n autorizada, haga click")) {
+                    ec.message.addError("No se recibió solicitud de timbraje electrónico")
+                    ec.logger.info("Recibido paso 2: ${paso2}")
+                    ec.logger.info("Recibido paso 3: ${paso3}")
+                    ec.logger.info("Recibido paso 4: ${paso4}")
+                    return
+                }
+                fieldValues = [:]
+                ['FOLIO_INI', 'FOLIO_FIN', 'FECHA', 'RUT_EMP', 'DV_EMP', 'COD_DOCTO'].each { fieldName ->
+                    matcher = responseText =~ /(?i)<input\s+name="${fieldName}"[^>]*?value\s*=\s*"([^"]*)"/
+                    fields = matcher.findAll()
+                    if (fields) {
+                        value = fields[0][1]
+                        fieldValues[fieldName] = value
+                    }
+                }
+                fieldValues.ACEPTAR = 'AQUI'
+                params = fieldValues.collect { key, value -> "${key}=${value}"}.join("&")
+                ec.logger.info("params4: ${params}")
+                restClient.text(params).uri("https://${hostName}/cvc_cgi/dte/of_genera_archivo")
+                response = restClient.call()
+                caf = new String(response.bytes(), "iso-8859-1")
+
+                if (!caf.startsWith('<?xml version="1.0"?>\n<AUTORIZACION>\n<CAF')) {
+                    ec.message.addError("Did not get CAF as expected, responseCode ${response?.statusCode}, text: ${caf}")
+                    return
+                }
+                contentDisposition = response.headers().get("Content-Disposition")[0]
+                matcher = contentDisposition =~ /filename=([^;]+)/
+                if (matcher) {
+                    fileName = matcher[0][1]
+                } else {
+                    ec.message.addError("Could not determine fileName from contentType: ${contentType}")
+                }
+                contentLocation = "dbresource://moit/erp/dte/caf/${partyId}/${fileName}"
+                docRr = ec.resource.getLocationReference(contentLocation)
+                docRr.putBytes(response.bytes())
+                ]]></script>
+
+            <service-call name="mchile.sii.dte.DteFolioServices.load#CafInternal" in-map="[partyId:partyId, contentLocation:contentLocation, activateCaf:activateCaf]" out-map="context"/>
+        </actions>
+    </service>
+
+</services>

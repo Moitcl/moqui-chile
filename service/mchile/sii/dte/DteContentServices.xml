@@ -49,4 +49,181 @@ along with this software (see the LICENSE.md file). If not, see
             </else-if></if>
         </actions>
     </service>
+
+    <service verb="get" noun="DteContent">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="fiscalTaxDocumentContentTypeEnumId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="content"/>
+            <parameter name="contentRef"/>
+        </out-parameters>
+        <actions>
+            <set field="content" from="null"/>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="contentField"/>
+            <if condition="contentField">
+                <set field="content" from="contentField.contentLocation"/>
+                <script>
+                    docRr = ec.resource.getLocationReference(contentField.contentLocation)
+                </script>
+                <set field="contentRef" from="docRr"/>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="regenerate" noun="Pdf">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <econdition field-name="statusId" value="Ftd-Issued"/>
+            </entity-find>
+            <set field="dte" from="dteList.first"/>
+            <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument ${fiscalTaxDocumentId}"/></if>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="xmlList">
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
+            </entity-find>
+            <set field="xmlLocation" from="xmlList.first.contentLocation"/>
+            <if condition="!xmlLocation"><return error="true" message="No XML Found, cannot generate PDF"/></if>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="xmlList">
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Pdf"/>
+            </entity-find>
+            <if condition="xmlList"><then>
+                <set field="contentLocation" from="xmlList.first.contentLocation"/>
+            </then><else>
+                <service-call name="mchile.sii.dte.DteInternalServices.get#SiiCode" in-map="[fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId]" out-map="siiCodeMap"/>
+                <set field="tipoDte" from="siiCodeMap.siiCode"/>
+                <set field="contentLocation" value="dbresource://moit/erp/dte/${dte.issuerPartyIdValue}/DTE-${tipoDte}-${dte.fiscalTaxDocumentNumber}.pdf"/>
+                <service-call name="create#mchile.dte.FiscalTaxDocumentContent" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocation]"/>
+            </else></if>
+            <service-call name="mchile.sii.dte.DteContentServices.generate#Pdf" in-map="[xmlLocation:xmlLocation, issuerPartyId:dte.issuerPartyId]" out-map="context"/>
+            <script>ec.resource.getLocationReference(contentLocation).putBytes(pdfBytes)</script>
+        </actions>
+    </service>
+
+    <service verb="generate" noun="Pdf">
+        <description>
+            Genera archivo PDF de Factura/Boleta (envio).
+        </description>
+        <in-parameters>
+            <parameter name="xmlLocation" required="true"/>
+            <parameter name="issuerPartyId" required="true"/>
+            <parameter name="boleta"/>
+            <parameter name="continua"/>
+            <parameter name="invoiceMessage"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="pdfBytes" type="byte[]"/>
+            <parameter name="pdfCedibleBytes" type="byte[]"/>
+        </out-parameters>
+        <actions>
+            <!-- Recuperacion de parametros de la organizacion -->
+            <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="[partyId:issuerPartyId]" out-map="context"/>
+            <set field="template" from="pdfTemplate"/>
+            <set field="giro" from="giroEmisor"/>
+            <set field="pdfTemplateBoleta" from="pdfTemplateBoleta"/>
+            <set field="pdfTemplateBoleta" from="pdfTemplate"/>
+            <set field="pdfTemplateBoletaContinua" from="pdfTemplateBoletaContinua"/>
+
+            <if condition="boleta">
+                <set field="template" from="pdfTemplateBoleta"/>
+                <if condition="continua">
+                    <set field="template" from="pdfTemplateBoletaContinua"/>
+                </if>
+            </if>
+
+            <if condition="!template">
+                <return error="true" message="Organización emisora no tiene definida plantilla para generar PDF"/>
+            </if>
+
+            <script>
+                import javax.xml.transform.stream.StreamSource
+
+                if (invoiceMessage != null) {
+                    if (commentAfterDetalle == null) {
+                        commentAfterDetalle = invoiceMessage
+                        transformParameters.commentAfterDetalle = invoiceMessage
+                    } else {
+                        commentAfterDetalle = "${commentAfterDetalle}\n${invoiceMessage}"
+                        transformParameters.commentAfterDetalle = commentAfterDetalle
+                    }
+                }
+
+                ByteArrayOutputStream pdf = new ByteArrayOutputStream()
+
+                pages = ec.resource.xslFoTransform(new StreamSource(ec.resource.getLocationReference(xmlLocation).openStream()), new StreamSource(new ByteArrayInputStream(template.getBytes("UTF-8"))), pdf, "application/pdf", transformParameters + [cedible:'false'])
+                pdf.close()
+                if (pages == null || pages == 0) ec.message.addError("Error generando PDF: páginas generadas: ${pages}")
+                pdfBytes = pdf.toByteArray()
+            </script>
+            <if condition="!boleta">
+                <script>
+                    pdf = new ByteArrayOutputStream()
+                    pages = ec.resource.xslFoTransform(new StreamSource(ec.resource.getLocationReference(xmlLocation).openStream()), new StreamSource(new ByteArrayInputStream(template.getBytes("UTF-8"))), pdf, "application/pdf", transformParameters + [cedible:'true'])
+                    pdf.close()
+                    if (pages == null || pages == 0) ec.message.addError("Error generando PDF: páginas generadas: ${pages}")
+                    pdfCedibleBytes = pdf.toByteArray()
+                </script>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="download" noun="Document">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="fiscalTaxDocumentContentTypeEnumId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="document" cache="false">
+                <field-map field-name="fiscalTaxDocumentId"/>
+                <field-map field-name="fiscalTaxDocumentContentTypeEnumId"/>
+            </entity-find-one>
+            <script>
+                docRr = ec.resource.getLocationReference(document.contentLocation)
+                if (docRr?.exists)
+                    ec.web.sendResourceResponse(document.contentLocation)
+                else
+                    ec.message.addError(ec.resource.expand('No se encontró archivo en [${fiscalTaxDocumentId}]',''))
+            </script>
+        </actions>
+    </service>
+
+    <service verb="load" noun="PdfTemplate">
+        <description>Carga Plantilla para generar PDF</description>
+        <in-parameters>
+            <parameter name="templateFile" type="org.apache.commons.fileupload.FileItem"/>
+            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="encoding" required="true"/>
+            <parameter name="type" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams" for-update="true">
+                <field-map field-name="partyId" from="organizationPartyId"/>
+            </entity-find-one>
+
+
+            <if condition="type == 'DTE'">
+                <set field="dteParams.pdfTemplate" from="templateFile.getString(encoding)"/>
+            </if>
+
+            <if condition="type == 'Boleta'">
+                <set field="dteParams.pdfTemplateBoleta" from="templateFile.getString(encoding)"/>
+            </if>
+
+            <if condition="type == 'BoletaContinua'">
+                <set field="dteParams.pdfTemplateBoletaContinua" from="templateFile.getString(encoding)"/>
+            </if>
+
+            <set field="logFile" from="templateFile.getName()"/>
+            <log level="info" message="Subiendo plantilla PDF $type:$type:  $logFile"/>
+
+            <entity-update value-field="dteParams"/>
+        </actions>
+    </service>
+
 </services>

@@ -113,7 +113,7 @@ rejectionCount = 0
 discrepancyCount = 0
 allDuplicated = (dteNodeList.length > 0)
 dteNodeList.each { org.w3c.dom.Node domNode ->
-    recepcion = ec.service.sync().name("mchile.sii.DTEServices.load#DteFromDom").parameters(context+[domNode:domNode]).call()
+    recepcion = ec.service.sync().name("mchile.sii.dte.DteImportServices.load#DteFromDom").parameters(context+[domNode:domNode]).call()
     if (!recepcion.isDuplicated)
         allDuplicated = false
     recepcionList.add(recepcion)
@@ -174,7 +174,7 @@ acuseRecibo.RespuestaDTE('xmlns': 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http
     }
 }
 
-ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:receiverPartyId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInternalServices.load#DteConfig").parameters([partyId:receiverPartyId]).call())
 xml = writer.toString()
 Document doc2 = MoquiDTEUtils.parseDocument(xml.getBytes())
 byte[] salida = MoquiDTEUtils.sign(doc2, "#" + idAcuseRecibo, pkey, certificate, "#" + idAcuseRecibo,"Resultado")

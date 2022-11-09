@@ -8,7 +8,7 @@ import org.eclipse.jetty.http.HttpField
 
 ExecutionContext ec = context.ec
 
-ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:partyId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInternalServices.load#DteConfig").parameters([partyId:partyId]).call())
 
 if (tokenBoleta != null && tokenBoletaLastUsage != null && (ec.user.nowTimestamp.time - tokenBoletaLastUsage.time) < 50*60*1000) {
     token = tokenBoleta
@@ -21,7 +21,7 @@ String now = "-"+System.nanoTime()
 String returnedToken = "0"
 
 //String semilla = getSemilla()
-semilla = ec.service.sync().name("mchile.sii.DTECommServices.get#SeedBoleta").parameters([boletaIsProduction:boletaIsProduction]).call().semilla
+semilla = ec.service.sync().name("mchile.sii.dte.DteCommServices.get#SeedBoleta").parameters([boletaIsProduction:boletaIsProduction]).call().semilla
 
 StringWriter xmlWriter = new StringWriter()
 MarkupBuilder xmlBuilder = new MarkupBuilder(xmlWriter)

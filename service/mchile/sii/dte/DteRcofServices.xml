@@ -1,0 +1,345 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+
+    <service verb="generate" noun="Rcof" type="script" location="component://MoquiChile/service/mchile/sii/dte/gropovy/generaRCOF.groovy">
+        <description>Generación de Registro de Consumo de Folios</description>
+        <in-parameters>
+            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="fechaInicio"/>
+            <parameter name="fechaFin"/>
+            <parameter name="saveSinFirma" type="Boolean" default="false"/>
+        </in-parameters>
+    </service>
+
+    <service verb="generate" noun="DailyRcof">
+        <description>Generación de Registro de Consumo de Folios</description>
+        <in-parameters>
+            <parameter name="organizationPartyId" required="true"/>
+        </in-parameters>
+        <actions>
+            <set field="fecha" from="ec.l10n.format(ec.user.nowTimestamp, 'YYYY-MM-dd')"/>
+            <service-call name="mchile.sii.dte.DteRcofServices.generate#Rcof" out-map="context" in-map="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fechaInicio:fecha, fechaFin:fecha,organizationPartyId:organizationPartyId]"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="ResumenRcof">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="fechaInicio" required="true" type="Timestamp"/>
+            <parameter name="fechaFin" required="true" type="Timestamp"/>
+            <parameter name="organizationPartyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="totalMontoNeto" type="BigDecimal"/>
+            <parameter name="totalMontoIva" type="BigDecimal"/><!-- Se toma monto IVA Recuperable -->
+            <parameter name="tasaIva"/>
+            <parameter name="totalMontoExento"/>
+            <parameter name="totalMontoTotal"/>
+            <parameter name="cantDocEmitidos"/>
+            <parameter name="cantFoliosAnulados"/>
+            <parameter name="cantDocUtilizados"/>
+            <parameter name="rangosFoliosUtilizados" type="List"/>
+            <parameter name="rangosFoliosAnulados" type="List"/>
+        </out-parameters>
+        <actions>
+            <set field="totalMontoNeto" from="0"/>
+            <set field="totalMontoIva" from="0"/>
+            <set field="totalMontoExento" from="0"/>
+            <set field="totalMontoTotal" from="0"/>
+            <set field="cantDocEmitidos" from="0"/>
+            <set field="cantFoliosAnulados" from="0"/>
+            <set field="cantDocUtilizados" from="0"/>
+            <set field="tasaIva" from="19"/>
+            <set field="rangosFoliosUtilizados" type="List"/>
+            <set field="rangosFoliosAnulados" type="List"/>
+            <script>
+                Calendar cal = Calendar.instance
+                cal.setTimeInMillis(fechaFin.time)
+                // add x hours
+                cal.add(Calendar.HOUR, 24)
+                fechaFin = new Timestamp(cal.timeInMillis)
+            </script>
+
+            <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="statusId" operator="in" value="Ftd-Issued,Ftd-Cancelled"/>
+                <econdition field-name="issuerPartyId" from="organizationPartyId"/>
+                <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
+                <econdition field-name="date" operator="less" from="fechaFin"/>
+                <order-by field-name="fiscalTaxDocumentId"/>
+            </entity-find>
+
+
+            <iterate list="dteList" entry="dteEv">
+                <!--log level="warn" message="Atributos encontrados: $dteEv.fiscalTaxDocumentId, Monto Neto: $dteEv.montoNeto, monto IVA: $dteEv.montoIVARecuperable, tipo: $dteEv.statusId"/-->
+                <if condition="!dteEv.statusId.equals('Ftd-Cancelled')">
+                    <then>
+                        <script>
+                            if (dteEv.montoNeto != null) {
+                                long montoNeto = (long) dteEv.montoNeto
+                                totalMontoNeto = totalMontoNeto + montoNeto
+                            }
+                            if (dteEv.montoIVARecuperable != null) {
+                                long montoIva = (long) dteEv.montoIVARecuperable
+                                totalMontoIva = totalMontoIva + montoIva
+                            }
+                            if (dteEv.montoExento != null) {
+                                long montoExento = (long) dteEv.montoExento
+                                totalMontoExento = totalMontoExento + montoExento
+                            }
+                            cantDocEmitidos = cantDocEmitidos + 1
+                        </script>
+                    </then>
+                    <else><!-- Documento cancelado -->
+                        <!--log message="DTE Cancelada" level="warn"/-->
+                        <script>
+                            cantFoliosAnulados = cantFoliosAnulados + 1
+                        </script>
+                    </else>
+                </if>
+            </iterate>
+            <set field="cantDocUtilizados" from="cantFoliosAnulados + cantDocEmitidos"/>
+            <set field="totalMontoTotal" from="totalMontoNeto + totalMontoExento + totalMontoIva"/>
+
+            <!-- TODO: Consulta para ver todos los folios usados -->
+            <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="statusId" value="Ftd-Issued"/>
+                <econdition field-name="issuerPartyId" from="organizationPartyId"/>
+                <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
+                <econdition field-name="date" operator="less-equals" from="fechaFin"/>
+                <order-by field-name="fiscalTaxDocumentId"/>
+            </entity-find>
+            <script>
+                List&lt;Integer&gt; list
+                List&lt;List&lt;Integer&gt;&gt; lList = new ArrayList&lt;List&lt;Integer&gt;&gt;()
+                int i = 0
+                int start = 0
+                List&lt;Integer&gt; sList = new ArrayList&lt;Integer&gt;(2)
+                int listSize = 0
+
+                for (i = 1; i &lt; dteList.size(); i++) {
+                    if (dteList.get(i-1).fiscalTaxDocumentNumber + 1 != dteList.get(i).fiscalTaxDocumentNumber) {
+                        sList.add(dteList.get(start).fiscalTaxDocumentNumber)
+                        sList.add(dteList.get(i-1).fiscalTaxDocumentNumber)
+                        lList.add(sList)
+                        sList = new ArrayList&lt;Integer&gt;(2)
+                        start = i
+                    }
+                }
+                if (dteList.size() &gt; 0) {
+                    sList.add(dteList.get(start).fiscalTaxDocumentNumber)
+                    sList.add(dteList.get(dteList.size()-1).fiscalTaxDocumentNumber)
+                    lList.add(sList)
+                }
+                logger.warn("Lista de rangos emitidos: " + lList)
+
+            </script>
+
+            <!-- TODO: Consulta para ver todos los folios anulados -->
+            <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="statusId" value="Ftd-Cancelled"/>
+                <econdition field-name="issuerPartyId" from="organizationPartyId"/>
+                <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
+                <econdition field-name="date" operator="less-equals" from="fechaFin"/>
+                <order-by field-name="fiscalTaxDocumentId"/>
+            </entity-find>
+
+
+            <script>
+                List&lt;Integer&gt; listc
+                List&lt;List&lt;Integer&gt;&gt; lListc = new ArrayList&lt;List&lt;Integer&gt;&gt;()
+                i = 0
+                start = 0
+                List&lt;Integer&gt; sListc = new ArrayList&lt;Integer&gt;(2)
+                for (i = 1; i &lt; dteList.size(); i++) {
+                    if (dteList.get(i-1).fiscalTaxDocumentNumber + 1 != dteList.get(i).fiscalTaxDocumentNumber) {
+                        sListc.add(dteList.get(start).fiscalTaxDocumentNumber)
+                        sListc.add(dteList.get(i-1).fiscalTaxDocumentNumber)
+                        lListc.add(sList)
+                        sListc = new ArrayList&lt;Integer&gt;(2)
+                        start = i
+                    }
+                }
+                if (dteList.size() &gt; 0) {
+                    sListc.add(dteList.get(start).fiscalTaxDocumentNumber)
+                    sListc.add(dteList.get(dteList.size()-1).fiscalTaxDocumentNumber)
+                    lListc.add(sListc)
+                }
+                logger.warn("Lista de rangos anulados: " + lListc)
+            </script>
+            <set field="rangosFoliosUtilizados" from="lList"/>
+            <set field="rangosFoliosAnulados" from="lListc"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="ResumenRcofNC">
+        <description>
+            Servicio que devuelve resumen de NC emitidas que refieren a boletas (39, 41)
+        </description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="fechaInicio" required="true" type="Timestamp"/>
+            <parameter name="fechaFin" required="true" type="Timestamp"/>
+            <parameter name="organizationPartyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="totalMontoNeto" type="BigDecimal"/>
+            <parameter name="totalMontoIva" type="BigDecimal"/><!-- Se toma monto IVA Recuperable -->
+            <parameter name="tasaIva"/>
+            <parameter name="totalMontoExento"/>
+            <parameter name="totalMontoTotal"/>
+            <parameter name="cantDocEmitidos"/>
+            <parameter name="cantFoliosAnulados"/>
+            <parameter name="cantDocUtilizados"/>
+            <parameter name="rangosFoliosUtilizados" type="List"/>
+            <parameter name="rangosFoliosAnulados" type="List"/>
+        </out-parameters>
+        <actions>
+            <set field="totalMontoNeto" from="0"/>
+            <set field="totalMontoIva" from="0"/>
+            <set field="totalMontoExento" from="0"/>
+            <set field="totalMontoTotal" from="0"/>
+            <set field="cantDocEmitidos" from="0"/>
+            <set field="cantFoliosAnulados" from="0"/>
+            <set field="cantDocUtilizados" from="0"/>
+            <set field="tasaIva" from="19"/>
+            <set field="rangosFoliosUtilizados" type="List"/>
+            <set field="rangosFoliosAnulados" type="List"/>
+            <script>
+                Calendar cal = Calendar.getInstance()
+                cal.setTimeInMillis(fechaFin.getTime())
+                // add x hours
+                cal.add(Calendar.HOUR, 24)
+                fechaFin = new Timestamp(cal.getTime().getTime())
+            </script>
+
+            <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="statusId" operator="in" value="Ftd-Issued,Ftd-Cancelled"/>
+                <econdition field-name="issuerPartyId" from="organizationPartyId"/>
+                <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
+                <econdition field-name="date" operator="less-equals" from="fechaFin"/>
+                <order-by field-name="fiscalTaxDocumentId"/>
+            </entity-find>
+
+
+            <iterate list="dteList" entry="dteEv">
+                <!--log level="warn" message="Atributos encontrados: $dteEv.fiscalTaxDocumentId, Monto Neto: $dteEv.montoNeto, monto IVA: $dteEv.montoIVARecuperable, tipo: $dteEv.statusId"/-->
+                <if condition="!dteEv.statusId.equals('Ftd-Cancelled')">
+                    <then>
+                        <script>
+                            if (dteEv.montoNeto != null) {
+                                long montoNeto = (long) dteEv.montoNeto
+                                totalMontoNeto = totalMontoNeto + montoNeto
+                            }
+                            if (dteEv.montoIVARecuperable != null) {
+                                long montoIva = (long) dteEv.montoIVARecuperable
+                                totalMontoIva = totalMontoIva + montoIva
+                            }
+                            if (dteEv.montoExento != null) {
+                                long montoExento = (long) dteEv.montoExento
+                                totalMontoExento = totalMontoExento + montoExento
+                            }
+                            cantDocEmitidos = cantDocEmitidos + 1
+                        </script>
+                    </then>
+                    <else><!-- Documento cancelado -->
+                        <!--log message="DTE Cancelada" level="warn"/-->
+                        <script>
+                            cantFoliosAnulados = cantFoliosAnulados + 1
+                        </script>
+                    </else>
+                </if>
+            </iterate>
+            <set field="cantDocUtilizados" from="cantFoliosAnulados + cantDocEmitidos"/>
+            <set field="totalMontoTotal" from="totalMontoNeto + totalMontoExento + totalMontoIva"/>
+            <!--return error="true" message="NC: $cantDocUtilizados - $totalMontoTotal"/-->
+
+            <!-- TODO: Consulta para ver todos los folios usados -->
+            <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="statusId" value="Ftd-Issued"/>
+                <econdition field-name="issuerPartyId" from="organizationPartyId"/>
+                <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
+                <econdition field-name="date" operator="less-equals" from="fechaFin"/>
+                <order-by field-name="fiscalTaxDocumentId"/>
+            </entity-find>
+            <script>
+                List&lt;Integer&gt; list
+                List&lt;List&lt;Integer&gt;&gt; lList = new ArrayList&lt;List&lt;Integer&gt;&gt;()
+                int i = 0
+                int start = 0
+                List&lt;Integer&gt; sList = new ArrayList&lt;Integer&gt;(2)
+                int listSize = 0
+
+                for (i = 1; i &lt; dteList.size(); i++) {
+                    if (dteList.get(i-1).fiscalTaxDocumentNumber + 1 != dteList.get(i).fiscalTaxDocumentNumber) {
+                        sList.add(dteList.get(start).fiscalTaxDocumentNumber)
+                        sList.add(dteList.get(i-1).fiscalTaxDocumentNumber)
+                        lList.add(sList)
+                        sList = new ArrayList&lt;Integer&gt;(2)
+                        start = i
+                    }
+                }
+                if (dteList.size() &gt; 0) {
+                    sList.add(dteList.get(start).fiscalTaxDocumentNumber)
+                    sList.add(dteList.get(dteList.size()-1).fiscalTaxDocumentNumber)
+                    lList.add(sList)
+                }
+                logger.warn("Lista de rangos emitidos: " + lList)
+
+            </script>
+
+            <!-- TODO: Consulta para ver todos los folios anulados -->
+            <entity-find entity-name="mchile.dte.FtdtAttributesView" list="dteList">
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="statusId" value="Ftd-Cancelled"/>
+                <econdition field-name="issuerPartyId" from="organizationPartyId"/>
+                <econdition field-name="date" operator="greater-equals" from="fechaInicio"/>
+                <econdition field-name="date" operator="less-equals" from="fechaFin"/>
+                <order-by field-name="fiscalTaxDocumentId"/>
+            </entity-find>
+
+            <script>
+                List&lt;Integer&gt; listc
+                List&lt;List&lt;Integer&gt;&gt; lListc = new ArrayList&lt;List&lt;Integer&gt;&gt;()
+                i = 0
+                start = 0
+                List&lt;Integer&gt; sListc = new ArrayList&lt;Integer&gt;(2)
+                for (i = 1; i &lt; dteList.size(); i++) {
+                    if (dteList.get(i-1).fiscalTaxDocumentNumber + 1 != dteList.get(i).fiscalTaxDocumentNumber) {
+                        sListc.add(dteList.get(start).fiscalTaxDocumentNumber)
+                        sListc.add(dteList.get(i-1).fiscalTaxDocumentNumber)
+                        lListc.add(sList)
+                        sListc = new ArrayList&lt;Integer&gt;(2)
+                        start = i
+                    }
+                }
+                if (dteList.size() &gt; 0) {
+                    sListc.add(dteList.get(start).fiscalTaxDocumentNumber)
+                    sListc.add(dteList.get(dteList.size()-1).fiscalTaxDocumentNumber)
+                    lListc.add(sListc)
+                }
+                logger.warn("Lista de rangos anulados: " + lListc)
+            </script>
+            <set field="rangosFoliosUtilizados" from="lList"/>
+            <set field="rangosFoliosAnulados" from="lListc"/>
+        </actions>
+    </service>
+
+</services>

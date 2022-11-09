@@ -16,15 +16,15 @@ rutEmisor = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").par
 // ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rutReceptor]).call()
 
 // Recuperacion de parametros de la organizacion -->
-ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameter("partyId", organizationPartyId).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInternalServices.load#DteConfig").parameter("partyId", organizationPartyId).call())
 
 
 // Buscar lista de DTE 39 que se hayan emitido/anulado
-mapBoleta = ec.service.sync().name("mchile.sii.DTEServices.get#ResumenRcof").parameters([fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-39', organizationPartyId:organizationPartyId]).call()
+mapBoleta = ec.service.sync().name("mchile.sii.dte.DteRcofServices.get#ResumenRcof").parameters([fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-39', organizationPartyId:organizationPartyId]).call()
 // Buscar lista de DTE 41
-mapBoletaExenta = ec.service.sync().name("mchile.sii.DTEServices.get#ResumenRcof").parameters([fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-41', organizationPartyId:organizationPartyId]).call()
+mapBoletaExenta = ec.service.sync().name("mchile.sii.dte.DteRcofServices.get#ResumenRcof").parameters([fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-41', organizationPartyId:organizationPartyId]).call()
 // Buscar lista de DTE 61 que anulen boletas
-mapNotaCredito = ec.service.sync().name("mchile.sii.DTEServices.get#ResumenRcof").parameters([fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-61', organizationPartyId:organizationPartyId]).call()
+mapNotaCredito = ec.service.sync().name("mchile.sii.dte.DteRcofServices.get#ResumenRcof").parameters([fechaInicio:fechaInicio, fechaFin:fechaFin, fiscalTaxDocumentTypeEnumId:'Ftdt-61', organizationPartyId:organizationPartyId]).call()
 
 
 tmst = ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")

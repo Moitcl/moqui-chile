@@ -16,7 +16,7 @@ else {
 
 if (!(fiscalTaxDocumentTypeEnumId in ['Ftdt-33', 'Ftdt-34', 'Ftdt-43', 'Ftdt-46', 'Ftdt-52']))
     ec.message.addError("Aceptación no soportada para DTEs de tipo ${fiscalTaxDocumentTypeEnumId}")
-codeOut = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]).call()
+codeOut = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]).call()
 Integer tipoDoc = codeOut.siiCode
 
 if (dte.sentRecStatusId == 'Ftd-ReceiverAccept') {
@@ -44,7 +44,7 @@ if (!(invoice.statusId in ['InvoiceIncoming', 'InvoiceReceived']))
 ec.service.sync().name("update#mantle.account.invoice.Invoice").parameters([invoiceId:invoice.invoiceId, statusId:'InvoiceApproved']).call()
 
 // Recuperacion de parametros de la organizacion
-ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameter("partyId", dte.receiverPartyId).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInternalServices.load#DteConfig").parameter("partyId", dte.receiverPartyId).call())
 
 if (ec.message.hasError())
     return

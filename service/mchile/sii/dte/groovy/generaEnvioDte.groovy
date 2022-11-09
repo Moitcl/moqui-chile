@@ -8,7 +8,7 @@ import cl.moit.dte.MoquiDTEUtils
 ExecutionContext ec = context.ec
 
 // Recuperacion de parametros de la organizacion
-ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:organizationPartyId]).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInternalServices.load#DteConfig").parameters([partyId:organizationPartyId]).call())
 
 ResourceReference[] DTEList = new ResourceReference[documentIdList.size()]
 
@@ -26,7 +26,7 @@ dteEvList.each { dte ->
         ec.message.addError("No se pueden incluir documentos para diferentes receptores si envío es hacia el receptor (${receiverPartyId} y ${dte.receiverPartyId})")
     else if (receiverPartyId == null)
         receiverPartyId = dte.receiverPartyId
-    tipoDte = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameter("fiscalTaxDocumentTypeEnumId", dte.fiscalTaxDocumentTypeEnumId).call().siiCode
+    tipoDte = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameter("fiscalTaxDocumentTypeEnumId", dte.fiscalTaxDocumentTypeEnumId).call().siiCode
     contentLocation = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:"Ftdct-Xml"]).one()?.contentLocation
     if (contentLocation == null) {
         ec.message.addError("Did not find XML content for FiscalTaxDocument with id ${dte.fiscalTaxDocumentId}")

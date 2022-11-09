@@ -20,7 +20,7 @@ if (envio.rutReceptor != '60803000-K') {
 }
 partyIdEmisor = ec.entity.find("mantle.party.PartyIdentification").condition([partyIdTypeEnumId:'PtidNationalTaxId', idValue:rutEmisorEnvio]).list().first?.partyId
 // Validación rut -->
-ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameter("partyId", partyIdEmisor).call())
+ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInternalServices.load#DteConfig").parameter("partyId", partyIdEmisor).call())
 if (rutEmisorEnvio != rutEmisor) {
     ec.message.addError("Rut Emisor del envío (${rutEmisorEnvio}) no coincide con Rut de organización que envía (${rutEmisor})")
     return
@@ -34,7 +34,7 @@ if (dteIsProduction) {
 }
 
 // Get token
-String token = ec.service.sync().name("mchile.sii.DTECommServices.get#Token").parameter("dteIsProduction", dteIsProduction).parameter("partyId", partyIdEmisor).call().token
+String token = ec.service.sync().name("mchile.sii.dte.DteCommServices.get#Token").parameter("dteIsProduction", dteIsProduction).parameter("partyId", partyIdEmisor).call().token
 
 locationReference = ec.resource.getLocationReference(envio.documentLocation)
 
@@ -103,10 +103,10 @@ if (status == '0') {
         trackId = xmlDoc.'siid:TRACKID'.text()
     ec.logger.warn("DTE Enviada correctamente con trackId " + trackId)
     ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioId, trackId:trackId, statusId:'Ftde-Sent', attemptCount:attemptCount, lastAttempt:ec.user.nowTimestamp]).call()
-    ec.service.special().name("mchile.sii.DTECommServices.start#ValidaEnvioServiceJob").parameters([envioId: envioId, initialDelaySeconds:5, checkDelaySeconds:30, checkAttempts:4, minSecondsBetweenAttempts: 0]).registerOnCommit()
+    ec.service.special().name("mchile.sii.dte.DteCommServices.start#ValidaEnvioServiceJob").parameters([envioId: envioId, initialDelaySeconds:5, checkDelaySeconds:30, checkAttempts:4, minSecondsBetweenAttempts: 0]).registerOnCommit()
     envioFtdList = ec.entity.find("mchile.dte.DteEnvioFiscalTaxDocument").condition("envioId", envioId).list()
     if (envioFtdList)
-        ec.service.sync().name("mchile.sii.DTECommServices.marcarEnviados#Documentos").parameters([trackId:trackId, documentIdList:envioFtdList.fiscalTaxDocumentId]).call()
+        ec.service.sync().name("mchile.sii.dte.DteCommServices.marcarEnviados#Documentos").parameters([trackId:trackId, documentIdList:envioFtdList.fiscalTaxDocumentId]).call()
 } else {
     errorDescriptionMap = ['0':'Upload OK', '1':'El Sender no tiene permiso para enviar', '2':'Error en tamaño del archivo (muy grande o muy chico)', '3':'Archivo cortado (tamaño != al parámetro size)',
                            '5':'No está autenticado', '6':'Empresa no autorizada a enviar archivos', '7':'Esquema Inválido', '8':'Firma del Documento', '9':'Sistema Bloqueado', '0':'Error Interno']

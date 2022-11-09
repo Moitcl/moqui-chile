@@ -17,8 +17,8 @@ if (envio.rutReceptor != '60803000-K') {
     ec.message.addError("Envío ${envioId} tiene Rut de Receptor distinto al SII: ${envio.rutReceptor}, no se puede enviar")
     return
 }
-ec.context.putAll(ec.service.sync().name("mchile.sii.DTEServices.load#DTEConfig").parameters([partyId:envio.issuerPartyId]).call())
-tokenMap = ec.service.sync().name("mchile.sii.DTECommServices.get#TokenBoleta").parameters([boletaIsProduction:boletaIsProduction,  partyId:envio.issuerPartyId]).call()
+ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInternalServices.load#DteConfig").parameters([partyId:envio.issuerPartyId]).call())
+tokenMap = ec.service.sync().name("mchile.sii.dte.DteCommServices.get#TokenBoleta").parameters([boletaIsProduction:boletaIsProduction,  partyId:envio.issuerPartyId]).call()
 token = tokenMap.token
 urlSolicitud = boletaIsProduction? 'https://rahue.sii.cl/recursos/v1/boleta.electronica.envio' : 'https://pangal.sii.cl/recursos/v1/boleta.electronica.envio'
 locationReference = ec.resource.getLocationReference(envio.documentLocation)
@@ -87,10 +87,10 @@ if (estado == 'REC') {
     ec.logger.warn("DTE Enviada correctamente con trackId " + trackId)
     attemptCount
     ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioId, trackId:trackId, statusId:'Ftde-Sent', attemptCount:attemptCount, lastAttempt:ec.user.nowTimestamp]).call()
-    ec.service.special().name("mchile.sii.DTECommServices.start#ValidaEnvioServiceJob").parameters([envioId: envioId, initialDelaySeconds:5, checkDelaySeconds:30, checkAttempts:4, minSecondsBetweenAttempts: 0]).registerOnCommit()
+    ec.service.special().name("mchile.sii.dte.DteCommServices.start#ValidaEnvioServiceJob").parameters([envioId: envioId, initialDelaySeconds:5, checkDelaySeconds:30, checkAttempts:4, minSecondsBetweenAttempts: 0]).registerOnCommit()
     envioFtdList = ec.entity.find("mchile.dte.DteEnvioFiscalTaxDocument").condition("envioId", envioId).list()
     if (envioFtdList)
-        ec.service.sync().name("mchile.sii.DTECommServices.marcarEnviados#Documentos").parameters([trackId:trackId, documentIdList:envioFtdList.fiscalTaxDocumentId]).call()
+        ec.service.sync().name("mchile.sii.dte.DteCommServices.marcarEnviados#Documentos").parameters([trackId:trackId, documentIdList:envioFtdList.fiscalTaxDocumentId]).call()
 
 } else {
     ec.message.addMessage("Error "+ status + " al enviar DTE", "danger")

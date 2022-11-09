@@ -119,7 +119,7 @@ class NotaDeDebitoTests extends Specification {
       // Lista de items
       ArrayList items= [[returnItemSeqId:'01', returnQuantity:'1', returnPrice: 10000, description:'HORAS PROGRAMADOR']]
       // Creacion de Nota de Credito
-      Map factOut = ec.service.sync().name("mchile.sii.DTEServices.generar#NotaCredito")
+      Map factOut = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#NotaCredito")
               .parameters([returnId:returnId, invoiceId:invoiceId, issuerPartyId:partyId, fiscalTaxDocumentTypeEnumId:'Ftdt-61', items:items])
               .call()
       String fiscalTaxDocumentId = factOut.fiscalTaxDocumentId
@@ -130,7 +130,7 @@ class NotaDeDebitoTests extends Specification {
       itemsNd.add('01-4-3.351-HORAS PROGRAMADOR')
 
       // Se toma nota de crédito anterior para generar nota de débito
-      Map notadebOut = ec.service.sync().name("mchile.sii.DTEServices.generar#NotaDebito")
+      Map notadebOut = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#NotaDebito")
               .parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, invoiceId:invoiceId, issuerPartyId:partyId, fiscalTaxDocumentTypeEnumId:'Ftdt-56', items:itemsNd])
               .call()
       String fiscalTaxDocumentIdNotaDeb = notadebOut.fiscalTaxDocumentIdNotaDebito

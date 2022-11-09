@@ -45,7 +45,7 @@ if (requireIssuerInternalOrg && !issuerIsInternalOrg) {
     ec.message.addError("Sujeto emisor de documento ${i} (${ec.resource.expand('PartyNameTemplate', null, issuer)}, rut ${rutEmisor}) no es organización interna")
 }
 
-rsResult = ec.service.sync().name("mchile.sii.DTEServices.compare#RazonSocial").parameters([rs1:issuerTaxName, rs2:dteMap.razonSocialEmisor]).call()
+rsResult = ec.service.sync().name("mchile.sii.dte.DteInternalServices.compare#RazonSocial").parameters([rs1:issuerTaxName, rs2:dteMap.razonSocialEmisor]).call()
 if (!rsResult.equivalent) {
     discrepancyMessages.add("Razón Social mismatch, en BD '${issuerTaxName}', en documento '${dteMap.razonSocialEmisor}'")
 }
@@ -128,7 +128,7 @@ receiver = ec.entity.find("mantle.party.PartyDetail").condition("partyId", recei
 String razonSocialDb = receiver.taxOrganizationName
 if (razonSocialDb == null || razonSocialDb.size() == 0)
     razonSocialDb = ec.resource.expand("PartyNameOnlyTemplate", null, receiver)
-rsResult = ec.service.sync().name("mchile.sii.DTEServices.compare#RazonSocial").parameters([rs1:dteMap.razonSocialReceptor, rs2:razonSocialDb]).call()
+rsResult = ec.service.sync().name("mchile.sii.dte.DteInternalServices.compare#RazonSocial").parameters([rs1:dteMap.razonSocialReceptor, rs2:razonSocialDb]).call()
 if ((!rsResult.equivalent)) {
     ec.logger.warn("Razón social en XML no coincide con la registrada: $dteMap.razonSocialReceptor != $razonSocialDb")
 }

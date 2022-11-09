@@ -21,12 +21,12 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="ignoreLastAttempt" type="Boolean" default="false"/>
         </in-parameters>
         <actions>
-            <if condition="context.DTECommServices_processingPendingEnvioDte == 'yes'">
+            <if condition="context.DteCommServices_processingPendingEnvioDte == 'yes'">
                 <!-- was already triggered -->
                 <log message="Returning without running from process#PendingEnvioDte"/>
                 <return/>
             </if>
-            <set field="context.DTECommServices_processingPendingEnvioDte" value="yes"/>
+            <set field="context.DteCommServices_processingPendingEnvioDte" value="yes"/>
             <set field="maxAttemptThreshold" from="3"/>
             <set field="minutesBeforeRetry" from="120"/>
             <entity-find entity-name="mchile.dte.DteEnvio" list="envioList">
@@ -44,7 +44,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="responseCount" from="0"/>
             <iterate list="envioList" entry="envio">
                 <entity-find-one entity-name="moqui.basic.Enumeration" value-field="envEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
-                <service-call name="mchile.sii.DTECommServices.process#${envEv.enumCode}" in-map="[envioId:envio.envioId]" out-map="processOut" ignore-error="true" transaction="force-new" out-map-add-to-existing="false"/>
+                <service-call name="mchile.sii.dte.DteCommServices.process#${envEv.enumCode}" in-map="[envioId:envio.envioId]" out-map="processOut" ignore-error="true" transaction="force-new" out-map-add-to-existing="false"/>
                 <if condition="processOut.withResponse"><set field="responseCount" from="responseCount+1"/></if>
                 <set field="newAttemptCount" from="(envio.attemptCount?:0) + 1"/>
                 <if condition="processOut.processed"><then>
@@ -64,7 +64,7 @@ along with this software (see the LICENSE.md file). If not, see
                 </else></if>
             </iterate>
             <if condition="responseCount &gt; 0">
-                <script>ec.service.special().name("mchile.sii.DTECommServices.start#SendPendingEnvioDteJob").registerOnCommit()</script>
+                <script>ec.service.special().name("mchile.sii.dte.DteCommServices.start#SendPendingEnvioDteJob").registerOnCommit()</script>
             </if>
         </actions>
     </service>
@@ -82,8 +82,8 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
     </service>
 
-    <service verb="process" noun="EnvioDte" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/processEnvioDte.groovy">
-        <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
+    <service verb="process" noun="EnvioDte" type="script" location="component://MoquiChile/service/mchile/sii/dte/groovy/processEnvioDte.groovy">
+        <implements service="mchile.sii.dte.DteCommServices.process#EnvioInterface"/>
         <out-parameters>
             <parameter name="envioRespuestaId"/>
             <parameter name="rejectionCount" type="Integer"/>
@@ -93,7 +93,7 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="process" noun="RespuestaDte">
-        <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
+        <implements service="mchile.sii.dte.DteCommServices.process#EnvioInterface"/>
         <actions>
             <set field="processed" from="false"/>
             <set field="withResponse" from="false"/>
@@ -190,7 +190,7 @@ along with this software (see the LICENSE.md file). If not, see
                         </script>
                         <set field="estadoDte" from="dte.EstadoRecepDTE.text()"/>
                         <set field="estadoDteGlosa" from="dte.RecepDTEGlosa.text()"/>
-                        <service-call name="mchile.sii.DTECommServices.process#DteInRespuestaDte" in-map="context" out-map="processDte" out-map-add-to-existing="false"/>
+                        <service-call name="mchile.sii.dte.DteCommServices.process#DteInRespuestaDte" in-map="context" out-map="processDte" out-map-add-to-existing="false"/>
                         <if condition="processDte.processed"><then>
                             <set field="processedItems" from="processedItems+1"/>
                         </then><else-if condition="processDte.processedWithErrors">
@@ -242,7 +242,7 @@ along with this software (see the LICENSE.md file). If not, see
                     </script>
                     <set field="estadoDte" from="resultadoDte.EstadoDTE.text()"/>
                     <set field="estadoDteGlosa" from="resultadoDte.EstadoDTEGlosa.text()"/>
-                    <service-call name="mchile.sii.DTECommServices.process#DteInRespuestaDte" in-map="context" out-map="processDte"/>
+                    <service-call name="mchile.sii.dte.DteCommServices.process#DteInRespuestaDte" in-map="context" out-map="processDte"/>
                     <if condition="processDte.envioIssuerPartyId">
                         <if condition="envio.issuerPartyId == null"><then>
                             <set field="envio.issuerPartyId" from="processDte.envioIssuerPartyId"/>
@@ -311,7 +311,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="process" from="false" type="Boolean"/>
             </if>
             <if condition="process">
-                <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="moquiCode"/>
+                <service-call name="mchile.sii.dte.DteInternalServices.get#MoquiCode" in-map="[siiCode:tipoDte]" out-map="moquiCode"/>
                 <set field="fiscalTaxDocumentTypeEnumId" from="moquiCode.enumId"/>
                 <entity-find entity-name="mchile.dte.FiscalTaxDocumentAndInvoice" list="dbDteList">
                     <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
@@ -345,7 +345,7 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="process" noun="EnvioRecibo">
-        <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
+        <implements service="mchile.sii.dte.DteCommServices.process#EnvioInterface"/>
         <actions>
             <set field="processed" from="false"/>
             <set field="withError" from="false"/>
@@ -366,7 +366,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="rutFirma" from="recibo.RutFirma.text()"/>
                 <set field="declaracion" from="recibo.Declaracion.text()"/>
                 <set field="timestampFirma" from="recibo.TmstFirmaRecibo.text()"/>
-                <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="moquiCode"/>
+                <service-call name="mchile.sii.dte.DteInternalServices.get#MoquiCode" in-map="[siiCode:tipoDte]" out-map="moquiCode"/>
                 <set field="fiscalTaxDocumentTypeEnumId" from="moquiCode.enumId"/>
                 <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList" for-update="true">
                     <econdition field-name="issuerPartyIdValue" from="rutEmisor"/>
@@ -409,7 +409,7 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="process" noun="ResultadoEnvio">
-        <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
+        <implements service="mchile.sii.dte.DteCommServices.process#EnvioInterface"/>
         <actions>
             <set field="withResponse" from="false"/>
             <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>
@@ -437,7 +437,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="tipoDte" from="dte.TIPODTE.text()"/>
                     <set field="estadoDte" from="dte.ESTADO.text()"/>
                     <set field="detalle" from="dte.DETALLE.text()"/>
-                    <service-call name="mchile.sii.DTEServices.get#MoquiSIICode" in-map="[siiCode:tipoDte]" out-map="moquiCode"/>
+                    <service-call name="mchile.sii.dte.DteInternalServices.get#MoquiCode" in-map="[siiCode:tipoDte]" out-map="moquiCode"/>
                     <set field="fiscalTaxDocumentTypeEnumId" from="moquiCode.enumId"/>
                     <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" for-update="true">
                         <econdition field-name="issuerPartyIdValue" from="rutEmisor"/>
@@ -496,7 +496,7 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="process" noun="ResultadoConsumoFolios">
-        <implements service="mchile.sii.DTECommServices.process#EnvioInterface"/>
+        <implements service="mchile.sii.dte.DteCommServices.process#EnvioInterface"/>
         <actions>
             <set field="withResponse" from="false"/>
             <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>

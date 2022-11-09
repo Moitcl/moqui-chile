@@ -115,7 +115,7 @@ if ((montoNeto + montoExento + iva + impuestos) != montoTotal) errorMessages.add
 if (montoNeto > 0 && tasaIva / 100 != vatTaxRate) errorMessages.add("Tasa IVA no coincide: esperada: ${vatTaxRate*100}%, recibida: ${tasaIva}%")
 
 rutReceptor = encabezado.Receptor.RUTRecep.text()
-tipoDteEnumId = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameter("siiCode", tipoDte).call().enumId
+tipoDteEnumId = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#MoquiCode").parameter("siiCode", tipoDte).call().enumId
 fechaEmision = ec.l10n.parseDate(encabezado.IdDoc.FchEmis.text(), "yyyy-MM-dd")
 fechaVencimiento = ec.l10n.parseDate(encabezado.IdDoc.FchVenc.text(), "yyyy-MM-dd")
 
@@ -318,7 +318,7 @@ if (tipoDteEnumId == 'Ftdt-52') {
     if (!indTraslado)
         errorMessages.add("Guía de despacho no indica tipo de traslado (IndTraslado): ${indTraslado}")
     else {
-        indTrasladoEnumId = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameters([siiCode:indTraslado, enumTypeId:'IndTraslado']).call().enumId
+        indTrasladoEnumId = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#MoquiCode").parameters([siiCode:indTraslado, enumTypeId:'IndTraslado']).call().enumId
         if (!indTrasladoEnumId) {
             errorMessages.add("Guía de despacho indica tipo de traslado (IndTraslado) desconocido: ${indTraslado}")
         }
@@ -339,7 +339,7 @@ referenciasList.each { groovy.util.Node referencia ->
     }
     if (nroLinRef != nroRef)
         errorMessages.add("Valor inesperado en referencia, campo NroLinRef, esperado ${nroRef}, recibido ${referencia.NroLinRef.text()}")
-    referenciaTipoDteEnumId = ec.service.sync().name("mchile.sii.DTEServices.get#MoquiSIICode").parameter("siiCode", referencia.TpoDocRef.text()).call().enumId
+    referenciaTipoDteEnumId = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#MoquiCode").parameter("siiCode", referencia.TpoDocRef.text()).call().enumId
     Date refDate = null
     try {
         refDate = formatter.parse(referencia.FchRef.text())

@@ -125,7 +125,7 @@ class MoquiDTEUtils {
             }
             String itemAfecto = "true"
             if (detailEntry.productId) {
-                Map<String, Object> afectoOutMap = ec.service.sync().name("mchile.sii.DTEServices.check#Afecto").parameter("productId", detailEntry.productId).call()
+                Map<String, Object> afectoOutMap = ec.service.sync().name("mchile.sii.dte.DteImportServices.check#Afecto").parameter("productId", detailEntry.productId).call()
                 itemAfecto = afectoOutMap.afecto
             }
 
@@ -264,7 +264,7 @@ class MoquiDTEUtils {
             if (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('Ftdt-0')) { // Used for Set de Pruebas SII
                 referenciaMap.tipoDocumento = 'SET'
             } else {
-                Map<String, Object> codeOut = ec.service.sync().name("mchile.sii.DTEServices.get#SIICode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
+                Map<String, Object> codeOut = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
                 Integer tpoDocRef = codeOut.siiCode
                 referenciaMap.tipoDocumento = tpoDocRef as String
                 if (rutReceptor)

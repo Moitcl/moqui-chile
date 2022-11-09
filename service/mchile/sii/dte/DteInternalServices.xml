@@ -13,4 +13,325 @@ along with this software (see the LICENSE.md file). If not, see
 <http://creativecommons.org/publicdomain/zero/1.0/>.
 -->
 <services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+
+    <service verb="load" noun="DteConfig">
+        <description>
+            Carga parametros desde archivo resources
+        </description>
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <auto-parameters entity-name="mchile.dte.PartyDteParams"/>
+            <parameter name="rutEmisor"/>
+            <parameter name="rutEnviador"/>
+            <parameter name="transformParameters"/>
+            <parameter name="dteSystemIsProduction" type="Boolean"/>
+            <parameter name="dteIsProduction" type="Boolean"/>
+            <parameter name="boletaIsProduction" type="Boolean"/>
+            <parameter name="certificate" type="java.security.cert.X509Certificate"/>
+            <parameter name="pkey" type="java.security.PrivateKey"/>
+            <parameter name="tokenBoleta"/>
+            <parameter name="tokenBoletaLastUsage"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams">
+                <field-map field-name="partyId" from="partyId"/>
+            </entity-find-one>
+
+            <if condition="!dteParams">
+                <message error="true">Organización no tiene datos para generar DTE</message>
+            </if>
+
+            <service-call name="mchile.GeneralServices.get#RutForParty" in-map="context" out-map="context"/>
+            <set field="rutEmisor" from="rutSinFormato"/>
+            <if condition="rut == null"><message error="true">No se encuentra RUT para emisor (partyId ${partyId})</message></if>
+
+            <check-errors/>
+
+            <set field="certData" from="dteParams.certData"/>
+            <set field="passCert" from="dteParams.passCert"/>
+
+            <script><![CDATA[
+                import java.security.KeyStore
+                import java.security.PrivateKey
+                import java.security.cert.X509Certificate
+                import cl.moit.dte.MoquiDTEUtils
+
+                if (certData && passCert) {
+                    KeyStore ks = KeyStore.getInstance("PKCS12")
+                    ks.load(new ByteArrayInputStream(certData.decodeBase64()), passCert.toCharArray())
+                    String alias = ks.aliases().nextElement()
+                    certificate = (X509Certificate) ks.getCertificate(alias)
+                    rutEnviador = MoquiDTEUtils.getRutFromCertificate(certificate)
+                    ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEnviador).call()
+                    pkey = (PrivateKey) ks.getKey(alias, ((String)passCert).toCharArray())
+                }
+                ]]></script>
+            <set field="pdfTemplate" from="dteParams.pdfTemplate"/>
+            <if condition="!pdfTemplate">
+                <set field="pdfTemplate" from="ec.resource.getLocationReference('component://MoquiChile/DTE/TEMPLATES/plantilla_general.xsl').text"/>
+            </if>
+            <set field="pdfTemplateBoleta" from="dteParams.pdfTemplateBoleta"/>
+            <set field="pdfTemplateBoletaContinua" from="dteParams.pdfTemplateBoletaContinua"/>
+            <set field="logo" from="dteParams.logo ?: ''"/>
+            <set field="fechaResolucionSii" from="dteParams.fechaResolucionSii ?: ''"/>
+            <set field="numeroResolucionSii" from="dteParams.numeroResolucionSii ?: ''"/>
+            <set field="razonSocialEmisor" from="dteParams.razonSocialEmisor"/>
+            <set field="codigoSucursalSii" from="dteParams.codigoSucursalSii"/>
+            <set field="direccionOrigen" from="dteParams.direccionOrigen"/>
+            <set field="comunaOrigen" from="dteParams.comunaOrigen"/>
+            <set field="ciudadOrigen" from="dteParams.ciudadOrigen"/>
+            <set field="nombreContacto" from="dteParams.nombreContacto"/>
+            <set field="mailContacto" from="dteParams.mailContacto ?: ''"/>
+            <set field="fonoContacto" from="dteParams.fonoContacto ?: ''"/>
+            <set field="oficinaSII" from="dteParams.oficinaSII ?: ''"/>
+            <set field="showItemNumber" from="dteParams.showItemNumber ?: 'Y'"/>
+            <set field="commentAfterDetalle" from="dteParams.commentAfterDetalle ?: ''"/>
+            <set field="cuentaBancariaMail" from="dteParams.cuentaBancariaMail ?: ''"/>
+            <set field="cuentaBancariaText" from="dteParams.cuentaBancariaText ?: ''"/>
+            <set field="codigosActividadEconomica" from="dteParams.codigosActividadEconomica ?: ''"/>
+            <set field="detailHeaderBgColor" from="dteParams.detailHeaderBgColor ?: '&#35;eaeaea'"/>
+            <set field="detailHeaderFgColor" from="dteParams.detailHeaderFgColor ?: 'black'"/>
+            <set field="detailHeaderSepColor" from="dteParams.detailHeaderSepColor ?: 'white'"/>
+            <set field="tableBorderColor" from="dteParams.tableBorderColor ?: '&#35;eaeaea'"/>
+            <set field="vendorNameColor" from="dteParams.vendorNameColor ?: 'black'"/>
+
+            <set field="transformParameters" from="[fonoContacto:fonoContacto, mailContacto:mailContacto, oficinaSII:oficinaSII, logo:logo, numeroResolucionSii:numeroResolucionSii, fechaResolucionSii:fechaResolucionSii, maxItems:'14',
+                                                    showItemNumber:'N', commentAfterDetalle:commentAfterDetalle, cuentaBancariaMail:cuentaBancariaMail, cuentaBancariaText:cuentaBancariaText,
+                                                    detailHeaderBgColor:detailHeaderBgColor, detailHeaderFgColor:detailHeaderFgColor, detailHeaderSepColor:detailHeaderSepColor, tableBorderColor:tableBorderColor,
+                                                    vendorNameColor:vendorNameColor]"/>
+
+            <service-call name="mchile.sii.dte.DteInternalServices.check#ProductionEnvironment" out-map="context"/>
+            <set field="dteSystemIsProduction" from="systemIsProduction"/>
+            <set field="dteIsProduction" from="dteIsProductionByPartyId[partyId]"/>
+            <set field="boletaIsProduction" from="boletaIsProductionByPartyId[partyId]"/>
+            <set field="ec.user.context.dteSystemIsProduction" from="systemIsProduction"/>
+            <if condition="boletaIsProduction &amp;&amp; !dteIsProduction">
+                <return error="true" message="Error de configuración, definido en producción para Boleta pero no para DTE"/>
+            </if>
+            <set field="tokenBoleta" from="dteParams.tokenBoleta"/>
+            <set field="tokenBoletaLastUsage" from="dteParams.tokenBoletaLastUsage"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="SiiCode">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="enumTypeId" default-value="FiscalTaxDocumentType"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="siiCode" type="Integer"/>
+        </out-parameters>
+        <actions>
+            <set field="siiCode" from="null"/>
+            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="enumField">
+                <field-map field-name="enumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <field-map field-name="enumTypeId"/>
+            </entity-find-one>
+            <set field="siiCode" from="enumField.enumCode" type="Integer"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="MoquiCode">
+        <in-parameters>
+            <parameter name="siiCode" required="true"/>
+            <parameter name="enumTypeId" default-value="FiscalTaxDocumentType"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="enumId"/>
+        </out-parameters>
+        <actions>
+            <set field="enumId" from="null"/>
+            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="enumField">
+                <field-map field-name="enumCode" from="siiCode"/>
+                <field-map field-name="enumTypeId"/>
+            </entity-find-one>
+            <set field="enumId" from="enumField?.enumId"/>
+        </actions>
+    </service>
+
+    <service verb="update" noun="ShipmentIndTraslado">
+        <in-parameters>
+            <parameter name="shipmentId" required="true"/>
+            <parameter name="indTrasladoEnumId" required="true"/>
+            <parameter name="tipoDespachoEnumId"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.shipment.Shipment" value-field="shipmentEv">
+                <field-map field-name="shipmentId" from="shipmentId"/>
+            </entity-find-one>
+            <set field="shipmentEv.indTrasladoEnumId" from="indTrasladoEnumId"/>
+            <if condition="tipoDespachoEnumId">
+                <set field="shipmentEv.tipoDespachoEnumId" from="tipoDespachoEnumId"/>
+            </if>
+            <entity-update value-field="shipmentEv"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="GiroPrimario">
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="giroId"/>
+            <parameter name="description"/>
+        </out-parameters>
+        <actions>
+
+            <entity-find-one entity-name="mchile.dte.PartyGiro" value-field="giroField">
+                <field-map field-name="partyId" from="partyId"/>
+                <field-map field-name="isPrimary" value="Primario"/>
+            </entity-find-one>
+            <if condition="giroField == null">
+                <then>
+                    <entity-find-one entity-name="mchile.dte.PartyGiro" value-field="giroField">
+                        <field-map field-name="partyId" from="partyId"/>
+                    </entity-find-one>
+                    <if condition="!giroField">
+                        <return error="true" message="Empresa de ID ${partyId} no tiene giro primario o giro registrado"/>
+                    </if>
+                </then>
+            </if>
+            <set field="giroId" from="giroField.giroId"/>
+            <set field="description" from="giroField.description"/>
+        </actions>
+    </service>
+
+    <service verb="update" noun="PartyDteParameters">
+        <in-parameters>
+            <auto-parameters entity-name="mchile.dte.PartyDteParams"/>
+            <parameter name="partyId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.PartyDteParams" list="paramsList">
+                <econdition field-name="partyId"/>
+            </entity-find>
+
+            <if condition="paramsList"><then>
+                <service-call name="update#mchile.dte.PartyDteParams" in-map="context"/>
+            </then><else>
+                <service-call name="create#mchile.dte.PartyDteParams" in-map="[partyId:partyId, templatePdf:templatePdf, templatePdfBoleta:templatePdfBoleta,
+                                  templatePdfBoletaContinua:templatePdfBoletaContinua, logo:logo, fechaResolucionSii:fechResol, numeroResolucionSii:numeroResolucionSii, rutEmisor:rutEmisor,
+                                  rutEnviador:rutEnviador, razonSocialEmisor:razonSocialEmisor, codigoSucursalSii:codigoSucursalSii, direccionOrigen:direccionOrigen, comunaOrigen:comunaOrigen, ciudadOrigen:ciudadOrigen,
+                                  passCert:passCert, nombreContacto:nombreContacto, mailContacto:mailContacto, fonoContacto:fonoContacto]"/>
+            </else></if>
+        </actions>
+    </service>
+
+    <service verb="load" noun="Certificate">
+        <description>Carga Certificado Digital para firmar DTE</description>
+        <in-parameters>
+            <parameter name="certificateFile" type="org.apache.commons.fileupload.FileItem"/>
+            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="encoding" default-value="UTF-8"/>
+            <parameter name="passCert" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams" for-update="true">
+                <field-map field-name="partyId" from="organizationPartyId"/>
+            </entity-find-one>
+            <if condition="!dteParams">
+                <return error="true" message="Primero complete parametros de organizacion"/>
+            </if>
+            <set field="dteParams.certData" from="certificateFile.get().encodeBase64()" type="String"/>
+            <set field="dteParams.passCert" from="passCert"/>
+            <!--set field="dteParams.certData" from="certificateFile.getString(encoding)"/-->
+
+            <entity-update value-field="dteParams"/>
+        </actions>
+    </service>
+
+    <service verb="check" noun="ProductionEnvironment" authenticate="anonymous-view">
+        <out-parameters>
+            <parameter name="systemIsProduction" type="Boolean"/>
+            <parameter name="dteIsProductionByPartyId" type="List"/>
+            <parameter name="boletaIsProductionByPartyId" type="List"/>
+        </out-parameters>
+        <actions>
+            <set field="systemIsProduction" from="org.moqui.util.SystemBinding.getPropOrEnv('moquichile.dte.systemIsProduction') == 'true'"/>
+            <set field="dteIsProductionByPartyId" from="[:]"/>
+            <set field="boletaIsProductionByPartyId" from="[:]"/>
+            <entity-find entity-name="mantle.party.PartyRole" list="internalOrgList">
+                <econdition field-name="roleTypeId" value="OrgInternal"/>
+            </entity-find>
+            <iterate list="internalOrgList" entry="internalOrg">
+                <service-call name="mantle.party.PartyServices.get#PartySettingValue" in-map="[partyId:internalOrg.partyId, partySettingTypeId:'moit.dte.DteIsProduction']" out-map="settingMap" out-map-add-to-existing="false"/>
+                <set field="dteIsProductionByPartyId[internalOrg.partyId]" from="systemIsProduction &amp;&amp; (settingMap.settingValue == 'true')"/>
+                <service-call name="mantle.party.PartyServices.get#PartySettingValue" in-map="[partyId:internalOrg.partyId, partySettingTypeId:'moit.dte.BoletaIsProduction']" out-map="settingMap" out-map-add-to-existing="false"/>
+                <set field="boletaIsProductionByPartyId[internalOrg.partyId]" from="systemIsProduction &amp;&amp; (settingMap.settingValue == 'true')"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="compare" noun="RazonSocial">
+        <in-parameters>
+            <parameter name="rs1"/>
+            <parameter name="rs2"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="equivalent" type="Boolean"/>
+        </out-parameters>
+        <actions>
+            <set field="equivalent" from="false"/>
+            <if condition="rs1 == null || rs2 == null"><return/></if>
+            <set field="rs1" from="rs1.toUpperCase().replaceAll('Á', 'A').replaceAll('É', 'E').replaceAll('Í', 'I').replaceAll('Ó', 'O').replaceAll('[ÚÜ]', 'U').replaceAll('Ñ', 'N').replaceAll('[^A-Z ]', '')"/>
+            <set field="rs2" from="rs2.toUpperCase().replaceAll('Á', 'A').replaceAll('É', 'E').replaceAll('Í', 'I').replaceAll('Ó', 'O').replaceAll('[ÚÜ]', 'U').replaceAll('Ñ', 'N').replaceAll('[^A-Z ]', '')"/>
+            <if condition="rs1.size() == 0 || rs2.size() == 0"><return/></if>
+            <if condition="rs1.equals(rs2)"><set field="equivalent" from="true"/><return/></if>
+            <set field="replaceItems" from="[' LTDA':' LIMITADA', ' HNOS':' HERMANOS', 'Y CIA':'Y COMPANIA', ' S A':' SA']"/>
+            <iterate list="replaceItems" key="pattern" entry="replacement">
+                <set field="rs1" from="rs1.replaceAll(pattern, replacement)"/>
+                <set field="rs2" from="rs2.replaceAll(pattern, replacement)"/>
+            </iterate>
+
+            <if condition="rs1.equals(rs2)"><set field="equivalent" from="true"/><return/></if>
+        </actions>
+    </service>
+
+    <service verb="enforce" noun="RoundedTotalOrderItem">
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+            <parameter name="orderPartSeqId" required="true"/>
+            <parameter name="quantity" type="BigDecimal"/>
+            <parameter name="unitAmount" type="BigDecimal"/>
+            <parameter name="orderItemSeqId" required="true"/>
+            <parameter name="itemTypeEnumId"/>
+            <parameter name="parentItemSeqId"/>
+        </in-parameters>
+        <actions>
+            <if condition="itemTypeEnumId == 'ItemDteRoundingAdjust'">
+                <entity-delete-by-condition entity-name="mantle.order.OrderItem">
+                    <econdition field-name="orderId"/>
+                    <econdition field-name="orderPartSeqId"/>
+                    <econdition field-name="itemTypeEnumId" value="ItemDteRoundingAdjust"/>
+                    <econdition field-name="parentItemSeqId"/>
+                    <econdition field-name="orderItemSeqId" operator="not-equals"/>
+                </entity-delete-by-condition>
+                <return/>
+            </if>
+            <entity-find-one entity-name="mantle.order.OrderHeader" value-field="order"/>
+            <if condition="!order"><return error="true" message="Could not find order ${orderId}"/></if>
+            <if condition="order.currencyUomId != 'CLP'"><return/></if>
+            <set field="roundingAdjustmentItemAmount" from="0" type="BigDecimal"/>
+            <set field="itemTotal" from="(quantity?:0)*(unitAmount?:0)" type="BigDecimal"/>
+            <set field="montoItem" from="itemTotal.setScale(0, java.math.RoundingMode.HALF_UP)"/>
+            <if condition="itemTotal != montoItem">
+                <set field="roundingAdjustmentItemAmount" from="montoItem - itemTotal.setScale(6, java.math.RoundingMode.HALF_UP)" type="BigDecimal"/>
+                <if condition="roundingAdjustmentItemAmount != 0">
+                    <if condition="itemTotal + roundingAdjustmentItemAmount != montoItem">
+                        <set field="roundingAdjustmentItemAmount" from="0"/>
+                        <set field="dteQuantity" from="quantity"/>
+                        <set field="dteAmount" from="unitAmount"/>
+                        <set field="unitAmount" from="(unitAmount * quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                        <set field="quantity" from="1"/>
+                    </if>
+                    <set field="description" value="Ajuste redondeo DTE (precio ${dteAmount?:unitAmount}, cantidad ${dteQuantity?:quantity}, montoItem ${montoItem}"/>
+                    <service-call name="create#mantle.order.OrderItem" in-map="[orderId:orderId, orderPartSeqId:orderPartSeqId, itemTypeEnumId:'ItemDteRoundingAdjust', description: description,
+                                quantity: 1, unitAmount:roundingAdjustmentItemAmount, parentItemSeqId:orderItemSeqId]"/>
+                </if>
+            </if>
+        </actions>
+    </service>
+
 </services>
