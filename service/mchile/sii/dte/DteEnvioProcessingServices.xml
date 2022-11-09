@@ -83,7 +83,7 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="process" noun="EnvioDte" type="script" location="component://MoquiChile/service/mchile/sii/dte/groovy/processEnvioDte.groovy">
-        <implements service="mchile.sii.dte.DteCommServices.process#EnvioInterface"/>
+        <implements service="mchile.sii.dte.DteEnvioProcessingServices.process#EnvioInterface"/>
         <out-parameters>
             <parameter name="envioRespuestaId"/>
             <parameter name="rejectionCount" type="Integer"/>
@@ -93,7 +93,7 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="process" noun="RespuestaDte">
-        <implements service="mchile.sii.dte.DteCommServices.process#EnvioInterface"/>
+        <implements service="mchile.sii.dte.DteEnvioProcessingServices.process#EnvioInterface"/>
         <actions>
             <set field="processed" from="false"/>
             <set field="withResponse" from="false"/>
@@ -345,7 +345,7 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="process" noun="EnvioRecibo">
-        <implements service="mchile.sii.dte.DteCommServices.process#EnvioInterface"/>
+        <implements service="mchile.sii.dte.DteEnvioProcessingServices.process#EnvioInterface"/>
         <actions>
             <set field="processed" from="false"/>
             <set field="withError" from="false"/>
@@ -366,6 +366,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="rutFirma" from="recibo.RutFirma.text()"/>
                 <set field="declaracion" from="recibo.Declaracion.text()"/>
                 <set field="timestampFirma" from="recibo.TmstFirmaRecibo.text()"/>
+                <set field="fechaAcuseRecibo" from="ec.l10n.parseTimestamp(timestampFirma, 'yyyy-MM-dd\'T\'HH:mm:ss')"/>
                 <service-call name="mchile.sii.dte.DteInternalServices.get#MoquiCode" in-map="[siiCode:tipoDte]" out-map="moquiCode"/>
                 <set field="fiscalTaxDocumentTypeEnumId" from="moquiCode.enumId"/>
                 <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList" for-update="true">
@@ -389,10 +390,12 @@ along with this software (see the LICENSE.md file). If not, see
                     </then><else-if condition="envio.receiverPartyId != dte.issuerPartyId">
                         <return error="true" message="ReceiverPartyId mismatch: previously ${envio.receiverPartyId}, for tipo DTE ${tipoDte}, folio ${folio}: ${dte.issuerPartyId}"/>
                     </else-if></if>
-                    <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAttributes" value-field="attributes" auto-field-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId]"/>
+                    <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAttributes" value-field="attributes" auto-field-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId]" for-update="true"/>
                     <if condition="attributes.amount == montoTotal"><then>
                         <set field="dte.sentRecStatusId" value="Ftd-ReceiverAccept"/>
                         <entity-update value-field="dte"/>
+                        <set field="attributes.fechaAcuseRecibo" from="fechaAcuseRecibo"/>
+                        <entity-update value-field="attributes"/>
                         <service-call name="create#mchile.dte.DteEnvioFiscalTaxDocument" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, envioId:envioId]"/>
                     </then><else>
                         <log message="Not processing, attributes.amount (${attributes.amount}) != montoTotal (${montoTotal})"/>
@@ -409,7 +412,7 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="process" noun="ResultadoEnvio">
-        <implements service="mchile.sii.dte.DteCommServices.process#EnvioInterface"/>
+        <implements service="mchile.sii.dte.DteEnvioProcessingServices.process#EnvioInterface"/>
         <actions>
             <set field="withResponse" from="false"/>
             <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>
@@ -496,7 +499,7 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="process" noun="ResultadoConsumoFolios">
-        <implements service="mchile.sii.dte.DteCommServices.process#EnvioInterface"/>
+        <implements service="mchile.sii.dte.DteEnvioProcessingServices.process#EnvioInterface"/>
         <actions>
             <set field="withResponse" from="false"/>
             <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>
