@@ -27,7 +27,7 @@ if (dteMap.rutEmisor in reserved.rutList) {
     return
 }
 
-issuerPartyId = ec.service.sync().name("mchile.sii.DTECommServices.get#PartyIdByRut").parameters([idValue:dteMap.rutEmisor, createUnknown:createUnknownIssuer, razonSocial:dteMap.razonSocialEmisor, roleTypeId:'Supplier',
+issuerPartyId = ec.service.sync().name("mchile.GeneralServicesServices.get#PartyIdByRut").parameters([idValue:dteMap.rutEmisor, createUnknown:createUnknownIssuer, razonSocial:dteMap.razonSocialEmisor, roleTypeId:'Supplier',
                                                                                               giro:dteMap.giroEmisor, direccion:dteMap.direccionOrigen, comuna:dteMap.comunaOrigen, ciudad:dteMap.ciudadOrigen]).call().partyId
 issuerTaxName = null
 EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()
@@ -121,7 +121,7 @@ if (existingDteList) {
     }
 }
 
-receiverPartyId = ec.service.sync().name("mchile.sii.DTECommServices.get#PartyIdByRut").parameters([idValue:dteMap.rutReceptor, createUnknown:createUnknownReceiver, razonSocial:dteMap.razonSocialReceptor, roleTypeId:'Customer',
+receiverPartyId = ec.service.sync().name("mchile.GeneralServicesServices.get#PartyIdByRut").parameters([idValue:dteMap.rutReceptor, createUnknown:createUnknownReceiver, razonSocial:dteMap.razonSocialReceptor, roleTypeId:'Customer',
                                                                                               giro:dteMap.giroReceptor, direccion:dteMap.direccionReceptor, comuna:dteMap.comunaReceptor, ciudad:dteMap.ciudadReceptor]).call().partyId
 receiver = ec.entity.find("mantle.party.PartyDetail").condition("partyId", receiverPartyId).one()
 // Verificación de Razón Social en XML vs lo guardado en Moqui

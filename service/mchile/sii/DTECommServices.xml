@@ -100,14 +100,14 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="envioMessageText" value="Adjunto encontrará el resultado del proceso de revision y validación de un envío de Documentos Tributarios Electrónicos que Usted realizó."/>
                     <set field="subject" value="Acuse de Recibo Nro. ${envio.internalId} - Receptor: ${envio.rutEmisor}"/>
                     <set field="emailTypeEnumId" value="Ftdemt-XmlReceptionResponse"/>
-                    <service-call name="mchile.sii.DTECommServices.get#PartyIdByRut" in-map="[idValue:envio.rutReceptor]" out-map="receptorMap" out-map-add-to-existing="false"/>
+                    <service-call name="mchile.GeneralServicesServices.get#PartyIdByRut" in-map="[idValue:envio.rutReceptor]" out-map="receptorMap" out-map-add-to-existing="false"/>
                     <set field="receptorPartyId" from="receptorMap?.partyId"/>
                 </else-if><else-if condition="envio.envioTypeEnumId == 'Ftde-EnvioRecibos'">
                     <!-- Aceptación / Acuse de Recibo que da pie a título ejecutivo de factura -->
                     <set field="emailTypeEnumId" value="Ftdemt-XmlCommercialAcceptance"/>
                     <set field="envioMessageText" value="Adjunto encontrará la Aceptación del Documento Tributario Electrónico que Usted envió."/>
                     <set field="subject" value="Aceptación Nro. ${envio.internalId} - Receptor: ${envio.rutEmisor}"/>
-                    <service-call name="mchile.sii.DTECommServices.get#PartyIdByRut" in-map="[idValue:envio.rutReceptor]" out-map="receptorMap" out-map-add-to-existing="false"/>
+                    <service-call name="mchile.GeneralServicesServices.get#PartyIdByRut" in-map="[idValue:envio.rutReceptor]" out-map="receptorMap" out-map-add-to-existing="false"/>
                     <set field="receptorPartyId" from="receptorMap?.partyId"/>
                 </else-if><else>
                     <return error="true" message="Unsupported envioTypeEnumId ${envio.envioTypeEnumId}"/>
@@ -119,7 +119,7 @@ along with this software (see the LICENSE.md file). If not, see
                 </then><else>
                     <set field="envioContent" from="ec.resource.getLocationReference(envio.documentLocation)"/>
                     <set field="xmlAttachment" from="[attachmentLocation:envioContent.location, fileName:envioContent.fileName, contentType:envioContent.contentType]"/>
-                    <service-call name="mchile.sii.DTECommServices.get#PartyIdByRut" in-map="[idValue:envio.rutEmisor]" out-map="emisorMap" out-map-add-to-existing="false"/>
+                    <service-call name="mchile.GeneralServicesServices.get#PartyIdByRut" in-map="[idValue:envio.rutEmisor]" out-map="emisorMap" out-map-add-to-existing="false"/>
                     <set field="xmlReceptionEmailAddress" from="null"/>
                     <service-call name="mchile.sii.SIIServices.get#XmlReceptionEmail" in-map="[partyId:receptorPartyId, partyIdValue:envio.rutReceptor, dtePartyId:emisorMap.partyId]" out-map="context"
                                   ignore-error="true" transaction="force-new"/>
@@ -502,28 +502,6 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="triggerEnvioToReceiver &amp;&amp; totalAcceptedDocs &gt; 0">
                 <script>ec.service.job("sii_dte_CreateEnvioDteReceiver").run()</script>
             </if>
-        </actions>
-    </service>
-
-    <service verb="marcarEnviados" noun="Documentos">
-        <description>
-            Marca lista de documentos como enviados, usando el trackid devuelto por el SII
-        </description>
-        <in-parameters>
-            <parameter name="trackId"/>
-            <parameter name="documentIdList" required="true" type="List"/>
-        </in-parameters>
-        <actions>
-            <iterate list="documentIdList" entry="documentId">
-                <!-- Se marca DTE como enviada -->
-                <set field="idDte" from="documentId"/>
-                <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteEv" for-update="true">
-                    <field-map field-name="fiscalTaxDocumentId" from="idDte"/>
-                </entity-find-one>
-                <set field="dteEv.sentAuthStatusId" value="Ftd-SentAuthUnverified"/>
-                <set field="dteEv.trackId" from="trackId"/>
-                <entity-update value-field="dteEv"/>
-            </iterate>
         </actions>
     </service>
 
@@ -1035,6 +1013,28 @@ TrackId Token']" type="Map"/>
         </actions>
     </service>
 
+    <service verb="marcarEnviados" noun="Documentos">
+        <description>
+            Marca lista de documentos como enviados, usando el trackid devuelto por el SII
+        </description>
+        <in-parameters>
+            <parameter name="trackId"/>
+            <parameter name="documentIdList" required="true" type="List"/>
+        </in-parameters>
+        <actions>
+            <iterate list="documentIdList" entry="documentId">
+                <!-- Se marca DTE como enviada -->
+                <set field="idDte" from="documentId"/>
+                <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteEv" for-update="true">
+                    <field-map field-name="fiscalTaxDocumentId" from="idDte"/>
+                </entity-find-one>
+                <set field="dteEv.sentAuthStatusId" value="Ftd-SentAuthUnverified"/>
+                <set field="dteEv.trackId" from="trackId"/>
+                <entity-update value-field="dteEv"/>
+            </iterate>
+        </actions>
+    </service>
+
     <service verb="marcarNoEnviado" noun="Documento">
         <description>
             Marca una DTE como no enviada al SII
@@ -1077,68 +1077,6 @@ TrackId Token']" type="Map"/>
         </actions>
     </service>
     
-    <service verb="get" noun="PartyIdByRut">
-        <in-parameters>
-            <parameter name="idValue" required="true"/>
-            <parameter name="createUnknown" type="Boolean" default="false"/>
-            <parameter name="razonSocial"/>
-            <parameter name="roleTypeId"/>
-            <parameter name="giro"/>
-            <parameter name="direccion"/>
-            <parameter name="comuna"/>
-            <parameter name="ciudad"/>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="partyId"/>
-        </out-parameters>
-        <actions>
-            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                <econdition field-name="idValue"/>
-                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
-            </entity-find>
-            <if condition="partyIdentificationList.size() &gt; 1">
-                <entity-find entity-name="mantle.party.Party" list="multiplePartyList">
-                    <econdition field-name="partyId" operator="in" from="partyIdentificationList.partyId"/>
-                </entity-find>
-                <set field="excludePartyIds" from="[]"/>
-                <iterate list="multiplePartyList" entry="party">
-                    <script>
-                        if (party.mergedToPartyId || party.disabled == 'Y')
-                            excludePartyIds.add(party.partyId)
-                    </script>
-                </iterate>
-                <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                    <econdition field-name="idValue"/>
-                    <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
-                    <econdition field-name="partyId" operator="not-in" from="excludePartyIds"/>
-                </entity-find>
-            </if>
-            <if condition="!partyIdentificationList"><then>
-                <if condition="createUnknown"><then>
-                    <service-call name="mantle.party.PartyServices.create#Organization" in-map="[organizationName:razonSocial, taxOrganizationName:razonSocial, roleTypeId:'Supplier']"
-                                  out-map="context"/>
-                    <service-call name="create#mantle.party.PartyIdentification" in-map="[partyId:partyId, partyIdTypeEnumId:'PtidNationalTaxId', idValue:idValue]"/>
-                    <if condition="giro != null &amp;&amp; giro != ''">
-                        <service-call name="create#mchile.dte.PartyGiro" in-map="[partyId:partyId, description:giro, isPrimary:'Y']"/>
-                    </if>
-                    <entity-find entity-name="moqui.basic.GeoAssocAndToDetail" list="comunaList">
-                        <econdition field-name="geoId" value="CHL"/>
-                        <econdition field-name="geoName" ignore-case="true" from="comuna"/>
-                    </entity-find>
-                    <set field="comunaId" from="comunaList.first?.geoId"/>
-                    <service-call name="mantle.party.ContactServices.store#PartyContactInfo"
-                                  in-map="[partyId:partyId, address1:direccion, postalContactMechPurposeId:'PostalTax', stateProvinceGeoId:comunaId, countryGeoId:'CHL', city:ciudad]"/>
-                </then><else>
-                    <return error="true" message="No existe organización con RUT ${idValue} definida en el sistema"/>
-                </else></if>
-            </then><else-if condition="partyIdentificationList.size() == 1">
-                <set field="partyId" from="partyIdentificationList.first.partyId"/>
-            </else-if><else>
-                <return error="true" message="Más de un sujeto con mismo rut ${idValue}: partyIds ${partyIdentificationList.partyId})"/>
-            </else></if>
-        </actions>
-    </service>
-
     <service verb="get" noun="Seed">
         <in-parameters>
             <parameter name="dteIsProduction" type="Boolean"/>
