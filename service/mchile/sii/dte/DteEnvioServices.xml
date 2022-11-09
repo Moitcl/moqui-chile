@@ -64,7 +64,7 @@ along with this software (see the LICENSE.md file). If not, see
             </iterate>
             <iterate list="ungeneratedDocumentIdsByIssuerPartyId" entry="ungeneratedDocumentIdsByReceiverPartyId" key="issuerPartyId">
                 <iterate list="ungeneratedDocumentIdsByReceiverPartyId" entry="ungeneratedDocumentIdMap" key="receiverPartyId">
-                    <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[rutReceptor:ungeneratedDocumentIdMap.receiverPartyIdValue, organizationPartyId:issuerPartyId, documentIdList:ungeneratedDocumentIdMap.list]" out-map="envio" transaction="force-new"/>
+                    <service-call name="mchile.sii.dte.DteEnvioServices.genera#EnvioDte" in-map="[rutReceptor:ungeneratedDocumentIdMap.receiverPartyIdValue, organizationPartyId:issuerPartyId, documentIdList:ungeneratedDocumentIdMap.list]" out-map="envio" transaction="force-new"/>
                     <script>envioIdsToSend.add(envio.envioId)</script>
                     <log message="Generated envio ${envio.envioId}"/>
                 </iterate>
@@ -116,7 +116,7 @@ along with this software (see the LICENSE.md file). If not, see
             </iterate>
             <iterate list="ungeneratedDocumentIdsByIssuerPartyId" entry="documentIdList" key="issuerPartyId">
                 <log message="Creating envio for documentIdList ${documentIdList}"/>
-                <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[organizationPartyId:issuerPartyId, documentIdList:documentIdList]" out-map="envio" transaction="force-new" ignore-error="true"/>
+                <service-call name="mchile.sii.dte.DteEnvioServices.genera#EnvioDte" in-map="[organizationPartyId:issuerPartyId, documentIdList:documentIdList]" out-map="envio" transaction="force-new" ignore-error="true"/>
                 <script>envioIdsToSend.add(envio.envioId)</script>
             </iterate>
             <if condition="envioIdsToSend &amp;&amp; triggerSend">
@@ -142,13 +142,75 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <if condition="contentList.size() != 1"><return error="true" message="Found ${contentList.size()} XML content for fiscalTaxDocumentId ${fiscalTaxDocumentId}, expected 1"/></if>
             <set field="content" from="ec.resource.getLocationReference(contentList.first.contentLocation)"/>
-            <service-call name="mchile.sii.DTECommServices.genera#EnvioDte" in-map="[rutReceptor:dte.receiverPartyIdValue, organizationPartyId:dte.issuerPartyId, documentIdList:[dte.fiscalTaxDocumentId]]" out-map="envio"/>
+            <service-call name="mchile.sii.dte.DteEnvioServices.genera#EnvioDte" in-map="[rutReceptor:dte.receiverPartyIdValue, organizationPartyId:dte.issuerPartyId, documentIdList:[dte.fiscalTaxDocumentId]]" out-map="envio"/>
 
             <script><![CDATA[
                 if (triggerSend && systemIsProduction)
                     ec.service.special().name("mchile.sii.DTECommServices.send#PendingEnvioDteReceiver").parameter("envioId", envio.envioId).registerOnCommit()
                 ]]></script>
         </actions>
+    </service>
+
+    <service verb="genera" noun="Envio">
+        <in-parameters>
+            <parameter name="rutReceptor" default-value="60803000-K"><description>El receptor del envio es el SII</description></parameter>
+            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="documentIdList" required="true" type="List"/>
+            <parameter name="saveSinFirma" type="Boolean" default="false"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="envioIdList"/>
+        </out-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList">
+                <econdition field-name="fiscalTaxDocumentId" operator="in" from="documentIdList"/>
+            </entity-find>
+            <if condition="!ftdList"><return error="true" message="Could not find any FiscalTaxDocument"/></if>
+            <set field="boletaIdList" from="[]"/>
+            <set field="facturaIdList" from="[]"/>
+            <iterate list="ftdList" entry="ftd">
+                <if condition="ftd.fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41']"><then>
+                    <script>boletaIdList.add(ftd.fiscalTaxDocumentId)</script>
+                </then><else>
+                    <script>facturaIdList.add(ftd.fiscalTaxDocumentId)</script>
+                </else></if>
+            </iterate>
+            <set field="envioIdList" from="[]"/>
+            <if condition="boletaIdList">
+                <service-call name="mchile.sii.dte.DteEnvioServices.genera#EnvioBoleta" in-map="context+[documentIdList:boletaIdList]" out-map="envioBoleta"/>
+                <script>envioIdList.add(envioBoleta.envioId)</script>
+            </if>
+            <if condition="facturaIdList">
+                <service-call name="mchile.sii.dte.DteEnvioServices.genera#EnvioDte" in-map="context+[documentIdList:facturaIdList]" out-map="envioFactura"/>
+                <script>envioIdList.add(envioFactura.envioId)</script>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="genera" noun="EnvioDte" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/generaEnvioDte.groovy">
+        <description>Generación de envio documento a partir de facturas ya generadas.</description>
+        <in-parameters>
+            <parameter name="rutReceptor" default-value="60803000-K"><description>El receptor del envio es el SII</description></parameter>
+            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="documentIdList" required="true" type="List"/>
+            <parameter name="saveSinFirma" type="Boolean" default="false"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="envioId"/>
+        </out-parameters>
+    </service>
+
+    <service verb="genera" noun="EnvioBoleta" type="script" location="component://MoquiChile/service/mchile/sii/DTECommServices/generaEnvioBoleta.groovy">
+        <description>Generación de envio boletas a partir de facturas ya generadas.</description>
+        <in-parameters>
+            <parameter name="rutReceptor" default-value="60803000-K"><description>El receptor del envio es el SII</description></parameter>
+            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="documentIdList" required="true" type="List"/>
+            <parameter name="saveSinFirma" type="Boolean" default="false"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="envioId"/>
+        </out-parameters>
     </service>
 
 </services>
