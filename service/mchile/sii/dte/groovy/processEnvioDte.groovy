@@ -65,14 +65,14 @@ if (rutEmisorCaratula != emisor.RUTEmisor.text()) {
     ec.logger.error("Rut emisor de carátula (${rutEmisorCaratula} y DTE (${emisor.RUTEmisor.text()}) no coinciden")
     estadoRecepEnv = 2
 }
-issuerPartyId = ec.service.sync().name("mchile.GeneralServicesServices.get#PartyIdByRut").parameters([idValue:rutEmisorCaratula, createUnknown:createUnknownIssuer, razonSocial:emisor.RznSoc.text(), roleTypeId:'Supplier',
+issuerPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutEmisorCaratula, createUnknown:createUnknownIssuer, razonSocial:emisor.RznSoc.text(), roleTypeId:'Supplier',
         giro:emisor.GiroEmis.text(), direccion:emisor.DirOrigen.text(), comuna:emisor.CmnaOrigen.text(), ciudad:emisor.CiudadOrigen.text()]).call().partyId
 receptor = setDte.DTE[0].Documento.Encabezado.Receptor
 if (rutReceptorCaratula != receptor.RUTRecep.text()) {
     ec.logger.error("Rut receptor de carátula (${rutReceptorCaratula} y DTE (${receptor.RUTRecep.text()}) no coinciden")
     estadoRecepEnv = 2
 }
-receiverPartyId = ec.service.sync().name("mchile.GeneralServicesServices.get#PartyIdByRut").parameters([idValue:rutReceptorCaratula, createUnknown:createUnknownReceiver, razonSocial:receptor.RznSocRecep.text(), roleTypeId:'Customer',
+receiverPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutReceptorCaratula, createUnknown:createUnknownReceiver, razonSocial:receptor.RznSocRecep.text(), roleTypeId:'Customer',
                                                                                               giro:emisor.GiroRecep.text(), direccion:emisor.DirRecep.text(), comuna:emisor.CmnaRecep.text(), ciudad:emisor.CiudadRecep.text()]).call()?.partyId
 if (!receiverPartyId) {
     return
@@ -113,7 +113,7 @@ rejectionCount = 0
 discrepancyCount = 0
 allDuplicated = (dteNodeList.length > 0)
 dteNodeList.each { org.w3c.dom.Node domNode ->
-    recepcion = ec.service.sync().name("mchile.sii.dte.DteImportServices.load#DteFromDom").parameters(context+[domNode:domNode]).call()
+    recepcion = ec.service.sync().name("mchile.sii.dte.DteLoadServices.load#DteFromDom").parameters(context+[domNode:domNode]).call()
     if (!recepcion.isDuplicated)
         allDuplicated = false
     recepcionList.add(recepcion)
@@ -162,7 +162,7 @@ acuseRecibo.RespuestaDTE('xmlns': 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http
                 RecepcionDTE {
                     TipoDTE(recepcion.tipoDte)
                     Folio(recepcion.folioDte)
-                    FchEmis(recepcion.fechaEmision)
+                    FchEmis(ec.l10n.format(recepcion.fechaEmision, 'yyyy-MM-dd'))
                     RUTEmisor(recepcion.rutEmisor)
                     RUTRecep(recepcion.rutReceptor)
                     MntTotal(recepcion.montoTotal)
@@ -182,7 +182,7 @@ byte[] salida = MoquiDTEUtils.sign(doc2, "#" + idAcuseRecibo, pkey, certificate,
 try {
     MoquiDTEUtils.validateDocumentSii(ec, salida, schemaLocation)
 } catch (Exception e) {
-    ec.message.addError("Failed validation: " + e.getMessage())
+    ec.message.addError("Failed validation of Envio: " + e.getMessage())
 }
 
 doc2 = MoquiDTEUtils.parseDocument(salida)

@@ -358,6 +358,4 @@ referenciasList.each { groovy.util.Node referencia ->
     referenciaList.add([referenciaTipoDteEnumId:referenciaTipoDteEnumId, folio:folio, refDate:refDate, codRefEnumId:codRefEnumId, razonReferencia:referencia.RazonRef?.text()])
 }
 
-
-
 return;
