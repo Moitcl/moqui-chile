@@ -125,7 +125,7 @@ class MoquiDTEUtils {
             }
             String itemAfecto = "true"
             if (detailEntry.productId) {
-                Map<String, Object> afectoOutMap = ec.service.sync().name("mchile.sii.dte.DteImportServices.check#Afecto").parameter("productId", detailEntry.productId).call()
+                Map<String, Object> afectoOutMap = ec.service.sync().name("mchile.sii.dte.DteLoadServices.check#Afecto").parameter("productId", detailEntry.productId).call()
                 itemAfecto = afectoOutMap.afecto
             }
 
