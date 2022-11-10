@@ -223,7 +223,7 @@ if (errorMessages.size() > 0) {
     sentRecStatusId = 'Ftd-ReceiverAck'
 }
 
-ec.service.sync().name("update#mchile.dte.FiscalTaxDocumentAttributes").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, invoiceId:invoiceId]).call()
+ec.service.sync().name("update#mchile.dte.FiscalTaxDocument").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, invoiceId:invoiceId]).call()
 
 
 // Se agregan las referencias
