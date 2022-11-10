@@ -130,7 +130,7 @@ if (allDuplicated) {
 
 estadoGlosaMap = [0:'Envio Recibido Conforme', 1:'Envio Rechazado - Error de Schema', 2:'Envio Rechazado - Error de Firma', 3:'Envio Rechazado - RUT Receptor No Corresponde', 90:'Envio Rechazado - Archivo Repetido',
                   91:'Envio Rechazado - Archivo Ilegible', 99:'Envio Rechazado - Otros']
-idAcuseRecibo = "EnvAcuseRecibo-" + envioRespuestaId
+idAcuseRecibo = "RespuestaDte-" + envioRespuestaId
 StringWriter writer = new StringWriter()
 MarkupBuilder acuseRecibo = new MarkupBuilder(writer)
 String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
