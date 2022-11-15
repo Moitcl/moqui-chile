@@ -167,7 +167,7 @@ ftdCreateMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNation
 mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(ftdCreateMap).call()
 fiscalTaxDocumentId = mapOut.fiscalTaxDocumentId
 
-attributeCreateMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, date:ec.user.nowTimestamp, amount:montoTotal, montoNeto:dteMap.montoNeto, montoExento:dteMap.montoExento, tasaImpuesto:dteMap.tasaIva, tipoImpuesto:1, montoIvaRecuperable:dteMap.iva, montoIvaNoRecuperable:0,
+attributeCreateMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, date:ec.user.nowTimestamp, amount:montoTotal, montoNeto:dteMap.montoNeto, montoExento:dteMap.montoExento, tasaImpuesto:dteMap.tasaIva, tipoImpuesto:1, montoIVARecuperable:dteMap.iva, montoIVANoRecuperable:0,
                       fechaEmision:fechaEmision, fechaVencimiento:dteMap.fechaVencimiento, razonSocialEmisor:dteMap.razonSocialEmisor, razonSocialReceptor:dteMap.razonSocialReceptor]
 
 if (dteMap.tipoDteEnumId == 'Ftdt-52') {
