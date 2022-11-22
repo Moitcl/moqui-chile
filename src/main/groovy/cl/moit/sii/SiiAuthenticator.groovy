@@ -114,20 +114,33 @@ class SiiAuthenticator {
                 response = restClient.call()
                 responseText = new String(response.bytes(), "iso-8859-1")
                 // javascript:sendMethodPost('/cgi_AUT2000/admRepresentar.cgi?RUT_RPDO=76514104&APPLS=RPETC&NOMBRE=MOIT%20SPA&APPLSDES=RPETC%20Consulta%20Registro%20Transferencia%20Credito%27);
+                // javascript:sendMethodPost('/cgi_AUT2000/admRepresentar.cgi?RUT_RPDO=76222457&amp;APPLS=RPETC,FIS10&amp;NOMBRE=INVERSIONES CJ LIMITADA&amp;APPLSDES=RPETC Consulta Registro Transferencia Credito, FIS10 Acceso a opciones de Usuarios Relacionados de BBRR');">76.222.457-7 </a>
                 //"rPDOsTo":
-                Pattern pattern = Pattern.compile('\\{"rutRpteRpdo":"([0-9]+)","dvRpteRpdo":"(.)","codAppl":"([^"]+)","descripcion":"([^"]+)","nameRpte":"([^"]+)","nameRpdo":"([^"]+)","marca":([^"]+)}', Pattern.DOTALL)
+                Pattern pattern = Pattern.compile('\\{"rutRpteRpdo":"([0-9]+)","dvRpteRpdo":"(.)","codAppl":"([^"]+)","descripcion":"([^"]+)","nameRpte":"([^"]+)","nameRpdo":"([^"]+)","marca":([^"]+)}[,\\]]', Pattern.DOTALL)
                 Object matcher = responseText =~ pattern
                 Collection results = matcher.findAll()
                 Map representeeMap
                 results.each { match ->
                     String rutCandidato = "${match[1]}-${match[2]}"
                     if (rutRepresentado == rutCandidato) {
-                        representeeMap = [RUT_RPDO:match[1], APPLS:match[3], NOMBRE:match[7], APPLSDES:match[4]]
+                        representeeMap = [RUT_RPDO:match[1], APPLS:match[3], NOMBRE:match[6], APPLSDES:match[4]]
                     }
                 }
                 if (representeeMap == null) {
                     logger.error("No se pudo encontrar RUT representado")
-                    return null;
+                    return null
+                }
+                boolean hasAllFields = true
+                ['RUT_RPDO', 'APPLS', 'NOMBRE', 'APPLSDES'].each {
+                    if (representeeMap[it] == null || representeeMap[it] == 'null') {
+                        logger.error("Parsing representee data did not find key ${it}")
+                        hasAllFields = false
+                    }
+                }
+                logger.warn("representeeMap: ${representeeMap}")
+                if (!hasAllFields) {
+                    logger.error("Received responseText: ${responseText}")
+                    return null
                 }
                 if (certData != null && certData.size() > 0 && certPass != null && certPass.size() > 0) {
                     restClient.uri('https://herculesr.sii.cl/cgi_AUT2000/admRepresentar.cgi')
@@ -135,12 +148,19 @@ class SiiAuthenticator {
                     restClient.uri('https://zeusr.sii.cl/cgi_AUT2000/admRepresentar.cgi')
                 }
                 restClient.contentType("application/x-www-form-urlencoded")
+                restClient.addBodyParameters(representeeMap)
+                org.eclipse.jetty.util.Fields fields = new org.eclipse.jetty.util.Fields()
                 representeeMap.each { key, value ->
-                    restClient.addFieldPart(key as String, value as String)
+                    fields.add(key, value)
                 }
-                restClient.text("")
+                String bodyText = org.eclipse.jetty.client.util.FormRequestContent.convert(fields)
+                restClient.text(bodyText)
                 response = restClient.call()
                 responseText = response.text()
+                if (responseText.contains("En este momento no lo podemos atender, pues hemos detectado un error")) {
+                    logger.error("Error: ${responseText}")
+                    return null;
+                }
                 if (debug)
                     logger.info("responseText for representación: ${responseText}")
             }
