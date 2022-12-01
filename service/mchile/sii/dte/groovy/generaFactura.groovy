@@ -1,6 +1,5 @@
 import org.w3c.dom.Document
 
-import org.moqui.BaseArtifactException
 import org.moqui.entity.EntityValue
 import org.moqui.context.ExecutionContext
 
