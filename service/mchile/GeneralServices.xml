@@ -243,6 +243,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="direccion"/>
             <parameter name="comuna"/>
             <parameter name="ciudad"/>
+            <parameter name="failOnDuplicate" type="Boolean" default="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="partyId"/>
@@ -269,28 +270,45 @@ along with this software (see the LICENSE.md file). If not, see
                     <econdition field-name="partyId" operator="not-in" from="excludePartyIds"/>
                 </entity-find>
             </if>
-            <if condition="!partyIdentificationList"><then>
-                <if condition="createUnknown"><then>
-                    <service-call name="mantle.party.PartyServices.create#Organization" in-map="[organizationName:razonSocial, taxOrganizationName:razonSocial, roleTypeId:'Supplier']"
-                                  out-map="context"/>
-                    <service-call name="create#mantle.party.PartyIdentification" in-map="[partyId:partyId, partyIdTypeEnumId:'PtidNationalTaxId', idValue:idValue]"/>
-                    <if condition="giro != null &amp;&amp; giro != ''">
-                        <service-call name="create#mchile.dte.PartyGiro" in-map="[partyId:partyId, description:giro, isPrimary:'Y']"/>
-                    </if>
-                    <entity-find entity-name="moqui.basic.GeoAssocAndToDetail" list="comunaList">
-                        <econdition field-name="geoId" value="CHL"/>
-                        <econdition field-name="geoName" ignore-case="true" from="comuna"/>
-                    </entity-find>
-                    <set field="comunaId" from="comunaList.first?.geoId"/>
-                    <service-call name="mantle.party.ContactServices.store#PartyContactInfo"
-                                  in-map="[partyId:partyId, address1:direccion, postalContactMechPurposeId:'PostalTax', stateProvinceGeoId:comunaId, countryGeoId:'CHL', city:ciudad]"/>
-                </then><else>
-                    <return error="true" message="No existe organización con RUT ${idValue} definida en el sistema"/>
-                </else></if>
-            </then><else-if condition="partyIdentificationList.size() == 1">
+            <if condition="partyIdentificationList.size() == 1"><then>
                 <set field="partyId" from="partyIdentificationList.first.partyId"/>
-            </else-if><else>
-                <return error="true" message="Más de un sujeto con mismo rut ${idValue}: partyIds ${partyIdentificationList.partyId})"/>
+                <return/>
+            </then><else-if condition="partyIdentificationList.size() > 1">
+                <if condition="failOnDuplicate"><then>
+                    <return error="true" message="Más de un sujeto con mismo rut ${idValue}: partyIds ${partyIdentificationList.partyId})"/>
+                </then></if>
+                <!-- Attempt to find including razonSocial -->
+                <iterate list="partyIdentificationList" entry="partyIdentification">
+                    <entity-find entity-name="mantle.party.PartyDetail" list="partyList">
+                        <econdition field-name="partyId" from="partyIdentification.partyId"/>
+                        <econditions combine="or">
+                            <econdition field-name="organizationName" from="razonSocial"/>
+                            <econdition field-name="taxOrganizationName" from="razonSocial"/>
+                        </econditions>
+                    </entity-find>
+                    <if condition="partyList">
+                        <set field="partyId" from="partyList.first.partyId"/>
+                        <return/>
+                    </if>
+                </iterate>
+            </else-if></if>
+            <!-- Not Found, check whether need to create -->
+            <if condition="createUnknown"><then>
+                <service-call name="mantle.party.PartyServices.create#Organization" in-map="[organizationName:razonSocial, taxOrganizationName:razonSocial, roleTypeId:'Supplier']"
+                              out-map="context"/>
+                <service-call name="create#mantle.party.PartyIdentification" in-map="[partyId:partyId, partyIdTypeEnumId:'PtidNationalTaxId', idValue:idValue]"/>
+                <if condition="giro != null &amp;&amp; giro != ''">
+                    <service-call name="create#mchile.dte.PartyGiro" in-map="[partyId:partyId, description:giro, isPrimary:'Y']"/>
+                </if>
+                <entity-find entity-name="moqui.basic.GeoAssocAndToDetail" list="comunaList">
+                    <econdition field-name="geoId" value="CHL"/>
+                    <econdition field-name="geoName" ignore-case="true" from="comuna"/>
+                </entity-find>
+                <set field="comunaId" from="comunaList.first?.geoId"/>
+                <service-call name="mantle.party.ContactServices.store#PartyContactInfo"
+                              in-map="[partyId:partyId, address1:direccion, postalContactMechPurposeId:'PostalTax', stateProvinceGeoId:comunaId, countryGeoId:'CHL', city:ciudad]"/>
+            </then><else>
+                <return error="true" message="No existe organización con RUT ${idValue} definida en el sistema"/>
             </else></if>
         </actions>
     </service>

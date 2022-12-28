@@ -66,14 +66,14 @@ if (rutEmisorCaratula != emisor.RUTEmisor.text()) {
     estadoRecepEnv = 2
 }
 issuerPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutEmisorCaratula, createUnknown:createUnknownIssuer, razonSocial:emisor.RznSoc.text(), roleTypeId:'Supplier',
-        giro:emisor.GiroEmis.text(), direccion:emisor.DirOrigen.text(), comuna:emisor.CmnaOrigen.text(), ciudad:emisor.CiudadOrigen.text()]).call().partyId
+        giro:emisor.GiroEmis.text(), direccion:emisor.DirOrigen.text(), comuna:emisor.CmnaOrigen.text(), ciudad:emisor.CiudadOrigen.text(), failOnDuplicate:false]).call().partyId
 receptor = setDte.DTE[0].Documento.Encabezado.Receptor
 if (rutReceptorCaratula != receptor.RUTRecep.text()) {
     ec.logger.error("Rut receptor de carátula (${rutReceptorCaratula} y DTE (${receptor.RUTRecep.text()}) no coinciden")
     estadoRecepEnv = 2
 }
 receiverPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutReceptorCaratula, createUnknown:createUnknownReceiver, razonSocial:receptor.RznSocRecep.text(), roleTypeId:'Customer',
-                                                                                              giro:emisor.GiroRecep.text(), direccion:emisor.DirRecep.text(), comuna:emisor.CmnaRecep.text(), ciudad:emisor.CiudadRecep.text()]).call()?.partyId
+        giro:emisor.GiroRecep.text(), direccion:emisor.DirRecep.text(), comuna:emisor.CmnaRecep.text(), ciudad:emisor.CiudadRecep.text(), failOnDuplicate:false]).call()?.partyId
 if (!receiverPartyId) {
     return
 }

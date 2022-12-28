@@ -35,7 +35,7 @@ if (rutEmisor in reserved.rutList) {
 }
 
 issuerPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutEmisor, createUnknown:createUnknownIssuer, razonSocial:dteMap.razonSocialEmisor, roleTypeId:'Supplier',
-                                                                                              giro:dteMap.giroEmisor, direccion:dteMap.direccionOrigen, comuna:dteMap.comunaOrigen, ciudad:dteMap.ciudadOrigen]).call().partyId
+      giro:dteMap.giroEmisor, direccion:dteMap.direccionOrigen, comuna:dteMap.comunaOrigen, ciudad:dteMap.ciudadOrigen, failOnDuplicate:false]).call().partyId
 issuerTaxName = null
 EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()
 issuerTaxName = issuer.taxOrganizationName
