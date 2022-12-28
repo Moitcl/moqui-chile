@@ -62,6 +62,7 @@ if (rutReceptor in reserved.rutList) {
     errorMessages.add("Rut de receptor es Rut reservado, no se puede importar automáticamente")
     estadoRecepDte = 2
     recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+    if (recepDteGlosa.length()  > 256) recepDteGlosa = recepDteGlosa.substring(0, 256)
     sentRecStatusId = 'Ftd-ReceiverReject'
     return
 }
@@ -122,6 +123,7 @@ if (existingDteList) {
             errorMessages.add("Ya existe registrada DTE tipo ${dteMap.tipoDte} para emisor ${rutEmisor} y folio ${dteMap.fiscalTaxDocumentNumber}, diferente al recibido")
             estadoRecepDte = 2
             recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+            if (recepDteGlosa.length()  > 256) recepDteGlosa = recepDteGlosa.substring(0, 256)
             isDuplicated = true
             return
         }
