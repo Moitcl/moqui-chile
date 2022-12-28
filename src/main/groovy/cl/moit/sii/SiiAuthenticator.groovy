@@ -30,27 +30,27 @@ class SiiAuthenticator {
 
     public SiiAuthenticator() {}
 
-    public void setRutOrganizacion(String rutOrganizacion) { this.rutOrganizacion = rutOrganizacion }
+    public SiiAuthenticator setRutOrganizacion(String rutOrganizacion) { this.rutOrganizacion = rutOrganizacion; return this }
 
-    public void setRutRepresentado(String rutRepresentado) { this.rutRepresentado = rutRepresentado }
+    public SiiAuthenticator setRutRepresentado(String rutRepresentado) { this.rutRepresentado = rutRepresentado; return this }
 
-    public void setCertData(String certData) { this.certData = certData }
+    public SiiAuthenticator setCertData(String certData) { this.certData = certData; return this }
 
-    public void setCertPass(String certPass) { this.certPass = certPass }
+    public SiiAuthenticator setCertPass(String certPass) { this.certPass = certPass; return this }
 
-    public void setUsername(String username) { this.username = username }
+    public SiiAuthenticator setUsername(String username) { this.username = username; return this }
 
-    public void setPassword(String password) { this.password = password }
+    public SiiAuthenticator setPassword(String password) { this.password = password; return this }
 
-    public void setDebug(boolean debug) { this.debug = debug }
+    public SiiAuthenticator setDebug(boolean debug) { this.debug = debug; return this }
 
-    public void setProxyHost(String proxyHost) { this.proxyHost = proxyHost }
+    public SiiAuthenticator setProxyHost(String proxyHost) { this.proxyHost = proxyHost; return this }
 
-    public void setProxyPort(int proxyPort) { this.proxyPort = proxyPort }
+    public SiiAuthenticator setProxyPort(int proxyPort) { this.proxyPort = proxyPort; return this }
 
-    public void setPortalMipyme(boolean portalMipyme) { this.portalMipyme = portalMipyme }
+    public SiiAuthenticator setPortalMipyme(boolean portalMipyme) { this.portalMipyme = portalMipyme; return this }
 
-    public void setTrustAll(boolean trustAll) { this.trustAll = trustAll }
+    public SiiAuthenticator setTrustAll(boolean trustAll) { this.trustAll = trustAll; return this }
 
     public RestClient.RequestFactory getRequestFactory() {
         return requestFactory

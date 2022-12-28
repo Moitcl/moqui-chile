@@ -130,21 +130,23 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="autorizaciones" type="List"/>
         </out-parameters>
         <actions>
-            <!--
-            <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="[partyId:partyId]" out-map="context"/>
-            -->
             <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="[partyId:dtePartyId]" out-map="dteconfig"/>
             <script><![CDATA[
                 import org.moqui.util.RestClient
                 import cl.moit.net.ClientAuthRequestFactory
+                import cl.moit.sii.SiiAuthenticator
 
-                ClientAuthRequestFactory requestFactory = new ClientAuthRequestFactory(dteconfig.certData, dteconfig.passCert)
-                RestClient restClient = new RestClient().uri("https://palena.sii.cl/cvc_cgi/dte/ce_consulta_rut").method("GET").acceptContentType("text/html").contentType("application/x-www-form-urlencoded")
-                        .withRequestFactory(requestFactory).encoding("iso-8859-1")
-                response = restClient.call()
-                responseText = new String(response.bytes(), "iso-8859-1")
+                SiiAuthenticator authenticator = new SiiAuthenticator().setRutOrganizacion(dteconfig.rutEmisor).setTrustAll(true).setPortalMipyme(false)
+
+                if (dteconfig.certData != null && dteconfig.certData.length() > 0 && dteconfig.passCert != null && dteconfig.passCert.size() > 0) {
+                    authenticator.setCertData(dteconfig.certData)
+                    authenticator.setCertPass(dteconfig.passCert)
+                }
+
+                RestClient restClient = authenticator.createRestClient()
+
                 restClient.uri("https://palena.sii.cl/cvc_cgi/dte/ce_consulta_e").method("POST").acceptContentType("text/html").contentType("application/x-www-form-urlencoded")
-                        .addHeader("Referer", "https://palena.sii.cl/cvc/dte/ee_empresas_dte.html")
+                        .addHeader("Referer", "https://palena.sii.cl/cvc_cgi/dte/ce_consulta_rut")
                         .text("RUT_EMP=${rut}&DV_EMP=${dv.toUpperCase()}&ACEPTAR=Consultar")
                 response = restClient.call()
                 responseText = new String(response.bytes(), "iso-8859-1")
