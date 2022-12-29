@@ -44,6 +44,7 @@ class Text {
             int resto = number % 10
             String union = " y "
             switch(decena) {
+                case 1: text.append("dieci"); union = ""; break
                 case 2: text.append("veinti"); union = ""; break
                 case 3: text.append("treinta"); break
                 case 4: text.append("cuarenta"); break
