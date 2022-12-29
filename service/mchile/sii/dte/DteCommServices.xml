@@ -32,15 +32,17 @@ along with this software (see the LICENSE.md file). If not, see
             <iterate list="envioList" entry="envio">
                 <if condition="envio.envioTypeEnumId == 'Ftde-EnvioBoleta'"><then>
                     <if condition="envio.rutReceptor == '60803000-K'"><then>
-                        <service-call name="mchile.sii.dte.DteCommServices.enviaSII#EnvioBoleta" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio"/>
+                        <service-call name="mchile.sii.dte.DteCommServices.enviaSII#EnvioBoleta" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio" transaction="force-new"/>
                     </then><else>
                         <message type="danger">Not sending EnvioBoleta ${envio.envioId} with rut not matching SII</message>
                     </else></if>
                 </then><else>
                     <if condition="envio.rutReceptor == '60803000-K'"><then>
-                        <service-call name="mchile.sii.dte.DteCommServices.enviaSII#EnvioDte" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio"/>
+                        <log message="Sending envio ${envio.envioId} to sii"/>
+                        <service-call name="mchile.sii.dte.DteCommServices.enviaSII#EnvioDte" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio" transaction="force-new" ignore-error="true"/>
                     </then><else>
-                        <service-call name="mchile.sii.dte.DteCommServices.send#PendingEnvioDteReceiver" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio"/>
+                        <log message="Sending envio ${envio.envioId} to receiver"/>
+                        <service-call name="mchile.sii.dte.DteCommServices.send#PendingEnvioDteReceiver" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio" transaction="force-new" ignore-error="true"/>
                     </else></if>
                 </else></if>
             </iterate>
@@ -60,6 +62,7 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <set field="envio" from="envioList.first"/>
             <if condition="envio">
+                <set field="receptorPartyId" from="envio.receiverPartyId"/>
                 <if condition="envio.envioTypeEnumId == 'Ftde-EnvioDte'"><then>
                     <entity-find entity-name="mchile.dte.DteEnvioFiscalTaxDocument" list="dteList" for-update="true">
                         <econdition field-name="envioId" from="envio.envioId"/>
@@ -71,7 +74,6 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="rutReceptor" from="null"/>
                     <set field="rutEmisor" from="null"/>
                     <set field="folio" value=""/>
-                    <set field="receptorPartyId" from="envio.receiverPartyId"/>
                     <set field="issuerPartyId" from="null"/>
                     <iterate list="dteList" entry="envioDte">
                         <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" auto-field-map="envioDte"/>
@@ -101,7 +103,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="subject" value="Acuse de Recibo Nro. ${envio.internalId} - Receptor: ${envio.rutEmisor}"/>
                     <set field="emailTypeEnumId" value="Ftdemt-XmlReceptionResponse"/>
                     <if condition="receptorPartyId == null">
-                        <service-call name="mchile.GeneralServices.get#PartyIdByRut" in-map="[idValue:envio.rutReceptor]" out-map="receptorMap" out-map-add-to-existing="false" ignore-error="true"/>
+                        <service-call name="mchile.GeneralServices.get#PartyIdByRut" in-map="[idValue:envio.rutReceptor ]" out-map="receptorMap" out-map-add-to-existing="false" ignore-error="true"/>
                         <set field="receptorPartyId" from="receptorMap?.partyId"/>
                     </if>
                 </else-if><else-if condition="envio.envioTypeEnumId == 'Ftde-EnvioRecibos'">
