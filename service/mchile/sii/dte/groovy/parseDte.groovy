@@ -349,11 +349,15 @@ referenciasList.each { groovy.util.Node referencia ->
     } catch (NullPointerException e) {
         discrepancyMessages.add("Valor inválido en referencia ${nroRef}, campo FchRef: null")
     }
-    codRefEnum = ec.entity.find("moqui.basic.Enumeration").condition([enumTypeId:"FtdCodigoReferencia", enumCode:referencia.CodRef.text()]).list().first
-    codRefEnumId = codRefEnum?.enumId
+    codRef = referencia.CodRef.text()
+    if (codRef != null && codRef != '') {
+        codRefEnum = ec.entity.find("moqui.basic.Enumeration").condition([enumTypeId:"FtdCodigoReferencia", enumCode:codRef]).list().first
+        codRefEnumId = codRefEnum?.enumId
+        if (!codRefEnumId)
+            errorMessages.add("Valor inválido en referencia ${nroRef}, campo CodRef: ${referencia.CodRef.text()}")
+    } else
+        codRefEnumId = null
     folio = referencia.FolioRef.text()
-    if (!codRefEnumId)
-        errorMessages.add("Valor inválido en referencia ${nroRef}, campo CodRef: ${referencia.CodRef.text()}")
     referenciaList.add([referenciaTipoDteEnumId:referenciaTipoDteEnumId, folio:folio, refDate:refDate, codRefEnumId:codRefEnumId, razonReferencia:referencia.RazonRef?.text()])
 }
 
