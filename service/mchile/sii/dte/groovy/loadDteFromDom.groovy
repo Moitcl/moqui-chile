@@ -77,8 +77,11 @@ isDuplicated = false
 
 if (existingDteList) {
     dte = existingDteList.first
-    if (dte.sentRecStatusId == 'Ftd-ReceiverReject') {
-        ec.logger.info("Existente tiene estado rechazado, eliminando para partir de cero")
+    if (dte.sentRecStatusId == 'Ftd-ReceiverReject' || dte.statusId == 'Ftd-LocallyUnknown') {
+        if (dte.sentRecStatusId == 'Ftd-ReceiverReject')
+            ec.logger.info("Existente tiene estado rechazado, eliminando para partir de cero")
+        else
+            ec.logger.info("Existente era obtenido desde SII (sólo metadata), eliminando para partir de cero")
         // remove existing DTE and start from scratch
         ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentAttributes").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).call()
         ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentContent").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).parameter("fiscalTaxDocumentContentId", "*").call()
