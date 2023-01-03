@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+
+    <service verb="get" noun="CertificateDetail">
+        <in-parameters>
+            <parameter name="organizationPartyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="daysLeft" type="Integer"/>
+            <parameter name="noticeDate30Days" type="Timestamp"/>
+            <parameter name="noticeDate15Days" type="Timestamp"/>
+            <parameter name="noticeDate5Days" type="Timestamp"/>
+            <parameter name="noticeDate2Days" type="Timestamp"/>
+            <parameter name="noticeDate1Day" type="Timestamp"/>
+            <parameter name="expirationDate" type="Timestamp"/>
+            <parameter name="issuerName"/>
+            <parameter name="subjectName"/>
+        </out-parameters>
+        <actions>
+            <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="[partyId:organizationPartyId]" out-map="dteConfig"/>
+            <script><![CDATA[
+                import sun.security.x509.X500Name
+
+                certificate = dteConfig.certificate
+                Timestamp thruDate = new Timestamp(certificate.getNotAfter().getTime())
+                Timestamp fromDate = new Timestamp(certificate.getNotBefore().getTime())
+                X500Name issuer = (X500Name) certificate.getIssuerDN()
+                issuerName = issuer.getCommonName()
+                X500Name subject = (X500Name) certificate.getSubjectDN()
+                subjectName = subject.getCommonName()
+                subjectRut = dteConfig.rutEnviador
+                daysLeft = Math.round((thruDate.time - ec.user.nowTimestamp.time) / (1000 * 60 * 60 * 24))
+
+                expirationDate = thruDate
+                Calendar cal = Calendar.instance
+                cal.setTimeInMillis(expirationDate.time)
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.add(Calendar.DAY_OF_MONTH, -1)
+                noticeDate1Day = new Timestamp(cal.timeInMillis)
+                cal.add(Calendar.DAY_OF_MONTH, -1)
+                noticeDate2Days = new Timestamp(cal.timeInMillis)
+                cal.add(Calendar.DAY_OF_MONTH, -3)
+                noticeDate5Days = new Timestamp(cal.timeInMillis)
+                cal.add(Calendar.DAY_OF_MONTH, -10)
+                noticeDate15Days = new Timestamp(cal.timeInMillis)
+                cal.add(Calendar.DAY_OF_MONTH, -15)
+                noticeDate30Days = new Timestamp(cal.timeInMillis)
+                ]]></script>
+        </actions>
+    </service>
+
+    <service verb="store" noun="Certificate">
+        <description>Carga Certificado Digital para firmar DTE</description>
+        <in-parameters>
+            <parameter name="certificateFile" type="org.apache.commons.fileupload.FileItem"/>
+            <parameter name="organizationPartyId" required="true"/>
+            <parameter name="encoding" default-value="UTF-8"/>
+            <parameter name="passCert" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams" for-update="true">
+                <field-map field-name="partyId" from="organizationPartyId"/>
+            </entity-find-one>
+            <if condition="!dteParams">
+                <return error="true" message="No se encuentran parámetros de organizacion"/>
+            </if>
+            <set field="dteParams.certData" from="certificateFile.get().encodeBase64()" type="String"/>
+            <set field="dteParams.passCert" from="passCert"/>
+            <entity-update value-field="dteParams"/>
+        </actions>
+    </service>
+
+
+</services>
