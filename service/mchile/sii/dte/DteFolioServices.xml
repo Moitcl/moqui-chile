@@ -340,25 +340,14 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="ACEPTAR" value="Solicitar Numeración"/>
             <script><![CDATA[
                 import org.moqui.util.RestClient
-                import cl.moit.net.ClientAuthRequestFactory
-                import org.eclipse.jetty.client.HttpClient
+                import cl.moit.sii.SiiAuthenticator
 
-                ClientAuthRequestFactory requestFactory = new ClientAuthRequestFactory(certData, passCert)
+                SiiAuthenticator authenticator = new SiiAuthenticator()
+                authenticator.setCertData(certData)
+                authenticator.setCertPass(passCert)
+                authenticator.setPortalMipyme(false)
+                RestClient restClient = authenticator.createRestClient()
 
-                RestClient restClient = new RestClient().uri("https://${hostName}/cvc_cgi/dte/of_solicita_folios").method("GET").acceptContentType("text/html")
-                        .contentType("application/x-www-form-urlencoded").withRequestFactory(requestFactory).encoding("iso-8859-1")
-                Object cookieStore = requestFactory.getHttpClient().cookieStore
-                response = restClient.call() // Primer llamado lleva a selección de Continuar o representar.
-                // Servidor del SII no especifica encoding pero sabemos que es iso-8859-1 y el default de RestClient es UTF-8
-                responseText = new String(response.bytes(), "iso-8859-1")
-                if (responseText =~ /Debido a que usted ha sido autorizado por otros contribuyentes\s+para que los represente electrónicamente en el sitio web del SII, esta página le permitirá decidir\s+si en esta oportunidad desea realizar trámites propios o representar electrónicamente a otro\s+contribuyente/) {
-                    response = restClient.call() // Segundo llamado lleva a formulario
-                    responseText = new String(response.bytes(), "iso-8859-1")
-                }
-                if (! responseText =~ /Para continuar debe digitar el Rut del Contribuyente que solicita timbrar\s+documentos electrónicos:/) {
-                    ec.message.addError("Se esperaba recibir texto solicitando Rut del Contribuyente para solicitar timrar documentos electrónicos")
-                    ec.logger.error("Texto recibido: ${responseText}")
-                }
                 restClient.method("POST").text("RUT_EMP=${rutEmp}&DV_EMP=${dvEmp}&ACEPTAR=Continuar").uri("https://${hostName}/cvc_cgi/dte/of_solicita_folios_dcto")
                 response = restClient.call()
                 responseText = new String(response.bytes(), "iso-8859-1")
