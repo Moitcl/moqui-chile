@@ -17,13 +17,16 @@
             <parameter name="issuerName"/>
             <parameter name="subjectName"/>
             <parameter name="subjectRut"/>
+            <parameter name="failedToLoadCertificate" type="Boolean"/>
         </out-parameters>
         <actions>
             <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="[partyId:organizationPartyId]" out-map="dteConfig"/>
+            <set field="failedToLoadCertificate" from="dteConfig.failedToLoadCertificate"/>
             <script><![CDATA[
                 import sun.security.x509.X500Name
 
                 certificate = dteConfig.certificate
+                if (certificate == null) return
                 subjectRut = cl.moit.dte.MoquiDTEUtils.getRutFromCertificate(certificate)
                 Timestamp thruDate = new Timestamp(certificate.getNotAfter().getTime())
                 Timestamp fromDate = new Timestamp(certificate.getNotBefore().getTime())
@@ -74,6 +77,8 @@
             <set field="dteParams.certData" from="certificateFile.get().encodeBase64()" type="String"/>
             <set field="dteParams.passCert" from="passCert"/>
             <entity-update value-field="dteParams"/>
+            <service-call name="mchile.sii.dte.DteCertificateServices.get#CertificateDetail" in-map="context" out-map="context"/>
+            <if condition="failedToLoadCertificate"><return error="true" message="No se pudo cargar el certificado, por favor chequear el archivo y la clave."/></if>
         </actions>
     </service>
 

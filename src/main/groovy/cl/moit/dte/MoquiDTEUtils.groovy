@@ -615,12 +615,14 @@ class MoquiDTEUtils {
      * @return
      */
     public static String getRutFromCertificate(X509Certificate x509) {
-        String rut = null;
-        Pattern p = Pattern.compile("[\\d]{6,8}-[\\dkK]");
-        Matcher m = p.matcher(new String(x509.getExtensionValue("2.5.29.17")));
+        if (x509 == null)
+            return null
+        String rut = null
+        Pattern p = Pattern.compile("[\\d]{6,8}-[\\dkK]")
+        Matcher m = p.matcher(new String(x509.getExtensionValue("2.5.29.17")))
         if (m.find())
-            rut = m.group();
-        return rut;
+            rut = m.group()
+        return rut
     }
 
     public static void validateDocumentSii(ExecutionContext ec, byte[] docBytes, String schemaUri) throws SAXException {

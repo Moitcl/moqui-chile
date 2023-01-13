@@ -33,6 +33,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="pkey" type="java.security.PrivateKey"/>
             <parameter name="tokenBoleta"/>
             <parameter name="tokenBoletaLastUsage"/>
+            <parameter name="failedToLoadCertificate" type="Boolean"/>
         </out-parameters>
         <actions>
             <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams">
@@ -58,14 +59,20 @@ along with this software (see the LICENSE.md file). If not, see
                 import java.security.cert.X509Certificate
                 import cl.moit.dte.MoquiDTEUtils
 
+                failedToLoadCertificate = false
                 if (certData && passCert) {
-                    KeyStore ks = KeyStore.getInstance("PKCS12")
-                    ks.load(new ByteArrayInputStream(certData.decodeBase64()), passCert.toCharArray())
-                    String alias = ks.aliases().nextElement()
-                    certificate = (X509Certificate) ks.getCertificate(alias)
-                    rutEnviador = MoquiDTEUtils.getRutFromCertificate(certificate)
-                    ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEnviador).call()
-                    pkey = (PrivateKey) ks.getKey(alias, ((String)passCert).toCharArray())
+                    try {
+                        KeyStore ks = KeyStore.getInstance("PKCS12")
+                        ks.load(new ByteArrayInputStream(certData.decodeBase64()), passCert.toCharArray())
+                        String alias = ks.aliases().nextElement()
+                        certificate = (X509Certificate) ks.getCertificate(alias)
+                        rutEnviador = MoquiDTEUtils.getRutFromCertificate(certificate)
+                        ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEnviador).call()
+                        pkey = (PrivateKey) ks.getKey(alias, ((String)passCert).toCharArray())
+                    } catch (java.io.IOException e) {
+                        ec.message.addMessage("No se pudo cargar el certificado: ${e.message}", "danger")
+                        failedToLoadCertificate = true
+                    }
                 }
                 ]]></script>
             <set field="pdfTemplate" from="dteParams.pdfTemplate"/>
