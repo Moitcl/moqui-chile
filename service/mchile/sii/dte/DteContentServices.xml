@@ -141,18 +141,33 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="Organización emisora no tiene definida plantilla para generar PDF"/>
             </if>
 
+            <if condition="invoiceMessage">
+                <if condition="commentAfterDetalle == null"><then>
+                    <set field="commentAfterDetalle" from="invoiceMessage"/>
+                </then><else>
+                    <set field="commentAfterDetalle" value="${commentAfterDetalle}\n${invoiceMessage}"/>
+                </else></if>
+                <set field="transformParameters.commentAfterDetalle" from="commentAfterDetalle"/>
+            </if>
+            <service-call name="mchile.sii.dte.DteContentServices.generate#PdfInternal" in-map="context" out-map="context"/>
+        </actions>
+    </service>
+
+    <service verb="generate" noun="PdfInternal">
+        <in-parameters>
+            <parameter name="xmlLocation" required="true"/>
+            <parameter name="commentAfterDetalle"/>
+            <parameter name="transformParameters" type="Map" default="[detailHeaderBgColor:'#eaeaea', detailHeaderFgColor:'black', detailHeaderSepColor:'white', tableBorderColor:'#eaeaea', vendorNameColor:'black']"/>
+            <parameter name="template" allow-html="any"/>
+            <parameter name="boleta"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="pdfBytes" type="byte[]"/>
+            <parameter name="pdfCedibleBytes" type="byte[]"/>
+        </out-parameters>
+        <actions>
             <script>
                 import javax.xml.transform.stream.StreamSource
-
-                if (invoiceMessage != null) {
-                    if (commentAfterDetalle == null) {
-                        commentAfterDetalle = invoiceMessage
-                        transformParameters.commentAfterDetalle = invoiceMessage
-                    } else {
-                        commentAfterDetalle = "${commentAfterDetalle}\n${invoiceMessage}"
-                        transformParameters.commentAfterDetalle = commentAfterDetalle
-                    }
-                }
 
                 ByteArrayOutputStream pdf = new ByteArrayOutputStream()
 
@@ -177,19 +192,40 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
             <parameter name="fiscalTaxDocumentContentTypeEnumId" required="true"/>
+            <parameter name="generatePdfIfUnavailable" type="Boolean" default="false"/>
         </in-parameters>
         <actions>
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentContent" value-field="document" cache="false">
-                <field-map field-name="fiscalTaxDocumentId"/>
-                <field-map field-name="fiscalTaxDocumentContentTypeEnumId"/>
-            </entity-find-one>
-            <script>
-                docRr = ec.resource.getLocationReference(document.contentLocation)
-                if (docRr?.exists)
-                    ec.web.sendResourceResponse(document.contentLocation)
-                else
-                    ec.message.addError(ec.resource.expand('No se encontró archivo en [${fiscalTaxDocumentId}]',''))
-            </script>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="documentList">
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <econdition field-name="fiscalTaxDocumentContentTypeEnumId"/>
+            </entity-find>
+            <if condition="documentList">
+                <set field="docRr" from="ec.resource.getLocationReference(documentList.first?.contentLocation)"/>
+            </if>
+            <if condition="docRr?.exists"><then>
+                <script>ec.web.sendResourceResponse(documentList.first.contentLocation)</script>
+                <return/>
+            </then><else-if condition="fiscalTaxDocumentContentTypeEnumId == 'Ftdct-Pdf' &amp;&amp; generatePdfIfUnavailable">
+                <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="documentList" cache="false">
+                    <econdition field-name="fiscalTaxDocumentId"/>
+                    <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
+                </entity-find>
+                <if condition="documentList?.first">
+                    <set field="template" from="ec.resource.getLocationReference('component://MoquiChile/DTE/TEMPLATES/plantilla_general.xsl').text"/>
+                    <service-call name="mchile.sii.dte.DteContentServices.generate#PdfInternal" in-map="[xmlLocation:documentList.first.contentLocation, template:template]" out-map="context"/>
+                    <if condition="pdfBytes">
+                        <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte"/>
+                        <service-call name="mchile.sii.dte.DteInternalServices.get#SiiCode" in-map="[fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId]" out-map="siiCodeMap"/>
+                        <set field="tipoDte" from="siiCodeMap.siiCode"/>
+                        <set field="contentLocation" value="dbresource://moit/erp/dte/${dte.issuerPartyIdValue}/DTE-${tipoDte}-${dte.fiscalTaxDocumentNumber}.pdf"/>
+                        <service-call name="create#mchile.dte.FiscalTaxDocumentContent" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocation]"/>
+                        <script>ec.resource.getLocationReference(contentLocation).putBytes(pdfBytes)</script>
+                        <script>ec.web.sendResourceResponse(contentLocation)</script>
+                        <return/>
+                    </if>
+                </if>
+            </else-if></if>
+            <message error="true">ec.resource.expand('No se encontró archivo en [${fiscalTaxDocumentId}]','')</message>
         </actions>
     </service>
 

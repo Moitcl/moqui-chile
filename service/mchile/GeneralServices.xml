@@ -257,22 +257,24 @@ along with this software (see the LICENSE.md file). If not, see
                 <entity-find entity-name="mantle.party.Party" list="multiplePartyList">
                     <econdition field-name="partyId" operator="in" from="partyIdentificationList.partyId"/>
                 </entity-find>
-                <set field="excludePartyIds" from="[]"/>
+                <set field="includePartyIds" from="[]"/>
                 <iterate list="multiplePartyList" entry="party">
                     <script>
-                        if (party.mergedToPartyId || party.disabled == 'Y')
-                            excludePartyIds.add(party.partyId)
+                        if (party.mergedToPartyId == null &amp;&amp; party.disabled != 'Y')
+                            includePartyIds.add(party.partyId)
                     </script>
                 </iterate>
                 <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
                     <econdition field-name="idValue"/>
                     <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
-                    <econdition field-name="partyId" operator="not-in" from="excludePartyIds"/>
+                    <econdition field-name="partyId" operator="in" from="includePartyIds"/>
                 </entity-find>
             </if>
             <if condition="partyIdentificationList.size() == 1"><then>
-                <set field="partyId" from="partyIdentificationList.first.partyId"/>
-                <return/>
+                <!-- Ensure Party is visible (given EntityFilters) -->
+                <entity-find-one entity-name="mantle.party.Party" value-field="party" auto-field-map="partyIdentificationList.first"/>
+                <set field="partyId" from="party?.partyId"/>
+                <if condition="partyId"><return/></if>
             </then><else-if condition="partyIdentificationList.size() > 1">
                 <if condition="failOnDuplicate"><then>
                     <return error="true" message="Más de un sujeto con mismo rut ${idValue}: partyIds ${partyIdentificationList.partyId})"/>
