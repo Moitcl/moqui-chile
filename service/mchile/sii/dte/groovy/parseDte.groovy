@@ -341,13 +341,14 @@ referenciasList.each { groovy.util.Node referencia ->
         errorMessages.add("Valor inesperado en referencia, campo NroLinRef, esperado ${nroRef}, recibido ${referencia.NroLinRef.text()}")
     referenciaTipoDteEnumId = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#MoquiCode").parameter("siiCode", referencia.TpoDocRef.text()).call().enumId
     Date refDate = null
-    try {
-        refDate = formatter.parse(referencia.FchRef.text())
-    } catch (ParseException e) {
-        errorMessages.add("Valor inválido en referencia ${nroRef}, campo FchRef: ${referencia.FchRef.text()}")
-        return
-    } catch (NullPointerException e) {
-        discrepancyMessages.add("Valor inválido en referencia ${nroRef}, campo FchRef: null")
+    if (referencia.FchRef.text() != null) {
+        try {
+            refDate = formatter.parse(referencia.FchRef.text())
+        } catch (ParseException e) {
+            errorMessages.add("Valor inválido en referencia ${nroRef}, campo FchRef: ${referencia.FchRef.text()}")
+        } catch (NullPointerException e) {
+            //discrepancyMessages.add("Valor inválido en referencia ${nroRef}, campo FchRef: null")
+        }
     }
     codRef = referencia.CodRef.text()
     if (codRef != null && codRef != '') {
