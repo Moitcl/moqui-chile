@@ -80,7 +80,13 @@ class SiiAuthenticator {
             restClient.withRequestFactory(requestFactory)
             restClient.uri("https://herculesr.sii.cl/cgi_AUT2000/CAutInicio.cgi?https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi?DESDE_DONDE_URL=OPCION%3D1%26TIPO%3D4").method("POST").acceptContentType("*/*")
             restClient.text("referencia=https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi?DESDE_DONDE_URL=OPCION%3D1%26TIPO%3D4")
-            response = restClient.call()
+            try {
+                response = restClient.call()
+            } catch (Exception e) {
+                ec.logger.error("Calling sii CautInicio certificate", e)
+                ec.message.addError("Error de comunicación con SII en autenticación con certificado")
+                return
+            }
             if (debug) {
                 logger.warn("Cookies after request:")
                 cookieStore.cookies.each { cookie -> logger.info("Cookie for ${cookie.commentURL}: ${cookie.name} = ${cookie.value}")}
@@ -102,16 +108,28 @@ class SiiAuthenticator {
                 logger.warn("rut: ${rut}, dv: ${dv}")
             }
             restClient.text("rut=${rut}&dv=${dv}&referencia=https%3A%2F%2Fmisiir.sii.cl%2Fcgi_misii%2Fsiihome.cgi&411=&rutcntr=${username}&&clave=${password}")
-            response = restClient.call()
+            try {
+                response = restClient.call()
+            } catch (Exception e) {
+                ec.logger.error("Calling sii CautInicio user/pass", e)
+                ec.message.addError("Error de comunicación con SII en autenticación con usuario/clave")
+                return
+            }
             responseText = response.text()
         }
         if (responseText =~ /Debido a que usted ha sido autorizado por otros contribuyentes\s+para que los represente electrónicamente en el sitio web del SII, esta página le permitirá decidir\s+si en esta oportunidad desea realizar trámites propios o representar electrónicamente a otro\s+contribuyente/) {
-            logger.info("Selección de representar o continuar")
+            if (debug) logger.info("Selección de representar o continuar")
             if (rutRepresentado) {
                 // Cambiar a Representar
-                logger.warn("Cambiando a representar")
+                if (debug) logger.warn("Cambiando a representar")
                 restClient.uri('https://zeusr.sii.cl/cgi_AUT2000/admRPDOBuild.cgi')
-                response = restClient.call()
+                try {
+                    response = restClient.call()
+                } catch (Exception e) {
+                    ec.logger.error("Calling sii obteniendo RUTs a representar", e)
+                    ec.message.addError("Error de comunicación con SII al obtener RUTs para representar")
+                    return
+                }
                 responseText = new String(response.bytes(), "iso-8859-1")
                 // javascript:sendMethodPost('/cgi_AUT2000/admRepresentar.cgi?RUT_RPDO=76514104&APPLS=RPETC&NOMBRE=MOIT%20SPA&APPLSDES=RPETC%20Consulta%20Registro%20Transferencia%20Credito%27);
                 // javascript:sendMethodPost('/cgi_AUT2000/admRepresentar.cgi?RUT_RPDO=76222457&amp;APPLS=RPETC,FIS10&amp;NOMBRE=INVERSIONES CJ LIMITADA&amp;APPLSDES=RPETC Consulta Registro Transferencia Credito, FIS10 Acceso a opciones de Usuarios Relacionados de BBRR');">76.222.457-7 </a>
@@ -127,7 +145,7 @@ class SiiAuthenticator {
                     }
                 }
                 if (representeeMap == null) {
-                    logger.error("No se pudo encontrar RUT representado")
+                    ec.message.addError("No se pudo encontrar RUT representado")
                     return null
                 }
                 boolean hasAllFields = true
@@ -137,7 +155,7 @@ class SiiAuthenticator {
                         hasAllFields = false
                     }
                 }
-                logger.warn("representeeMap: ${representeeMap}")
+                if (debug) logger.warn("representeeMap: ${representeeMap}")
                 if (!hasAllFields) {
                     logger.error("Received responseText: ${responseText}")
                     return null
@@ -155,7 +173,13 @@ class SiiAuthenticator {
                 }
                 String bodyText = org.eclipse.jetty.client.util.FormRequestContent.convert(fields)
                 restClient.text(bodyText)
-                response = restClient.call()
+                try {
+                    response = restClient.call()
+                } catch (Exception e) {
+                    ec.logger.error("Calling sii admRepresentar", e)
+                    ec.message.addError("Error de comunicación con SII en autenticación al activar representación")
+                    return
+                }
                 responseText = response.text()
                 if (responseText.contains("En este momento no lo podemos atender, pues hemos detectado un error")) {
                     logger.error("Error: ${responseText}")
@@ -167,7 +191,13 @@ class SiiAuthenticator {
         }
         if (portalMipyme) {
             restClient.uri("https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi?DESDE_DONDE_URL=OPCION=1&TIPO=4")
-            response = restClient.call() // Segundo llamado lleva a formulario
+            try {
+                response = restClient.call() // Segundo llamado lleva a formulario
+            } catch (Exception e) {
+                ec.logger.error("Calling portalMipyme step 1", e)
+                ec.message.addError("Error de comunicación con SII autenticando portalMipyme (paso 1)")
+                return
+            }
             responseText = new String(response.bytes(), "iso-8859-1")
             if (debug)
                 logger.info("responseText: ${responseText}")
@@ -175,7 +205,13 @@ class SiiAuthenticator {
             if (responseText =~ /location.replace\('https:\/\/www1.sii.cl\/cgi-bin\/Portal001\/mipeSelEmpresa.cgi\?DESDE_DONDE_URL=OPCION=1&TIPO=4'\)/) {
                 logger.info("Redirección al origen")
                 restClient.uri("https://www1.sii.cl/cgi-bin/Portal001/mipeSelEmpresa.cgi?DESDE_DONDE_URL=OPCION=1&amp;TIPO=4")
-                response = restClient.call() // Segundo llamado lleva a formulario
+                try {
+                    response = restClient.call() // Segundo llamado lleva a formulario
+                } catch (Exception e) {
+                    ec.logger.error("Calling portalMipyme step 2", e)
+                    ec.message.addError("Error de comunicación con SII autenticando portalMipyme (paso 2)")
+                    return
+                }
                 responseText = new String(response.bytes(), "iso-8859-1")
                 if (debug)
                     logger.info("responseText: ${responseText}")
@@ -187,7 +223,13 @@ class SiiAuthenticator {
                     restClient.contentType("application/x-www-form-urlencoded")
                     restClient.addBodyParameters([RUT_EMP: rutOrganizacion, DESDE_DONDE_URL: "OPCION=1&TIPO=4"])
                     restClient.text("RUT_EMP=${rutOrganizacion}&DESDE_DONDE_URL=OPCION%3D1%26TIPO%3D4")
-                    response = restClient.call()
+                    try {
+                        response = restClient.call()
+                    } catch (Exception e) {
+                        ec.logger.error("Calling portalMipyme step 3", e)
+                        ec.message.addError("Error de comunicación con SII autenticando portalMipyme (paso 3)")
+                        return
+                    }
                     responseText = new String(response.bytes(), "iso-8859-1")
                     if (debug)
                         logger.info("responseText: ${responseText}")
