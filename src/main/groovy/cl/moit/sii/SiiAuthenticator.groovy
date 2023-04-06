@@ -2,6 +2,8 @@ package cl.moit.sii
 
 import org.eclipse.jetty.http.HttpField
 import org.eclipse.jetty.http.HttpHeader
+import org.moqui.BaseArtifactException
+import org.moqui.BaseException
 import org.moqui.util.RestClient
 import cl.moit.net.ClientAuthRequestFactory
 import org.slf4j.Logger
@@ -83,9 +85,7 @@ class SiiAuthenticator {
             try {
                 response = restClient.call()
             } catch (Exception e) {
-                ec.logger.error("Calling sii CautInicio certificate", e)
-                ec.message.addError("Error de comunicación con SII en autenticación con certificado")
-                return
+                throw new BaseException("Error calling sii CautInicio certificate", e)
             }
             if (debug) {
                 logger.warn("Cookies after request:")
@@ -111,9 +111,7 @@ class SiiAuthenticator {
             try {
                 response = restClient.call()
             } catch (Exception e) {
-                ec.logger.error("Calling sii CautInicio user/pass", e)
-                ec.message.addError("Error de comunicación con SII en autenticación con usuario/clave")
-                return
+                throw new BaseException("Error calling sii CautInicio user/pass", e)
             }
             responseText = response.text()
         }
@@ -126,9 +124,7 @@ class SiiAuthenticator {
                 try {
                     response = restClient.call()
                 } catch (Exception e) {
-                    ec.logger.error("Calling sii obteniendo RUTs a representar", e)
-                    ec.message.addError("Error de comunicación con SII al obtener RUTs para representar")
-                    return
+                    throw new BaseException("Error calling sii obteniendo RUTs a representar", e)
                 }
                 responseText = new String(response.bytes(), "iso-8859-1")
                 // javascript:sendMethodPost('/cgi_AUT2000/admRepresentar.cgi?RUT_RPDO=76514104&APPLS=RPETC&NOMBRE=MOIT%20SPA&APPLSDES=RPETC%20Consulta%20Registro%20Transferencia%20Credito%27);
@@ -176,9 +172,7 @@ class SiiAuthenticator {
                 try {
                     response = restClient.call()
                 } catch (Exception e) {
-                    ec.logger.error("Calling sii admRepresentar", e)
-                    ec.message.addError("Error de comunicación con SII en autenticación al activar representación")
-                    return
+                    throw new BaseArtifactException("Error calling sii admRepresentar", e)
                 }
                 responseText = response.text()
                 if (responseText.contains("En este momento no lo podemos atender, pues hemos detectado un error")) {
@@ -234,7 +228,7 @@ class SiiAuthenticator {
                     if (debug)
                         logger.info("responseText: ${responseText}")
                 } else {
-                    throw new RuntimeException("Empresa ${rutOrganizacion} no aparece entre las opciones de selección en el SII")
+                    throw new BaseException("Empresa ${rutOrganizacion} no aparece entre las opciones de selección en el SII")
                 }
             }
 
