@@ -203,7 +203,7 @@ class MoquiDTEUtils {
             detalleList.add(detailMap)
             detailMap.numeroLinea = i+1
             if (detailEntry.productId)
-                detailMap.codigoItem = [[tipoCodigo:'Interna', valorCodigo:detailEntry.productId]]
+                detailMap.codigoItem = [[tipoCodigo:'INT1', valorCodigo:detailEntry.productId]]
             detailMap.nombreItem = nombreItem
             if (detailEntry.detailedDescription)
                 detailMap.descripcionItem = detailEntry.detailedDescription
