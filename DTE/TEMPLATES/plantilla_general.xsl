@@ -27,6 +27,7 @@
     <xsl:param name="detailHeaderSepColor" select="'&#35;ffffff'"/>
     <xsl:param name="tableBorderColor" select="'&#35;eaeaea'"/>
     <xsl:param name="vendorNameColor" select="'black'"/>
+    <xsl:param name="rutEnviador" select="''"/>
 
     <xsl:output method="xml" version="1.0" omit-xml-declaration="no" indent="yes" encoding="UTF-8"/>
 
@@ -43,6 +44,38 @@
                     <fo:region-after extent="1.0cm"/>
                 </fo:simple-page-master>
             </fo:layout-master-set>
+
+            <xsl:variable name="tipo" select="siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE | DTE/Documento/Encabezado/IdDoc/TipoDTE"/>
+            <xsl:variable name="folio" select="siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:Folio | DTE/Documento/Encabezado/IdDoc/Folio"/>
+            <xsl:variable name="rutEmisor" select="siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Receptor/siidte:RUTRecep | DTE/Documento/Encabezado/Receptor/RUTRecep"/>
+            <fo:declarations>
+                <x:xmpmeta xmlns:x="adobe:ns:meta/">
+                    <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+                        <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
+                            <!-- Dublin Core properties go here -->
+                            <dc:title><xsl:choose>
+                                    <xsl:when test="$tipo=33">Factura Electrónica</xsl:when>
+                                    <xsl:when test="$tipo=34">Factura Electrónica Exenta</xsl:when>
+                                    <xsl:when test="$tipo=39">Boleta Electrónica</xsl:when>
+                                    <xsl:when test="$tipo=41">Boleta Electrónica Exenta</xsl:when>
+                                    <xsl:when test="$tipo=52">Guía de Despacho Electrónica</xsl:when>
+                                    <xsl:when test="$tipo=56">Nota de Débito Electrónica</xsl:when>
+                                    <xsl:when test="$tipo=61">Nota de Crédito Electrónica</xsl:when>
+                                    <xsl:when test="$tipo=110">Factura de Exportación Electrónica</xsl:when>
+                                    <xsl:when test="$tipo=112">Nota de Crédito Exportación Electrónica</xsl:when>
+                                    <xsl:otherwise>DTE tipo <xsl:value-of select="$tipo"/></xsl:otherwise>
+                                </xsl:choose>Folio&#160;<xsl:value-of select="$folio"/> RUT&#160;<xsl:value-of select="$rutEmisor"/>
+                            </dc:title>
+                            <dc:creator><xsl:value-of select="$rutEnviador"/></dc:creator>
+                            <dc:description>Representación impresa de Documento Tributario Electrónico (DTE) de acuerdo a las definiciones del Servicio de Impuestos Internos de Chile</dc:description>
+                        </rdf:Description>
+                        <rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/">
+                            <!-- XMP properties go here -->
+                            <xmp:CreatorTool>Moit ERP https://moit.cl/</xmp:CreatorTool>
+                        </rdf:Description>
+                    </rdf:RDF>
+                </x:xmpmeta>
+            </fo:declarations>
 
             <fo:page-sequence master-reference="simple">
                 <fo:flow flow-name="xsl-region-body">
