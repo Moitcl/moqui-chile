@@ -47,7 +47,8 @@
 
             <xsl:variable name="tipo" select="siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE | DTE/Documento/Encabezado/IdDoc/TipoDTE"/>
             <xsl:variable name="folio" select="siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:Folio | DTE/Documento/Encabezado/IdDoc/Folio"/>
-            <xsl:variable name="rutEmisor" select="siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Receptor/siidte:RUTRecep | DTE/Documento/Encabezado/Receptor/RUTRecep"/>
+            <xsl:variable name="rutEmisor" select="siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Emisor/siidte:RUTEmisor | DTE/Documento/Encabezado/Emisor/RUTEmisor"/>
+            <xsl:variable name="razonSocialEmisor" select="siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Emisor/siidte:RznSoc | DTE/Documento/Encabezado/Emisor/RznSoc | siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Emisor/siidte:RznSocEmisor | DTE/Documento/Encabezado/Emisor/RznSocEmisor"/>
             <fo:declarations>
                 <x:xmpmeta xmlns:x="adobe:ns:meta/">
                     <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
@@ -64,9 +65,9 @@
                                     <xsl:when test="$tipo=110">Factura de Exportación Electrónica</xsl:when>
                                     <xsl:when test="$tipo=112">Nota de Crédito Exportación Electrónica</xsl:when>
                                     <xsl:otherwise>DTE tipo <xsl:value-of select="$tipo"/></xsl:otherwise>
-                                </xsl:choose>Folio&#160;<xsl:value-of select="$folio"/> RUT&#160;<xsl:value-of select="$rutEmisor"/>
+                                </xsl:choose> Folio <xsl:value-of select="$folio"/> RUT <xsl:value-of select="$rutEmisor"/>
                             </dc:title>
-                            <dc:creator><xsl:value-of select="$rutEnviador"/></dc:creator>
+                            <dc:creator><xsl:value-of select="$razonSocialEmisor"/></dc:creator>
                             <dc:description>Representación impresa de Documento Tributario Electrónico (DTE) de acuerdo a las definiciones del Servicio de Impuestos Internos de Chile</dc:description>
                         </rdf:Description>
                         <rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/">
@@ -293,7 +294,7 @@
 
         </fo:block>
         <fo:block-container absolute-position="absolute" left="19.85cm" top="-7.8cm" reference-orientation="90">
-            <fo:block writing-mode="tb-rl" font-size="6pt" color="#c0c0c0">Moit ERP <fo:basic-link external-destination="https://moit.cl/">www.moit.cl</fo:basic-link></fo:block>
+            <fo:block writing-mode="tb-rl" font-size="6pt" color="#c0c0c0"><fo:basic-link external-destination="https://moit.cl/">Moit ERP www.moit.cl</fo:basic-link></fo:block>
         </fo:block-container>
     </xsl:template>
 
