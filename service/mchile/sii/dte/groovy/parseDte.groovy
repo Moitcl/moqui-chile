@@ -98,8 +98,10 @@ BigDecimal impuestos = 0
 impuestosMap = [:]
 encabezado.Totales.ImptoReten.each { it ->
     tipoImpuesto = it.TipoImp.text()
-    tasaImpuesto = it.TasaImp.text() as BigDecimal
-    montoImpuesto = it.MontoImp.text() as BigDecimal
+    if (it.TasaImp.text())
+        tasaImpuesto = it.TasaImp.text() as BigDecimal
+    if (it.MontoImp.text())
+        montoImpuesto = it.MontoImp.text() as BigDecimal
     impuestos += montoImpuesto
     if (impuestosMap[tipoImpuesto] == null) {
         impuesto = [tipo:tipoImpuesto, tasa:tasaImpuesto, monto:montoImpuesto]
