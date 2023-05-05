@@ -95,11 +95,17 @@ class SiiAuthenticator {
             responseText = response.text()
         } else {
             logger.warn("Sending user/pass")
+            if (username == null || username == '')
+                throw new BaseException("No username defined")
+            if (password == null || password == '')
+                throw new BaseException("No password defined")
             requestFactory = new ClientAuthRequestFactory(null, null, proxyHost, proxyPort)
             restClient.withRequestFactory(requestFactory)
             restClient.uri("https://zeusr.sii.cl/cgi_AUT2000/CAutInicio.cgi").method("POST")
             restClient.contentType("application/x-www-form-urlencoded")
             int pos = username.indexOf('-')
+            if (pos < 0)
+                throw new BaseException("Username does not have any '-' character")
             String rut = null
             String dv = null
             if (pos > 0 && pos < username.length()-1) {
