@@ -108,6 +108,7 @@ if (existingDteList) {
                 return
             ec.service.sync().name("mchile.sii.dte.DteContentServices.store#DteContent").parameters([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml',
                                                                                                      documentContent:dteMap.dteBytes]).call()
+            ec.service.sync().name("mchile.sii.dte.DteInternalServices.store#DteReferences").parameters([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, referenciaList:dteMap.referenciaList]).call()
             return
         } else {
             if (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-ReceiverAccept'] && contentList && sendResponse) {
