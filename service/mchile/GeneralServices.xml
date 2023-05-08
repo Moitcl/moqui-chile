@@ -253,49 +253,58 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="idValue"/>
                 <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
             </entity-find>
-            <if condition="partyIdentificationList.size() &gt; 1">
-                <entity-find entity-name="mantle.party.Party" list="multiplePartyList">
-                    <econdition field-name="partyId" operator="in" from="partyIdentificationList.partyId"/>
-                </entity-find>
-                <set field="includePartyIds" from="[]"/>
-                <iterate list="multiplePartyList" entry="party">
-                    <script>
-                        if (party.mergedToPartyId == null &amp;&amp; party.disabled != 'Y')
-                            includePartyIds.add(party.partyId)
-                    </script>
-                </iterate>
-                <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
-                    <econdition field-name="idValue"/>
-                    <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
-                    <econdition field-name="partyId" operator="in" from="includePartyIds"/>
-                </entity-find>
-            </if>
-            <if condition="partyIdentificationList.size() == 1"><then>
-                <!-- Ensure Party is visible (given EntityFilters) -->
-                <entity-find-one entity-name="mantle.party.Party" value-field="party" auto-field-map="partyIdentificationList.first"/>
-                <set field="partyId" from="party?.partyId"/>
-                <if condition="partyId"><return/></if>
-            </then><else-if condition="partyIdentificationList.size() > 1">
+            <!-- Ensure party is visible and not replaced/deactivated -->
+            <entity-find entity-name="mantle.party.Party" list="partyCandidateList">
+                <econdition field-name="partyId" operator="in" from="partyIdentificationList.partyId"/>
+            </entity-find>
+            <set field="partyList" from="[]"/>
+            <iterate list="partyCandidateList" entry="party">
+                <if condition="party.mergedToPartyId == null &amp;&amp; party.disabled != 'Y'">
+                    <script>partyList.add(party)</script>
+                </if>
+            </iterate>
+            <if condition="partyList.size() == 1"><then>
+                <set field="partyId" from="partyList.get(0).partyId"/>
+                <return/>
+            </then><else-if condition="partyList.size() > 1">
                 <if condition="failOnDuplicate"><then>
                     <return error="true" message="Más de un sujeto con mismo rut ${idValue}: partyIds ${partyIdentificationList.partyId})"/>
                 </then></if>
                 <!-- Attempt to find including razonSocial -->
-                <if condition="razonSocial == null || razonSocial == ''">
-                    <return error="true" message="Más de un sujeto con mismo rut ${idValue} y no hay razón social para desambiguar: partyIds ${partyIdentificationList.partyId})"/>
+                <if condition="razonSocial != null &amp;&amp; razonSocial != ''">
                 </if>
-                <iterate list="partyIdentificationList" entry="partyIdentification">
-                    <entity-find entity-name="mantle.party.PartyDetail" list="partyList">
-                        <econdition field-name="partyId" from="partyIdentification.partyId"/>
-                        <econditions combine="or">
-                            <econdition field-name="organizationName" from="razonSocial"/>
-                            <econdition field-name="taxOrganizationName" from="razonSocial"/>
-                        </econditions>
-                    </entity-find>
-                    <if condition="partyList">
-                        <set field="partyId" from="partyList.first.partyId"/>
-                        <return/>
-                    </if>
+                <entity-find entity-name="mantle.party.PartyDetail" list="partyDetailList">
+                    <econdition field-name="partyId" operator="in" from="partyList.partyId"/>
+                    <econditions combine="or">
+                        <econdition field-name="organizationName" from="razonSocial"/>
+                        <econdition field-name="taxOrganizationName" from="razonSocial"/>
+                    </econditions>
+                </entity-find>
+                <if condition="partyDetailList.size() == 1"><then>
+                    <set field="partyId" from="partyDetailList.first.partyId"/>
+                    <return/>
+                </then><else-if condition="partyDetailList.size() > 1">
+                    <set field="partyList" from="partyDetailList"/>
+                </else-if></if>
+                <!-- Attempt to find parent organization -->
+                <entity-find entity-name="mantle.party.PartyRelationship" list="relList">
+                    <date-filter/>
+                    <econdition field-name="relationshipTypeEnumId" value="PrtOrgRollup"/>
+                    <econdition field-name="fromPartyId" operator="in" from="partyList.partyId"/>
+                    <econdition field-name="toPartyId" operator="in" from="partyList.partyId"/>
+                </entity-find>
+                <set field="knownParentPartyId" from="null"/>
+                <set field="foundMultiplePartyIds" from="false"/>
+                <iterate list="relList" entry="relationship">
+                    <set field="foundMultiplePartyIds" from="knownParentPartyId != null &amp;&amp; knownParentPartyId != relationship.toPartyId"/>
+                    <if condition="foundMultiplePartyIds"><break/></if>
+                    <set field="knownParentPartyId" from="relationship.toPartyId"/>
                 </iterate>
+                <if condition="!foundMultiplePartyIds">
+                    <set field="partyId" from="knownParentPartyId"/>
+                    <if condition="partyId"><return/></if>
+                </if>
+                <return error="true" message="Más de un sujeto con mismo rut ${idValue} sin padre común ni calce por razón social: partyIds ${partyIdentificationList.partyId})"/>
             </else-if></if>
             <!-- Not Found, check whether need to create -->
             <if condition="createUnknown"><then>
