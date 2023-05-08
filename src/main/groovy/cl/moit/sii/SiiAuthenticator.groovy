@@ -147,7 +147,7 @@ class SiiAuthenticator {
                     }
                 }
                 if (representeeMap == null) {
-                    ec.message.addError("No se pudo encontrar RUT representado")
+                    logger.error("No se pudo encontrar RUT representado")
                     return null
                 }
                 boolean hasAllFields = true
@@ -194,8 +194,8 @@ class SiiAuthenticator {
             try {
                 response = restClient.call() // Segundo llamado lleva a formulario
             } catch (Exception e) {
-                ec.logger.error("Calling portalMipyme step 1", e)
-                ec.message.addError("Error de comunicación con SII autenticando portalMipyme (paso 1)")
+                logger.error("Calling portalMipyme step 1", e)
+                logger.error("Error de comunicación con SII autenticando portalMipyme (paso 1)")
                 return
             }
             responseText = new String(response.bytes(), "iso-8859-1")
@@ -208,8 +208,8 @@ class SiiAuthenticator {
                 try {
                     response = restClient.call() // Segundo llamado lleva a formulario
                 } catch (Exception e) {
-                    ec.logger.error("Calling portalMipyme step 2", e)
-                    ec.message.addError("Error de comunicación con SII autenticando portalMipyme (paso 2)")
+                    logger.error("Calling portalMipyme step 2", e)
+                    logger.error("Error de comunicación con SII autenticando portalMipyme (paso 2)")
                     return
                 }
                 responseText = new String(response.bytes(), "iso-8859-1")
@@ -226,8 +226,8 @@ class SiiAuthenticator {
                     try {
                         response = restClient.call()
                     } catch (Exception e) {
-                        ec.logger.error("Calling portalMipyme step 3", e)
-                        ec.message.addError("Error de comunicación con SII autenticando portalMipyme (paso 3)")
+                        logger.error("Calling portalMipyme step 3", e)
+                        logger.error("Error de comunicación con SII autenticando portalMipyme (paso 3)")
                         return
                     }
                     responseText = new String(response.bytes(), "iso-8859-1")
