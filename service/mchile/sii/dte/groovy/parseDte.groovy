@@ -328,9 +328,9 @@ if (tipoDteEnumId == 'Ftdt-52') {
 }
 
 referenciaList = []
-referenciasList = documento.Documento.Referencia
+dteRefList = documento.Documento.Referencia
 Integer nroRef = 0
-referenciasList.each { groovy.util.Node referencia ->
+dteRefList.each { groovy.util.Node referencia ->
     nroRef++
     Integer nroLinRef = null
     try {

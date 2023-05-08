@@ -108,7 +108,8 @@ if (existingDteList) {
                 return
             ec.service.sync().name("mchile.sii.dte.DteContentServices.store#DteContent").parameters([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml',
                                                                                                      documentContent:dteMap.dteBytes]).call()
-            ec.service.sync().name("mchile.sii.dte.DteInternalServices.store#DteReferences").parameters([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, referenciaList:dteMap.referenciaList]).call()
+            if (dteMap.referenciaList)
+                ec.service.sync().name("mchile.sii.dte.DteReferenceServices.store#DteReferences").parameters([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, referenciaList:dteMap.referenciaList]).call()
             return
         } else {
             if (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-ReceiverAccept'] && contentList && sendResponse) {
@@ -135,8 +136,9 @@ if (existingDteList) {
     }
 }
 
-receiverPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutReceptor, createUnknown:createUnknownReceiver, razonSocial:dteMap.razonSocialReceptor, roleTypeId:'Customer',
-                                                                                              giro:dteMap.giroReceptor, direccion:dteMap.direccionReceptor, comuna:dteMap.comunaReceptor, ciudad:dteMap.ciudadReceptor]).call().partyId
+receiverPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutReceptor, createUnknown:createUnknownReceiver, razonSocial:dteMap.razonSocialReceptor,
+                                    roleTypeId:'Customer', giro:dteMap.giroReceptor, direccion:dteMap.direccionReceptor, comuna:dteMap.comunaReceptor, ciudad:dteMap.ciudadReceptor,
+                                    failOnDuplicate: false]).call().partyId
 receiver = ec.entity.find("mantle.party.PartyDetail").condition("partyId", receiverPartyId).one()
 // Verificación de Razón Social en XML vs lo guardado en Moqui
 String razonSocialDb = receiver.taxOrganizationName
