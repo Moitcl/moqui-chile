@@ -38,7 +38,7 @@ tipoDte = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode
 
 // Formas de pago
 if (settlementTermId.equals('Immediate'))
-    formaPago = 1 // Contado
+    formaPago = "2" // No se pone 1 (Contado) porque eso significa que ya está pagado.
 /*
 else if (settlementTermId.equals('Net10'))
     formaPago = "2" // Credito (usar GlosaPagos)
@@ -52,9 +52,15 @@ else if (settlementTermId.equals('Net90'))
     formaPago = "2" // Credito (usar GlosaPagos)
 */
 else if (settlementTermId == "3")
-    formaPago = 3 // Sin costo
+    formaPago = "3" // Sin costo
 else
-    formaPago = 2 // Credito (usar GlosaPagos)
+    formaPago = "2" // Credito (usar GlosaPagos)
+
+formaPagoEv = ec.entity.find("moqui.basic.Enumeration").condition([enumTypeId:"FiscalTaxDocumentFormaPago"]).condition([enumCode:(formaPago as String)]).one()
+formaPagoEnumId = formaPagoEv?.enumId
+if (formaPagoEnumId == null)
+    formaPagoEnumId = 'Ftdfp-Credito'
+
 codRef = 0 as Integer
 
 // Indicador Servicio
@@ -498,6 +504,7 @@ dteEv.invoiceId = invoiceId
 dteEv.shipmentId = shipmentId
 Timestamp ts = new Timestamp(fechaEmision.time)
 dteEv.date = ts
+dteEv.formaPagoEnumId = formaPagoEnumId
 dteEv.update()
 
 if (tipoDte == 52) {

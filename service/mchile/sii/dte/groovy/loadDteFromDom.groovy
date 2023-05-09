@@ -26,6 +26,11 @@ fechaEmision = dteMap.fechaEmision
 rutEmisor = dteMap.rutEmisor
 rutReceptor = dteMap.rutReceptor
 montoTotal = dteMap.montoTotal
+formaPago = dteMap.formaPago
+formaPagoEv = ec.entity.find("moqui.basic.Enumeration").condition([enumTypeId:"FiscalTaxDocumentFormaPago"]).condition([enumCode:(formaPago as String)]).one()
+formaPagoEnumId = formaPagoEv?.enumId
+if (formaPagoEnumId == null)
+    formaPagoEnumId = 'Ftdfp-Credito'
 
 reserved = ec.service.sync().name("mchile.sii.SIIServices.get#RutEspeciales").call()
 
@@ -170,7 +175,7 @@ if (ec.message.hasError()) {
 
 ftdCreateMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rutEmisor, fiscalTaxDocumentTypeEnumId:dteMap.tipoDteEnumId, fiscalTaxDocumentNumber:dteMap.fiscalTaxDocumentNumber,
                 receiverPartyId:receiverPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', receiverPartyIdValue:rutReceptor, date:fechaEmision, statusId:'Ftd-Issued',
-                sentAuthStatusId:'Ftd-SentAuthAccepted', sentRecStatusId:sentRecStatusId]
+                sentAuthStatusId:'Ftd-SentAuthAccepted', sentRecStatusId:sentRecStatusId, formaPagoEnumId:formaPagoEnumId]
 
 // Se guarda DTE recibido en la base de datos
 mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(ftdCreateMap).call()

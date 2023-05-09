@@ -77,6 +77,9 @@ folioDte = encabezado.IdDoc.Folio.text() as Integer
 fiscalTaxDocumentNumber = folioDte
 montosBrutos = encabezado.IdDoc.MntBruto?.text() == "1"
 indTraslado = encabezado.IdDoc.IndTraslado?.text()
+formaPago = encabezado.IdDoc.FmaPago?.text()
+if (formaPago == null)
+    formaPago = "2"
 
 emisor = encabezado.Emisor
 rutEmisor = emisor.RUTEmisor.text()
