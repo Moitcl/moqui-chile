@@ -56,6 +56,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="mayorOchoDias" type="Boolean"/>
             <parameter name="tieneReferenciaGuia" type="Boolean"/>
             <parameter name="pagosList" type="List"/>
+            <parameter name="factoringAssignmentList" type="List"/>
         </out-parameters>
         <actions>
             <entity-find-one entity-name="moit.erp.sii.DteDetail" value-field="dteEv"/>
@@ -87,22 +88,20 @@ along with this software (see the LICENSE.md file). If not, see
                 timestamp8Dias = cal.time
             </script>
             <set field="mayorOchoDias" from="dte.date.before(timestamp8Dias)"/>
-            <entity-find entity-name="mchile.dte.DteFactoringAssignment" list="factoringAssignmentList">
-                <econdition field-name="fiscalTaxDocumentId"/>
-            </entity-find>
             <set field="issuerPaymentAmount" from="dte.amount"/>
-            <set field="pagosList" from="[]"/>
-            <iterate list="factoringAssignmentList" entry="factoringAssignment">
-                <set field="issuerPaymentAmount" from="issuerPaymentAmount - factoringAssignment.assignmentAmount"/>
-                <script>pagosList.add([partyId:factoringAssignment.assigneePartyId, amount:factoringAssignment.assignmentAmount, uom:'CLP'])</script>
-            </iterate>
-            <if condition="issuerPaymentAmount">
-                <script>pagosList.add([partyId:dte.issuerPartyId, amount:issuerPaymentAmount, uom:'CLP'])</script>
-            </if>
             <service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:dte.issuerPartyIdValue]" out-map="formattedRut"/>
             <set field="dte.issuerRut" from="formattedRut.rut"/>
             <service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:dte.receiverPartyIdValue]" out-map="formattedRut"/>
             <set field="dte.receiverRut" from="formattedRut.rut"/>
+            <!-- Factory Assignments -->
+            <entity-find entity-name="mchile.dte.DteFactoringAssignment" list="factoringAssignments">
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <order-by field-name="assignmentDate"/>
+            </entity-find>
+            <set field="factoringAssignmentList" from="[]"/>
+            <iterate list="factoringAssignments" entry="factoringAssignment">
+                <script>factoringAssignmentList.add(factoringAssignment.getMap())</script>
+            </iterate>
         </actions>
     </service>
 
