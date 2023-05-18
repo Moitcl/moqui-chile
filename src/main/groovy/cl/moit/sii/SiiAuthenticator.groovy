@@ -27,6 +27,7 @@ class SiiAuthenticator {
     protected int proxyPort = 0
     protected boolean portalMipyme = true
     protected boolean trustAll = false
+    protected boolean irrecoverableFailure = false
 
     protected boolean debug = false
 
@@ -56,6 +57,10 @@ class SiiAuthenticator {
 
     public RestClient.RequestFactory getRequestFactory() {
         return requestFactory
+    }
+
+    public Boolean getIrrecoverableFailure() {
+        return Boolean.valueOf(irrecoverableFailure)
     }
 
     public RestClient getRestClient() {
@@ -196,6 +201,7 @@ class SiiAuthenticator {
             } catch (Exception e) {
                 logger.error("Calling portalMipyme step 1", e)
                 logger.error("Error de comunicación con SII autenticando portalMipyme (paso 1)")
+                irrecoverableFailure = true
                 return
             }
             responseText = new String(response.bytes(), "iso-8859-1")
