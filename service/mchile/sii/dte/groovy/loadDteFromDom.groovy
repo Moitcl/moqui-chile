@@ -84,7 +84,7 @@ isDuplicated = false
 
 if (existingDteList) {
     dte = existingDteList.first
-    if (dte.sentRecStatusId == 'Ftd-ReceiverReject' || dte.statusId == 'Ftd-LocallyUnknown') {
+    if (dte.sentRecStatusId == 'Ftd-ReceiverReject') {
         if (dte.sentRecStatusId == 'Ftd-ReceiverReject')
             ec.logger.info("Existente tiene estado rechazado, eliminando para partir de cero")
         else
@@ -100,16 +100,27 @@ if (existingDteList) {
         contentList = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml'])
                 .disableAuthz().list()
         if (contentList.size() == 0) {
-            attrib = ec.entity.find("mchile.dte.FiscalTaxDocumentAttributes").condition("fiscalTaxDocumentId", fiscalTaxDocumentId).one()
-            attributeMap = [amount:'montoTotal', montoNeto:'montoNeto', montoExento:'montoExento', tasaImpuesto:'tasaIva', tipoImpuesto:'tipoImpuesto', montoIvaRecuperable:'iva',
-                            montoIvaNoRecuperable:'montoIvaNoRecuperable', fechaEmision:'fechaEmision', fechaVencimiento:'fechaVencimiento', razonSocialEmisor:'razonSocialEmisor',
-                            razonSocialReceptor:'razonSocialReceptor']
+            attrib = ec.entity.find("mchile.dte.FiscalTaxDocumentAttributes").condition("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).forUpdate(true).one()
+            attributeMap = [amount               : 'montoTotal', montoNeto: 'montoNeto', montoExento: 'montoExento', tasaImpuesto: 'tasaIva', tipoImpuesto: 'tipoImpuesto', montoIVARecuperable: 'iva',
+                            montoIVANoRecuperable: 'montoIvaNoRecuperable', fechaEmision: 'fechaEmision', fechaVencimiento: 'fechaVencimiento', razonSocialEmisor: 'razonSocialEmisor',
+                            razonSocialReceptor  : 'razonSocialReceptor']
             dteMap.tipoImpuesto = 1
             dteMap.montoIvaNoRecuperable = 0
+            changed = false
             attributeMap.each { entityFieldName, mapFieldName ->
-                if (attrib[entityFieldName] != dteMap[mapFieldName])
-                    ec.message.addError("Value mismatch for attribute field ${entityFieldName}, XML value: ${dteMap[mapFieldName]}, DB value: ${attrib[entityFieldName]}")
+                if (entityFieldName in ['tipoImpuesto', 'montoIvaNoRecuperable', 'tasaImpuesto', 'montoIVANoRecuperable', 'fechaVencimiento'] && attrib[entityFieldName] == null) {
+                    attrib[entityFieldName] = dteMap[mapFieldName]
+                    changed = true
+                }
+                if (attrib[entityFieldName] != dteMap[mapFieldName]) {
+                    if (entityFieldName in ['razonSocialReceptor', 'razonSocialEmisor'])
+                        ec.message.addMessage("Value mismatch for attribute field ${entityFieldName}, XML value: ${dteMap[mapFieldName]}, DB value: ${attrib[entityFieldName]}", "warning")
+                    else
+                        ec.message.addError("Value mismatch for attribute field ${entityFieldName}, XML value: ${dteMap[mapFieldName]}, DB value: ${attrib[entityFieldName]}")
+                }
             }
+            if (changed)
+                attrib.update()
             if (ec.message.hasError())
                 return
             ec.service.sync().name("mchile.sii.dte.DteContentServices.store#DteContent").parameters([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml',
