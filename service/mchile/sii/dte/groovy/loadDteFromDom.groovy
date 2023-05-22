@@ -84,7 +84,7 @@ isDuplicated = false
 
 if (existingDteList) {
     dte = existingDteList.first
-    if (dte.sentRecStatusId == 'Ftd-ReceiverReject') {
+    if (dte.sentRecStatusId == 'Ftd-ReceiverReject' && issuerIsInternalOrg) {
         if (dte.sentRecStatusId == 'Ftd-ReceiverReject')
             ec.logger.info("Existente tiene estado rechazado, eliminando para partir de cero")
         else
