@@ -249,8 +249,12 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <out-parameters>
             <parameter name="partyId"/>
+            <parameter name="created" type="Boolean"/>
         </out-parameters>
         <actions>
+            <set field="created" from="false"/>
+            <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:idValue]" out-map="verifyRutMap"/>
+            <set field="idValue" value="${verifyRutMap.rut}-${verifyRutMap.dv}"/>
             <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentificationList">
                 <econdition field-name="idValue"/>
                 <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
@@ -258,7 +262,7 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Ensure party is visible and not replaced/deactivated -->
             <entity-find entity-name="mantle.party.Party" list="partyCandidateList">
                 <econdition field-name="partyId" operator="in" from="partyIdentificationList.partyId"/>
-                <econdition field-name="ownerPartyId" operator="in" from="['_NA_']+organizationPartyIdAsOwnerWhenCreating" ignore="organizationPartyIdAsOwnerWhenCreating == null"/>
+                <econdition field-name="ownerPartyId" operator="in" from="['_NA_', organizationPartyIdAsOwnerWhenCreating]" ignore="organizationPartyIdAsOwnerWhenCreating == null"/>
             </entity-find>
             <set field="partyList" from="[]"/>
             <iterate list="partyCandidateList" entry="party">
@@ -313,6 +317,7 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="createUnknown"><then>
                 <service-call name="mantle.party.PartyServices.create#Organization" in-map="[ownerPartyId:(organizationPartyIdAsOwnerWhenCreating?:'_NA_'), organizationName:razonSocial, taxOrganizationName:razonSocial, roleTypeId:createRoleTypeId]"
                               out-map="context"/>
+                <set field="created" from="true"/>
                 <service-call name="create#mantle.party.PartyIdentification" in-map="[partyId:partyId, partyIdTypeEnumId:'PtidNationalTaxId', idValue:idValue]"/>
                 <if condition="giro != null &amp;&amp; giro != ''">
                     <service-call name="create#mchile.dte.PartyGiro" in-map="[partyId:partyId, description:giro, isPrimary:'Y']"/>
