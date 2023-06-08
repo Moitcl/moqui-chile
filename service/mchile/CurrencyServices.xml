@@ -29,11 +29,35 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="thruDate"/>
         </out-parameters>
         <actions>
-            <if condition="!(fromCurrencyUomId in ['CLF', 'CL_UTM', 'USD'])">
+            <if condition="fromCurrencyUomId == toCurrencyUomId">
+                <set field="value" from="1 as BigDecimal"/>
+            </if>
+            <if condition="!(fromCurrencyUomId in ['CLP', 'CLF', 'CL_UTM', 'USD'])">
                 <return error="true" message="Exchangerate from unit '${fromCurrencyUomId}' is not yet implemented."/>
             </if>
             <if condition="toCurrencyUomId != 'CLP'">
-                <return error="true" message="Exchangerate to unit '${toCurrencyUomId}' is not yet implemented."/>
+                <if condition="toCurrencyUomId in ['CLF', 'CL_UTM', 'USD']"><then>
+                    <if condition="fromCurrencyUomId == 'CLP'"><then>
+                        <set field="toClpMap" from="[value:(1 as BigDecimal)]"/>
+                    </then><else>
+                        <service-call name="mchile.currencyServices.get#ExchangeRate" in-map="context+[toCurrencyUomId:'CLP']" out-map="toClpMap" ignore-error="true"/>
+                    </else></if>
+                    <if condition="toCurrencyUomId == 'CLP'"><then>
+                        <set field="fromClpMap" from="[value:(1 as BigDecimal)]"/>
+                    </then><else>
+                        <service-call name="mchile.currencyServices.get#ExchangeRate" in-map="context+[toCurrencyUomId:'CLP',fromCurrencyUomId:toCurrencyUomId]" out-map="fromClpMap" ignore-error="true"/>
+                    </else></if>
+                    <if condition="toClpMap.value != null &amp;&amp; fromClpMap.value != null">
+                        <set field="value" from="toClpMap.value/fromClpMap.value"/>
+                        <set field="fromDate" from="toClpMap.fromDate"/>
+                        <if condition="fromDate == null || fromDate.time &lt; fromClpMap.fromDate?.time"><set field="fromDate" from="fromClpMap.fromDate"/></if>
+                        <set field="thruDate" from="toClpMap.thruDate"/>
+                        <if condition="thruDate == null || thruDate.time &gt; fromClpMap.thruDate?.time"><set field="thruDate" from="fromClpMap.thruDate"/></if>
+                    </if>
+                    <return/>
+                </then><else>
+                    <return error="true" message="Exchangerate to unit '${toCurrencyUomId}' is not yet implemented."/>
+                </else></if>
             </if>
             <service-call name="mchile.CurrencyServices.get#LastAvailableExchangeratePeriodDates" in-map="[currencyUomId:fromCurrencyUomId]" out-map="lastPeriod"/>
             <if condition="date > lastPeriod.thruDate"><return error="true" message="No se puede obtener un valor para ${fromCurrencyUomId} en la fecha ${date} en estos momentos"/></if>
