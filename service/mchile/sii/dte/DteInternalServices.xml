@@ -339,5 +339,25 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="fechaLimiteAccionSii" from="fechaRecepcionSii + 8"/>
         </actions>
     </service>
+    
+    <service verb="change" noun="CreditMemoReceiver">
+        <in-parameters>
+            <parameter name="invoiceId" required="true"/>
+            <parameter name="receiverPartyId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="creditMemo" for-update="true"/>
+            <if condition="creditMemo == null || creditMemo.invoiceTypeEnumId != 'InvoiceCreditMemo'"><return error="true" message="No Credit Memo found with ID ${invoiceId}"/></if>
+            <if condition="!(creditMemo.statusId in ['InvoiceInProcess', 'InvoiceIncoming'])"><return error="true" message="Credit Memo is not in editable status"/></if>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="receiverPartyIdentificationList">
+                <econdition field-name="partyIdTypeEnumId" operator="in" value="PtidNationalTaxId,PtidUniqueNationalId"/>
+                <econdition field-name="partyId" from="creditMemo.fromPartyId"/>
+            </entity-find>
+            <set field="receiverRut" from="receiverPartyIdentificationList.first?.idValue"/>
+            <if condition="receiverRut != null"><return error="true" message="Receiver Rut is not null"/></if>
+            <set field="creditMemo.fromPartyId" from="receiverPartyId"/>
+            <entity-update value-field="creditMemo"/>
+        </actions>
+    </service>
 
 </services>
