@@ -38,26 +38,6 @@ giroEmisor = giroOutMap.description
 codeOut = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]).call()
 tipoDte = codeOut.siiCode
 
-// Formas de pago
-if (settlementTermId.equals('Immediate'))
-    formaPago = 1 // Contado
-/*
-else if (settlementTermId.equals('Net10'))
-    formaPago = "2" // Credito (usar GlosaPagos)
-else if (settlementTermId.equals('Net15'))
-    formaPago = "2" // Credito (usar GlosaPagos)
-else if (settlementTermId.equals('Net30'))
-    formaPago = "2" // Credito (usar GlosaPagos)
-else if (settlementTermId.equals('Net60'))
-    formaPago = "2" // Credito (usar GlosaPagos)
-else if (settlementTermId.equals('Net90'))
-    formaPago = "2" // Credito (usar GlosaPagos)
-*/
-else if (settlementTermId == "3")
-    formaPago = 3 // Sin costo
-else
-    formaPago = 2 // Credito (usar GlosaPagos)
-
 codRef = 0 as Integer
 
 // Indicador Servicio
@@ -98,6 +78,17 @@ if (invoiceId) {
         referenciaList.add(reference)
     }
 }
+
+// Formas de pago
+if (invoice != null && invoice.invoiceTotal == 0)
+    formaPago = 3 // Sin costo
+else if (invoice != null && invoice.unpaidTotal == 0) {
+    formaPago = 1 // Contado (ya pagado)
+    ec.message.addError("fechaCancelacion needs to be determined (unimplemented)")
+    //fechaCancelacion
+} else
+    formaPago = 2 // Crédito (usar GlosaPagos)
+
 if (tipoDte == 39) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     detalleList = detMap.detalleList

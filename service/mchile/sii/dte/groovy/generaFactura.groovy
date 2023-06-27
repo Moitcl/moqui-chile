@@ -36,26 +36,6 @@ giroEmisor = giroOutMap.description
 // Recuperación del código SII de DTE -->
 tipoDte = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]).call().siiCode
 
-// Formas de pago
-if (settlementTermId.equals('Immediate'))
-    formaPago = "2" // No se pone 1 (Contado) porque eso significa que ya está pagado.
-/*
-else if (settlementTermId.equals('Net10'))
-    formaPago = "2" // Credito (usar GlosaPagos)
-else if (settlementTermId.equals('Net15'))
-    formaPago = "2" // Credito (usar GlosaPagos)
-else if (settlementTermId.equals('Net30'))
-    formaPago = "2" // Credito (usar GlosaPagos)
-else if (settlementTermId.equals('Net60'))
-    formaPago = "2" // Credito (usar GlosaPagos)
-else if (settlementTermId.equals('Net90'))
-    formaPago = "2" // Credito (usar GlosaPagos)
-*/
-else if (settlementTermId == "3")
-    formaPago = "3" // Sin costo
-else
-    formaPago = "2" // Credito (usar GlosaPagos)
-
 formaPagoEv = ec.entity.find("moqui.basic.Enumeration").condition([enumTypeId:"FiscalTaxDocumentFormaPago"]).condition([enumCode:(formaPago as String)]).one()
 formaPagoEnumId = formaPagoEv?.enumId
 if (formaPagoEnumId == null)
@@ -119,6 +99,17 @@ if (invoiceId) {
         }
     }
 }
+
+// Formas de pago
+if (invoice != null && invoice.invoiceTotal == 0)
+    formaPago = 3 // Sin costo
+else if (invoice != null && invoice.unpaidTotal == 0) {
+    formaPago = 1 // Contado (ya pagado)
+    ec.message.addError("fechaCancelacion needs to be determined (unimplemented)")
+    //fechaCancelacion
+} else
+    formaPago = 2 // Crédito (usar GlosaPagos)
+
 if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
     detalleList = detMap.detalleList
