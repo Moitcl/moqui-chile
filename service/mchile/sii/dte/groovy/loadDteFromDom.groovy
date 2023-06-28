@@ -82,6 +82,26 @@ existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([issu
         .disableAuthz().list()
 isDuplicated = false
 
+receiverPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutReceptor, createUnknown:createUnknownReceiver,
+                                                                                                organizationPartyIdAsOwnerWhenCreating:organizationPartyIdAsOwnerWhenCreating, razonSocial:dteMap.razonSocialReceptor,
+                                                                                                roleTypeId:'Customer', giro:dteMap.giroReceptor, direccion:dteMap.direccionReceptor, comuna:dteMap.comunaReceptor, ciudad:dteMap.ciudadReceptor,
+                                                                                                failOnDuplicate: false]).call().partyId
+receiver = ec.entity.find("mantle.party.PartyDetail").condition("partyId", receiverPartyId).one()
+// Verificación de Razón Social en XML vs lo guardado en Moqui
+String razonSocialDb = receiver.taxOrganizationName
+if (razonSocialDb == null || razonSocialDb.size() == 0)
+    razonSocialDb = ec.resource.expand("PartyNameOnlyTemplate", null, receiver)
+rsResult = ec.service.sync().name("mchile.sii.dte.DteInternalServices.compare#RazonSocial").parameters([rs1:dteMap.razonSocialReceptor, rs2:razonSocialDb]).call()
+if ((!rsResult.equivalent)) {
+    ec.logger.warn("Razón social en XML no coincide con la registrada: $dteMap.razonSocialReceptor != $razonSocialDb")
+}
+
+internalRole = ec.entity.find("mantle.party.PartyRole").condition([partyId:receiverPartyId, roleTypeId:'OrgInternal']).one()
+receiverIsInternalOrg = internalRole != null
+if (requireReceiverInternalOrg && !receiverIsInternalOrg) {
+    errorMessages.add("Sujeto receptor de documento ${i} (${ec.resource.expand('PartyNameTemplate', null, receiver)}, rut ${rutReceptor}) no es organización interna")
+}
+
 if (existingDteList) {
     dte = existingDteList.first
     if (dte.sentRecStatusId == 'Ftd-ReceiverReject' && issuerIsInternalOrg) {
@@ -100,6 +120,36 @@ if (existingDteList) {
         contentList = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml'])
                 .disableAuthz().list()
         if (contentList.size() == 0) {
+            changed = false
+            dteMap.issuerPartyIdTypeEnumId = 'PtidNationalTaxId'
+            dteMap.issuerPartyId = issuerPartyId
+            dteMap.receiverPartyId = receiverPartyId
+            dteMap.receiverPartyIdTypeEnumId = 'PtidNationalTaxId'
+            dteMap.receiverPartyIdValue = rutReceptor
+            dteMap.date = fechaEmision
+            dteMap.statusId = 'Ftd-Issued'
+            dteMap.sentAuthStatusId = 'Ftd-SentAuthAccepted'
+            dteMap.formaPagoEnumId = formaPagoEnumId
+            dteFieldListConstant = ['issuerPartyIdTypeEnumId', 'issuerPartyId', 'receiverPartyIdTypeEnumId', 'receiverPartyIdValue', 'date', 'receiverPartyId']
+            dteFieldListConstant.each { entityFieldName ->
+                if (dteMap[entityFieldName] != dte[entityFieldName])
+                    ec.message.addError("Value mismatch for attribute field ${entityFieldName}, XML value: ${dteMap[entityFieldName]}, DB value: ${dte[entityFieldName]}")
+            }
+            dteFieldListOverwrite = ['statusId', 'sentAuthStatusId', 'sentRecStatusId', 'formaPagoEnumId']
+            dteFieldListOverwrite.each { entityFieldName ->
+                if (dteMap[entityFieldName] != dte[entityFieldName]) {
+                    ec.logger.warn("Changing ${entityFieldName} from ${dte[entityFieldName]} to ${dteMap[entityFieldName]}")
+                    dte[entityFieldName] = dteMap[entityFieldName]
+                    changed = true
+                }
+            }
+            if (receiverIsInternalOrg && dte.sentRecStatusId in ['Ftd-NotSentRec', 'Ftd-ReceiverReject', 'Ftd-SentRec', 'Ftd-SentRecFailed']) {
+                dte.sentRecStatusId = 'Ftd-ReceiverAck'
+                changed = true
+            }
+            if (changed)
+                dte.update()
+
             attrib = ec.entity.find("mchile.dte.FiscalTaxDocumentAttributes").condition("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).forUpdate(true).one()
             attributeMap = [amount               : 'montoTotal', montoNeto: 'montoNeto', montoExento: 'montoExento', tasaImpuesto: 'tasaIva', tipoImpuesto: 'tipoImpuesto', montoIVARecuperable: 'iva',
                             montoIVANoRecuperable: 'montoIvaNoRecuperable', fechaEmision: 'fechaEmision', fechaVencimiento: 'fechaVencimiento', razonSocialEmisor: 'razonSocialEmisor',
@@ -153,25 +203,6 @@ if (existingDteList) {
     }
 }
 
-receiverPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutReceptor, createUnknown:createUnknownReceiver,
-                                    organizationPartyIdAsOwnerWhenCreating:organizationPartyIdAsOwnerWhenCreating, razonSocial:dteMap.razonSocialReceptor,
-                                    roleTypeId:'Customer', giro:dteMap.giroReceptor, direccion:dteMap.direccionReceptor, comuna:dteMap.comunaReceptor, ciudad:dteMap.ciudadReceptor,
-                                    failOnDuplicate: false]).call().partyId
-receiver = ec.entity.find("mantle.party.PartyDetail").condition("partyId", receiverPartyId).one()
-// Verificación de Razón Social en XML vs lo guardado en Moqui
-String razonSocialDb = receiver.taxOrganizationName
-if (razonSocialDb == null || razonSocialDb.size() == 0)
-    razonSocialDb = ec.resource.expand("PartyNameOnlyTemplate", null, receiver)
-rsResult = ec.service.sync().name("mchile.sii.dte.DteInternalServices.compare#RazonSocial").parameters([rs1:dteMap.razonSocialReceptor, rs2:razonSocialDb]).call()
-if ((!rsResult.equivalent)) {
-    ec.logger.warn("Razón social en XML no coincide con la registrada: $dteMap.razonSocialReceptor != $razonSocialDb")
-}
-
-internalRole = ec.entity.find("mantle.party.PartyRole").condition([partyId:receiverPartyId, roleTypeId:'OrgInternal']).one()
-receiverIsInternalOrg = internalRole != null
-if (requireReceiverInternalOrg && !receiverIsInternalOrg) {
-    errorMessages.add("Sujeto receptor de documento ${i} (${ec.resource.expand('PartyNameTemplate', null, receiver)}, rut ${rutReceptor}) no es organización interna")
-}
 
 if (issuerPartyId == null)
     ec.message.addError("Empty issuerPartyId")
@@ -194,7 +225,7 @@ ftdCreateMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNation
 mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(ftdCreateMap).call()
 fiscalTaxDocumentId = mapOut.fiscalTaxDocumentId
 
-attributeCreateMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, date:ec.user.nowTimestamp, amount:montoTotal, montoNeto:dteMap.montoNeto, montoExento:dteMap.montoExento, tasaImpuesto:dteMap.tasaIva, tipoImpuesto:1, montoIVARecuperable:dteMap.iva, montoIVANoRecuperable:0,
+attributeCreateMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, amount:montoTotal, montoNeto:dteMap.montoNeto, montoExento:dteMap.montoExento, tasaImpuesto:dteMap.tasaIva, tipoImpuesto:1, montoIVARecuperable:dteMap.iva, montoIVANoRecuperable:0,
                       fechaEmision:fechaEmision, fechaVencimiento:dteMap.fechaVencimiento, razonSocialEmisor:dteMap.razonSocialEmisor, razonSocialReceptor:dteMap.razonSocialReceptor]
 
 if (dteMap.tipoDteEnumId == 'Ftdt-52') {
