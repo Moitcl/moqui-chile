@@ -85,6 +85,7 @@ emisor = encabezado.Emisor
 rutEmisor = emisor.RUTEmisor.text()
 razonSocialEmisor = emisor.RznSoc.text()
 giroEmisor = emisor.GiroEmis.text()
+correoEmisor = emisor.CorreoEmisor.text()
 direccionOrigen = emisor.DirOrigen.text()
 comunaOrigen = emisor.CmnaOrigen.text()
 ciudadOrigen = emisor.CiudadOrigen.text()

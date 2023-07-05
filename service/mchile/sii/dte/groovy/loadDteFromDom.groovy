@@ -283,7 +283,6 @@ if (errorMessages.size() > 0) {
 
 ec.service.sync().name("update#mchile.dte.FiscalTaxDocument").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, invoiceId:invoiceId]).call()
 
-
 // Se agregan las referencias
 referenciaList.each { referencia ->
     if (invoiceId) {
@@ -313,5 +312,14 @@ if (envioId) {
 }
 if (envioRespuestaId)
     ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioRespuestaId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
+
+if (dteMap.correoEmisor) {
+    contactMechId = ec.service.sync().name("mantle.party.ContactServices.findOrCreate#PartyEmailAddress").parameters([emailAddress:dteMap.correoEmisor, partyId:issuerPartyId,
+                    contactMechPurposeId:'DteIssuerEmail']).call().contactMechId
+    if (contactMechId) {
+        ec.service.sync().name("create#mantle.account.invoice.InvoiceContactMech").parameters([invoiceId:invoiceId, contactMechPurposeId:'DteIssuerEmail',
+                                                                                               contactMechId:contactMechId])
+    }
+}
 
 return
