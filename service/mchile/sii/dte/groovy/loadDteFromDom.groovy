@@ -104,20 +104,21 @@ if (requireReceiverInternalOrg && !receiverIsInternalOrg) {
 
 if (existingDteList) {
     dte = existingDteList.first
+    fiscalTaxDocumentId = dte.fiscalTaxDocumentId
     if (dte.sentRecStatusId == 'Ftd-ReceiverReject' && issuerIsInternalOrg) {
         if (dte.sentRecStatusId == 'Ftd-ReceiverReject')
             ec.logger.info("Existente tiene estado rechazado, eliminando para partir de cero")
         else
             ec.logger.info("Existente era obtenido desde SII (sólo metadata), eliminando para partir de cero")
         // remove existing DTE and start from scratch
-        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentAttributes").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).call()
-        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentContent").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).parameter("fiscalTaxDocumentContentId", "*").call()
-        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentEmailMessage").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).parameter("fiscalTaxDocumentEmailMessageId", "*").call()
-        ec.service.sync().name("delete#mchile.dte.ReferenciaDte").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).parameter("referenciaId", "*").call()
-        ec.service.sync().name("delete#mchile.dte.DteEnvioFiscalTaxDocument").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).parameter("envioId", "*").call()
-        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocument").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).call()
+        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentAttributes").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).call()
+        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentContent").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).parameter("fiscalTaxDocumentContentId", "*").call()
+        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentEmailMessage").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).parameter("fiscalTaxDocumentEmailMessageId", "*").call()
+        ec.service.sync().name("delete#mchile.dte.ReferenciaDte").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).parameter("referenciaId", "*").call()
+        ec.service.sync().name("delete#mchile.dte.DteEnvioFiscalTaxDocument").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).parameter("envioId", "*").call()
+        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocument").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).call()
     } else {
-        contentList = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml'])
+        contentList = ec.entity.find("mchile.dte.FiscalTaxDocumentContent").condition([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml'])
                 .disableAuthz().list()
         if (contentList.size() == 0) {
             changed = false
@@ -128,14 +129,14 @@ if (existingDteList) {
             dteMap.receiverPartyIdValue = rutReceptor
             dteMap.date = fechaEmision
             dteMap.statusId = 'Ftd-Issued'
-            dteMap.sentAuthStatusId = 'Ftd-SentAuthAccepted'
+            dteMap.sentAuthStatusId = sentAuthStatusId
             dteMap.formaPagoEnumId = formaPagoEnumId
             dteFieldListConstant = ['issuerPartyIdTypeEnumId', 'issuerPartyId', 'receiverPartyIdTypeEnumId', 'receiverPartyIdValue', 'date', 'receiverPartyId']
             dteFieldListConstant.each { entityFieldName ->
                 if (dteMap[entityFieldName] != dte[entityFieldName])
                     ec.message.addError("Value mismatch for attribute field ${entityFieldName}, XML value: ${dteMap[entityFieldName]}, DB value: ${dte[entityFieldName]}")
             }
-            dteFieldListOverwrite = ['statusId', 'sentAuthStatusId', 'sentRecStatusId', 'formaPagoEnumId']
+            dteFieldListOverwrite = ['statusId', 'sentAuthStatusId', 'formaPagoEnumId']
             dteFieldListOverwrite.each { entityFieldName ->
                 if (dteMap[entityFieldName] != dte[entityFieldName]) {
                     ec.logger.warn("Changing ${entityFieldName} from ${dte[entityFieldName]} to ${dteMap[entityFieldName]}")
@@ -143,14 +144,10 @@ if (existingDteList) {
                     changed = true
                 }
             }
-            if (receiverIsInternalOrg && dte.sentRecStatusId in ['Ftd-NotSentRec', 'Ftd-ReceiverReject', 'Ftd-SentRec', 'Ftd-SentRecFailed']) {
-                dte.sentRecStatusId = 'Ftd-ReceiverAck'
-                changed = true
-            }
             if (changed)
                 dte.update()
 
-            attrib = ec.entity.find("mchile.dte.FiscalTaxDocumentAttributes").condition("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).forUpdate(true).one()
+            attrib = ec.entity.find("mchile.dte.FiscalTaxDocumentAttributes").condition("fiscalTaxDocumentId", fiscalTaxDocumentId).forUpdate(true).one()
             attributeMap = [amount               : 'montoTotal', montoNeto: 'montoNeto', montoExento: 'montoExento', tasaImpuesto: 'tasaIva', tipoImpuesto: 'tipoImpuesto', montoIVARecuperable: 'iva',
                             montoIVANoRecuperable: 'montoIvaNoRecuperable', fechaEmision: 'fechaEmision', fechaVencimiento: 'fechaVencimiento', razonSocialEmisor: 'razonSocialEmisor',
                             razonSocialReceptor  : 'razonSocialReceptor']
@@ -173,11 +170,6 @@ if (existingDteList) {
                 attrib.update()
             if (ec.message.hasError())
                 return
-            ec.service.sync().name("mchile.sii.dte.DteContentServices.store#DteContent").parameters([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml',
-                                                                                                     documentContent:dteMap.dteBytes]).call()
-            if (dteMap.referenciaList)
-                ec.service.sync().name("mchile.sii.dte.DteReferenceServices.store#DteReferences").parameters([fiscalTaxDocumentId:dte.fiscalTaxDocumentId, referenciaList:dteMap.referenciaList]).call()
-            return
         } else {
             if (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-ReceiverAccept'] && contentList && sendResponse) {
                 ec.logger.warn("Contenido existe, DTE está aprobado, enviando aceptación")
@@ -187,9 +179,8 @@ if (existingDteList) {
                     recepDteGlosa = 'ACEPTADO OK'
                     sentRecStatusId = 'Ftde-DuplicateNotProcessed'
                     if (envioId)
-                        ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioId, fiscalTaxDocumentId:dte.fiscalTaxDocumentId]).call()
+                        ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
                 isDuplicated = true
-                fiscalTaxDocumentId = dte.fiscalTaxDocumentId
                 return
                 }
             }
@@ -203,7 +194,6 @@ if (existingDteList) {
     }
 }
 
-
 if (issuerPartyId == null)
     ec.message.addError("Empty issuerPartyId")
 if (receiverPartyId == null)
@@ -212,27 +202,30 @@ if (receiverPartyId == null)
 if (ec.message.hasError()) {
     estadoRecepDte = 2
     recepDteGlosa = 'RECHAZADO, Errores: ' + ec.message.getErrors().join(', ') + ((errorMessages.size() > 0) ? (', ' + errorMessages.join(', ')) : '')
-        + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+    + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
     sentRecStatusId = 'Ftd-ReceiverReject'
     return
 }
 
-ftdCreateMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rutEmisor, fiscalTaxDocumentTypeEnumId:dteMap.tipoDteEnumId, fiscalTaxDocumentNumber:dteMap.fiscalTaxDocumentNumber,
+if (!dte) {
+
+    ftdCreateMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rutEmisor, fiscalTaxDocumentTypeEnumId:dteMap.tipoDteEnumId, fiscalTaxDocumentNumber:dteMap.fiscalTaxDocumentNumber,
                 receiverPartyId:receiverPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', receiverPartyIdValue:rutReceptor, date:fechaEmision, statusId:'Ftd-Issued',
                 sentAuthStatusId:'Ftd-SentAuthAccepted', sentRecStatusId:sentRecStatusId, formaPagoEnumId:formaPagoEnumId]
 
-// Se guarda DTE recibido en la base de datos
-mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(ftdCreateMap).call()
-fiscalTaxDocumentId = mapOut.fiscalTaxDocumentId
+    // Se guarda DTE recibido en la base de datos
+    mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(ftdCreateMap).call()
+    fiscalTaxDocumentId = mapOut.fiscalTaxDocumentId
 
-attributeCreateMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, amount:montoTotal, montoNeto:dteMap.montoNeto, montoExento:dteMap.montoExento, tasaImpuesto:dteMap.tasaIva, tipoImpuesto:1, montoIVARecuperable:dteMap.iva, montoIVANoRecuperable:0,
+    attributeCreateMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, amount:montoTotal, montoNeto:dteMap.montoNeto, montoExento:dteMap.montoExento, tasaImpuesto:dteMap.tasaIva, tipoImpuesto:1, montoIVARecuperable:dteMap.iva, montoIVANoRecuperable:0,
                       fechaEmision:fechaEmision, fechaVencimiento:dteMap.fechaVencimiento, razonSocialEmisor:dteMap.razonSocialEmisor, razonSocialReceptor:dteMap.razonSocialReceptor]
+
+    mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(attributeCreateMap).call()
+}
 
 if (dteMap.tipoDteEnumId == 'Ftdt-52') {
     ec.service.sync().name("store#mchile.dte.GuiaDespacho").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, indTrasladoEnumId:dteMap.indTrasladoEnumId]).call()
 }
-
-mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(attributeCreateMap).call()
 
 ec.service.sync().name("mchile.sii.dte.DteContentServices.store#DteContent").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml',
                                                                                          documentContent:dteMap.dteBytes]).call()
@@ -242,10 +235,14 @@ if (pdfBytes) {
                                                                                              documentContent:dteMap.pdfBytes]).call()
 }
 
-invoiceOut = ec.service.sync().name("mchile.sii.dte.DteLoadServices.create#InvoiceFromDte").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, parsedDteXmlMap:dteMap, hasErrors:(errorMessages.size() > 0)]).call()
+invoiceId = dte?.invoiceId
 
-invoiceId = invoiceOut.invoiceId
-discrepancyMessages.addAll(invoiceOut.discrepancyMessages)
+if (invoiceId == null) {
+    invoiceOut = ec.service.sync().name("mchile.sii.dte.DteLoadServices.create#InvoiceFromDte").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, parsedDteXmlMap:dteMap, hasErrors:(errorMessages.size() > 0)]).call()
+
+    invoiceId = invoiceOut.invoiceId
+    discrepancyMessages.addAll(invoiceOut.discrepancyMessages)
+}
 
 invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", invoiceId).forUpdate(true).one()
 
@@ -281,7 +278,10 @@ if (errorMessages.size() > 0) {
     sentRecStatusId = 'Ftd-ReceiverAck'
 }
 
-ec.service.sync().name("update#mchile.dte.FiscalTaxDocument").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, invoiceId:invoiceId]).call()
+updateDteMap = [fiscalTaxDocumentId:fiscalTaxDocumentId, invoiceId:invoiceId]
+if (receiverIsInternalOrg)
+    updateDteMap.sentRecStatusId=sentRecStatusId
+ec.service.sync().name("update#mchile.dte.FiscalTaxDocument").parameters(updateDteMap).call()
 
 // Se agregan las referencias
 referenciaList.each { referencia ->
@@ -316,9 +316,9 @@ if (envioRespuestaId)
 if (dteMap.correoEmisor) {
     contactMechId = ec.service.sync().name("mantle.party.ContactServices.findOrCreate#PartyEmailAddress").parameters([emailAddress:dteMap.correoEmisor, partyId:issuerPartyId,
                     contactMechPurposeId:'DteIssuerEmail']).call().contactMechId
-    if (contactMechId) {
+    if (contactMechId && invoiceId) {
         ec.service.sync().name("create#mantle.account.invoice.InvoiceContactMech").parameters([invoiceId:invoiceId, contactMechPurposeId:'DteIssuerEmail',
-                                                                                               contactMechId:contactMechId])
+                                                                                               contactMechId:contactMechId]).call()
     }
 }
 
