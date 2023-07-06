@@ -284,7 +284,7 @@ if (receiverIsInternalOrg)
 ec.service.sync().name("update#mchile.dte.FiscalTaxDocument").parameters(updateDteMap).call()
 
 // Se agregan las referencias
-referenciaList.each { referencia ->
+dteMap.referenciaList.each { referencia ->
     if (invoiceId) {
         if (referencia.referenciaTipoDteEnumId == "Ftdt-801") {
             // Orden de Compra, va en el Invoice y no en mchile.dte.ReferenciaDte
