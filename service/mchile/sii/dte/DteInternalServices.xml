@@ -20,8 +20,11 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="partyId" required="true"/>
+            <parameter name="excludeParentOrganizationPartyIdList" type="List"/>
+            <parameter name="failIfNotFound" type="Boolean" default="true"/>
         </in-parameters>
         <out-parameters>
+            <parameter name="found" type="Boolean"/>
             <auto-parameters entity-name="mchile.dte.PartyDteParams"/>
             <parameter name="rutEmisor"/>
             <parameter name="rutEnviador"/>
@@ -36,13 +39,35 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="failedToLoadCertificate" type="Boolean"/>
         </out-parameters>
         <actions>
+            <set field="found" from="false"/>
             <entity-find-one entity-name="mchile.dte.PartyDteParams" value-field="dteParams">
                 <field-map field-name="partyId" from="partyId"/>
             </entity-find-one>
 
             <if condition="!dteParams">
-                <message error="true">Organización no tiene datos para generar DTE</message>
+                <entity-find entity-name="mantle.party.PartyFromAndToRelationship" list="parentOrganizationList" distinct="true">
+                    <econdition field-name="relationshipTypeEnumId" value="PrtOrgRollup"/>
+                    <econdition field-name="fromPartyId" from="partyId"/>
+                    <econdition field-name="fromDisabled" value="N" or-null="true"/>
+                    <econdition field-name="toPartyId" operator="not-in" from="excludeParentOrganizationPartyIdList" ignore-if-empty="true"/>
+                    <econdition field-name="toDisabled" value="N" or-null="true"/>
+                    <date-filter/>
+                </entity-find>
+                <if condition="!excludeParentOrganizationPartyIdList">
+                    <set field="excludeParentOrganizationPartyIdList" from="[]"/>
+                </if>
+                <script>excludeParentOrganizationPartyIdList.add(partyId)</script>
+                <iterate list="parentOrganizationList" entry="parentOrganization">
+                    <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="context+[failIfNotFound:false]" out-map="context"/>
+                    <if condition="found"><return/></if>
+                </iterate>
+                <if condition="failIfNotFound">
+                    <message error="true">Organización ${partyId} no tiene datos para generar DTE</message>
+                </if>
+                <return/>
             </if>
+
+            <set field="found" from="true"/>
 
             <service-call name="mchile.GeneralServices.get#RutForParty" in-map="context" out-map="context"/>
             <set field="rutEmisor" from="rutSinFormato"/>
