@@ -59,7 +59,7 @@ String schemaLocation = 'http://www.sii.cl/SiiDte EnvioBOLETA_v11.xsd'
 xmlBuilder.EnvioBOLETA(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation) {
     SetDTE(ID: idEnvio) {
         Caratula(version: '1.0') {
-            RutEmisor(rutEmisor)
+            RutEmisor(rutOrganizacion)
             RutEnvia(rutEnviador)
             //RutReceptor(rutReceptor)
             RutReceptor("60803000-K")
@@ -82,7 +82,7 @@ xmlBuilder.EnvioBOLETA(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://w
 xml = xmlWriter.toString()
 
 if (saveSinFirma) {
-    ResourceReference xmlContentReference = ec.resource.getLocationReference("dbresource://moit/erp/dte/EnvioDte-sinfirma/${rutEmisor}/${idEnvio}-sinfirma.xml")
+    ResourceReference xmlContentReference = ec.resource.getLocationReference("dbresource://moit/erp/dte/EnvioDte-sinfirma/${rutOrganizacion}/${idEnvio}-sinfirma.xml")
 }
 Document doc = MoquiDTEUtils.parseDocument(xmlWriter.toString().getBytes())
 

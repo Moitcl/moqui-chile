@@ -21,8 +21,8 @@ if (envio.rutReceptor != '60803000-K') {
 partyIdEmisor = ec.entity.find("mantle.party.PartyIdentification").condition([partyIdTypeEnumId:'PtidNationalTaxId', idValue:rutEmisorEnvio]).list().first?.partyId
 // Validación rut -->
 ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInternalServices.load#DteConfig").parameter("partyId", partyIdEmisor).call())
-if (rutEmisorEnvio != rutEmisor) {
-    ec.message.addError("Rut Emisor del envío (${rutEmisorEnvio}) no coincide con Rut de organización que envía (${rutEmisor})")
+if (rutEmisorEnvio != rutOrganizacion) {
+    ec.message.addError("Rut Emisor del envío (${rutEmisorEnvio}) no coincide con Rut de organización que envía (${rutOrganizacion})")
     return
 }
 
@@ -43,7 +43,7 @@ ec.logger.info("Subiendo envío ${envioId} a uri ${uploadUrl}")
 boundary = "MoitCl-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-DTE"
 
 rutEnviaMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEnviador).call()
-rutEmisorMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEmisor).call()
+rutEmisorMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutOrganizacion).call()
 fileBytes = locationReference.openStream().readAllBytes()
 fileName = locationReference.getFileName()
 body = """--${boundary}\r

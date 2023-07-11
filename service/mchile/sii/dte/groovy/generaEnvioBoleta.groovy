@@ -62,7 +62,7 @@ String schemaLocation = 'http://www.sii.cl/SiiDte EnvioBOLETA_v11.xsd'
 xmlBuilder.EnvioBOLETA(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation) {
     SetDTE(ID: idEnvio) {
         Caratula(version: '1.0') {
-            RutEmisor(rutEmisor)
+            RutEmisor(rutOrganizacion)
             RutEnvia(rutEnviador)
             //RutReceptor(rutReceptor)
             RutReceptor("60803000-K")
@@ -85,7 +85,7 @@ xmlBuilder.EnvioBOLETA(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://w
 xml = xmlWriter.toString()
 
 if (saveSinFirma) {
-    ResourceReference xmlContentReference = ec.resource.getLocationReference("dbresource://moit/erp/dte/EnvioDte-sinfirma/${rutEmisor}/${idEnvio}-sinfirma.xml")
+    ResourceReference xmlContentReference = ec.resource.getLocationReference("dbresource://moit/erp/dte/EnvioDte-sinfirma/${rutOrganizacion}/${idEnvio}-sinfirma.xml")
     //envioBoletaDocument.save(xmlContentReference.outputStream, opts)
 }
 Document doc = MoquiDTEUtils.parseDocument(xmlWriter.toString().getBytes())
@@ -101,20 +101,20 @@ try {
 
 ts = ec.user.nowTimestamp
 if (MoquiDTEUtils.verifySignature(doc, "/sii:EnvioBOLETA/sii:SetDTE", "./sii:Caratula/sii:TmstFirmaEnv/text()")) {
-    xmlContentLocation = "dbresource://moit/erp/dte/EnvioDte/${rutEmisor}/${idEnvio}.xml"
+    xmlContentLocation = "dbresource://moit/erp/dte/EnvioDte/${rutOrganizacion}/${idEnvio}.xml"
     envioRr = ec.resource.getLocationReference(xmlContentLocation)
     envioRr.putBytes(salida)
     fileName = envioRr.fileName
     ec.logger.warn("Envio generado OK")
 } else {
-    xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/${idEnvio}-mala.xml"
+    xmlContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/${idEnvio}-mala.xml"
     envioRr = ec.resource.getLocationReference(xmlContentLocation)
     envioRr.putBytes(salida)
     fileName = envioRr.fileName
     ec.logger.warn("Error al generar envio")
 }
 
-envioId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-EnvioBoleta', statusId:'Ftde-Created', internalId:idEnvio, rutEmisor:rutEmisor, issuerPartyId:issuerPartyId,
+envioId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-EnvioBoleta', statusId:'Ftde-Created', internalId:idEnvio, rutEmisor:rutOrganizacion, issuerPartyId:issuerPartyId,
                                                                            rutReceptor:rutReceptor, receiverPartyId:'CL_SII', registerDate:ec.user.nowTimestamp, documentLocation:xmlContentLocation, fileName:fileName]).call().envioId
 documentIdList.each { documentId ->
     ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters([fiscalTaxDocumentId:documentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Envio', contentLocation:xmlContentLocation, contentDate:ts]).call()

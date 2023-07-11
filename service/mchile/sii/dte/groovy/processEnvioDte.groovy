@@ -191,7 +191,7 @@ if (MoquiDTEUtils.verifySignature(doc2, "/sii:RespuestaDTE/sii:Resultado", "./si
     xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDte/${rutReceptorCaratula}/${idAcuseRecibo}.xml"
     ec.logger.warn("Envio generado OK")
 } else {
-    xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDte/${rutEmisor}/${idAcuseRecibo}-mala.xml"
+    xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDte/${rutOrganizacion}/${idAcuseRecibo}-mala.xml"
     ec.logger.warn("Error al generar envio")
 }
 xmlContentRr = ec.resource.getLocationReference(xmlContentLocation)

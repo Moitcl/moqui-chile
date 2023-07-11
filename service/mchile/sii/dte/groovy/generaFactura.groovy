@@ -260,7 +260,7 @@ if (detalleIt1.length() > 40)
     detalleIt1 = detalleIt1.substring(0, 40)
 
 xmlBuilderTimbre.DD() {
-    RE(rutEmisor)
+    RE(rutOrganizacion)
     TD(tipoDte)
     F(folio)
     FE(ec.l10n.format(fechaEmision, "yyyy-MM-dd"))
@@ -313,8 +313,8 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                     FchVenc(ec.l10n.format(fechaVencimiento, "yyyy-MM-dd"))
             }
             Emisor {
-                RUTEmisor(rutEmisor)
-                RznSoc(razonSocialEmisor)
+                RUTEmisor(rutOrganizacion)
+                RznSoc(razonSocialOrganizacion)
                 GiroEmis(giroEmisor)
                 Telefono(fonoContacto)
                 CorreoEmisor(mailContacto)
@@ -502,9 +502,9 @@ if (tipoDte == 52) {
     ec.service.sync().name("store#mchile.dte.GuiaDespacho").parameters([fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, indTrasladoEnumId:indTrasladoEnumId]).call()
 }
 
-xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folio}.xml"
-pdfContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folio}.pdf"
-pdfCedibleContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folio}-cedible.pdf"
+xmlContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/DTE-${tipoDte}-${folio}.xml"
+pdfContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/DTE-${tipoDte}-${folio}.pdf"
+pdfCedibleContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/DTE-${tipoDte}-${folio}-cedible.pdf"
 
 // Creacion de registros en FiscalTaxDocumentContent
 createMapBase = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, contentDte:ts]
@@ -522,6 +522,6 @@ if ((fiscalTaxDocumentTypeEnumId as String) in dteConstituyeVentaTypeList) {
 
 // Creación de registro en FiscalTaxDocumentAttributes
 createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:totalInvoice, fechaEmision:fechaEmision, fechaVencimiento:fechaVencimiento, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:totalNeto, tasaImpuesto:19,
-             montoExento:totalExento, montoIVARecuperable:montoIVARecuperable, razonSocialEmisor:razonSocialEmisor, razonSocialReceptor:razonSocialReceptor]
+             montoExento:totalExento, montoIVARecuperable:montoIVARecuperable, razonSocialEmisor:razonSocialOrganizacion, razonSocialReceptor:razonSocialReceptor]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call())
 fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId

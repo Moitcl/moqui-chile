@@ -10,11 +10,6 @@ if (fechaInicio > fechaFin) {
     return
 }
 
-rutEmisor = ec.service.sync().name("mchile.GeneralServices.get#RutForParty").parameters([partyId:organizationPartyId, failIfNotFound:true]).call().rut
-
-// Validación rut
-// ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameters([rut:rutReceptor]).call()
-
 // Recuperacion de parametros de la organizacion -->
 ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInternalServices.load#DteConfig").parameter("partyId", organizationPartyId).call())
 
@@ -38,7 +33,7 @@ String schemaLocation = 'http://www.sii.cl/SiiDte ConsumoFolio_v10.xsd'
 xmlBuilder.ConsumoFolios(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation) {
     DocumentoConsumoFolios(ID: idDocumento) {
         Caratula(version: '1.0') {
-            RutEmisor(rutEmisor)
+            RutEmisor(rutOrganizacion)
             RutEnvia(rutEnviador)
             FchResol(fechaResolucionSii)
             // NroResol is 0 in Certification
@@ -79,8 +74,8 @@ xmlWriter.close()
 Document doc2 = MoquiDTEUtils.parseDocument(rcofString.getBytes())
 byte[] rcofXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "DocumentoConsumoFolios")
 
-xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/RCOF/RCOF-${idDocumento}.xml"
-createMap = [envioTypeEnumId:'Ftdt-Rcof', issuerPartyId:organizationPartyId, rutEmisor:rutEmisor, receiverPartyId:receiverPartyId, statusId:"Ftde-Created", registerDate:ts, documentLocation:xmlContentLocation]
+xmlContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/RCOF/RCOF-${idDocumento}.xml"
+createMap = [envioTypeEnumId:'Ftdt-Rcof', issuerPartyId:organizationPartyId, rutEmisor:rutOrganizacion, receiverPartyId:receiverPartyId, statusId:"Ftde-Created", registerDate:ts, documentLocation:xmlContentLocation]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.DteEnvio").parameters(createMap).call())
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.RCof").parameters([envioId:envioId, fechaInicio:fechaInicio, fechaFin:fechaFin]).call())
 

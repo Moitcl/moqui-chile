@@ -28,7 +28,7 @@ URI requestUrl = new URI(urlSolicitud)
 boundary = "MoitCl-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-${StringUtilities.getRandomString(10)}-DTE"
 
 rutEnviaMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEnviador).call()
-rutEmisorMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutEmisor).call()
+rutEmisorMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut").parameter("rut", rutOrganizacion).call()
 fileBytes = locationReference.openStream().readAllBytes()
 fileName = locationReference.getFileName()
 body = """--${boundary}\r

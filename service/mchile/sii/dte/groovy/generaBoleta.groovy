@@ -157,7 +157,7 @@ String detalleIt1 = detalleList.get(0).nombreItem
 
 if (detalleIt1.length() > 40)
     detalleIt1 = detalleIt1.substring(0, 40)
-datosTed = "<DD><RE>${rutEmisor}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptorTimbre}</RSR><MNT>${totalInvoice}</MNT><IT1>${detalleIt1}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
+datosTed = "<DD><RE>${rutOrganizacion}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptorTimbre}</RSR><MNT>${totalInvoice}</MNT><IT1>${detalleIt1}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
 
 String schemaLocation = ''
 xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
@@ -184,8 +184,8 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                     SaldoInsol(saldoInsoluto)
             }
             Emisor {
-                RUTEmisor(rutEmisor)
-                RznSocEmisor(razonSocialEmisor)
+                RUTEmisor(rutOrganizacion)
+                RznSocEmisor(razonSocialOrganizacion)
                 GiroEmisor(giroEmisor)
                 if (codigoSucursalSii)
                     CdgSIISucur(codigoSucursalSii)
@@ -353,9 +353,9 @@ Timestamp ts = new Timestamp(date.getTime())
 dteEv.date = ts
 dteEv.update()
 
-xmlContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folio}.xml"
-pdfContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folio}.pdf"
-pdfCedibleContentLocation = "dbresource://moit/erp/dte/${rutEmisor}/DTE-${tipoDte}-${folio}-cedible.pdf"
+xmlContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/DTE-${tipoDte}-${folio}.xml"
+pdfContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/DTE-${tipoDte}-${folio}.pdf"
+pdfCedibleContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/DTE-${tipoDte}-${folio}-cedible.pdf"
 
 // Creacion de registros en FiscalTaxDocumentContent
 createMapBase = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, contentDte:ts]
@@ -373,6 +373,6 @@ ec.resource.getLocationReference(pdfContentLocation).putBytes(pdfBytes)
 
 // Creación de registro en FiscalTaxDocumentAttributes
 createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:totalInvoice, fechaEmision:fechaEmision, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:totalNeto, tasaImpuesto:19,
-             montoExento:totalExento, montoIVARecuperable:montoIVARecuperable, razonSocialEmisor:razonSocialEmisor, razonSocialReceptor:razonSocialReceptor]
+             montoExento:totalExento, montoIVARecuperable:montoIVARecuperable, razonSocialEmisor:razonSocialOrganizacion, razonSocialReceptor:razonSocialReceptor]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call())
 fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId
