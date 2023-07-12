@@ -314,8 +314,11 @@ if (envioRespuestaId)
     ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioRespuestaId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
 
 if (dteMap.correoEmisor) {
-    contactMechId = ec.service.sync().name("mantle.party.ContactServices.findOrCreate#PartyEmailAddress").parameters([emailAddress:dteMap.correoEmisor, partyId:issuerPartyId,
-                    contactMechPurposeId:'DteIssuerEmail']).call().contactMechId
+    emailValidator = org.apache.commons.validator.routines.EmailValidator.instance
+    if (emailValidator.isValid(dteMap.correoEmisor)) {
+        contactMechId = ec.service.sync().name("mantle.party.ContactServices.findOrCreate#PartyEmailAddress").parameters([emailAddress:dteMap.correoEmisor, partyId:issuerPartyId,
+                        contactMechPurposeId:'DteIssuerEmail']).call().contactMechId
+    }
     if (contactMechId && invoiceId) {
         ec.service.sync().name("create#mantle.account.invoice.InvoiceContactMech").parameters([invoiceId:invoiceId, contactMechPurposeId:'DteIssuerEmail',
                                                                                                contactMechId:contactMechId]).call()
