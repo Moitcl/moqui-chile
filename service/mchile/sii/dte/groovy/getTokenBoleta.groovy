@@ -39,7 +39,7 @@ String signedXml = new String(signedXmlBytes)
 URI uploadUrl = new URI(urlSolicitud)
 RestClient.RequestFactory requestFactory = new RestClient.SimpleRequestFactory(false, false)
 requestFactory.getHttpClient().setUserAgentField(new HttpField(HttpHeader.USER_AGENT, "Mozilla/4.0 (compatible; PROG 1.0; Windows NT 5.0; YComp 5.0.2.4)"))
-RestClient restClient = new RestClient().uri(uploadUrl).method("POST").withRequestFactory(requestFactory)
+RestClient restClient = new RestClient().uri(uploadUrl).method("POST").withRequestFactory(requestFactory).timeout(5)
 restClient.addHeader("Host", uploadUrl.getHost())
 if (proxyHost != null && proxyPort != 0) {
     restClient.withRequestFactory(new cl.moit.net.ProxyRequestFactory(proxyHost, proxyPort))
