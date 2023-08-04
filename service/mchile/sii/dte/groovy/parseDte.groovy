@@ -133,7 +133,7 @@ encabezado.Totales.ImptoReten.each { it ->
 }
 
 if ((montoNeto + montoExento + iva + impuestos) != montoTotal) errorMessages.add("Total inválido (montoTotal no coincide con suma de monto neto, monto exento, iva e impuestos)")
-if (montoNeto > 0 && tasaIva / 100 != vatTaxRate) errorMessages.add("Tasa IVA no coincide: esperada: ${vatTaxRate*100}%, recibida: ${tasaIva}%")
+if ((montoNeto > 0 && tasaIva / 100 != vatTaxRate) && !esBoleta) errorMessages.add("Tasa IVA no coincide: esperada: ${vatTaxRate*100}%, recibida: ${tasaIva}%")
 
 tipoDteEnumId = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#MoquiCode").parameter("siiCode", tipoDte).call().enumId
 
