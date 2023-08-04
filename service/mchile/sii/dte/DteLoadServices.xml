@@ -14,44 +14,6 @@ along with this software (see the LICENSE.md file). If not, see
 -->
 <services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
 
-    <service verb="preLoad" noun="Dte">
-        <description>
-            Servicio para simplificar carga de Facturas vs Boletas discriminando por los dos grandes tipos antes de parsear el XML
-        </description>
-        <in-parameters>
-            <parameter name="invoiceId"/>
-            <parameter name="xml" type="Object" required="true"/>
-            <parameter name="pdf" type="Object"/>
-            <parameter name="productMatch" default-value="false"/>
-            <parameter name="fiscalTaxDocumentAggrEnumId" required="true"/>
-            <parameter name="createUnknownIssuer" type="Boolean" default="false"/>
-            <parameter name="requireIssuerInternalOrg" type="Boolean" default="false"/>
-            <parameter name="createUnknownReceiver" type="Boolean" default="false"/>
-            <parameter name="requireReceiverInternalOrg" type="Boolean" default="false"/>
-            <parameter name="ignoreSignatureErrors" type="Boolean" default="false"/>
-        </in-parameters>
-        <actions>
-            <if condition="fiscalTaxDocumentAggrEnumId == 'Ftdt-Boletas'"><then>
-                <service-call name="mchile.sii.dte.DteLoadServices.load#Boleta" in-map="context"/>
-            </then><else>
-                <service-call name="mchile.sii.dte.DteLoadServices.load#DteFromFile" in-map="context"/>
-            </else></if>
-        </actions>
-    </service>
-
-    <service verb="load" noun="Boleta" type="script" location="component://MoquiChile/service/mchile/sii/dte/groovy/loadBoleta.groovy">
-        <description>
-            Carga boleta en XML recibida por la organización
-        </description>
-        <in-parameters>
-            <parameter name="invoiceId"/>
-            <parameter name="xml" type="org.apache.commons.fileupload.FileItem" required="true"/>
-            <parameter name="pdf" type="org.apache.commons.fileupload.FileItem" required="true"/>
-            <parameter name="productMatch" default-value="false"/>
-            <parameter name="organizationPartyId" required="true"/>
-        </in-parameters>
-    </service>
-
     <service verb="load" noun="DteFromDom" type="script" location="component://MoquiChile/service/mchile/sii/dte/groovy/loadDteFromDom.groovy">
         <in-parameters>
             <parameter name="createUnknownIssuer" default="true" type="Boolean"/>
@@ -402,7 +364,6 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="parse" noun="Dte" type="script" location="component://MoquiChile/service/mchile/sii/dte/groovy/parseDte.groovy">
         <in-parameters>
             <parameter name="dte" type="Object" required="true"/>
-            <parameter name="charset" default-value="UTF-8"><description>When dte is String, charset to use when converting into byte array</description></parameter>
             <parameter name="attemptProductMatch" default-value="false" type="Boolean"/>
         </in-parameters>
         <out-parameters>
@@ -410,10 +371,15 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="rutEmisor"/>
             <parameter name="razonSocialEmisor"/>
             <parameter name="giroEmisor"/>
+            <parameter name="sucursalSiiEmisor"/>
+            <parameter name="actividadEconomica"/>
             <parameter name="correoEmisor"/>
             <parameter name="direccionOrigen"/>
             <parameter name="comunaOrigen"/>
             <parameter name="ciudadOrigen"/>
+            <parameter name="indicadorServicio"/>
+            <parameter name="periodoDesde" type="Date"/>
+            <parameter name="periodoHasta" type="Date"/>
             <parameter name="impuestosMap" type="Map"/>
             <parameter name="rutReceptor"/>
             <parameter name="tipoDte" type="Integer"/>
@@ -423,6 +389,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fechaVencimiento" type="Date"/>
             <parameter name="razonSocialReceptor"/>
             <parameter name="giroReceptor"/>
+            <parameter name="codigoInternoReceptor"/>
             <parameter name="direccionReceptor"/>
             <parameter name="comunaReceptor"/>
             <parameter name="ciudadReceptor"/>
@@ -434,6 +401,8 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="montoTotal" type="BigDecimal"/>
             <parameter name="montoNeto" type="BigDecimal"/>
             <parameter name="montoExento" type="BigDecimal"/>
+            <parameter name="saldoAnterior" type="BigDecimal"/>
+            <parameter name="valorAPagar" type="BigDecimal"/>
             <parameter name="tasaIva" type="BigDecimal"/>
             <parameter name="formaPago"/>
             <parameter name="indTrasladoEnumId"/>
@@ -493,15 +462,19 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="itemMap" from="null"/>
                 <if condition="!attemptProductMatch"><then>
                     <service-call name="mantle.account.InvoiceServices.create#InvoiceItem" in-map="[invoiceId: invoiceId, itemTypeEnumId:'ItemSales', dteQuantity:detalle.dteQuantity, dteAmount:detalle.dteAmount,
-                                                       productId: (detalle.itemExento? 'SRVCEXENTO': null), description: detalle.itemDescription, quantity: detalle.quantity, amount: detalle.amount]" out-map="itemMap"/>
+                                                       productId: (detalle.itemExento? 'SRVCEXENTO': null), description: detalle.itemName, quantity: detalle.quantity, amount: detalle.amount]" out-map="itemMap"/>
+                    <if condition="detalle.itemDescription">
+                        <service-call name="mantle.account.InvoiceServices.create#InvoiceItem" in-map="[invoiceId: invoiceId, itemTypeEnumId:'ItemDetailedDescription', description: detalle.itemDescription,
+                                parentItemSeqId:itemMap.invoiceItemSeqId]" out-map="descriptionItemMap"/>
+                    </if>
                     <set field="invoiceItemCount" from="invoiceItemCount + 1"/>
                 </then><else>
                     <log message="Buscando código item"/>
                     <set field="k" from="0"/>
                     <set field="productId" from="null"/>
-                    <iterate list="detalle.codigoList" entry="codigo">
+                    <iterate list="detalle.codigoMap" entry="codigo" key="tipoCodigo">
                         <set field="k" from="k+1"/>
-                        <log message="Leyendo código ${k}, valor: ${codigo}"/>
+                        <log message="Leyendo código ${k}, tipo ${tipoCodigo}, valor: ${codigo}"/>
                         <if condition="issuerIsInternalOrg"><then>
                             <entity-find-one entity-name="mantle.product.Product" auto-field-map="[pseudoId:codigo]" value-field="product"/>
                             <if condition="product">
@@ -607,17 +580,17 @@ along with this software (see the LICENSE.md file). If not, see
                             <set field="afecto" from="afectoMap.afecto"/>
                         </if>
                         <if condition="afecto">
-                            <set field="dteAmount" from="it.dteAmount ?: it.amount"/>
+                            <set field="dteAmount" from="item.dteAmount ?: item.amount"/>
                             <set field="decimals" from="2"/>
-                            <set field="it.amount" from="(it.amount * factor).setScale(decimals, RoundingMode.HALF_UP)"/>
-                            <while condition="decimals > 0 &amp;&amp; (it.amount * it.quantity).setScale(0, RoundingMode.HALF_UP) != it.amount * it.quantity">
+                            <set field="item.amount" from="((item.amount?:0 as BigDecimal) * factor).setScale(decimals, java.math.RoundingMode.HALF_UP)"/>
+                            <while condition="decimals > 0 &amp;&amp; (item.amount * (item.quantity?:1)).setScale(0, java.math.RoundingMode.HALF_UP) != item.amount * (item.quantity?:1)">
                                 <set field="decimals" from="decimals-1"/>
-                                <set field="it.amount" from="it.amount.setScale(decimals, RoundingMode.HALF_UP)"/>
+                                <set field="item.amount" from="item.amount.setScale(decimals, java.math.RoundingMode.HALF_UP)"/>
                             </while>
-                            <if condition="(it.amount * it.quantity).setScale(0, RoundingMode.HALF_UP) != it.amount * it.quantity">
-                                <set field="it.dteQuantity" from="it.dteQuantity ?: it.quantity"/>
-                                <set field="it.amount" from="(it.amount * it.quantity).setScale(0, RoundingMode.HALF_UP)"/>
-                                <set field="it.quantity" from="1"/>
+                            <if condition="((item.amount?:0 as BigDecimal) * (item.quantity?:1 as BigDecimal)).setScale(0, java.math.RoundingMode.HALF_UP) != (item.amount?:0) * (item.quantity?:1)">
+                                <set field="item.dteQuantity" from="item.dteQuantity ?: item.quantity"/>
+                                <set field="item.amount" from="(item.amount * item.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                                <set field="item.quantity" from="1"/>
                             </if>
                         </if>
                         <entity-update value-field="item"/>

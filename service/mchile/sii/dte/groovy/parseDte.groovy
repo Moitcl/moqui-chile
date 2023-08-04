@@ -73,6 +73,7 @@ if (verResult.code != VerifyResult.TED_OK)
     ec.logger.warn("Error en timbre documento ${i}: ${verResult.message}")
  */
 tipoDte = encabezado.IdDoc.TipoDTE.text()
+esBoleta = (tipoDte == '39' || tipoDte == '41')
 folioDte = encabezado.IdDoc.Folio.text() as Integer
 fiscalTaxDocumentNumber = folioDte
 montosBrutos = encabezado.IdDoc.MntBruto?.text() == "1"
@@ -80,19 +81,33 @@ indTraslado = encabezado.IdDoc.IndTraslado?.text()
 formaPago = encabezado.IdDoc.FmaPago?.text()
 if (formaPago == null)
     formaPago = "2"
+indicadorServicio = encabezado.IdDoc.IndServicio.text()
+fechaEmision = ec.l10n.parseDate(encabezado.IdDoc.FchEmis.text(), "yyyy-MM-dd")
+fechaVencimiento = ec.l10n.parseDate(encabezado.IdDoc.FchVenc.text(), "yyyy-MM-dd")
+periodoDesde = ec.l10n.parseDate(encabezado.IdDoc.PeriodoDesde.text(), "yyyy-MM-dd")
+periodoHasta = ec.l10n.parseDate(encabezado.IdDoc.PeriodoHasta.text(), "yyyy-MM-dd")
 
-emisor = encabezado.Emisor
+        emisor = encabezado.Emisor
 rutEmisor = emisor.RUTEmisor.text()
-razonSocialEmisor = emisor.RznSoc.text()
-giroEmisor = emisor.GiroEmis.text()
+if (esBoleta) {
+    razonSocialEmisor = emisor.RznSocEmisor.text()
+    giroEmisor = emisor.GiroEmisor.text()
+} else {
+    razonSocialEmisor = emisor.RznSoc.text()
+    giroEmisor = emisor.GiroEmis.text()
+}
 correoEmisor = emisor.CorreoEmisor.text()
+sucursalSiiEmisor = emisor.CdgSIISucur.text()
 direccionOrigen = emisor.DirOrigen.text()
 comunaOrigen = emisor.CmnaOrigen.text()
 ciudadOrigen = emisor.CiudadOrigen.text()
+actividadEconomica = emisor.Acteco.text()
 
 // Totales
 montoNeto = (encabezado.Totales.MntNeto.text() ?: 0) as BigDecimal
-montoTotal = (encabezado.Totales.MntTotal.text() ?: 0) as BigDecimal // es retornado, si se especifica clase se considera var local y no retorna
+montoTotal = (encabezado.Totales.MntTotal.text() ?: 0) as BigDecimal
+saldoAnterior = (encabezado.Totales.SaldoAnterio.text() ?: 0) as BigDecimal
+valorAPagar = (encabezado.Totales.VlrPagar.text() ?: 0) as BigDecimal
 BigDecimal montoNoFacturable = (encabezado.Totales.MontoNF.text() ?: 0) as BigDecimal
 montoExento = (encabezado.Totales.MntExe.text() ?: 0) as BigDecimal
 tasaIva = (encabezado.Totales.TasaIVA.text() ?: 0) as BigDecimal
@@ -120,17 +135,31 @@ encabezado.Totales.ImptoReten.each { it ->
 if ((montoNeto + montoExento + iva + impuestos) != montoTotal) errorMessages.add("Total inválido (montoTotal no coincide con suma de monto neto, monto exento, iva e impuestos)")
 if (montoNeto > 0 && tasaIva / 100 != vatTaxRate) errorMessages.add("Tasa IVA no coincide: esperada: ${vatTaxRate*100}%, recibida: ${tasaIva}%")
 
-rutReceptor = encabezado.Receptor.RUTRecep.text()
 tipoDteEnumId = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#MoquiCode").parameter("siiCode", tipoDte).call().enumId
-fechaEmision = ec.l10n.parseDate(encabezado.IdDoc.FchEmis.text(), "yyyy-MM-dd")
-fechaVencimiento = ec.l10n.parseDate(encabezado.IdDoc.FchVenc.text(), "yyyy-MM-dd")
 
 receptor = encabezado.Receptor
+rutReceptor = receptor.RUTRecep.text()
 razonSocialReceptor = receptor.RznSocRecep.text()
 giroReceptor = receptor.GiroRecep.text()
 direccionReceptor = receptor.DirRecep.text()
 comunaReceptor = receptor.CmnaRecep.text()
 ciudadReceptor = receptor.CiudadRecep.text()
+codigoInternoReceptor = receptor.CdgIntRecep.text()
+
+transporte = encabezado.Transporte
+if (transporte) {
+    transporteMap = [:]
+    transporteMap.patente = transporte.Patente.text()
+    transporteMap.rutTransportista = transporte.RUTTrans.text()
+    transporteMap.rutChofer = transporte.RUTChofer.text()
+    transporteMap.nombreChofer = transporte.NombreChofer.text()
+    transporteMap.direccionDestino = transporte.DirDest.text()
+    transporteMap.comunaDestino = transporte.CmnaDest.text()
+    transporteMap.ciudadDestino = transporte.CiudadDest.text()
+
+    // ToDo: TransporteAduana
+
+}
 
 detalleDteList = documento.Documento.Detalle
 
@@ -151,13 +180,18 @@ detalleDteList.each { detalleDte ->
     ec.logger.warn("Precio: ${detalleDte.PrcItem.text()}")
     ec.logger.warn("Descuento: ${detalleDte.DescuentoMonto?.text()}")
     ec.logger.warn("Monto: ${detalleDte.MontoItem.text()}")
-    itemDescription = detalleDte.NmbItem?.text()
+    itemName = detalleDte.NmbItem?.text()
+    itemDescription = detalleDte.DscItem?.text()
     BigDecimal quantity = detalleDte.QtyItem ? (detalleDte.QtyItem.text() as BigDecimal) : null
+    BigDecimal referenceQuantity = detalleDte.QtyRef ? (detalleDte.QtyRef.text() as BigDecimal) : null
     price = detalleDte.PrcItem ? (detalleDte.PrcItem.text() as BigDecimal) : null
+    referencePrice = detalleDte.PrcRef ? (detalleDte.PrcRef.text() as BigDecimal) : null
     montoItem = detalleDte.MontoItem ? (detalleDte.MontoItem.text() as BigDecimal) : null
     montoItemBruto = null
     dteQuantity = null
     dteAmount = null
+    referenceUnit = detalleDte.UnmdRef.text()
+    unit = detalleDte.UnmdItem.text()
     descuentoMonto = detalleDte.DescuentoMonto ? (detalleDte.DescuentoMonto.text() as BigDecimal) : 0 as BigDecimal
     descuentoMonto = descuentoMonto.setScale(0, RoundingMode.HALF_UP)
     if (montoItem && montosBrutos) {
@@ -179,9 +213,9 @@ detalleDteList.each { detalleDte ->
     } else if (((price * quantity) - descuentoMonto).setScale(0, RoundingMode.HALF_UP) != montoItem) {
         if (montosBrutos) {
             if (montoItemBruto && priceBruto && ((priceBruto * quantity) - descuentoMontoBruto).setScale(0, RoundingMode.HALF_UP) != montoItemBruto)
-                discrepancyMessages.add("En detalle ${nroDetalles} (${itemDescription?:''}), montoItem (${montoItemBruto}) no calza con el valor unitario (${priceBruto}) multiplicado por cantidad (${quantity}) menos descuento (${descuentoMontoBruto}), redondeado")
+                discrepancyMessages.add("En detalle ${nroDetalles} (${itemName?:''}), montoItem (${montoItemBruto}) no calza con el valor unitario (${priceBruto}) multiplicado por cantidad (${quantity}) menos descuento (${descuentoMontoBruto}), redondeado")
         } else {
-            discrepancyMessages.add("En detalle ${nroDetalles} (${itemDescription?:''}), montoItem (${montoItem}) no calza con el valor unitario (${price}) multiplicado por cantidad (${quantity}) menos descuento (${descuentoMonto}), redondeado")
+            discrepancyMessages.add("En detalle ${nroDetalles} (${itemName?:''}), montoItem (${montoItem}) no calza con el valor unitario (${price}) multiplicado por cantidad (${quantity}) menos descuento (${descuentoMonto}), redondeado")
         }
         dteAmount = price
         price = (montoItem+descuentoMonto)/quantity
@@ -248,13 +282,21 @@ detalleDteList.each { detalleDte ->
 
     cdgItemList = detalleDte.CdgItem
     int k = 0
-    codigoList = []
+    codigoMap = [:]
     detalleDte.CdgItem.each { cdgItem ->
-        codigoList.add(cdgItem.VlrCodigo.text())
+        codigoMap[cdgItem.TpoCodigo.text() ?: 'Interna'] = cdgItem.VlrCodigo.text()
     }
 
-    detalleList.add([quantity:quantity, dteAmount:dteAmount, itemExento:itemExento, itemDescription:itemDescription, dteQuantity:dteQuantity, amount:price, codigoList:codigoList,
-                     descuentoMonto:descuentoMonto, roundingAdjustmentItemAmount:roundingAdjustmentItemAmount])
+    detalleMap = [quantity:quantity, dteAmount:dteAmount, itemExento:itemExento, itemName:itemName, itemDescription:itemDescription, dteQuantity:dteQuantity, amount:price,
+                  codigoMap:codigoMap, descuentoMonto:descuentoMonto, referenceQuantity:referenceQuantity, referenceUnit:referenceUnit, referenceAmount:referencePrice, unit:unit,
+                  roundingAdjustmentItemAmount:roundingAdjustmentItemAmount]
+
+    itemEspectaculo = detalleDte.ItemEspectaculo.text()
+    if (itemEspectaculo) {
+        detalleMap.itemEspectaculo = itemEspectaculo
+    }
+
+    detalleList.add( detalleMap )
 }
 
 descuentoRecargoList = []
