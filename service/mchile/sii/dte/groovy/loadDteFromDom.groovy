@@ -70,7 +70,7 @@ if (rutReceptor in reserved.rutList) {
     estadoRecepDte = 2
     recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
     if (recepDteGlosa.length()  > 256) recepDteGlosa = recepDteGlosa.substring(0, 256)
-    sentRecStatusId = 'Ftd-ReceiverReject'
+    sentRecStatusId = 'Ftd-ReceiverToReject'
     return
 }
 
@@ -105,8 +105,8 @@ if (requireReceiverInternalOrg && !receiverIsInternalOrg) {
 if (existingDteList) {
     dte = existingDteList.first
     fiscalTaxDocumentId = dte.fiscalTaxDocumentId
-    if (dte.sentRecStatusId == 'Ftd-ReceiverReject' && issuerIsInternalOrg) {
-        if (dte.sentRecStatusId == 'Ftd-ReceiverReject')
+    if (dte.sentRecStatusId in ['Ftd-ReceiverToReject', 'Ftd-ReceiverReject'] && issuerIsInternalOrg) {
+        if (dte.sentRecStatusId in ['Ftd-ReceiverToReject', 'Ftd-ReceiverReject'] )
             ec.logger.info("Existente tiene estado rechazado, eliminando para partir de cero")
         else
             ec.logger.info("Existente era obtenido desde SII (sólo metadata), eliminando para partir de cero")
@@ -201,9 +201,9 @@ if (receiverPartyId == null)
 
 if (ec.message.hasError()) {
     estadoRecepDte = 2
-    recepDteGlosa = 'RECHAZADO, Errores: ' + ec.message.getErrors().join(', ') + ((errorMessages.size() > 0) ? (', ' + errorMessages.join(', ')) : '')
+    recepDteGlosa = 'A Reclamar, Errores: ' + ec.message.getErrors().join(', ') + ((errorMessages.size() > 0) ? (', ' + errorMessages.join(', ')) : '')
     + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
-    sentRecStatusId = 'Ftd-ReceiverReject'
+    sentRecStatusId = 'Ftd-ReceiverToReject'
     return
 }
 
@@ -248,8 +248,8 @@ invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId"
 
 if (errorMessages.size() > 0) {
     estadoRecepDte = 2
-    recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
-    sentRecStatusId = 'Ftd-ReceiverReject'
+    recepDteGlosa = 'A Reclamar, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+    sentRecStatusId = 'Ftd-ReceiverToReject'
     ec.logger.error(recepDteGlosa)
     if (recepDteGlosa.length() > 256)
         recepDteGlosa = recepDteGlosa.substring(0, 256)
