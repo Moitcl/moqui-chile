@@ -112,13 +112,17 @@
                     <xsl:with-param name="formaPago"><xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:FmaPago | Encabezado/IdDoc/FmaPago"/></xsl:with-param>
                     <xsl:with-param name="rutReceptor"><xsl:value-of select="siidte:Encabezado/siidte:Receptor/siidte:RUTRecep | Encabezado/Receptor/RUTRecep"/></xsl:with-param>
                 </xsl:apply-templates>
+
                 <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
                           fox:border-radius="4pt" border-width="0.8pt" border-style="solid">
                     <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
-                    <fo:block-container height="11cm">
+                    <fo:block-container>
+                        <xsl:if test="count(siidte:Detalle | Detalle) &lt; 8">
+                            <xsl:attribute name="height">11cm</xsl:attribute>
+                        </xsl:if>
                         <fo:table table-layout="fixed" width="100%" border-collapse="collapse">
                             <xsl:call-template name="ItemColumnsAndHeader"/>
-                            <fo:table-body>
+                                <fo:table-body>
                                 <xsl:choose>
                                     <xsl:when test="siidte:Detalle | Detalle">
                                         <xsl:apply-templates select="siidte:Detalle[position() &lt;= $maxItems] | Detalle[position() &lt;= $maxItems]"/>
@@ -145,6 +149,7 @@
                         </fo:table>
                     </fo:block-container>
                 </fo:block>
+
                 <xsl:if test="not ($commentAfterDetalle = '')">
                     <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
                               fox:border-radius="4pt" border-width="0.8pt" border-style="solid">

@@ -113,8 +113,8 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="xmlLocation" required="true"/>
             <parameter name="issuerPartyId" required="true"/>
-            <parameter name="boleta"/>
-            <parameter name="continua"/>
+            <parameter name="type" default-value="both"><description>nocedible, cedible, both or boleta</description></parameter>
+            <parameter name="continua" type="Boolean"/>
             <parameter name="invoiceMessage"/>
         </in-parameters>
         <out-parameters>
@@ -130,7 +130,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="pdfTemplateBoleta" from="pdfTemplate"/>
             <set field="pdfTemplateBoletaContinua" from="pdfTemplateBoletaContinua"/>
 
-            <if condition="boleta">
+            <if condition="type == 'boleta'">
                 <set field="template" from="pdfTemplateBoleta"/>
                 <if condition="continua">
                     <set field="template" from="pdfTemplateBoletaContinua"/>
@@ -159,7 +159,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="commentAfterDetalle"/>
             <parameter name="transformParameters" type="Map" default="[detailHeaderBgColor:'#eaeaea', detailHeaderFgColor:'black', detailHeaderSepColor:'white', tableBorderColor:'#eaeaea', vendorNameColor:'black']"/>
             <parameter name="template" allow-html="any"/>
-            <parameter name="boleta"/>
+            <parameter name="type" default-value="both"><description>nocedible, cedible, both or boleta</description></parameter>
         </in-parameters>
         <out-parameters>
             <parameter name="pdfBytes" type="byte[]"/>
@@ -168,15 +168,18 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <script>
                 import javax.xml.transform.stream.StreamSource
-
-                ByteArrayOutputStream pdf = new ByteArrayOutputStream()
-
-                pages = ec.resource.xslFoTransform(new StreamSource(ec.resource.getLocationReference(xmlLocation).openStream()), new StreamSource(new ByteArrayInputStream(template.getBytes("UTF-8"))), pdf, "application/pdf", transformParameters + [cedible:'false'])
-                pdf.close()
-                if (pages == null || pages == 0) ec.message.addError("Error generando PDF: páginas generadas: ${pages}")
-                pdfBytes = pdf.toByteArray()
             </script>
-            <if condition="!boleta">
+            <if condition="type in ['boleta', 'nocedible', 'both']">
+                <script>
+                    ByteArrayOutputStream pdf = new ByteArrayOutputStream()
+
+                    pages = ec.resource.xslFoTransform(new StreamSource(ec.resource.getLocationReference(xmlLocation).openStream()), new StreamSource(new ByteArrayInputStream(template.getBytes("UTF-8"))), pdf, "application/pdf", transformParameters + [cedible:'false'])
+                    pdf.close()
+                    if (pages == null || pages == 0) ec.message.addError("Error generando PDF: páginas generadas: ${pages}")
+                    pdfBytes = pdf.toByteArray()
+                </script>
+            </if>
+            <if condition="type in ['cedible', 'both']">
                 <script>
                     pdf = new ByteArrayOutputStream()
                     pages = ec.resource.xslFoTransform(new StreamSource(ec.resource.getLocationReference(xmlLocation).openStream()), new StreamSource(new ByteArrayInputStream(template.getBytes("UTF-8"))), pdf, "application/pdf", transformParameters + [cedible:'true'])
@@ -193,6 +196,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fiscalTaxDocumentId" required="true"/>
             <parameter name="fiscalTaxDocumentContentTypeEnumId" required="true"/>
             <parameter name="generatePdfIfUnavailable" type="Boolean" default="false"/>
+            <parameter name="forceGeneration" type="Boolean" default="false"/>
         </in-parameters>
         <actions>
             <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="documentList">
@@ -202,17 +206,22 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="documentList">
                 <set field="docRr" from="ec.resource.getLocationReference(documentList.first?.contentLocation)"/>
             </if>
-            <if condition="docRr?.exists"><then>
+            <if condition="docRr?.exists &amp;&amp; !forceGeneration"><then>
                 <script>ec.web.sendResourceResponse(documentList.first.contentLocation)</script>
                 <return/>
-            </then><else-if condition="fiscalTaxDocumentContentTypeEnumId == 'Ftdct-Pdf' &amp;&amp; generatePdfIfUnavailable">
+            </then><else-if condition="fiscalTaxDocumentContentTypeEnumId in ['Ftdct-Pdf', 'Ftdct-PdfCedible'] &amp;&amp; (generatePdfIfUnavailable || forceGeneration)">
+                <set field="cedible" from="fiscalTaxDocumentContentTypeEnumId == 'Ftdct-PdfCedible'"/>
                 <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="documentList" cache="false">
                     <econdition field-name="fiscalTaxDocumentId"/>
                     <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
                 </entity-find>
                 <if condition="documentList?.first">
                     <set field="template" from="ec.resource.getLocationReference('component://MoquiChile/DTE/TEMPLATES/plantilla_general.xsl').text"/>
-                    <service-call name="mchile.sii.dte.DteContentServices.generate#PdfInternal" in-map="[xmlLocation:documentList.first.contentLocation, template:template]" out-map="context"/>
+                    <service-call name="mchile.sii.dte.DteContentServices.generate#PdfInternal" out-map="context"
+                                  in-map="[xmlLocation:documentList.first.contentLocation, template:template, type:(cedible? 'cedible' : 'nocedible')]"/>
+                    <if condition="cedible">
+                        <set field="pdfBytes" from="pdfCedibleBytes"/>
+                    </if>
                     <if condition="pdfBytes">
                         <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte"/>
                         <service-call name="mchile.sii.dte.DteInternalServices.get#SiiCode" in-map="[fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId]" out-map="siiCodeMap"/>
@@ -225,7 +234,7 @@ along with this software (see the LICENSE.md file). If not, see
                     </if>
                 </if>
             </else-if></if>
-            <message error="true">ec.resource.expand('No se encontró archivo en [${fiscalTaxDocumentId}]','')</message>
+            <message error="true">${ec.resource.expand('No se encontró archivo en [${fiscalTaxDocumentId}] para tipo de contenido ${fiscalTaxDocumentContentTypeEnumId}','')}</message>
         </actions>
     </service>
 
