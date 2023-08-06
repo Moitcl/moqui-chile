@@ -181,6 +181,26 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="send" noun="RejectionOfReceviedDtes">
+        <actions>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList" for-update="true">
+                <econdition field-name="sentRecStatusId" value="Ftd-ReceiverToReject"/>
+                <econdition field-name="date" operator="greater-equals" from="ec.user.nowTimestamp-30"/>
+            </entity-find>
+            <log message="Attempting to reject ${dteList.size()} received DTE${dteList.size() == 1 ? '' : 's'}"/>
+            <set field="eventTypeEnumId" value=""/>
+            <iterate list="dteList" entry="dte">
+                <set field="fiscalTaxDocumentId" from="dte.fiscalTaxDocumentId"/>
+                <service-call name="mchile.sii.dte.DteConsultaAceptacionReclamoWebServiceServices.ingresar#AceptacionReclamoDoc" out-map="resultMap"
+                              in-map="[eventTypeEnumId:'Siidterc-ReclamoContDoc', fiscalTaxDocumentId:dte.fiscalTaxDocumentId]" out-map-add-to-existing="false"/>
+                <if condition="resultMap.finished &amp;&amp; resultMap.codResp in ['0', '7']">
+                    <set field="dte.sentRecStatusId" value="Ftd-ReceiverReject"/>
+                    <entity-update value-field="dte"/>
+                </if>
+            </iterate>
+        </actions>
+    </service>
+
     <service verb="process" noun="IncomingDteMessage">
         <implements service="org.moqui.EmailServices.process#EmailEca"/>
         <actions>
