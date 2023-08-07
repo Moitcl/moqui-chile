@@ -592,7 +592,14 @@
                 <xsl:if test="siidte:DscItem | DscItem"><fo:block margin="2pt"><xsl:value-of select="siidte:DscItem | DscItem"/></fo:block></xsl:if>
             </fo:table-cell>
             <fo:table-cell text-align="right">
-                <fo:block margin="2pt"><xsl:value-of select="format-number(siidte:QtyItem | QtyItem, '###.##0,###', 'european')"/>&#160;<xsl:value-of select="siidte:UnmdItem | UnmdItem"/></fo:block>
+                <xsl:choose>
+                    <xsl:when test="number(siidte:QtyItem | QtyItem)">
+                        <fo:block margin="2pt"><xsl:value-of select="format-number(siidte:QtyItem | QtyItem, '###.##0,###', 'european')"/>&#160;<xsl:value-of select="siidte:UnmdItem | UnmdItem"/></fo:block>
+                    </xsl:when>
+                    <xsl:otherwise>
+                        <fo:block margin="2pt">-</fo:block>
+                    </xsl:otherwise>
+                </xsl:choose>
             </fo:table-cell>
             <fo:table-cell text-align="right"><fo:block margin="2pt">
                 <xsl:choose>
