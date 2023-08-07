@@ -415,21 +415,24 @@
                       fox:border-radius="4pt" border-width="0.8pt"  border-style="solid">
                 <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
                 <fo:table table-layout="fixed" margin="2pt">
-                    <fo:table-column column-width="3.2cm"/>
-                    <fo:table-column column-width="8cm"/>
+                    <fo:table-column column-width="2.2cm"/>
+                    <fo:table-column column-width="9cm"/>
                     <fo:table-column column-width="2cm"/>
                     <fo:table-column column-width="6.6cm"/>
                     <fo:table-body>
                         <xsl:choose>
                             <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=39) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=39) or (/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=41) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=41)">
+                                <!-- Boleta -->
                                 <xsl:choose>
                                     <xsl:when test="(contains($rutReceptor, '0')) or (contains($rutReceptor, '66666666-6'))">
+                                        <!-- Sin identificación de Receptor -->
                                         <fo:table-row>
                                             <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Fecha</fo:inline></fo:block></fo:table-cell>
                                             <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
                                         </fo:table-row>
                                     </xsl:when>
                                     <xsl:otherwise>
+                                        <!-- Con Receptor -->
                                         <fo:table-row>
                                             <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Fecha</fo:inline></fo:block></fo:table-cell>
                                             <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
@@ -444,8 +447,35 @@
                                         </fo:table-row>
                                         <fo:table-row>
                                             <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">RUT</fo:inline></fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block margin-top="4pt"><xsl:call-template name="RutFormat"><xsl:with-param name="rut">
-                                                <xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param></xsl:call-template></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt">
+                                                <xsl:choose>
+                                                    <xsl:when test="siidte:CdgIntRecep | CdgIntRecep">
+                                                        <fo:table>
+                                                            <fo:table-column column-width="30%"/>
+                                                            <fo:table-column column-width="26%"/>
+                                                            <fo:table-column column-width="45%"/>
+                                                            <fo:table-body>
+                                                                <fo:table-row>
+                                                                    <fo:table-cell>
+                                                                        <fo:block margin-left="0pt">
+                                                                            <xsl:call-template name="RutFormat">
+                                                                                <xsl:with-param name="rut"><xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param>
+                                                                            </xsl:call-template>
+                                                                        </fo:block>
+                                                                    </fo:table-cell>
+                                                                    <fo:table-cell><fo:block font-weight="bold">Código Interno</fo:block></fo:table-cell>
+                                                                    <fo:table-cell><fo:block><xsl:value-of select="siidte:CdgIntRecep | CdgIntRecep"/></fo:block></fo:table-cell>
+                                                                </fo:table-row>
+                                                            </fo:table-body>
+                                                        </fo:table>
+                                                    </xsl:when>
+                                                    <xsl:otherwise>
+                                                        <xsl:call-template name="RutFormat">
+                                                            <xsl:with-param name="rut"><xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param>
+                                                        </xsl:call-template>
+                                                    </xsl:otherwise>
+                                                </xsl:choose>
+                                            </fo:block></fo:table-cell>
                                             <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Ciudad</fo:inline></fo:block></fo:table-cell>
                                             <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:CiudadRecep | CiudadRecep"/></fo:block></fo:table-cell>
                                         </fo:table-row>
@@ -453,6 +483,7 @@
                                 </xsl:choose>
                             </xsl:when>
                             <xsl:otherwise>
+                                <!-- Otros DTE -->
                                 <fo:table-row>
                                     <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Señor(es)</fo:inline></fo:block></fo:table-cell>
                                     <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:value-of select="siidte:RznSocRecep | RznSocRecep"/></fo:inline></fo:block></fo:table-cell>
@@ -461,8 +492,35 @@
                                 </fo:table-row>
                                 <fo:table-row>
                                     <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">RUT</fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:call-template name="RutFormat"><xsl:with-param name="rut">
-                                        <xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param></xsl:call-template></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt">
+                                        <xsl:choose>
+                                            <xsl:when test="siidte:CdgIntRecep | CdgIntRecep">
+                                                <fo:table>
+                                                    <fo:table-column column-width="30%"/>
+                                                    <fo:table-column column-width="26%"/>
+                                                    <fo:table-column column-width="45%"/>
+                                                    <fo:table-body>
+                                                        <fo:table-row>
+                                                            <fo:table-cell>
+                                                                <fo:block margin-left="0pt">
+                                                                <xsl:call-template name="RutFormat">
+                                                                    <xsl:with-param name="rut"><xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param>
+                                                                </xsl:call-template>
+                                                                </fo:block>
+                                                            </fo:table-cell>
+                                                            <fo:table-cell><fo:block font-weight="bold">Código Interno</fo:block></fo:table-cell>
+                                                            <fo:table-cell><fo:block><xsl:value-of select="siidte:CdgIntRecep | CdgIntRecep"/></fo:block></fo:table-cell>
+                                                        </fo:table-row>
+                                                    </fo:table-body>
+                                                </fo:table>
+                                            </xsl:when>
+                                            <xsl:otherwise>
+                                                <xsl:call-template name="RutFormat">
+                                                    <xsl:with-param name="rut"><xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param>
+                                                </xsl:call-template>
+                                            </xsl:otherwise>
+                                        </xsl:choose>
+                                    </fo:block></fo:table-cell>
                                     <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Dirección</fo:inline></fo:block></fo:table-cell>
                                     <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:DirRecep | DirRecep"/></fo:block></fo:table-cell>
                                 </fo:table-row>
@@ -502,7 +560,7 @@
                                         <fo:table-cell><fo:block margin-top="4pt"/></fo:table-cell>
                                     </xsl:when><xsl:otherwise>
                                         <fo:table-cell>
-                                            <fo:block margin-top="4pt"><fo:inline font-weight="bold">Condiciones de pago</fo:inline></fo:block>
+                                            <fo:block margin-top="4pt"><fo:inline font-weight="bold">Cond. pago</fo:inline></fo:block>
                                         </fo:table-cell>
                                         <fo:table-cell><fo:block margin-top="4pt"><xsl:call-template name="PagoFormat">
                                             <xsl:with-param name="medioPago"><xsl:value-of select="$medioPago"/></xsl:with-param>
