@@ -26,7 +26,7 @@ validSignature = null as Boolean
 
 if (namespace == "http://www.sii.cl/SiiDte") {
     ec.logger.info("Namespace is SII")
-    documentPath = "/sii:DTE/sii:Documento"
+    documentPath = "/sii:DTE/sii:Documento|/sii:DTE/sii:Liquidacion|sii:DTE/sii:Exportaciones"
     try {validSignature = MoquiDTEUtils.verifySignature(doc2, documentPath, null)} catch (Exception e) {
         ec.logger.error("Verifying signature: ${e.toString()}")
     }
@@ -34,14 +34,14 @@ if (namespace == "http://www.sii.cl/SiiDte") {
         ec.logger.info("Verifying without namespace")
         dteBytes = new String(MoquiDTEUtils.getRawXML(doc2, true), "ISO-8859-1").replaceAll(" xmlns=\"http://www.sii.cl/SiiDte\"", "").getBytes("ISO-8859-1")
         doc2 = MoquiDTEUtils.parseDocument(dteBytes)
-        documentPath = "/DTE/Documento"
+        documentPath = "/DTE/Documento|/DTE/Liquidacion|DTE/Exportaciones"
         try {validSignature = MoquiDTEUtils.verifySignature(doc2, documentPath, null)} catch (Exception e) {
             ec.logger.error("Verifying signature: ${e.toString()}")
         }
     }
 } else {
     ec.logger.info("No namespace")
-    documentPath = "/DTE/Documento"
+    documentPath = "/DTE/Documento|/DTE/Liquidacion|DTE/Exportaciones"
     try {validSignature = MoquiDTEUtils.verifySignature(doc2, documentPath, null)} catch (Exception e) {
         ec.logger.error("Verifying signature: ${e.toString()}")
     }
@@ -51,7 +51,7 @@ if (namespace == "http://www.sii.cl/SiiDte") {
         dteBytes = MoquiDTEUtils.getRawXML(doc2, true)
         doc2 = MoquiDTEUtils.parseDocument(dteBytes)
         domNode = doc2.getDocumentElement()
-        documentPath = "/sii:DTE/sii:Documento"
+        documentPath = "/sii:DTE/sii:Documento|/sii:DTE/sii:Liquidacion|sii:DTE/sii:Exportaciones"
         try {validSignature = MoquiDTEUtils.verifySignature(doc2, documentPath, null)} catch (Exception e) {
             ec.logger.error("Verifying signature: ${e.toString()}")
         }
@@ -63,8 +63,14 @@ vatTaxRate = ec.service.sync().name("mchile.TaxServices.get#VatTaxRate").call().
 totalCalculadoIva = 0 as BigDecimal
 totalNoFacturable = 0 as BigDecimal
 totalBruto = 0 as BigDecimal
+
+groovy.util.NodeList documentoInterno = documento.Documento
+if (documentoInterno.size() == 0)
+    documentoInterno = documento.Liquidacion
+if (documentoInterno.size() == 0)
+    documentoInterno = documento.Exportaciones
 // tipo de DTE
-groovy.util.NodeList encabezado = documento.Documento.Encabezado
+groovy.util.NodeList encabezado = documentoInterno.Encabezado
 
 // ToDo: verify Timbre
 /*
@@ -74,6 +80,8 @@ if (verResult.code != VerifyResult.TED_OK)
  */
 tipoDte = encabezado.IdDoc.TipoDTE.text()
 esBoleta = (tipoDte == '39' || tipoDte == '41')
+esLiquidacion = (tipoDte == '43')
+esExportacion = (tipoDte == '110')
 folioDte = encabezado.IdDoc.Folio.text() as Integer
 fiscalTaxDocumentNumber = folioDte
 montosBrutos = encabezado.IdDoc.MntBruto?.text() == "1"
@@ -161,7 +169,7 @@ if (transporte) {
 
 }
 
-detalleDteList = documento.Documento.Detalle
+detalleDteList = documentoInterno.Detalle
 
 BigDecimal montoItem = 0 as BigDecimal
 ec.logger.warn("Recorriendo detalles: ${detalleDteList.size()}")
@@ -300,7 +308,7 @@ detalleDteList.each { detalleDte ->
 }
 
 descuentoRecargoList = []
-globalList = documento.Documento.DscRcgGlobal
+globalList = documentoInterno.DscRcgGlobal
 Integer globalItemCount = 0
 globalList.each { globalItem ->
     globalItemCount++
@@ -374,7 +382,7 @@ if (tipoDteEnumId == 'Ftdt-52') {
 }
 
 referenciaList = []
-dteRefList = documento.Documento.Referencia
+dteRefList = documentoInterno.Referencia
 Integer nroRef = 0
 dteRefList.each { groovy.util.Node referencia ->
     nroRef++
