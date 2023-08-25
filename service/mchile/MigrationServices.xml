@@ -65,33 +65,54 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="store#moqui.basic.Uom" in-map="[uomId:'CLM', abbreviation:'UTM', description:'Chilean Unidad Tributaria Mensual', uomTypeEnumId:'UT_CURRENCY_MEASURE']"/>
             <service-call name="store#moqui.basic.Uom" in-map="[uomId:'CLA', abbreviation:'UTA', description:'Chilean Unidad Tributaria Anual', uomTypeEnumId:'UT_CURRENCY_MEASURE']"/>
             <!-- OrderHeader -->
+            <set field="orderCount" from="0"/>
             <entity-find entity-name="mantle.order.OrderHeader" list="orderList" for-update="true">
                 <econdition field-name="currencyUomId" operator="in" from="migrationMap.keySet()"/>
             </entity-find>
             <iterate list="orderList" entry="order">
                 <set field="order.currencyUomId" from="migrationMap[order.currencyUomId]"/>
                 <entity-update value-field="order"/>
+                <set field="orderCount" from="orderCount+1"/>
             </iterate>
             <!-- Invoice -->
             <entity-find entity-name="mantle.account.invoice.Invoice" list="invoiceList" for-update="true">
                 <econdition field-name="currencyUomId" operator="in" from="migrationMap.keySet()"/>
             </entity-find>
+            <set field="invoiceCount" from="0"/>
             <iterate list="invoiceList" entry="invoice">
                 <set field="invoice.currencyUomId" from="migrationMap[invoice.currencyUomId]"/>
                 <entity-update value-field="invoice"/>
+                <set field="invoiceCount" from="invoiceCount+1"/>
             </iterate>
             <!-- InvoiceItem (originCurrencyUomId) -->
             <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemList" for-update="true">
                 <econdition field-name="originCurrencyUomId" operator="in" from="migrationMap.keySet()"/>
             </entity-find>
+            <set field="invoiceItemCount" from="0"/>
             <iterate list="invoiceItemList" entry="invoiceItem">
-                <set field="invoiceItem.currencyUomId" from="migrationMap[invoiceItem.currencyUomId]"/>
+                <set field="invoiceItem.originCurrencyUomId" from="migrationMap[invoiceItem.originCurrencyUomId]"/>
                 <entity-update value-field="invoiceItem"/>
+                <set field="invoiceItemCount" from="invoiceItemCount+1"/>
             </iterate>
+            <entity-find entity-name="mchile.currency.Exchangerate" list="exchangeRateList" for-update="true">
+                <econditions combine="or">
+                    <econdition field-name="fromCurrencyUomId" operator="in" from="migrationMap.keySet()"/>
+                    <econdition field-name="toCurrencyUomId" operator="in" from="migrationMap.keySet()"/>
+                </econditions>
+            </entity-find>
+            <set field="exchangeRateCount" from="0"/>
+            <iterate list="exchangeRateList" entry="exchangeRate">
+                <set field="er" from="exchangeRate.getMap()"/>
+                <if condition="er.fromCurrencyUomId in migrationMap.keySet()"><set field="er.fromCurrencyUomId" from="migrationMap[er.fromCurrencyUomId]"/></if>
+                <if condition="er.toCurrencyUomId in migrationMap.keySet()"><set field="er.toCurrencyUomId" from="migrationMap[er.toCurrencyUomId]"/></if>
+                <service-call name="create#mchile.currency.Exchangerate" in-map="er"/>
+                <entity-delete value-field="exchangeRate"/>
+                <set field="exchangeRateCount" from="exchangeRateCount+1"/>
+            </iterate>
+            <log message="Updated ${orderCount} orders, ${invoiceCount} invoices, ${invoiceItemCount} invoice items, ${exchangeRateCount} exchange rates (${orderCount+invoiceCount+invoiceItemCount+exchangeRateCount} in total)"/>
             <iterate list="uomList" entry="uom">
                 <entity-delete value-field="uom"/>
             </iterate>
-
         </actions>
     </service>
 
