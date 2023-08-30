@@ -87,7 +87,7 @@ class NotaDeCreditoTests extends Specification {
 
       // Creación de invoice
       Map invoiceOut = ec.service.sync().name("mantle.account.InvoiceServices.create#EntireOrderPartInvoice")
-              .parameters([orderId:orderId, orderPartSeqId:orderPartSeqId])
+              .parameters([orderId:orderId, orderPartSeqId:orderPartSeqId, statusId:'InvoiceFinalized'])
               .call()
       String invoiceId = invoiceOut.invoiceId
 
