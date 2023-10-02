@@ -128,6 +128,10 @@ if (tipoDte == 39) {
 //Obtención de folio y CAF -->
 folioResult = ec.service.sync().name("mchile.sii.dte.DteFolioServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call()
 folio = folioResult.folio
+if (folio == null) {
+    ec.message.addError("No se encuentra folio para generar boleta")
+    return
+}
 
 // Descuento Global (no va en Boletas)
 
