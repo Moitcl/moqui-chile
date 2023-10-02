@@ -129,7 +129,7 @@
                                         <xsl:if test="count(siidte:Detalle | Detalle) > $maxItems">
                                             <fo:table-row>
                                                 <fo:table-cell number-columns-spanned="5"><fo:block font-weight="bold">Más <xsl:value-of select="count(siidte:Detalle | Detalle)-$maxItems"/> ítemes <xsl:choose>
-                                                    <xsl:when test="$showExcessItemsInOtherPage = 'Y'"><xsl:value-of select="'en adjunto'"/></xsl:when>
+                                                    <xsl:when test="$showExcessItemsInOtherPage = 'Y'"><xsl:value-of select="'detallados en adjunto'"/></xsl:when>
                                                     <xsl:otherwise><xsl:value-of select="'no mostrados'"/></xsl:otherwise>
                                                 </xsl:choose></fo:block></fo:table-cell>
                                             </fo:table-row>
