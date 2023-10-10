@@ -567,16 +567,20 @@
                                             <xsl:with-param name="formaPago"><xsl:value-of select="$formaPago"/></xsl:with-param>
                                         </xsl:call-template></fo:block></fo:table-cell>
                                     </xsl:otherwise></xsl:choose>
-                                    <xsl:choose><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=52) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=52)">
-                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Contacto</fo:inline></fo:block></fo:table-cell>
-                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Receptor/siidte:Contacto | /DTE/Documento/Encabezado/Receptor/Contacto"/></fo:inline></fo:block></fo:table-cell>
-                                    </xsl:when><xsl:when test="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:FchVenc | /DTE/Documento/Encabezado/IdDoc/FchVenc">
-                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Vencimiento</fo:inline></fo:block></fo:table-cell>
-                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:FchVenc | /DTE/Documento/Encabezado/IdDoc/FchVenc"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
-                                    </xsl:when><xsl:otherwise>
-                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold"></fo:inline></fo:block></fo:table-cell>
-                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline></fo:inline></fo:block></fo:table-cell>
-                                    </xsl:otherwise></xsl:choose>
+                                    <xsl:choose>
+                                        <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=52) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=52)">
+                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Contacto</fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Receptor/siidte:Contacto | /DTE/Documento/Encabezado/Receptor/Contacto"/></fo:inline></fo:block></fo:table-cell>
+                                        </xsl:when>
+                                        <xsl:when test="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:FchVenc | /DTE/Documento/Encabezado/IdDoc/FchVenc">
+                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Vencimiento</fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:FchVenc | /DTE/Documento/Encabezado/IdDoc/FchVenc"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
+                                        </xsl:when>
+                                        <xsl:otherwise>
+                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold"></fo:inline></fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline></fo:inline></fo:block></fo:table-cell>
+                                        </xsl:otherwise>
+                                    </xsl:choose>
                                 </fo:table-row>
                             </xsl:otherwise>
                         </xsl:choose>
