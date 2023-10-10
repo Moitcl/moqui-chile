@@ -414,8 +414,9 @@ dteRefList.each { groovy.util.Node referencia ->
             errorMessages.add("Valor inválido en referencia ${nroRef}, campo CodRef: ${referencia.CodRef.text()}")
     } else
         codRefEnumId = null
+    rutOtro = referencia.RUTOtr.text()
     folio = referencia.FolioRef.text()
-    referenciaList.add([referenciaTipoDteEnumId:referenciaTipoDteEnumId, folio:folio, refDate:refDate, codRefEnumId:codRefEnumId, razonReferencia:referencia.RazonRef?.text()])
+    referenciaList.add([referenciaTipoDteEnumId:referenciaTipoDteEnumId, folio:folio, refDate:refDate, codRefEnumId:codRefEnumId, razonReferencia:referencia.RazonRef?.text(), rutOtro:rutOtro])
 }
 
 return;
