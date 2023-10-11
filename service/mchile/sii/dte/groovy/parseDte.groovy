@@ -12,7 +12,7 @@ dteBytes
 if (dte == null)
     return
 if (dte instanceof String) {
-    dteBytes = dte.getBytes(charset ?: Charset.forname("UTF-8"))
+    dteBytes = dte.getBytes(charset ?: Charset.forName("UTF-8"))
 } else if (dte instanceof org.w3c.dom.Node) {
     dteBytes = MoquiDTEUtils.getRawXML(dte, true)
 } else if (dte instanceof byte[]) {
@@ -212,7 +212,7 @@ detalleDteList.each { detalleDte ->
         descuentoMontoBruto = descuentoMonto
         descuentoMonto = ec.service.sync().name("mchile.TaxServices.calculate#NetFromGrossPrice").parameters([grossPrice:descuentoMonto]).call().netPrice
         totalBruto += montoItemBruto
-        ec.message.addMessage("Recalculando montoItem, montoItemBruto ${montoItemBruto}, montoItem ${montoItem}, totalBruto ${totalBruto}")
+        ec.logger.info("Recalculando montoItem, montoItemBruto ${montoItemBruto}, montoItem ${montoItem}, totalBruto ${totalBruto}")
     }
     if (((price?:0) * (quantity?:0)) == 0 && montoItem != null) {
         if (quantity == null)
