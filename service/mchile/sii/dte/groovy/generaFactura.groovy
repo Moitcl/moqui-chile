@@ -127,6 +127,7 @@ if (tipoDte == 33) {
         tipoDte = 34
         fiscalTaxDocumentTypeEnumId = 'Ftdt-34'
     }
+    originalReferenciaList = referenciaList
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
     totalDescuentos = detMap.totalDescuentos
@@ -142,12 +143,14 @@ if (tipoDte == 33) {
         tipoDte = 33
         fiscalTaxDocumentTypeEnumId = 'Ftdt-33'
     }
+    originalReferenciaList = referenciaList
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
     totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 61) {
     // Nota de Crédito Electrónica
     ec.logger.warn("Creando DTE tipo 61")
+    originalReferenciaList = referenciaList
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, null, tipoDte)
     referenciaList = refMap.referenciaList
     anulaBoleta = refMap.anulaBoleta
@@ -174,6 +177,7 @@ if (tipoDte == 33) {
 } else if (tipoDte == 56) {
     // Nota de Débito Electrónica
     ec.logger.warn("Creando DTE tipo 56")
+    originalReferenciaList = referenciaList
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, null, tipoDte)
     referenciaList = refMap.referenciaList
     dteExenta = refMap.dteExenta
@@ -205,6 +209,7 @@ if (tipoDte == 33) {
         ec.message.addError("No se puede generar una Guía de Despacho sin un invoiceId")
     indTraslado = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:indTrasladoEnumId, enumTypeId:'IndTraslado']).call().siiCode
     // TODO: Si la referencia es tipo fe de erratas, Monto Item puede ser 0
+    originalReferenciaList = referenciaList
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
     dteExenta = refMap.dteExenta
@@ -530,3 +535,21 @@ createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:totalInvoice,
              montoExento:totalExento, montoIVARecuperable:montoIVARecuperable, razonSocialEmisor:razonSocialOrganizacion, razonSocialReceptor:razonSocialReceptor]
 ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call())
 fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId
+
+// Creación de referencias en BD
+originalReferenciaList.each { referencia ->
+    tipoEnumEv = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referencia.fiscalTaxDocumentTypeEnumId).one()
+    esTipoTributario = (tipoEnumEv?.parentEnumId in ['Ftdt-DT','Ftdt-DTE'])
+    if (referencia.rutEmisorFolio) {
+        rutEmisorFolio = referencia.rutEmisorFolio
+    } else if (esTipoTributario) {
+        // Mismo rut del emisor del presente documento
+        rutEmisorFolio = rutEmisor
+    } else {
+        rutEmisorFolio = null
+    }
+    ec.service.sync().name("create#mchile.dte.ReferenciaDte")
+            .parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, referenciaTypeEnumId:'RefDteTypeFiscalTaxDocument', fiscalTaxDocumentTypeEnumId:referencia.fiscalTaxDocumentTypeEnumId,
+                         folio:referencia.folio, fecha: referencia.fecha, codigoReferenciaEnumId:referencia.codigoReferenciaEnumId, razonReferencia:referencia.razonReferencia,
+                         rutEmisorFolio:rutEmisorFolio]).call()
+}
