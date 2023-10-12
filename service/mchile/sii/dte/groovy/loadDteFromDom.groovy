@@ -113,7 +113,7 @@ if (existingDteList) {
         // remove existing DTE and start from scratch
         ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentAttributes").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).call()
         ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentContent").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).parameter("fiscalTaxDocumentContentId", "*").call()
-        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentEmailMessage").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).parameter("fiscalTaxDocumentEmailMessageId", "*").call()
+        ec.service.sync().name("delete#mchile.dte.FiscalTaxDocumentEmailMessage").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).parameter("emailMessageId", "*").call()
         ec.service.sync().name("delete#mchile.dte.ReferenciaDte").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).parameter("referenciaId", "*").call()
         ec.service.sync().name("delete#mchile.dte.DteEnvioFiscalTaxDocument").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).parameter("envioId", "*").call()
         ec.service.sync().name("delete#mchile.dte.FiscalTaxDocument").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).call()
