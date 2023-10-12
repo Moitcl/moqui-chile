@@ -537,7 +537,9 @@ ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAtt
 fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId
 
 // Creación de referencias en BD
+Integer nroLinea = 0
 originalReferenciaList.each { referencia ->
+    nroLinea++
     tipoEnumEv = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referencia.fiscalTaxDocumentTypeEnumId).one()
     esTipoTributario = (tipoEnumEv?.parentEnumId in ['Ftdt-DT','Ftdt-DTE'])
     if (referencia.rutEmisorFolio) {
@@ -551,5 +553,5 @@ originalReferenciaList.each { referencia ->
     ec.service.sync().name("create#mchile.dte.ReferenciaDte")
             .parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, referenciaTypeEnumId:'RefDteTypeFiscalTaxDocument', fiscalTaxDocumentTypeEnumId:referencia.fiscalTaxDocumentTypeEnumId,
                          folio:referencia.folio, fecha: referencia.fecha, codigoReferenciaEnumId:referencia.codigoReferenciaEnumId, razonReferencia:referencia.razonReferencia,
-                         rutEmisorFolio:rutEmisorFolio]).call()
+                         rutEmisorFolio:rutEmisorFolio, nroLinea:nroLinea, tipoDocumento:tipoEnumEv.enumCode]).call()
 }

@@ -303,14 +303,14 @@ dteMap.referenciaList.each { referencia ->
             ec.service.sync().name("create#mchile.dte.ReferenciaDte")
                     .parameters([invoiceId:invoiceId, referenciaTypeEnumId:'RefDteTypeInvoice', fiscalTaxDocumentTypeEnumId:referencia.referenciaTipoDteEnumId,
                                  folio:referencia.folio, fecha: referencia.refDate, codigoReferenciaEnumId:referencia.codRefEnumId, razonReferencia:referencia.razonReferencia,
-                                 rutEmisorFolio:rutEmisorFolio]).call()
+                                 rutEmisorFolio:rutEmisorFolio, tipoDocumento:referencia.tipoDocumento, nroLinea:referencia.nroLinRef]).call()
         }
     }
     if (referencia.referenciaTipoDteEnumId)
         ec.service.sync().name("create#mchile.dte.ReferenciaDte")
                 .parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, referenciaTypeEnumId:'RefDteTypeFiscalTaxDocument', fiscalTaxDocumentTypeEnumId:referencia.referenciaTipoDteEnumId,
-                             folio:referencia.folio, fecha: referencia.refDate, codigoReferenciaEnumId:referencia.codRefEnumId, razonReferencia:referencia.razonReferencia,
-                             rutEmisorFolio:rutEmisorFolio]).call()
+                             folio:referencia.folio, fecha:referencia.refDate, codigoReferenciaEnumId:referencia.codRefEnumId, razonReferencia:referencia.razonReferencia,
+                             rutEmisorFolio:rutEmisorFolio, tipoDocumento:referencia.tipoDocumento, nroLinea:referencia.nroLinRef]).call()
 }
 
 if (envioId) {

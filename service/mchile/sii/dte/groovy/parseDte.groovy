@@ -395,16 +395,11 @@ dteRefList.each { groovy.util.Node referencia ->
     }
     if (nroLinRef != nroRef)
         errorMessages.add("Valor inesperado en referencia, campo NroLinRef, esperado ${nroRef}, recibido ${referencia.NroLinRef.text()}")
-    referenciaTipoDteEnumId = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#MoquiCode").parameter("siiCode", referencia.TpoDocRef.text()).call().enumId
+    tipoDocumento = referencia.TpoDocRef.text()
+    referenciaTipoDteEnumId = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#MoquiCode").parameter("siiCode", tipoDocumento).call().enumId
     Date refDate = null
     if (referencia.FchRef.text() != null) {
-        try {
-            refDate = formatter.parse(referencia.FchRef.text())
-        } catch (ParseException e) {
-            errorMessages.add("Valor inválido en referencia ${nroRef}, campo FchRef: ${referencia.FchRef.text()}")
-        } catch (NullPointerException e) {
-            //discrepancyMessages.add("Valor inválido en referencia ${nroRef}, campo FchRef: null")
-        }
+        refDate = ec.l10n.parseDate(referencia.FchRef.text(), 'yyyy-MM-dd')
     }
     codRef = referencia.CodRef.text()
     if (codRef != null && codRef != '') {
@@ -416,7 +411,8 @@ dteRefList.each { groovy.util.Node referencia ->
         codRefEnumId = null
     rutOtro = referencia.RUTOtr.text()
     folio = referencia.FolioRef.text()
-    referenciaList.add([referenciaTipoDteEnumId:referenciaTipoDteEnumId, folio:folio, refDate:refDate, codRefEnumId:codRefEnumId, razonReferencia:referencia.RazonRef?.text(), rutOtro:rutOtro])
+    referenciaList.add([referenciaTipoDteEnumId:referenciaTipoDteEnumId, folio:folio, refDate:refDate, codRefEnumId:codRefEnumId, razonReferencia:referencia.RazonRef?.text(),
+                        rutOtro:rutOtro, nroLinRef:nroLinRef, tipoDocumento:tipoDocumento])
 }
 
 return;
