@@ -66,7 +66,7 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <out-parameters>
             <parameter name="content"/>
-            <parameter name="contentRef"/>
+            <parameter name="contentRef" type="Object"/>
         </out-parameters>
         <actions>
             <set field="content" from="null"/>
@@ -84,6 +84,8 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="regenerate" noun="Pdf">
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="templatePartyId"/>
+            <parameter name="templateLocation"/>
         </in-parameters>
         <actions>
             <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
@@ -110,7 +112,8 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="contentLocation" value="dbresource://moit/erp/dte/${dte.issuerPartyIdValue}/DTE-${tipoDte}-${dte.fiscalTaxDocumentNumber}.pdf"/>
                 <service-call name="create#mchile.dte.FiscalTaxDocumentContent" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocation]"/>
             </else></if>
-            <service-call name="mchile.sii.dte.DteContentServices.generate#Pdf" in-map="[xmlLocation:xmlLocation, issuerPartyId:dte.issuerPartyId]" out-map="context"/>
+            <if condition="!templatePartyId &amp;&amp; !templateLocation"><set field="templatePartyId" from="dte.issuerPartyId"/></if>
+            <service-call name="mchile.sii.dte.DteContentServices.generate#Pdf" in-map="[xmlLocation:xmlLocation, templatePartyId:templatePartyId, templateLocation:templateLocation]" out-map="context"/>
             <script>ec.resource.getLocationReference(contentLocation).putBytes(pdfBytes)</script>
         </actions>
     </service>
@@ -121,7 +124,8 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="xmlLocation" required="true"/>
-            <parameter name="issuerPartyId" required="true"/>
+            <parameter name="templatePartyId"/>
+            <parameter name="templateLocation"/>
             <parameter name="type" default-value="both"><description>nocedible, cedible, both or boleta</description></parameter>
             <parameter name="continua" type="Boolean"/>
             <parameter name="invoiceMessage"/>
@@ -131,23 +135,28 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="pdfCedibleBytes" type="byte[]"/>
         </out-parameters>
         <actions>
-            <!-- Recuperacion de parametros de la organizacion -->
-            <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="[partyId:issuerPartyId]" out-map="context"/>
-            <set field="template" from="pdfTemplate"/>
-            <set field="giro" from="giroEmisor"/>
-            <set field="pdfTemplateBoleta" from="pdfTemplateBoleta"/>
-            <set field="pdfTemplateBoleta" from="pdfTemplate"/>
-            <set field="pdfTemplateBoletaContinua" from="pdfTemplateBoletaContinua"/>
+            <if condition="!templateLocation &amp;&amp; !templatePartyId"><return error="true" message="Need to specify either templateLocation or templatePartyId"/></if>
 
-            <if condition="type == 'boleta'">
-                <set field="template" from="pdfTemplateBoleta"/>
-                <if condition="continua">
-                    <set field="template" from="pdfTemplateBoletaContinua"/>
+            <if condition="templateLocation"><then>
+                <set field="template" from="ec.resource.getLocationReference(templateLocation).text"/>
+            </then><else>
+                <!-- Recuperacion de parametros de la organizacion -->
+                <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="[partyId:templatePartyId]" out-map="context"/>
+                <set field="template" from="pdfTemplate"/>
+                <set field="pdfTemplateBoleta" from="pdfTemplateBoleta"/>
+                <set field="pdfTemplateBoleta" from="pdfTemplate"/>
+                <set field="pdfTemplateBoletaContinua" from="pdfTemplateBoletaContinua"/>
+
+                <if condition="type == 'boleta'">
+                    <set field="template" from="pdfTemplateBoleta"/>
+                    <if condition="continua">
+                        <set field="template" from="pdfTemplateBoletaContinua"/>
+                    </if>
                 </if>
-            </if>
+            </else></if>
 
             <if condition="!template">
-                <return error="true" message="Organización emisora no tiene definida plantilla para generar PDF"/>
+                <return error="true" message="Organización ${} no tiene definida plantilla para generar PDF"/>
             </if>
 
             <if condition="invoiceMessage">
