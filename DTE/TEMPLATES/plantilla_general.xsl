@@ -28,6 +28,7 @@
     <xsl:param name="tableBorderColor" select="'&#35;eaeaea'"/>
     <xsl:param name="vendorNameColor" select="'black'"/>
     <xsl:param name="rutEnviador" select="''"/>
+    <xsl:param name="draft" select="'N'"/>
 
     <xsl:output method="xml" version="1.0" omit-xml-declaration="no" indent="yes" encoding="UTF-8"/>
 
@@ -39,7 +40,16 @@
         <fo:root xmlns:fo="http://www.w3.org/1999/XSL/Format">
             <fo:layout-master-set>
                 <fo:simple-page-master master-name="simple" page-height="27.9cm" page-width="21.6cm" margin-top="1cm" margin-bottom="2cm" margin-left="0.8cm" margin-right="1cm">
-                    <fo:region-body margin-top="0cm" margin-bottom="1.2cm"/>
+                    <fo:region-body margin-top="0cm" margin-bottom="1.2cm" background-repeat="no-repeat" fox:background-image-width="6cm"
+                                    background-position-horizontal="0.49cm" background-position-vertical="0.27cm">
+                        <!--
+                        <xsl:if test="$draft = 'Y'">
+                        -->
+                            <xsl:attrbute name="background-image"><xsl:value-of select="'component://MoquiChile/DTE/TEMPLATES/borrador.svg'"/></xsl:attrbute>
+                        <!--
+                        </xsl:if>
+                        -->
+                    </fo:region-body>
                     <fo:region-before extent="3cm"/>
                     <fo:region-after extent="1.0cm"/>
                 </fo:simple-page-master>
@@ -47,6 +57,7 @@
 
             <xsl:variable name="tipo" select="siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE | DTE/Documento/Encabezado/IdDoc/TipoDTE"/>
             <xsl:variable name="folio" select="siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:Folio | DTE/Documento/Encabezado/IdDoc/Folio"/>
+            <xsl:if test="$draft = 'Y'"><xsl:variable name="folio" select="'SIN FOLIO'"/></xsl:if>
             <xsl:variable name="rutEmisor" select="siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Emisor/siidte:RUTEmisor | DTE/Documento/Encabezado/Emisor/RUTEmisor"/>
             <xsl:variable name="razonSocialEmisor" select="siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Emisor/siidte:RznSoc | DTE/Documento/Encabezado/Emisor/RznSoc | siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Emisor/siidte:RznSocEmisor | DTE/Documento/Encabezado/Emisor/RznSocEmisor"/>
             <fo:declarations>
@@ -103,7 +114,15 @@
         <fo:block>
             <fo:block-container absolute-position="absolute" top="0cm" left="0cm">
                 <xsl:apply-templates select="siidte:Encabezado/siidte:Emisor | Encabezado/Emisor">
-                    <xsl:with-param name="folio"><xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:Folio | Encabezado/IdDoc/Folio"/></xsl:with-param>
+                    <xsl:with-param name="folio">
+                        <xsl:choose>
+                            <xsl:when test="$draft = 'Y'">
+                                <xsl:value-of select="'SIN FOLIO'"/>
+                            </xsl:when>
+                            <xsl:otherwise>
+                                <xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:Folio | Encabezado/IdDoc/Folio"/>
+                            </xsl:otherwise>
+                        </xsl:choose></xsl:with-param>
                     <xsl:with-param name="tipo"><xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE | Encabezado/IdDoc/TipoDTE"/></xsl:with-param>
                 </xsl:apply-templates>
                 <xsl:apply-templates select="siidte:Encabezado/siidte:Receptor | Encabezado/Receptor">

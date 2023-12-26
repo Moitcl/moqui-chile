@@ -116,7 +116,7 @@ else if (invoice != null && invoice.unpaidTotal == 0) {
     formaPago = 2 // Crédito (usar GlosaPagos)
 
 if (tipoDte == 33) {
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, draft? "OrderItem" : "InvoiceItem")
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
     totalExento = detMap.totalExento
@@ -132,7 +132,7 @@ if (tipoDte == 33) {
     referenciaList = refMap.referenciaList
     totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 34) {
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, draft? "OrderItem" : "InvoiceItem")
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
     totalExento = detMap.totalExento
@@ -223,10 +223,28 @@ if (tipoDte == 33) {
 }
 
 //Obtención de folio y CAF -->
-folioResult = ec.service.sync().name("mchile.sii.dte.DteFolioServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call()
-folio = folioResult.folio
-if (folio == null)
-    return
+if (draft) {
+    folio = "1"
+    folioResult = [cafFragment:'<CAF version="1.0"> <DA> <RE>12345677-7</RE> <RS>CAF PARA USO DE PREVISUALIZACION</RS> <TD>33</TD> <RNG> <D>1324</D> <H>1503</H> </RNG> <FA>2021-11-10</FA> <RSAPK> <M>uX02i4mqmJ8hwWPwrRBJTBls5y3tylaSdXc9WQnkmUbnlHyGD2GH/zwSb5IYvOwGlChHtz0aKSITiPOiHTFfmw==</M> <E>Aw==</E> </RSAPK> <IDK>100</IDK> </DA> <FRMA algoritmo="SHA1withRSA">Fsh0/AFUH8dCcSgvXjiIT2wfO9QLYp94KNvGbeKc46jEMj2XgLxq7tBv83rVJ2bIgwytLoJCHaUOi4OnpkVjyg==</FRMA> </CAF>',
+                   publicKey:''''-----BEGIN PUBLIC KEY-----
+MFowDQYJKoZIhvcNAQEBBQADSQAwRgJBALl9NouJqpifIcFj8K0QSUwZbOct7cpW
+knV3PVkJ5JlG55R8hQ9ih/88Em+SGLzsLJQoR7c9GikiE4jzoh0xX5sCAQM=
+-----END PUBLIC KEY-----''',
+                   privateKey:'''-----BEGIN RSA PRIVATE KEY-----
+MIIBOgIBAAJBALl9NouJqpifIcFj8K0QSUwZbOct7cpWknV3PVkJ5JlG55R8hQ9i
+h/88Em+SGLzsLJQoR7c9GikiE4jzoh0xX5sCAQMCQHuozwexHGW/a9ZCoHNgMN1m
+SJoenobkYaOk05CxQxDYy64cThXXFJA5wsn/MTxMBUGpvx4fq3rJEB/6v3J8NXsC
+IQDxJBA2u1nUvzOjBm+h79bC0fGGA0RcJ6xUyQnXAtuE5QIhAMTrQdkzRhRnscs6
+I6zyo2HfuCMGyTzJSCaP8avum4p/AiEAoMK1edI74yoibK71Fp/kgeFLrqzYPW/I
+OIYGj1c9A0MCIQCDR4E7d4QNmnaHfBfIocJBP9AXWdt924VvCqEdSb0G/wIhAJ+3
+q4+htPABTvIWzZcF4LILEDnaZS791SWJYxbbE72D
+-----END RSA PRIVATE KEY-----''']
+} else {
+    folioResult = ec.service.sync().name("mchile.sii.dte.DteFolioServices.get#Folio").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, partyId:issuerPartyId]).call()
+    folio = folioResult.folio
+    if (folio == null)
+        return
+}
 
 descuentoORecargoGlobalList.each {
     if (it.tipo == 'D') {
@@ -492,66 +510,78 @@ if (ec.message.hasError())
 // Registry de DTE en base de datos y generación de PDF -->
 fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoDte}"
 
-// Creación de registro en FiscalTaxDocument -->
-dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:issuerPartyId]).one()
+if (!draft) {
+    // Creación de registro en FiscalTaxDocument -->
+    dteEv = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, fiscalTaxDocumentNumber:folio, issuerPartyId:issuerPartyId]).one()
 
-dteEv.receiverPartyId = receiverPartyId
-dteEv.receiverPartyIdTypeEnumId = "PtidNationalTaxId"
-dteEv.receiverPartyIdValue = rutReceptor.trim()
-dteEv.statusId = "Ftd-Issued"
-dteEv.sentAuthStatusId = "Ftd-NotSentAuth"
-dteEv.sentRecStatusId = "Ftd-NotSentRec"
-dteEv.invoiceId = invoiceId
-dteEv.shipmentId = shipmentId
-Timestamp ts = new Timestamp(fechaEmision.time)
-dteEv.date = ts
-dteEv.formaPagoEnumId = formaPagoEnumId
-dteEv.update()
+    dteEv.receiverPartyId = receiverPartyId
+    dteEv.receiverPartyIdTypeEnumId = "PtidNationalTaxId"
+    dteEv.receiverPartyIdValue = rutReceptor.trim()
+    dteEv.statusId = "Ftd-Issued"
+    dteEv.sentAuthStatusId = "Ftd-NotSentAuth"
+    dteEv.sentRecStatusId = "Ftd-NotSentRec"
+    dteEv.invoiceId = invoiceId
+    dteEv.shipmentId = shipmentId
+    Timestamp ts = new Timestamp(fechaEmision.time)
+    dteEv.date = ts
+    dteEv.formaPagoEnumId = formaPagoEnumId
+    dteEv.update()
 
-if (tipoDte == 52) {
-    ec.service.sync().name("store#mchile.dte.GuiaDespacho").parameters([fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, indTrasladoEnumId:indTrasladoEnumId]).call()
-}
-
-xmlContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/DTE-${tipoDte}-${folio}.xml"
-pdfContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/DTE-${tipoDte}-${folio}.pdf"
-pdfCedibleContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/DTE-${tipoDte}-${folio}-cedible.pdf"
-
-// Creacion de registros en FiscalTaxDocumentContent
-createMapBase = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, contentDte:ts]
-ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlContentLocation]).call())
-ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
-
-ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteContentServices.generate#Pdf").parameters([xmlLocation:xmlContentLocation, templatePartyId:issuerPartyId, invoiceMessage:invoiceMessage]).call())
-ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfContentLocation]).call())
-ec.resource.getLocationReference(pdfContentLocation).putBytes(pdfBytes)
-
-if ((fiscalTaxDocumentTypeEnumId as String) in dteConstituyeVentaTypeList) {
-    ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedibleContentLocation]).call())
-    ec.resource.getLocationReference(pdfCedibleContentLocation).putBytes(pdfCedibleBytes)
-}
-
-// Creación de registro en FiscalTaxDocumentAttributes
-createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:totalInvoice, fechaEmision:fechaEmision, fechaVencimiento:fechaVencimiento, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:totalNeto, tasaImpuesto:19,
-             montoExento:totalExento, montoIVARecuperable:montoIVARecuperable, razonSocialEmisor:razonSocialOrganizacion, razonSocialReceptor:razonSocialReceptor]
-ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call())
-fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId
-
-// Creación de referencias en BD
-Integer nroLinea = 0
-originalReferenciaList.each { referencia ->
-    nroLinea++
-    tipoEnumEv = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referencia.fiscalTaxDocumentTypeEnumId).one()
-    esTipoTributario = (tipoEnumEv?.parentEnumId in ['Ftdt-DT','Ftdt-DTE'])
-    if (referencia.rutEmisorFolio) {
-        rutEmisorFolio = referencia.rutEmisorFolio
-    } else if (esTipoTributario) {
-        // Mismo rut del emisor del presente documento
-        rutEmisorFolio = rutEmisor
-    } else {
-        rutEmisorFolio = null
+    if (tipoDte == 52) {
+        ec.service.sync().name("store#mchile.dte.GuiaDespacho").parameters([fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, indTrasladoEnumId:indTrasladoEnumId]).call()
     }
-    ec.service.sync().name("create#mchile.dte.ReferenciaDte")
-            .parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, referenciaTypeEnumId:'RefDteTypeFiscalTaxDocument', fiscalTaxDocumentTypeEnumId:referencia.fiscalTaxDocumentTypeEnumId,
-                         folio:referencia.folio, fecha: referencia.fecha, codigoReferenciaEnumId:referencia.codigoReferenciaEnumId, razonReferencia:referencia.razonReferencia,
-                         rutEmisorFolio:rutEmisorFolio, nroLinea:nroLinea, tipoDocumento:tipoEnumEv.enumCode]).call()
+
+    xmlContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/DTE-${tipoDte}-${folio}.xml"
+    pdfContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/DTE-${tipoDte}-${folio}.pdf"
+    pdfCedibleContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/DTE-${tipoDte}-${folio}-cedible.pdf"
+
+    // Creacion de registros en FiscalTaxDocumentContent
+    createMapBase = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, contentDte:ts]
+    ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml', contentLocation:xmlContentLocation]).call())
+} else {
+    xmlContentFile = File.createTempFile("draftDteXml", "pdf")
+    xmlContentLocation = xmlContentFile.getAbsolutePath()
+}
+
+ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
+ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteContentServices.generate#Pdf").parameters(
+        [xmlLocation:xmlContentLocation, templatePartyId:issuerPartyId, invoiceMessage:invoiceMessage, draft:draft]).call())
+
+if (draft) {
+    previewPdf = pdfBytes
+    xmlContentFile.delete()
+} else {
+    ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfContentLocation]).call())
+    ec.resource.getLocationReference(pdfContentLocation).putBytes(pdfBytes)
+
+    if ((fiscalTaxDocumentTypeEnumId as String) in dteConstituyeVentaTypeList) {
+        ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedibleContentLocation]).call())
+        ec.resource.getLocationReference(pdfCedibleContentLocation).putBytes(pdfCedibleBytes)
+    }
+
+    // Creación de registro en FiscalTaxDocumentAttributes
+    createMap = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, amount:totalInvoice, fechaEmision:fechaEmision, fechaVencimiento:fechaVencimiento, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, montoNeto:totalNeto, tasaImpuesto:19,
+                 montoExento:totalExento, montoIVARecuperable:montoIVARecuperable, razonSocialEmisor:razonSocialOrganizacion, razonSocialReceptor:razonSocialReceptor]
+    ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call())
+    fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId
+
+    // Creación de referencias en BD
+    Integer nroLinea = 0
+    originalReferenciaList.each { referencia ->
+        nroLinea++
+        tipoEnumEv = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referencia.fiscalTaxDocumentTypeEnumId).one()
+        esTipoTributario = (tipoEnumEv?.parentEnumId in ['Ftdt-DT','Ftdt-DTE'])
+        if (referencia.rutEmisorFolio) {
+            rutEmisorFolio = referencia.rutEmisorFolio
+        } else if (esTipoTributario) {
+            // Mismo rut del emisor del presente documento
+            rutEmisorFolio = rutEmisor
+        } else {
+            rutEmisorFolio = null
+        }
+        ec.service.sync().name("create#mchile.dte.ReferenciaDte")
+                .parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, referenciaTypeEnumId:'RefDteTypeFiscalTaxDocument', fiscalTaxDocumentTypeEnumId:referencia.fiscalTaxDocumentTypeEnumId,
+                             folio:referencia.folio, fecha: referencia.fecha, codigoReferenciaEnumId:referencia.codigoReferenciaEnumId, razonReferencia:referencia.razonReferencia,
+                             rutEmisorFolio:rutEmisorFolio, nroLinea:nroLinea, tipoDocumento:tipoEnumEv.enumCode]).call()
+    }
 }

@@ -90,6 +90,8 @@ class MoquiDTEUtils {
         detailList.each { detailEntryObj ->
             HashMap detailEntry = (detailEntryObj instanceof EntityValue) ? detailEntryObj.getMap() : detailEntryObj
             String nombreItem = detailEntry.description
+            if (detailType.equals("OrderItem"))
+                nombreItem = detailEntry.itemDescription
             if (nombreItem == null) {
                 EntityValue productEv = ec.entity.find("mantle.product.Product").condition("productId", detailEntry.productId).one()
                 nombreItem = productEv? productEv.productName : ''
@@ -118,8 +120,6 @@ class MoquiDTEUtils {
                     uom = "grms"
                 else if (detailEntry.quantityUomId.equals('LEN_m'))
                     uom = "Mtr"
-                else if (detailEntry.quantityUomId.equals('VLIQ_L'))
-                    uom = "Ltr"
                 else if (detailEntry.quantityUomId.equals('VLIQ_L'))
                     uom = "Ltr"
             }
@@ -188,6 +188,12 @@ class MoquiDTEUtils {
                 } else {
                     priceItem = detailEntry.returnPrice
                 }
+            } else if (detailType == "OrderItem") {
+                priceItem = detailEntry.unitAmount
+                totalItem = (quantity?:0) * (priceItem?:0) - (montoDescuento?:0) + (ajusteDecimal?:0)
+            } else if (detailType == "InvoiceItem") {
+                priceItem = detailEntry.amount
+                totalItem = (quantity?:0) * (priceItem?:0) - (montoDescuento?:0) + (ajusteDecimal?:0)
             } else {
                 priceItem = detailEntry.amount
                 totalItem = (quantity?:0) * (priceItem?:0) - (montoDescuento?:0) + (ajusteDecimal?:0)

@@ -28,6 +28,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="contactoReceptor" required="true"/>
             <parameter name="direccionReceptor" required="true"/>
             <parameter name="comunaReceptor" required="true"/>
+            <parameter name="draft" type="Boolean" default="false"/>
             <parameter name="ciudadReceptor" default-value="${comunaReceptor}"/>
             <parameter name="detailList" type="List"/>
             <parameter name="invoiceId"/>
@@ -49,6 +50,7 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
+            <parameter name="previewPdf" type="byte[]"/>
         </out-parameters>
     </service>
 
@@ -62,6 +64,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="rutReceptor" required="true"/>
             <parameter name="receiverPartyId" required="true"/>
             <parameter name="razonSocialReceptor" required="true"/>
+            <parameter name="draft" type="Boolean" default="false"/>
             <parameter name="giroReceptor"/>
             <parameter name="contactoReceptor"/>
             <parameter name="direccionReceptor"/>
@@ -87,7 +90,88 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
+            <parameter name="previewPdf" type="byte[]"/>
         </out-parameters>
+    </service>
+
+    <service verb="get" noun="ReceiverInfo">
+        <in-parameters>
+            <parameter name="receiverPartyId" required="true"/>
+            <parameter name="fallbackRut"/>
+            <parameter name="requireTaxAddress" type="Boolean" default="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="giroReceptor"/>
+            <parameter name="rutReceptor"/>
+            <parameter name="razonSocialReceptor"/>
+            <parameter name="contactoReceptor"/>
+            <parameter name="direccionReceptor"/>
+            <parameter name="comunaReceptor"/>
+        </out-parameters>
+        <actions>
+            <!--
+            <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:receiverPartyId]" out-map="context"/>
+            <if condition="!emailAddress">
+                <return error="true" message="Receptor no tiene dirección de correo"/>
+            </if>
+            -->
+            <!-- rut receptor -->
+            <entity-find entity-name="mantle.party.PartyIdentification" list="rpidList">
+                <econdition field-name="partyIdTypeEnumId" operator="in" value="PtidNationalTaxId,PtidUniqueNationalId"/>
+                <econdition field-name="partyId" from="receiverPartyId"/>
+            </entity-find>
+            <set field="partyIdentificationEv" from="rpidList.first"/>
+            <if condition="!partyIdentificationEv"><then>
+                <if condition="fallbackRut"><then>
+                    <set field="rutReceptor" from="fallbackRut"/>
+                </then><else>
+                    <return error="true" message="Receptor no tiene RUT"/>
+                </else></if>
+            </then><else>
+                <set field="rutReceptor" from="partyIdentificationEv.idValue"/>
+            </else></if>
+
+            <!-- Dirección tributaria -->
+            <set field="contactoReceptor" value=""/>
+            <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut" in-map="[partyId:receiverPartyId, postalContactMechPurposeId:'PostalTax']"/>
+            <if condition="contactOut.postalAddress"><then>
+                <set field="direccionReceptor" value="${contactOut.postalAddress.address1?:''}${contactOut.postalAddress.unitNumber? (' ' + contactOut.postalAddress.unitNumber) : ''}${contactOut.postalAddress.address2? (', ' + contactOut.postalAddress.address2) : ''}"/>
+                <set field="contactoReceptor" from="contactOut.postalAddress.toName?:''"/>
+                <service-call name="mchile.GeoServices.get#ComunaFromGeoId" in-map="[stateProvinceGeoId:contactOut.postalAddress.stateProvinceGeoId]" out-map="comunaOut"/>
+                <set field="comunaReceptor" from="comunaOut.comuna"/>
+                <set field="ciudadReceptor" from="contactOut.postalAddress.city?:''"/>
+            </then><else>
+                <if condition="requireTaxAddress">
+                    <return error="true" message="Receiver ${receiverPartyId} has no active tax postal address"/>
+                </if>
+                <set field="direccionReceptor" value=""/>
+                <set field="comunaReceptor" value=""/>
+                <set field="ciudadReceptor" value=""/>
+            </else></if>
+
+            <entity-find-one value-field="partyEv" entity-name="mantle.party.Party" auto-field-map="[partyId:receiverPartyId]"/>
+            <set field="partyTypeEnumId" from="partyEv.partyTypeEnumId"/>
+            <set field="razonSocialReceptor" value=""/>
+            <set field="giroReceptor" value="Sin Giro"/>
+            <if condition="partyTypeEnumId == 'PtyOrganization'"><then>
+                <!-- Organizacion -->
+                <entity-find-one entity-name="mantle.party.Organization" value-field="organization" auto-field-map="[partyId:receiverPartyId]"/>
+                <set field="razonSocialReceptor" from="organization.taxOrganizationName ?: organization.organizationName"/>
+                <service-call name="mchile.sii.dte.DteInternalServices.get#GiroPrimario" in-map="[partyId:receiverPartyId]" out-map="giroOutMap"/>
+                <set field="giroReceptor" from="giroOutMap.description"/>
+                <!-- Validar existencia de dirección tributaria -->
+                <if condition="!direccionReceptor">
+                    <return error="true" message="Receptor no tiene dirección tributaria asignada"/>
+                </if>
+            </then><else-if condition="partyTypeEnumId == 'PtyPerson'">
+                <!-- Persona Natural -->
+                <entity-find-one entity-name="mantle.party.Person" value-field="personField"/>
+                <if condition="!personField"><return error="true" message="No existe persona para facturar"/></if>
+
+                <set field="razonSocialReceptor" value="${personField.firstName?:''} ${personField.lastName?:''}"/>
+                <set field="contactoReceptor" from="razonSocialReceptor"/>
+            </else-if></if>
+        </actions>
     </service>
 
     <service verb="generate" noun="GuiaDespacho">
@@ -151,116 +235,12 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="!shipment.toPartyId">
                 <return error="true" message="No existe tercero asociado a despacho"/>
             </if>
-            <set field="partyId" from="shipment.toPartyId"/>
+
+            <set field="receiverPartyId" from="shipment.toPartyId"/>
             <set field="indTrasladoEnumId" from="shipment.indTrasladoEnumId"/>
             <set field="tipoDespachoEnumId" from="shipment.tipoDespachoEnumId"/>
 
-            <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:shipment.toPartyId]" out-map="context"/>
-            <if condition="!emailAddress">
-                <return error="true" message="Receptor no tiene dirección de correo"/>
-            </if>
-            <set field="username" from="emailAddress"/>
-
-            <!-- rut receptor -->
-            <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
-            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyIdentificationEv"/>
-
-            <if condition="!partyIdentificationEv">
-                <return error="true" message="Receptor no tiene RUT"/>
-            </if>
-
-            <set field="rutReceptor" from="partyIdentificationEv.idValue"/>
-
-            <!-- Datos para encontrar contacto -->
-            <entity-find entity-name="mantle.party.contact.PartyContactMech" list="contactMechList">
-                <econdition field-name="partyId" from="partyId"/>
-                <econdition field-name="contactMechPurposeId" value="PostalTax"/>
-                <econdition field-name="fromDate" operator="less-equals" from="ec.user.nowTimestamp"/>
-                <econdition field-name="thruDate" from="null"/>
-            </entity-find>
-
-            <if condition="!contactMechList">
-                <return error="true" message="Receptor no tiene dirección para impuestos"/>
-            </if>
-            <set field="contactMechId" from="contactMechList.contactMechId.first()"/>
-
-            <!-- Datos de contacto -->
-            <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressEv"/>
-
-            <if condition="!contactPostalAddressEv">
-                <return error="true" message="Receptor no tiene dirección postal"/>
-            </if>
-
-            <set field="direccionReceptor" value="${contactPostalAddressEv.address1?:''}${contactPostalAddressEv.unitNumber? (' ' + contactPostalAddressEv.unitNumber) : ''}${contactPostalAddressEv.address2? (', ' + contactPostalAddressEv.address2) : ''}"/>
-            <set field="comunaReceptor" from="contactPostalAddressEv.city"/>
-
-            <!-- Obtención de contacto para impuestos en organización -->
-            <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
-                          in-map="[partyId:partyId, postalContactMechPurposeId:'PostalTax']"/>
-            <if condition="!contactOut.postalContactMechId">
-            </if>
-            <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="postalAddressField">
-                <field-map field-name="contactMechId" from="contactOut.postalContactMechId"/>
-            </entity-find-one>
-
-            <set field="comunaReceptor" from="postalAddressField.stateProvinceGeoId"/>
-
-            <service-call name="mchile.GeoServices.get#ComunaFromGeoId" in-map="[stateProvinceGeoId:postalAddressField.stateProvinceGeoId]" out-map="comunaOut"/>
-
-            <set field="comunaReceptor" from="comunaOut.comuna"/>
-            <!-- ID Contacto receptor -->
-            <set field="receptorContactId" from="contactPostalAddressEv.telecomContactMechId"/>
-
-            <entity-find-one entity-name="mantle.party.Party" value-field="partyEv"/>
-            <if condition="!partyEv">
-                <return error="true" message="Receptor no existe"/>
-            </if>
-
-            <set field="partyTypeEnumId" from="partyEv.partyTypeEnumId"/>
-            <set field="razonSocialReceptor" value=""/>
-            <set field="contactoReceptor" value=""/>
-            <set field="giroReceptor" value="Sin Giro"/>
-
-            <if condition="partyTypeEnumId == 'PtyOrganization'">
-                <!-- Organizacion -->
-                <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField"/>
-                <set field="razonSocialReceptor" from="organizationField.organizationName"/>
-                <!--set field="giroReceptor" from="organizationField.giro"/!>
-                <if condition="!giroReceptor">
-                    <return error="true" message="Organización no tiene giro ingresado"/>
-                </if-->
-                <service-call name="mchile.sii.dte.DteInternalServices.get#GiroPrimario" in-map="[partyId:partyId]" out-map="giroOutMap"/>
-                <set field="giroReceptor" from="giroOutMap.description"/>
-                <!-- Obtención de contacto para impuestos en organización -->
-                <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
-                              in-map="[partyId:partyId, postalContactMechPurposeId:'PostalTax']"/>
-                <if condition="!contactOut.postalContactMechId">
-                    <return error="true" message="Receptor no tiene contacto tributario asignado"/>
-                </if>
-                <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="postalAddressField">
-                    <field-map field-name="contactMechId" from="contactOut.postalContactMechId"/>
-                </entity-find-one>
-                <!-- Obtención de contacto en organización -->
-                <if condition="!postalAddressField">
-                    <return error="true" message="Nombre receptor no encontrado"/>
-                </if>
-
-                <set field="contactoReceptor" from="postalAddressField.toName"/>
-            </if>
-
-            <if condition="partyTypeEnumId == 'PtyPerson'">
-                <!-- Persona Natural -->
-                <entity-find-one entity-name="mantle.party.Person" value-field="personField"/>
-                <if condition="!personField">
-                    <return error="true" message="No existe persona para facturar"/>
-                </if>
-
-                <set field="razonSocialReceptor" from="personField.firstName"/>
-                <script>
-                    razonSocialReceptor = razonSocialReceptor + " " + personField.lastName
-                </script>
-                <set field="contactoReceptor" from="razonSocialReceptor"/>
-            </if>
+            <service-call name="mchile.sii.dte.DteGenerationServices.get#ReceiverInfo" in-map="[receiverPartyId:receiverPartyId]" out-map="context"/>
 
             <if condition="tipoDespachoEnumId">
                 <service-call name="mchile.sii.dte.DteInternalServices.get#SiiCode" in-map="[fiscalTaxDocumentTypeEnumId:tipoDespachoEnumId, enumTypeId:'TipoDespacho']" out-map="codeOut"/>
@@ -274,7 +254,7 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.sii.dte.DteGenerationServices.generate#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-52', rutEmisor:rutEmisor, rutReceptor:rutReceptor,
                                 razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor, contactoReceptor:contactoReceptor,direccionReceptor:direccionReceptor,
                                 comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:shipmentItemDetailList, invoiceId:invoiceId, returnId:returnId,
-                                formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId, receiverPartyId:partyId,
+                                formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId, receiverPartyId:receiverPartyId,
                                 indTrasladoEnumId:indTrasladoEnumId, tipoDespacho:tipoDespacho, shipmentId:shipmentId, glosaPagos:glosaPagos, settlementTermId:settlementTermId,
                                 fechaEmision:fechaEmision]" out-map="context"/>
             <if condition="sendToSii">
@@ -371,110 +351,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="referencia.razonReferencia" from="codRefEnum.description"/>
             <entity-update value-field="referencia"/>
 
-            <set field="username"/>
-            <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:receiverPartyId]" out-map="context"/>
-            <if condition="!emailAddress"><then>
-                <!--return error="true" message="Receptor no tiene dirección de correo"/-->
-                <log level="warn" message="Receptor no tiene dirección de correo"/>
-            </then><else>
-                <set field="username" from="emailAddress"/>
-            </else></if>
-
-            <!-- rut receptor -->
-            <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
-            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyIdentificationEv" auto-field-map="[partyId:receiverPartyId, partyIdTypeEnumId:'PtidNationalTaxId']"/>
-            <if condition="!partyIdentificationEv"><then>
-                <log message="Receptor no tiene RUT" level="warn"/>
-                <set field="rutReceptor" from="'66666666-6'"/>
-            </then><else>
-                <set field="rutReceptor" from="partyIdentificationEv.idValue"/>
-            </else></if>
-
-            <!-- Datos para encontrar contacto -->
-
-            <set field="contactMechId"/>
-
-            <!-- Modificado para quedarse con la dirección válida a la fecha actual -->
-            <!--entity-find-one entity-name="mantle.party.contact.PartyContactMech" value-field="contactMechField">
-                <field-map field-name="partyId" from="partyId"/>
-                <field-map field-name="contactMechPurposeId" value="PostalTax"/>
-            </entity-find-one-->
-
-            <entity-find entity-name="mantle.party.contact.PartyContactMech" list="contactMechList">
-                <econdition field-name="partyId" from="receiverPartyId"/>
-                <econdition field-name="contactMechPurposeId" value="PostalTax"/>
-                <date-filter/>
-            </entity-find>
-
-            <if condition="!contactMechList">
-                <return error="true" message="Receptor no tiene dirección activa para impuestos"/>
-            </if>
-
-            <!--set field="contactMechId" from="contactMechField.contactMechId"/-->
-            <set field="contactMechId" from="contactMechList.contactMechId.first()"/>
-
-            <!-- Datos de contacto -->
-            <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressEv"/>
-            <set field="direccionReceptor" value="${contactPostalAddressEv.address1?:''}${contactPostalAddressEv.unitNumber? (' ' + contactPostalAddressEv.unitNumber) : ''}${contactPostalAddressEv.address2? (', ' + contactPostalAddressEv.address2) : ''}"/>
-
-            <service-call name="mchile.GeoServices.get#ComunaFromGeoId" in-map="[stateProvinceGeoId:contactPostalAddressEv.stateProvinceGeoId]" out-map="comunaOut"/>
-
-            <set field="comunaReceptor" from="comunaOut.comuna"/>
-
-            <if condition="!comunaReceptor">
-                <return error="true" message="Receptor no tiene comuna/ciudad definida $contactMechId"/>
-            </if>
-            <!-- ID Contacto receptor -->
-            <set field="receptorContactId" from="contactPostalAddressEv.telecomContactMechId"/>
-
-            <entity-find-one entity-name="mantle.party.Party" value-field="partyEv" auto-field-map="[partyId:receiverPartyId]"/>
-            <if condition="!partyEv">
-                <return error="true" message="Receptor no existe"/>
-            </if>
-
-            <set field="partyTypeEnumId" from="partyEv.partyTypeEnumId"/>
-
-            <set field="razonSocialReceptor" value=""/>
-            <set field="contactoReceptor" value=""/>
-            <set field="giroReceptor" value="Sin Giro"/>
-
-            <if condition="partyTypeEnumId == 'PtyOrganization'">
-                <!-- Organizacion -->
-                <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField" auto-field-map="[partyId:receiverPartyId]"/>
-                <set field="razonSocialReceptor" from="organizationField.organizationName"/>
-
-                <service-call name="mchile.sii.dte.DteInternalServices.get#GiroPrimario" in-map="[partyId:receiverPartyId]" out-map="giroOutMap"/>
-                <set field="giroReceptor" from="giroOutMap.description"/>
-                <!--set field="giroReceptor" from="organizationField.giro"/-->
-
-                <!-- Obtención de contacto para impuestos en organización -->
-                <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
-                              in-map="[partyId:receiverPartyId, postalContactMechPurposeId:'PostalTax']"/>
-                <if condition="!contactOut.postalContactMechId">
-                    <return error="true" message="Receptor no tiene contacto tributario asignado"/>
-                </if>
-                <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="postalAddressField">
-                    <field-map field-name="contactMechId" from="contactOut.postalContactMechId"/>
-                </entity-find-one>
-                <!-- Obtención de contacto en organización -->
-                <if condition="!postalAddressField">
-                    <return error="true" message="Nombre receptor no encontrado"/>
-                </if>
-
-                <set field="contactoReceptor" from="postalAddressField.toName"/>
-            </if>
-            <if condition="partyTypeEnumId == 'PtyPerson'">
-                <entity-find-one entity-name="mantle.party.Person" value-field="personField">
-                    <field-map field-name="partyId" from="receiverPartyId" />
-                </entity-find-one>
-                <if condition="!personField">
-                    <return error="true" message="No existe persona para facturar"/>
-                </if>
-
-                <set field="razonSocialReceptor" from="personField.firstName"/>
-                <script>razonSocialReceptor = razonSocialReceptor + " " + personField.lastName</script>
-                <set field="contactoReceptor" from="razonSocialReceptor"/>
-            </if>
+            <service-call name="mchile.sii.dte.DteGenerationServices.get#ReceiverInfo" in-map="[receiverPartyId:receiverPartyId, fallbackRut:'66666666-6']" out-map="context"/>
 
             <!-- Generacion de nota de crédito -->
             <service-call name="mchile.sii.dte.DteGenerationServices.generate#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-61', rutEmisor:rutEmisor, rutReceptor:rutReceptor, razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor,
@@ -583,101 +460,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="referencia.razonReferencia" from="codRefEnum.description"/>
             <entity-update value-field="referencia"/>
 
-            <set field="username"/>
-            <service-call name="mantle.party.ContactServices.get#PrimaryEmailAddress" in-map="[partyId:receiverPartyId]" out-map="context"/>
-            <if condition="!emailAddress"><then>
-                <log level="warn" message="Receptor no tiene dirección de correo"/>
-            </then><else>
-                <set field="username" from="emailAddress"/>
-            </else></if>
-
-            <!-- rut receptor -->
-            <set field="partyIdTypeEnumId" value="PtidNationalTaxId"/>
-            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="partyIdentificationEv" auto-field-map="[partyId:receiverPartyId, partyIdTypeEnumId:'PtidNationalTaxId']"/>
-            <set field="rutReceptor"/>
-            <if condition="!partyIdentificationEv"><then>
-                <log message="Receptor no tiene RUT" level="warn"/>
-                <set field="rutReceptor" from="'66666666-6'"/>
-            </then><else>
-                <set field="rutReceptor" from="partyIdentificationEv.idValue"/>
-            </else></if>
-
-            <!-- Datos para encontrar contacto -->
-            <set field="contactMechId"/>
-            <entity-find entity-name="mantle.party.contact.PartyContactMech" list="contactMechList">
-                <econdition field-name="partyId" from="receiverPartyId"/>
-                <econdition field-name="contactMechPurposeId" value="PostalTax"/>
-                <date-filter/>
-            </entity-find>
-
-            <if condition="!contactMechList">
-                <return error="true" message="Receptor no tiene dirección activa para impuestos"/>
-            </if>
-
-            <set field="contactMechId" from="contactMechList.contactMechId.first()"/>
-
-            <!-- Datos de contacto -->
-            <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressEv"/>
-            <set field="direccionReceptor" value="${contactPostalAddressEv.address1?:''}${contactPostalAddressEv.unitNumber? (' ' + contactPostalAddressEv.unitNumber) : ''}${contactPostalAddressEv.address2? (', ' + contactPostalAddressEv.address2) : ''}"/>
-
-            <service-call name="mchile.GeoServices.get#ComunaFromGeoId" in-map="[stateProvinceGeoId:contactPostalAddressEv.stateProvinceGeoId]" out-map="comunaOut"/>
-
-            <set field="comunaReceptor" from="comunaOut.comuna"/>
-
-            <if condition="!comunaReceptor">
-                <return error="true" message="Receptor no tiene comuna/ciudad definida $contactMechId"/>
-            </if>
-
-            <!-- ID Contacto receptor -->
-            <set field="receptorContactId" from="contactPostalAddressEv.telecomContactMechId"/>
-
-            <entity-find-one entity-name="mantle.party.Party" value-field="partyEv" auto-field-map="[partyId:receiverPartyId]"/>
-            <if condition="!partyEv">
-                <return error="true" message="Receptor no existe"/>
-            </if>
-
-            <set field="partyTypeEnumId" from="partyEv.partyTypeEnumId"/>
-
-            <set field="razonSocialReceptor" value=""/>
-            <set field="contactoReceptor" value=""/>
-            <set field="giroReceptor" value="Sin Giro"/>
-
-            <if condition="partyTypeEnumId == 'PtyOrganization'"><then>
-                <!-- Organización -->
-                <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField" auto-field-map="[partyId:receiverPartyId]"/>
-                <set field="razonSocialReceptor" from="organizationField.organizationName"/>
-
-                <service-call name="mchile.sii.dte.DteInternalServices.get#GiroPrimario" in-map="[partyId:receiverPartyId]" out-map="giroOutMap"/>
-                <set field="giroReceptor" from="giroOutMap.description"/>
-
-                <!-- Obtención de contacto tributario en organización -->
-                <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
-                              in-map="[partyId:receiverPartyId, postalContactMechPurposeId:'PostalTax']"/>
-                <if condition="!contactOut.postalContactMechId">
-                    <return error="true" message="Receptor no tiene contacto tributario asignado"/>
-                </if>
-                <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="postalAddressField">
-                    <field-map field-name="contactMechId" from="contactOut.postalContactMechId"/>
-                </entity-find-one>
-
-                <!-- Obtención de contacto en organización -->
-                <if condition="!postalAddressField">
-                    <return error="true" message="Nombre receptor no encontrado"/>
-                </if>
-
-                <set field="contactoReceptor" from="postalAddressField.toName"/>
-            </then><else-if condition="partyTypeEnumId == 'PtyPerson'">
-                <entity-find-one entity-name="mantle.party.Person" value-field="personField">
-                    <field-map field-name="partyId" from="receiverPartyId" />
-                </entity-find-one>
-                <if condition="!personField">
-                    <return error="true" message="No existe persona para facturar"/>
-                </if>
-
-                <set field="razonSocialReceptor" from="personField.firstName"/>
-                <script>razonSocialReceptor = razonSocialReceptor + " " + personField.lastName</script>
-                <set field="contactoReceptor" from="razonSocialReceptor"/>
-            </else-if></if>
+            <service-call name="mchile.sii.dte.DteGenerationServices.get#ReceiverInfo" in-map="[receiverPartyId:receiverPartyId, fallbackRut:'66666666-6']" out-map="context"/>
 
             <!-- Generacion de nota de débito -->
             <service-call name="mchile.sii.dte.DteGenerationServices.generate#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-56', rutEmisor:rutEmisor, rutReceptor:rutReceptor, razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor,
@@ -765,125 +548,16 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <set field="rutEmisor" from="issuerPartyIdentification.idValue"/>
 
-            <!-- Get receiver's RUT id -->
-            <entity-find entity-name="mantle.party.PartyIdentification" list="receiverPartyIdentificationList">
-                <econdition field-name="partyIdTypeEnumId" operator="in" value="PtidNationalTaxId,PtidUniqueNationalId"/>
-                <econdition field-name="partyId" from="receiverPartyId"/>
-            </entity-find>
-            <set field="receiverPartyIdentification" from="receiverPartyIdentificationList.first"/>
-
-            <!-- If RUT does not exist, a generic id value is used -->
-            <if condition="receiverPartyIdentification"><then>
-                <set field="rutReceptor" from="receiverPartyIdentification.idValue"/>
+            <if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-39','Ftdt-41']"><then>
+                <set field="fallbackRut" value="66666666-6"/>
             </then><else>
-                <if condition="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-39','Ftdt-41'])">
-                    <return error="true" message="Receiver has no RUT id value"/>
-                </if>
-                <set field="rutReceptor" value="66666666-6"/>
-                <log level="warn" message="Receiver for DTE type ${fiscalTaxDocumentTypeEnumId}, invoice ${invoiceId}, has no RUT id value"/>
+                <set field="fallbackRut" from="null"/>
             </else></if>
+            <set field="requireTaxAddress" from="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-39','Ftdt-41','Ftdt-56','Ftdt-61'])"/>
+            <service-call name="mchile.sii.dte.DteGenerationServices.get#ReceiverInfo" in-map="[receiverPartyId:receiverPartyId, fallbackRut:fallbackRut, requireTaxAddress:requireTaxAddress]" out-map="context"/>
 
             <!-- Get DTE references -->
             <service-call name="mchile.sii.dte.DteReferenceServices.get#Reference" in-map="context" out-map="context"/>
-
-            <!-- Validate receiver's postal tax address -->
-            <entity-find entity-name="mantle.party.contact.PartyContactMech" list="postalPcmList">
-                <date-filter/>
-                <econdition field-name="partyId" from="receiverPartyId"/>
-                <econdition field-name="contactMechPurposeId" value="PostalTax"/>
-                <econdition field-name="fromDate" operator="less-equals" from="ec.user.nowTimestamp"/>
-                <econdition field-name="thruDate" from="null"/>
-            </entity-find>
-
-            <set field="contactMechId" from="postalPcmList.first?.contactMechId"/>
-
-            <!-- Validate receiver's postal address -->
-            <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="contactPostalAddressEv"/>
-            <if condition="!contactPostalAddressEv"><then>
-                <set field="direccionReceptor" value=""/>
-                <set field="comunaReceptor" value=""/>
-                <set field="ciudadReceptor" value=""/>
-                <set field="receptorContactId" value=""/>
-                <if condition="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-39','Ftdt-41','Ftdt-56','Ftdt-61'])">
-                    <return message="Receiver ${receiverPartyId} has no active postal address" error="true"/>
-                </if>
-            </then><else>
-                <!-- Get receiver's postal address info -->
-                <set field="direccionReceptor" value="${contactPostalAddressEv.address1?:''}${contactPostalAddressEv.unitNumber? (' ' + contactPostalAddressEv.unitNumber) : ''}${contactPostalAddressEv.address2? (', ' + contactPostalAddressEv.address2) : ''}"/>
-
-                <!-- Comuna -->
-                <entity-find-one entity-name="moqui.basic.Geo" value-field="geoField">
-                    <field-map field-name="geoId" from="contactPostalAddressEv.stateProvinceGeoId"/>
-                </entity-find-one>
-
-                <if condition="geoField == null"><then>
-                    <if condition="contactPostalAddressEv.countryGeoId == 'CHL'">
-                        <return error="true" message="Dirección tributaria en Chile debe tener definida la comuna."/>
-                    </if>
-                    <if condition="contactPostalAddressEv.city"><then>
-                        <set field="comunaReceptor" from="contactPostalAddressEv.city"/>
-                    </then><else>
-                        <entity-find-one entity-name="moqui.basic.Geo" value-field="geoField">
-                            <field-map field-name="geoId" from="contactPostalAddressEv.countyGeoId"/>
-                        </entity-find-one>
-                        <set field="comunaReceptor" from="geoField.geoName"/>
-                    </else></if>
-                </then><else>
-                    <set field="comunaReceptor" from="geoField.geoName"/>
-                </else></if>
-
-                <set field="ciudadReceptor" from="contactPostalAddressEv.city?:''"/>
-                <set field="receptorContactId" from="contactPostalAddressEv.telecomContactMechId"/>
-            </else></if>
-
-            <!-- Get receiver info for DTE -->
-            <entity-find-one entity-name="mantle.party.Party" value-field="partyEv">
-                <field-map field-name="partyId" from="receiverPartyId"/>
-            </entity-find-one>
-            <set field="partyTypeEnumId" from="partyEv.partyTypeEnumId"/>
-            <set field="razonSocialReceptor" value=""/>
-            <set field="giroReceptor" value="Sin Giro"/>
-
-            <!-- Case when DTE receiver is an Organization -->
-            <if condition="partyTypeEnumId == 'PtyOrganization'"><then>
-                <entity-find-one entity-name="mantle.party.Organization" value-field="organizationField">
-                    <field-map field-name="partyId" from="receiverPartyId"/>
-                </entity-find-one>
-                <set field="razonSocialReceptor" from="organizationField.taxOrganizationName ?: organizationField.organizationName"/>
-
-                <!-- Giro no es necesario en boleta - ¡CONFIRMAR! -->
-                <if condition="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41'])">
-                    <service-call name="mchile.sii.dte.DteInternalServices.get#GiroPrimario" in-map="[partyId:receiverPartyId]" out-map="giroOutMap"/>
-                    <set field="giroReceptor" from="giroOutMap.description"/>
-                </if>
-
-                <!-- Get tax contact and their postal address, and validate that they exist -->
-                <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="contactOut"
-                              in-map="[partyId:receiverPartyId, postalContactMechPurposeId:'PostalTax']"/>
-                <if condition="!contactOut.postalContactMechId">
-                    <return error="true" message="Receiver has no postal tax contact"/>
-                </if>
-
-                <entity-find-one entity-name="mantle.party.contact.PostalAddress" value-field="postalAddressField">
-                    <field-map field-name="contactMechId" from="contactOut.postalContactMechId"/>
-                </entity-find-one>
-                <if condition="!postalAddressField">
-                    <return error="true" message="Contacto tributario del receptor no tiene dirección postal"/>
-                </if>
-
-                <set field="contactoReceptor" from="postalAddressField.toName"/>
-            </then><else-if condition="partyTypeEnumId == 'PtyPerson'">
-                <!-- Case when DTE receiver is a Person -->
-                <entity-find-one entity-name="mantle.party.Person" value-field="personField" auto-field-map="[partyId:receiverPartyId]"/>
-                <if condition="!personField">
-                    <return error="true" message="No existe persona para facturar"/>
-                </if>
-
-                <set field="razonSocialReceptor" value="${personField.firstName} ${personField.lastName}"/>
-                <set field="contactoReceptor" from="razonSocialReceptor"/>
-            </else-if></if>
-
-            <!-- Get DTE references -->
             <entity-find entity-name="mchile.dte.ReferenciaDteAndFiscalCode" list="referenciaList">
                 <econdition field-name="invoiceId" from="invoiceId"/>
                 <order-by field-name="fiscalTaxDocumentTypeEnumId"/>
