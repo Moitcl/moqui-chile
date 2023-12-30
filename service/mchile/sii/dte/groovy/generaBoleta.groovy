@@ -282,9 +282,9 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 if (detalle.uom)
                     UnmdItem(detalle.uom)
                 //PrcItem(detalle.priceItem)
-                if(detalle.indicadorExento)
+                if(detalle.indicadorExento && detalle.priceItem != null && detalle.priceItem != 0 && detalle.priceItem != "0")
                     PrcItem(Math.round(detalle.priceItem))
-                if(!detalle.indicadorExento)
+                if(!detalle.indicadorExento && detalle.priceItem != null && detalle.priceItem != 0 && detalle.priceItem != "0")
                     PrcItem(Math.round(detalle.priceItem + Math.round(detalle.priceItem * vatTaxRate)))
                 //OtrMnda{}
                 //if (detalle.porcentajeDescuento)
