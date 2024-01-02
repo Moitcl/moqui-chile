@@ -97,8 +97,7 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="get" noun="ReceiverInfo">
         <in-parameters>
             <parameter name="receiverPartyId" required="true"/>
-            <parameter name="fallbackRut"/>
-            <parameter name="requireTaxAddress" type="Boolean" default="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="giroReceptor"/>
@@ -116,17 +115,22 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             -->
             <!-- rut receptor -->
+            <set field="requireTaxAddress" from="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-39','Ftdt-41','Ftdt-56','Ftdt-61'])"/>
             <entity-find entity-name="mantle.party.PartyIdentification" list="rpidList">
                 <econdition field-name="partyIdTypeEnumId" operator="in" value="PtidNationalTaxId,PtidUniqueNationalId"/>
                 <econdition field-name="partyId" from="receiverPartyId"/>
             </entity-find>
             <set field="partyIdentificationEv" from="rpidList.first"/>
             <if condition="!partyIdentificationEv"><then>
-                <if condition="fallbackRut"><then>
-                    <set field="rutReceptor" from="fallbackRut"/>
-                </then><else>
-                    <return error="true" message="Receptor no tiene RUT"/>
-                </else></if>
+                <entity-find entity-name="mantle.party.PartyIdentification" list="rpidList">
+                    <econdition field-name="partyIdTypeEnumId" operator="in" value="PtidPassport,PtidForeignIdentificationCard"/>
+                    <econdition field-name="partyId" from="receiverPartyId"/>
+                </entity-find>
+                <if condition="rpidList"><then>
+                    <set field="rutReceptor" value="55555555-5"/>
+                </then><else-if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-39','Ftdt-41']">
+                    <set field="rutReceptor" value="66666666-6"/>
+                </else-if></if>
             </then><else>
                 <set field="rutReceptor" from="partyIdentificationEv.idValue"/>
             </else></if>
@@ -140,14 +144,26 @@ along with this software (see the LICENSE.md file). If not, see
                 <service-call name="mchile.GeoServices.get#ComunaFromGeoId" in-map="[stateProvinceGeoId:contactOut.postalAddress.stateProvinceGeoId]" out-map="comunaOut"/>
                 <set field="comunaReceptor" from="comunaOut.comuna"/>
                 <set field="ciudadReceptor" from="contactOut.postalAddress.city?:''"/>
+                <if condition="contactOut.postalAddress.countryGeoId != 'CHL'"><then>
+                    <if condition="contactOut.postalAddress.countryGeoId == null &amp;&amp; requireTaxAddress"><then>
+                        <message error="true">Receiver ${receiverPartyId} has no country defined for tax postal address</message>
+                    </then><else-if condition="rutReceptor == null || rutReceptor == '66666666-6'">
+                        <!-- Extranjero sin Rut -->
+                        <set field="rutReceptor" value="55555555-5"/>
+                    </else-if></if>
+                </then></if>
             </then><else>
                 <if condition="requireTaxAddress">
-                    <return error="true" message="Receiver ${receiverPartyId} has no active tax postal address"/>
+                    <message error="true">Receiver ${receiverPartyId} has no active tax postal address</message>
                 </if>
                 <set field="direccionReceptor" value=""/>
                 <set field="comunaReceptor" value=""/>
                 <set field="ciudadReceptor" value=""/>
             </else></if>
+            <if condition="!rutReceptor">
+                <message error="true">Receptor no tiene RUT</message>
+            </if>
+            <check-errors/>
 
             <entity-find-one value-field="partyEv" entity-name="mantle.party.Party" auto-field-map="[partyId:receiverPartyId]"/>
             <set field="partyTypeEnumId" from="partyEv.partyTypeEnumId"/>
@@ -351,7 +367,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="referencia.razonReferencia" from="codRefEnum.description"/>
             <entity-update value-field="referencia"/>
 
-            <service-call name="mchile.sii.dte.DteGenerationServices.get#ReceiverInfo" in-map="[receiverPartyId:receiverPartyId, fallbackRut:'66666666-6']" out-map="context"/>
+            <service-call name="mchile.sii.dte.DteGenerationServices.get#ReceiverInfo" in-map="[receiverPartyId:receiverPartyId, fiscalTaxDocumentTypeEnumId:'Ftdt-61']" out-map="context"/>
 
             <!-- Generacion de nota de crédito -->
             <service-call name="mchile.sii.dte.DteGenerationServices.generate#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-61', rutEmisor:rutEmisor, rutReceptor:rutReceptor, razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor,
@@ -460,7 +476,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="referencia.razonReferencia" from="codRefEnum.description"/>
             <entity-update value-field="referencia"/>
 
-            <service-call name="mchile.sii.dte.DteGenerationServices.get#ReceiverInfo" in-map="[receiverPartyId:receiverPartyId, fallbackRut:'66666666-6']" out-map="context"/>
+            <service-call name="mchile.sii.dte.DteGenerationServices.get#ReceiverInfo" in-map="[receiverPartyId:receiverPartyId, fiscalTaxDocumentTypeEnumId:'Ftdt-56']" out-map="context"/>
 
             <!-- Generacion de nota de débito -->
             <service-call name="mchile.sii.dte.DteGenerationServices.generate#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-56', rutEmisor:rutEmisor, rutReceptor:rutReceptor, razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor,
@@ -548,13 +564,7 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <set field="rutEmisor" from="issuerPartyIdentification.idValue"/>
 
-            <if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-39','Ftdt-41']"><then>
-                <set field="fallbackRut" value="66666666-6"/>
-            </then><else>
-                <set field="fallbackRut" from="null"/>
-            </else></if>
-            <set field="requireTaxAddress" from="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-39','Ftdt-41','Ftdt-56','Ftdt-61'])"/>
-            <service-call name="mchile.sii.dte.DteGenerationServices.get#ReceiverInfo" in-map="[receiverPartyId:receiverPartyId, fallbackRut:fallbackRut, requireTaxAddress:requireTaxAddress]" out-map="context"/>
+            <service-call name="mchile.sii.dte.DteGenerationServices.get#ReceiverInfo" in-map="[receiverPartyId:receiverPartyId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" out-map="context"/>
 
             <!-- Get DTE references -->
             <service-call name="mchile.sii.dte.DteReferenceServices.get#Reference" in-map="context" out-map="context"/>
