@@ -95,7 +95,7 @@ else if (invoice != null && invoice.unpaidTotal == 0) {
     formaPago = 2 // Crédito (usar GlosaPagos)
 
 if (tipoDte == 39) {
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, draft? "OrderItem" : "InvoiceItem")
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     //throw new BaseArtifactException("Lista:"+detMap.totalExento)
     totalNeto = detMap.totalNeto
@@ -112,7 +112,7 @@ if (tipoDte == 39) {
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
     referenciaList = refMap.referenciaList
 } else if (tipoDte == 41) {
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem")
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos

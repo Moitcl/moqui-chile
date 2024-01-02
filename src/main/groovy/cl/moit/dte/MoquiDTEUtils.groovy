@@ -61,11 +61,11 @@ class MoquiDTEUtils {
 
     protected final static Logger logger = LoggerFactory.getLogger(MoquiDTEUtils.class)
 
-    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType) throws BaseArtifactException {
-        return prepareDetails(ec, detailList, detailType, null)
+    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType, String issuerPartyId) throws BaseArtifactException {
+        return prepareDetails(ec, detailList, detailType, null, issuerPartyId)
     }
 
-    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType, Integer codRef) throws BaseArtifactException {
+    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType, Integer codRef, String issuerPartyId) throws BaseArtifactException {
         List detalleList = []
         // Text Correction DTEs have no detail list
         if (detailList.size() == 0 && codRef == 2) {
@@ -123,10 +123,16 @@ class MoquiDTEUtils {
                 else if (detailEntry.quantityUomId.equals('VLIQ_L'))
                     uom = "Ltr"
             }
-            String itemAfecto = "true"
+            Boolean itemAfecto = null
             if (detailEntry.productId) {
-                Map<String, Object> afectoOutMap = ec.service.sync().name("mchile.sii.dte.DteLoadServices.check#Afecto").parameter("productId", detailEntry.productId).call()
+                Map<String, Object> afectoOutMap = ec.service.sync().name("mchile.sii.dte.DteInternalServices.check#Afecto").parameters([issuerPartyId:issuerPartyId, productId:detailEntry.productId]).call()
                 itemAfecto = afectoOutMap.afecto
+                ec.logger.warn("itemAfecto by productId: ${itemAfecto} (class: ${itemAfecto.class}")
+            } else {
+                String productDefaultExento = ec.service.sync().name("mantle.party.PartyServices.get#PartySettingValue").parameters([partyId:issuerPartyId, partySettingTypeId:'moit.dte.ProductDefaultIsExento']).call().settingValue
+                ec.logger.warn("productDefaultExento: ${productDefaultExento}")
+                itemAfecto = productDefaultExento != 'true'
+                ec.logger.warn("itemAfecto by default: ${itemAfecto} (class: ${itemAfecto.class}")
             }
 
             BigDecimal priceItem
@@ -199,7 +205,7 @@ class MoquiDTEUtils {
                 totalItem = (quantity?:0) * (priceItem?:0) - (montoDescuento?:0) + (ajusteDecimal?:0)
             }
 
-            if (itemAfecto == "true")
+            if (itemAfecto)
                 numberAfectos++
             else
                 numberExentos++
@@ -220,7 +226,7 @@ class MoquiDTEUtils {
             if (priceItem != null && (detailType != "ShipmentItem" || Math.round(priceItem) > 0))
                 detailMap.priceItem = priceItem
             detailMap.montoItem = totalItem
-            if(detailType == "ShipmentItem" || itemAfecto.equals("true")) {
+            if(detailType == "ShipmentItem" || itemAfecto) {
                 totalNeto = (totalNeto ?: 0) + totalItem
             } else {
                 totalExento = (totalExento ?: 0) + totalItem
