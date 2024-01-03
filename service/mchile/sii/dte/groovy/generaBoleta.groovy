@@ -175,7 +175,7 @@ String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:
 StringWriter xmlWriter = new StringWriter()
 MarkupBuilder xmlBuilder = new MarkupBuilder(xmlWriter)
 
-if (giroReceptor.length() > 39)
+if (giroReceptor && giroReceptor.length() > 39)
     giroReceptor = giroReceptor.substring(0,39)
 razonSocialReceptorTimbre = razonSocialReceptor.length() > 39? razonSocialReceptor.substring(0,39): razonSocialReceptor
 
