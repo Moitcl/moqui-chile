@@ -24,7 +24,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="rutReceptor" required="true"/>
             <parameter name="receiverPartyId" required="true"/>
             <parameter name="razonSocialReceptor" required="true"/>
-            <parameter name="giroReceptor" required="true"/>
+            <parameter name="giroReceptor"/>
             <parameter name="contactoReceptor" required="true"/>
             <parameter name="direccionReceptor" required="true"/>
             <parameter name="comunaReceptor" required="true"/>
@@ -116,6 +116,7 @@ along with this software (see the LICENSE.md file). If not, see
             -->
             <!-- rut receptor -->
             <set field="requireTaxAddress" from="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-39','Ftdt-41','Ftdt-56','Ftdt-61'])"/>
+            <set field="requireGiro" from="(fiscalTaxDocumentTypeEnumId in ['Ftdt-33','Ftdt-34','Ftdt-52','Ftdt-43', 'Ftdt-46'])"/>
             <entity-find entity-name="mantle.party.PartyIdentification" list="rpidList">
                 <econdition field-name="partyIdTypeEnumId" operator="in" value="PtidNationalTaxId,PtidUniqueNationalId"/>
                 <econdition field-name="partyId" from="receiverPartyId"/>
@@ -168,12 +169,11 @@ along with this software (see the LICENSE.md file). If not, see
             <entity-find-one value-field="partyEv" entity-name="mantle.party.Party" auto-field-map="[partyId:receiverPartyId]"/>
             <set field="partyTypeEnumId" from="partyEv.partyTypeEnumId"/>
             <set field="razonSocialReceptor" value=""/>
-            <set field="giroReceptor" value="Sin Giro"/>
             <if condition="partyTypeEnumId == 'PtyOrganization'"><then>
                 <!-- Organizacion -->
                 <entity-find-one entity-name="mantle.party.Organization" value-field="organization" auto-field-map="[partyId:receiverPartyId]"/>
                 <set field="razonSocialReceptor" from="organization.taxOrganizationName ?: organization.organizationName"/>
-                <service-call name="mchile.sii.dte.DteInternalServices.get#GiroPrimario" in-map="[partyId:receiverPartyId]" out-map="giroOutMap"/>
+                <service-call name="mchile.sii.dte.DteInternalServices.get#GiroPrimario" in-map="[partyId:receiverPartyId, failIfNotFound:requireGiro]" out-map="giroOutMap"/>
                 <set field="giroReceptor" from="giroOutMap.description"/>
                 <!-- Validar existencia de dirección tributaria -->
                 <if condition="!direccionReceptor">
@@ -187,6 +187,9 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="razonSocialReceptor" value="${personField.firstName?:''} ${personField.lastName?:''}"/>
                 <set field="contactoReceptor" from="razonSocialReceptor"/>
             </else-if></if>
+            <if condition="giroReceptor == null &amp;&amp; requireGiro">
+                <return error="true" message="Giro es requerido y no se encuentra!"/>
+            </if>
         </actions>
     </service>
 

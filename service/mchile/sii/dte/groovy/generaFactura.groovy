@@ -275,7 +275,10 @@ if (invoice) {
 idDocumento = "Dte-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
 String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
 
-if (giroReceptor.length() > 39)
+if (giroReceptor == null && fiscalTaxDocumentTypeEnumId in ['Ftdt-33','Ftdt-34','Ftdt-52','Ftdt-43', 'Ftdt-46'])
+    ec.message.addError("No se define giro y es obligatorio para tipo de DTE ${fiscalTaxDocumentTypeEnumId}")
+
+if (giroReceptor && giroReceptor.length() > 39)
     giroReceptor = giroReceptor.substring(0,39)
 razonSocialReceptorTimbre = razonSocialReceptor.length() > 39? razonSocialReceptor.substring(0,39): razonSocialReceptor
 
@@ -365,7 +368,8 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
                 if (codigoInternoReceptor)
                     CdgIntRecep(codigoInternoReceptor)
                 RznSocRecep(razonSocialReceptor)
-                GiroRecep(giroReceptor)
+                if (giroReceptor)
+                    GiroRecep(giroReceptor)
                 if (contactoReceptor)
                     Contacto(contactoReceptor)
                 if (correoReceptor)
@@ -506,9 +510,6 @@ if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:
 
 if (ec.message.hasError())
     return
-
-// Registry de DTE en base de datos y generación de PDF -->
-fiscalTaxDocumentTypeEnumId = "Ftdt-${tipoDte}"
 
 if (!draft) {
     // Creación de registro en FiscalTaxDocument -->
