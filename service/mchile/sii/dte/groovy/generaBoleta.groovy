@@ -230,9 +230,11 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                     Contacto(contactoReceptor)
                 if (correoReceptor)
                     CorreoReceptor(correoReceptor)
-                DirRecep(direccionReceptor)
-                CmnaRecep(comunaReceptor)
-                CiudadRecep(ciudadReceptor)
+                if (direccionReceptor && comunaReceptor && ciudadReceptor) {
+                    DirRecep(direccionReceptor)
+                    CmnaRecep(comunaReceptor)
+                    CiudadRecep(ciudadReceptor)
+                }
             }
             //RUTSolicita()
             //Transporte{}
