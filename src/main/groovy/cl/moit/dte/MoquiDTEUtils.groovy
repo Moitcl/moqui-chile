@@ -107,8 +107,6 @@ class MoquiDTEUtils {
             if (montoDescuento)
                 totalDescuentos += montoDescuento
             String uom = null
-            // Solucion parche
-            //if (!detailType in ["ShipmentItem"]) {
             if (!detailType.equals("ShipmentItem")) {
                 if (detailEntry.quantityUomId.equals('TF_hr'))
                     uom = "Hora"

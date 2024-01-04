@@ -1070,7 +1070,7 @@ along with this software (see the LICENSE.md file). If not, see
                             <if condition="billingList"><then>
                                 <entity-find-one entity-name="mantle.order.OrderItem" auto-field-map="billingList.first" value-field="orderItem"/>
                                 <set field="hide" from="orderItem?.hideInParent == 'Y' &amp;&amp; (first || hide)"/>
-                                <if condition="invoiceItem.porcentajeDescuento">
+                                <if condition="orderItem.sourcePercentage">
                                     <if condition="hide || invoiceItem.porcentajeDescuento == orderItem.sourcePercentage"><then>
                                         <set field="invoiceItem.porcentajeDescuento" from="orderItem.sourcePercentage"/>
                                     </then><else>
@@ -1089,19 +1089,103 @@ along with this software (see the LICENSE.md file). If not, see
                         </else></if>
                         <set field="first" from="false"/>
                     </iterate>
-                    <if condition="hide">
-                        <then>
-                            <if condition="ec.user.getPreference('mchile.dte.AddDiscountSubitemDescription') == 'true'">
-                                <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}Incluye ${subitem.description} por ${ec.l10n.formatCurrency((-1*subitem.amount*subitem.quantity/invoiceItem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), invoice.currencyUomId)}${invoiceItem.quantity > 1? ' (unitario)': ''}"/>
+                    <if condition="hide"><then>
+                        <if condition="ec.user.getPreference('mchile.dte.AddDiscountSubitemDescription') == 'true'">
+                            <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}Incluye ${subitem.description} por ${ec.l10n.formatCurrency((-1*subitem.amount*subitem.quantity/invoiceItem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), invoice.currencyUomId)}${invoiceItem.quantity > 1? ' (unitario)': ''}"/>
+                        </if>
+                        <set field="invoiceItem.amount" from="invoiceItem.amount + (totalDiscount/invoiceItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                    </then><else>
+                        <set field="invoiceItem.montoDescuento" from="-totalDiscount"/>
+                    </else></if>
+                </else></if>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="get" noun="OrderItemsForDte">
+        <description>
+            Obtains a list of discounted price items for an invoice
+        </description>
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+            <parameter name="orderPartSeqId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="orderItemList" type="List"/>
+            <parameter name="descuentoORecargoGlobalList" type="List"/>
+        </out-parameters>
+        <actions>
+
+            <!-- Items de order -->
+            <entity-find entity-name="mantle.order.OrderItem" list="orderItemEVList">
+                <econdition field-name="orderId"/>
+                <econdition field-name="orderPartSeqId"/>
+                <econdition field-name="itemTypeEnumId" operator="not-in"  from="['ItemSalesTax', 'ItemVatTax', 'ItemDetailedDescription']" or-null="true"/>
+                <econdition field-name="parentItemSeqId" operator="is-null"/>
+                <order-by field-name="oreritemSeqId"/>
+            </entity-find>
+            <set field="orderItemList" from="[]"/>
+            <set field="descuentoORecargoGlobalList" from="[]"/>
+            <set field="numeroLineaDescuentoORecargoGlobal" from="0"/>
+            <iterate list="orderItemEVList" entry="orderItemEV">
+                <if condition="orderItemEV.itemTypeEnumId in ['ItemDiscount', 'ItemPromoDiscount']"><then>
+                    <set field="numeroLineaDescuentoORecargoGlobal" from="numeroLineaDescuentoORecargoGlobal+1"/>
+                    <set field="itemAmount" from="((orderItemEV.quantity?:0) * (orderItemEV.unitAmount?:0)).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                    <if condition="orderItemEV.sourcePercentage != null"><then>
+                        <set field="valor" from="orderItemEV.sourcePercentage"/>
+                        <set field="tipoValor" value="%"/>
+                    </then><else>
+                        <set field="valor" from="(-orderItemEV.unitAmount*orderItemEV.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                        <set field="tipoValor" from="'$'"/>
+                    </else></if>
+                    <!-- ToDo: determine whether discount is afecto or exento -->
+                    <if condition="orderItemEV.itemDescription?.length() > 45"><then>
+                        <set field="glosa" from="orderItemEV.itemDescription.substring(0,45)"/>
+                        <log level="warn" message="Glosa para descuento global excede los 45 caracteres, truncando."/>
+                    </then><else>
+                        <set field="glosa" from="orderItemEV.itemDescription"/>
+                    </else></if>
+                    <script>descuentoORecargoGlobalList.add([numeroLinea:numeroLineaDescuentoORecargoGlobal, tipo:'D', afecto:true, glosa:glosa, valor:valor, tipoValor:tipoValor, monto:itemAmount])</script>
+                </then><else><!-- ceItemEV.description, -->
+                    <set field="orderItem" from="orderItemEV.getMap()"/>
+                    <script>orderItemList.add(orderItem)</script>
+                    <entity-find entity-name="mantle.order.OrderItem" list="subitemList">
+                        <econdition field-name="orderId"/>
+                        <econdition field-name="orderPartSeqId"/>
+                        <econdition field-name="parentItemSeqId" from="orderItemEV.orderItemSeqId"/>
+                    </entity-find>
+                    <set field="first" from="true" type="Boolean"/>
+                    <set field="totalDiscount" from="0" type="BigDecimal"/>
+                    <iterate list="subitemList" entry="subitem">
+                        <if condition="subitem.itemTypeEnumId == 'ItemDetailedDescription'"><then>
+                            <set field="orderItem.detailedDescription" value="${orderItem.detailedDescription ? (orderItem.detailedDescription + '; '): ''}${subitem.itemDescription}"/>
+                        </then><else-if condition="subitem.itemTypeEnumId == 'ItemDiscount'">
+                            <set field="hide" from="(subItem?.hideInParent == 'Y' || ec.user.getPreference('mchile.dte.PreferHiddenDiscountInParent') == 'true' )
+                                                        &amp;&amp; (first || hide)"/>
+                            <if condition="subItem.sourcePercentage">
+                                <if condition="hide || orderItem.porcentajeDescuento == subItem.sourcePercentage"><then>
+                                    <set field="orderItem.porcentajeDescuento" from="subItem.sourcePercentage"/>
+                                </then><else>
+                                    <set field="orderItem.porcentajeDescuento" from="null"/>
+                                </else></if>
                             </if>
-                            <set field="invoiceItem.amount" from="invoiceItem.amount + (totalDiscount/invoiceItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
-                        </then>
-                        <else>
-                            <set field="invoiceItem.montoDescuento" from="-totalDiscount"/>
-                        </else>
-                    </if>
-                </else>
-                </if>
+                            <set field="totalDiscount" from="totalDiscount + (subitem.unitAmount*subitem.quantity as BigDecimal).setScale(0,java.math.RoundingMode.HALF_UP)"/>
+                        </else-if><else-if condition="subitem.itemTypeEnumId == 'ItemDteRoundingAdjust'">
+                            <set field="orderItem.ajusteDecimal" from="orderItem.ajusteDecimal?:0 + subitem.unitAmount*subitem.quantity"/>
+                        </else-if><else>
+                            <return error="true" message="Unknown itemTypeEnumId for subitem ${orderId-orderPartSeqId}:${subitem.orderItemSeqId}: ${subitem.itemTypeEnumId}"/>
+                        </else></if>
+                        <set field="first" from="false"/>
+                    </iterate>
+                    <if condition="hide"><then>
+                        <if condition="ec.user.getPreference('mchile.dte.AddDiscountSubitemDescription') == 'true'">
+                            <set field="orderItem.detailedDescription" value="${orderItem.detailedDescription ? (orderItem.detailedDescription + '; '): ''}Incluye ${subitem.itemDescription} por ${ec.l10n.formatCurrency((-1*subitem.unitAmount*subitem.quantity/orderItem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), invoice.currencyUomId)}${orderItem.quantity > 1? ' (unitario)': ''}"/>
+                        </if>
+                        <set field="orderItem.amount" from="orderItem.unitAmount + (totalDiscount/orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                    </then><else>
+                        <set field="orderItem.montoDescuento" from="-totalDiscount"/>
+                    </else></if>
+                </else></if>
             </iterate>
         </actions>
     </service>
