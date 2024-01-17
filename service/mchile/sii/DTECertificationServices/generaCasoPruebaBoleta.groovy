@@ -152,7 +152,8 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
             Referencia {
                 NroLinRef(referencia.numeroLinea)
                 TpoDocRef(referencia.tipoDocumento)
-                //IndGlobal()
+                if (referencia.indicadorGlobal)
+                    IndGlobal('1')
                 FolioRef(referencia.folio)
                 if (referencia.rutOtro)
                     RUTOtr(referencia.rutOtro)

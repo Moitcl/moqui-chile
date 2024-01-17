@@ -463,7 +463,8 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.or
             Referencia {
                 NroLinRef(referencia.numeroLinea)
                 TpoDocRef(referencia.tipoDocumento)
-                //IndGlobal()
+                if (referencia.indicadorGlobal)
+                    IndGlobal('1')
                 FolioRef(referencia.folio)
                 if (referencia.rutOtro)
                     RUTOtr(referencia.rutOtro)

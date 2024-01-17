@@ -24,9 +24,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
         </in-parameters>
         <actions>
-            <if condition="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-56','Ftdt-61'])">
-                <return/>
-            </if>
+            <if condition="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-56','Ftdt-61'])"><return/></if>
 
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
 
@@ -81,44 +79,39 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="validate" noun="InvoiceItems">
-        <description>
-            Validates that the invoice has at least one item
-        </description>
+        <description>Validates that the invoice has at least one item</description>
         <in-parameters>
             <parameter name="invoiceId" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
         </in-parameters>
         <actions>
-            <if condition="fiscalTaxDocumentTypeEnumId != 'Ftdt-61'">
-                <return/>
-            </if>
+            <if condition="fiscalTaxDocumentTypeEnumId != 'Ftdt-61'"><return/></if>
             <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="items">
                 <econdition field-name="invoiceId"/>
                 <econdition field-name="itemTypeEnumId" operator="not-in" value="ItemSalesTax,ItemVatTax"/>
                 <order-by field-name="invoiceItemSeqId"/>
             </entity-find>
-            <if condition="!items || items.size() == 0">
-                <return error="true" message="invoiceId ${invoiceId} must have at least one item"/>
-            </if>
+            <if condition="!items || items.size() == 0"><return error="true" message="Invoice ${invoiceId} must have at least one item"/></if>
         </actions>
     </service>
 
     <service verb="add" noun="InvoiceReference">
-        <description>
-            Agrega una referencia para DTE (excepto Nota de Débito)
-        </description>
+        <description>Agrega una referencia para DTE (excepto Nota de Débito)</description>
         <in-parameters>
-            <parameter name="invoiceId"/>
+            <parameter name="invoiceId" required="true"/>
             <parameter name="shipmentId"/>
             <parameter name="folio" required="true"/>
             <parameter name="rutEmisorFolio" required="true"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="idAdicional"/>
             <parameter name="fecha" required="true"/>
-            <parameter name="codigoReferenciaEnumId" required="true"/>
+            <parameter name="codigoReferenciaEnumId"/>
             <parameter name="razonReferencia"/>
         </in-parameters>
         <actions>
+            <service-call name="mchile.sii.dte.DteReferenceServices.check#ReferenceFields" in-map="context"/>
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
+            <if condition="!invoice"><return error="true" message="Could not find invoice ${invoiceId}"/></if>
             <!-- Verificación de RUT -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutEmisorFolio]"/>
             <set field="createMap" from="[fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, codigoReferenciaEnumId:codigoReferenciaEnumId, fecha:fecha, idAdicional:idAdicional,
@@ -136,10 +129,13 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="idAdicional"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="fecha" type="Date" required="true"/>
-            <parameter name="codigoReferenciaEnumId" required="true"/>
+            <parameter name="codigoReferenciaEnumId"/>
             <parameter name="razonReferencia"/>
         </in-parameters>
         <actions>
+            <service-call name="mchile.sii.dte.DteReferenceServices.check#ReferenceFields" in-map="context"/>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="fiscalTaxDocument"/>
+            <if condition="!fiscalTaxDocument"><return error="true" message="Could not find fiscal tax document ${fiscalTaxDocumentId}"/></if>
             <!-- Verificación de RUT -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutEmisorFolio]"/>
 
@@ -158,7 +154,7 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="fiscalTaxDocumentId"/>
             <parameter name="folio" required="true"/>
-            <parameter name="rutEmisorFolio" required="true"/>
+            <parameter name="rutEmisorFolio"/>
             <parameter name="idAdicional"/>
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="fecha" required="true"/>
@@ -167,6 +163,9 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="shipmentId" required="true"/>
         </in-parameters>
         <actions>
+            <service-call name="mchile.sii.dte.DteReferenceServices.check#ReferenceFields" in-map="context"/>
+            <entity-find-one entity-name="mantle.shipment.Shipment" value-field="shipment"/>
+            <if condition="!shipment"><return error="true" message="Could not find shipment ${shipmentId}"/></if>
             <!-- Verificación de RUT -->
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:rutEmisorFolio]"/>
 
@@ -178,14 +177,52 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="add" noun="OrderReference">
+        <description>Agrega una referencia para asociar a una orden</description>
+        <in-parameters>
+            <parameter name="folio" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="fecha" required="true"/>
+            <parameter name="razonReferencia"/>
+            <parameter name="orderId" required="true"/>
+            <parameter name="orderPartSeqId" required="true"/>
+            <parameter name="indicadorGlobal"/>
+        </in-parameters>
+        <actions>
+            <service-call name="mchile.sii.dte.DteReferenceServices.check#ReferenceFields" in-map="context"/>
+            <entity-find-one entity-name="mantle.order.OrderPart" value-field="order"/>
+            <if condition="!order"><return error="true" message="Could not find order part ${orderId}-${orderPartSeqId}"/></if>
+            <if condition="indicadorGlobal != null &amp;&amp; indicadorGlobal != '1'">
+                <return error="true" message="Valor inválido para indicador global: '${indicadorGlobal}'"/>
+            </if>
+            <set field="createMap" from="[orderId:orderId, orderPartSeqId:orderPartSeqId, fecha:fecha, folio:folio, razonReferencia:razonReferencia, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId,
+                                          referenciaTypeEnumId:'RefDteTypeOrder', indicadorGlobal:indicadorGlobal]"/>
+            <service-call name="create#mchile.dte.ReferenciaDte" out-map="context" in-map="createMap"/>
+        </actions>
+    </service>
+
     <service verb="delete" noun="Reference">
         <description>Eliminar referencia de una DTE</description>
         <in-parameters>
             <parameter name="referenciaId"/>
         </in-parameters>
         <actions>
-            <entity-find-one entity-name="mchile.dte.ReferenciaDte" value-field="referenciaField" for-update="true"/>
-            <entity-delete value-field="referenciaField"/>
+            <entity-find-one entity-name="mchile.dte.ReferenciaDte" value-field="reference" for-update="true"/>
+            <!-- Check that referencing document is available including entity filters -->
+            <if condition="reference.referenciaTypeEnumId == 'RefDteTypeInvoice'"><then>
+                <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice" auto-field-map="reference"/>
+                <if condition="!invoice"><return error="true" message="Could not find invoice ${reference.invoiceId}"/></if>
+            </then><else-if condition="reference.referenciaTypeEnumId == 'RefDteTypeFiscalTaxDocument'">
+                <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="fiscalTaxDocument" auto-field-map="reference"/>
+                <if condition="!fiscalTaxDocument"><return error="true" message="Could not find fiscal tax document ${reference.fiscalTaxDocumentId}"/></if>
+            </else-if><else-if condition="reference.referenciaTypeEnumId == 'RefDteTypeShipment'">
+                <entity-find-one entity-name="mantle.shipment.Shipment" value-field="shipment" auto-field-map="reference"/>
+                <if condition="!shipment"><return error="true" message="Could not find shipment ${reference.shipmentId}"/></if>
+            </else-if><else-if condition="reference.referenciaTypeEnumId == 'RefDteTypeOrder'">
+                <entity-find-one entity-name="mantle.order.OrderPart" value-field="order" auto-field-map="reference"/>
+                <if condition="!order"><return error="true" message="Could not find order part ${reference.orderId}-${reference.orderPartSeqId}"/></if>
+            </else-if></if>
+            <entity-delete value-field="reference"/>
         </actions>
     </service>
 
@@ -220,73 +257,43 @@ along with this software (see the LICENSE.md file). If not, see
                 <log message="Leyendo: ${invoiceEntry}" level="warn"/>
                 <set field="invoiceId" from="invoiceEntry"/>
             </iterate>
-
         </actions>
     </service>
 
-    <service verb="add" noun="ReferenceToInvoice">
+    <service verb="check" noun="ReferenceFields">
         <in-parameters>
+            <parameter name="folio"/>
+            <parameter name="razonReferencia"/>
+            <parameter name="idAdicional"/>
+        </in-parameters>
+        <actions>
+            <if condition="folio != null &amp;&amp; folio.length() > 18"><message error="true">Campo Folio no puede superar los 18 caracteres</message></if>
+            <if condition="razonReferencia != null &amp;&amp; razonReferencia.length() > 90"><message error="true">Campo Razón Referencia no puede superar los 90 caracteres</message></if>
+            <if condition="idAdicional != null &amp;&amp; idAdicional.length() > 20"><message error="true">Campo Id Adicional no puede superar los 20 caracteres</message></if>
+        </actions>
+    </service>
+
+    <service verb="copy" noun="OrderReferencesToInvoice">
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+            <parameter name="orderPartSeqId" required="true"/>
             <parameter name="invoiceId" required="true"/>
-            <parameter name="referenceText" default-value=" - "/>
-            <parameter name="folioRef"/>
-            <parameter name="tipoDocRef"/>
-            <parameter name="fecha" type="Date"/>
         </in-parameters>
         <actions>
-            <entity-find-one entity-name="mchile.dte.ReferenciaDte" value-field="refEv" for-update="true">
-                <field-map field-name="invoiceId" from="invoiceId"/>
-                <field-map field-name="fiscalTaxDocumentTypeEnumId" from="tipoDocRef"/>
-                <field-map field-name="folio" from="folioRef"/>
-                <field-map field-name="referenciaTypeEnumId" value="RefDteTypeInvoice"/>
-            </entity-find-one>
-
-            <if condition="!refEv">
-                <then>
-                    <!-- Hay que crear entrada para referencia de invoiceId -->
-                    <set field="createMap" from="[fiscalTaxDocumentTypeEnumId:tipoDocRef, codigoReferenciaEnumId:codigoReferenciaEnumId, fecha:fecha, folio:folioRef,
-                                                  invoiceId:invoiceId, razonReferencia:referenceText, referenciaTypeEnumId:'RefDteTypeInvoice']"/>
-                    <service-call name="create#mchile.dte.ReferenciaDte" out-map="context" in-map="createMap"/>
-                </then>
-                <else>
-                    <!-- Ya existe una referencia -->
-                    <set field="refEv.folio" from="folioRef"/>
-                    <set field="refEv.fiscalTaxDocumentTypeEnumId" from="tipoDocRef"/>
-                    <set field="refEv.fecha" from="fecha"/>
-                    <set field="refEv.razonReferencia" from="referenceText"/>
-                    <entity-update value-field="refEv"/>
-                </else>
-            </if>
-        </actions>
-    </service>
-
-    <service verb="add" noun="ReferenceToShipment">
-        <in-parameters>
-            <parameter name="shipmentId" required="true"/>
-            <parameter name="referenceText" default-value=" - "/>
-            <parameter name="folioRef"/>
-            <parameter name="tipoDocRef"/>
-            <parameter name="fecha" type="Date"/>
-        </in-parameters>
-        <actions>
-            <entity-find-one entity-name="mchile.dte.ReferenciaDte" value-field="refEv" for-update="true">
-                <field-map field-name="shipmentId" from="shipmentId"/>
-                <field-map field-name="fiscalTaxDocumentTypeEnumId" from="tipoDocRef"/>
-                <field-map field-name="folio" from="folioRef"/>
-                <field-map field-name="referenciaTypeEnumId" value="RefDteTypeShipment"/>
-            </entity-find-one>
-            <if condition="!refEv"><then>
-                <!-- Hay que crear entrada para referencia de invoiceId -->
-                <set field="createMap" from="[fiscalTaxDocumentTypeEnumId:tipoDocRef, codigoReferenciaEnumId:codigoReferenciaEnumId, fecha:fecha, folio:folioRef,
-                                              shipmentId:shipmentId, razonReferencia:referenceText, referenciaTypeEnumId:'RefDteTypeShipment']"/>
-                <service-call name="create#mchile.dte.ReferenciaDte" out-map="context" in-map="createMap"/>
-            </then><else>
-                <!-- Ya existe la referencia -->
-                <set field="refEv.folio" from="folioRef"/>
-                <set field="refEv.fiscalTaxDocumentTypeEnumId" from="tipoDocRef"/>
-                <set field="refEv.fecha" from="fecha"/>
-                <set field="refEv.razonReferencia" from="referenceText"/>
-                <entity-update value-field="refEv"/>
-            </else></if>
+            <entity-find entity-name="mchile.dte.ReferenciaDte" list="referenceList">
+                <econdition field-name="referenciaTypeEnumId" value="RefDteTypeOrder"/>
+                <econdition field-name="orderId"/>
+                <econdition field-name="orderPartSeqId"/>
+            </entity-find>
+            <iterate list="referenceList" entry="reference">
+                <set field="refMap" from="reference.getMap()"/>
+                <set field="refMap.referenciaId" from="null"/>
+                <set field="refMap.referenciaTypeEnumId" value="RefDteTypeInvoice"/>
+                <set field="refMap.orderId" from="null"/>
+                <set field="refMap.orderPartSeqId" from="null"/>
+                <set field="refMap.invoiceId" from="invoiceId"/>
+                <service-call name="create#mchile.dte.ReferenciaDte" in-map="refMap"/>
+            </iterate>
         </actions>
     </service>
 
