@@ -25,19 +25,26 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="taxResults" from="[]"/>
             <service-call name="mchile.TaxServices.get#VatTaxRate" out-map="vatTaxMap"/>
             <set field="vatTaxRate" from="vatTaxMap.taxRate"/>
-            <!--
-            <set field="vatBaseMap" from="[taxRate:vatTaxRate, taxAuthorityId:'CL_SII', taxName:'IVA', itemTypeEnumId:'ItemVatTax', taxQuantity:1]"/>
-            -->
+            <service-call name="mantle.party.PartyServices.get#PartySettingValue" in-map="[partyId:organizationPartyId, partySettingTypeId:'moit.dte.ProductDefaultIsExento']"
+                          out-map="exentoDefaultSettingMap"/>
+            <set field="defaultItemAfecto" from="exentoDefaultSettingMap.settingValue != 'true'"/>
             <set field="totalNeto" from="0" type="BigDecimal"/>
             <iterate list="items" entry="item">
-                <if condition="item.productId">
-                    <entity-find-count entity-name="mantle.product.category.ProductCategoryMember" count-field="exentoCount">
+                <if condition="item.productId"><then>
+                    <entity-find entity-name="mantle.product.category.ProductCategoryMember" list="catMemberList">
                         <econdition field-name="productId" from="item.productId"/>
-                        <econdition field-name="productCategoryId" value="ClVatTaxExento"/>
+                        <econdition field-name="productCategoryId" operator="in" value="ClVatTaxExento,ClVatTaxAfecto"/>
                         <date-filter/>
-                    </entity-find-count>
-                    <if condition="exentoCount > 0"><continue/></if>
-                </if>
+                        <order-by field-name="fromDate"/>
+                    </entity-find>
+                    <if condition="catMemberList"><then>
+                        <if condition="catMemberList.first.productCategoryId == 'ClVatTaxExento'"><continue/></if>
+                    </then><else>
+                        <if condition="!defaultItemAfecto"><continue/></if>
+                    </else></if>
+                </then><else>
+                    <if condition="!defaultItemAfecto"><continue/></if>
+                </else></if>
                 <set field="totalNeto" from="totalNeto+item.itemTotal"/>
             </iterate>
             <set field="vatAmount" from="(totalNeto*vatTaxRate).setScale(0, java.math.RoundingMode.HALF_UP)"/>
@@ -92,6 +99,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="invoiceId" required="true"/>
         </in-parameters>
         <actions>
+            <log message="recalculating IVA for invoice: ${invoiceId}"/>
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
             <entity-delete-by-condition entity-name="mantle.account.invoice.InvoiceItem">
                 <econdition field-name="invoiceId"/>
@@ -99,17 +107,32 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-delete-by-condition>
             <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="itemList">
                 <econdition field-name="invoiceId"/>
+                <order-by field-name="invoiceItemSeqId"/>
             </entity-find>
+            <if condition="invoice.invoiceTypeEnumId == 'InvoiceCreditMemo'"><then>
+                <set field="issuerPartyId" from="invoice.toPartyId"/>
+            </then><else>
+                <set field="issuerPartyId" from="invoice.fromPartyId"/>
+            </else></if>
+            <service-call name="mantle.party.PartyServices.get#PartySettingValue" in-map="[partyId:issuerPartyId, partySettingTypeId:'moit.dte.ProductDefaultIsExento']"
+                          out-map="exentoDefaultSettingMap"/>
+            <set field="defaultItemAfecto" from="exentoDefaultSettingMap.settingValue != 'true'"/>
             <set field="totalNeto" from="0" type="BigDecimal"/>
             <iterate list="itemList" entry="item">
-                <if condition="item.productId">
-                    <entity-find-count entity-name="mantle.product.category.ProductCategoryMember" count-field="exentoCount">
+                <if condition="item.productId"><then>
+                    <entity-find entity-name="mantle.product.category.ProductCategoryMember" list="catMemberList">
                         <econdition field-name="productId" from="item.productId"/>
-                        <econdition field-name="productCategoryId" value="ClVatTaxExento"/>
-                        <date-filter valid-date="invoice.invoiceDate"/>
-                    </entity-find-count>
-                    <if condition="exentoCount > 0"><continue/></if>
-                </if>
+                        <econdition field-name="productCategoryId" operator="in" value="ClVatTaxExento,ClVatTaxAfecto"/>
+                        <date-filter/>
+                    </entity-find>
+                    <if condition="catMemberList"><then>
+                        <if condition="catMemberList.first.productCategoryId == 'ClVatTaxExento'"><continue/></if>
+                    </then><else>
+                        <if condition="!defaultItemAfecto"><continue/></if>
+                    </else></if>
+                </then><else>
+                    <if condition="!defaultItemAfecto"><continue/></if>
+                </else></if>
                 <set field="totalNeto" from="totalNeto + ((item.quantity?:1) *  (item.amount?:0))"/>
             </iterate>
             <service-call name="mchile.TaxServices.get#VatTaxRate" out-map="vatTaxMap"/>

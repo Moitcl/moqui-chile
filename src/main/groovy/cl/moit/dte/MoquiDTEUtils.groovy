@@ -125,12 +125,9 @@ class MoquiDTEUtils {
             if (detailEntry.productId) {
                 Map<String, Object> afectoOutMap = ec.service.sync().name("mchile.sii.dte.DteInternalServices.check#Afecto").parameters([issuerPartyId:issuerPartyId, productId:detailEntry.productId]).call()
                 itemAfecto = afectoOutMap.afecto
-                ec.logger.warn("itemAfecto by productId: ${itemAfecto} (class: ${itemAfecto.class}")
             } else {
                 String productDefaultExento = ec.service.sync().name("mantle.party.PartyServices.get#PartySettingValue").parameters([partyId:issuerPartyId, partySettingTypeId:'moit.dte.ProductDefaultIsExento']).call().settingValue
-                ec.logger.warn("productDefaultExento: ${productDefaultExento}")
                 itemAfecto = productDefaultExento != 'true'
-                ec.logger.warn("itemAfecto by default: ${itemAfecto} (class: ${itemAfecto.class}")
             }
 
             BigDecimal priceItem
