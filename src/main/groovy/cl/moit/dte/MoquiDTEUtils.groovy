@@ -244,7 +244,7 @@ class MoquiDTEUtils {
         return [detalleList:detalleList, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos, totalDescuentos:totalDescuentos]
     }
 
-    public static Map<String, Object> prepareReferences(ExecutionContext ec, List<HashMap> referenciaList, String rutReceptor, Long tipoFactura) {
+    public static Map<String, Object> prepareReferences(ExecutionContext ec, List<HashMap> referenciaList, String rutEmisor, Long tipoFactura) {
         int listSize = referenciaList.size()
         List referenciaListOut = []
         String anulaBoleta = null
@@ -274,13 +274,18 @@ class MoquiDTEUtils {
                 Map<String, Object> codeOut = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
                 Integer tpoDocRef = codeOut.siiCode
                 referenciaMap.tipoDocumento = tpoDocRef as String
-                if (rutReceptor)
-                    referenciaMap.rutOtro = rutReceptor
                 if(tipoFactura == 61 && (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-39") || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41")) && codRef?.equals(1) ) {
                     // Nota de crédito hace referencia a Boletas Electrónicas
                     anulaBoleta = 'true'
                     folioAnulaBoleta = referenciaEntry.folio.toString()
                 }
+            }
+            // rutEmisorFolio se refiere al emisor del documento referenciado, rutEmisor es el rut del documento que va a referenciar al otro
+            if (referenciaEntry.rutEmisorFolio != null && referenciaEntry.rutEmisorFolio != rutEmisor) {
+                // Sólo si el documento de referencia es de tipo tributario y fue emitido por otro contribuyente
+                documentosTributariosEnumIdList = ec.entity.find("moqui.basic.Enumeration").condition("parentEnumId", EntityCondition.IN, ['Ftdt-DT', 'Ftdt-DTE']).list().enumId
+                if (referenciaEntry.fiscalTaxDocumentTypeEnumId in documentosTributariosEnumIdList)
+                    referenciaMap.rutOtro = referenciaEntry.rutEmisorFolio
             }
             if(codRef != null)
                 referenciaMap.codigo = codRef

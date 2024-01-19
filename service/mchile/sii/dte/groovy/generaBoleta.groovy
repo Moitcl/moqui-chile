@@ -109,7 +109,7 @@ if (tipoDte == 39) {
         tipoDte = 41
         fiscalTaxDocumentTypeEnumId = 'Ftdt-41'
     }
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
 } else if (tipoDte == 41) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", issuerPartyId)
@@ -121,7 +121,7 @@ if (tipoDte == 39) {
         tipoDte = 39
         fiscalTaxDocumentTypeEnumId = 'Ftdt-39'
     }
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
 }
 

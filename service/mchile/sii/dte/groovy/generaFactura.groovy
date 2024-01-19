@@ -128,7 +128,7 @@ if (tipoDte == 33) {
         fiscalTaxDocumentTypeEnumId = 'Ftdt-34'
     }
     originalReferenciaList = referenciaList
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
     totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 34) {
@@ -144,14 +144,14 @@ if (tipoDte == 33) {
         fiscalTaxDocumentTypeEnumId = 'Ftdt-33'
     }
     originalReferenciaList = referenciaList
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
     totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 61) {
     // Nota de Crédito Electrónica
     ec.logger.warn("Creando DTE tipo 61")
     originalReferenciaList = referenciaList
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, null, tipoDte)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
     anulaBoleta = refMap.anulaBoleta
     folioAnulaBoleta = refMap.folioAnulaBoleta
@@ -178,7 +178,7 @@ if (tipoDte == 33) {
     // Nota de Débito Electrónica
     ec.logger.warn("Creando DTE tipo 56")
     originalReferenciaList = referenciaList
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, null, tipoDte)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
     dteExenta = refMap.dteExenta
     codRef = referenciaList[0].codigo
@@ -210,7 +210,7 @@ if (tipoDte == 33) {
     indTraslado = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:indTrasladoEnumId, enumTypeId:'IndTraslado']).call().siiCode
     // TODO: Si la referencia es tipo fe de erratas, Monto Item puede ser 0
     originalReferenciaList = referenciaList
-    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutReceptor, tipoDte)
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
     dteExenta = refMap.dteExenta
     codRef = refMap.codigo
