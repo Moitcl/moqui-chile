@@ -308,7 +308,13 @@ StringWriter xmlWriter = new StringWriter()
 MarkupBuilder xmlBuilder = new MarkupBuilder(xmlWriter)
 
 String schemaLocation = 'http://www.sii.cl/SiiDte DTE_v10.xsd'
-xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation) {
+if (rutReceptor == '61603000-0') {
+    // Fonasa no soporta recibir el schemaLocation dentro del XML de intercambio (Envío DTE)
+    dteAttributesMap = [xmlns: 'http://www.sii.cl/SiiDte', version: '1.0']
+} else
+    dteAttributesMap = [xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation]
+
+xmlBuilder.DTE(dteAttributesMap) {
     Documento(ID: idDocumento) {
         Encabezado {
             IdDoc {
