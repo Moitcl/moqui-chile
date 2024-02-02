@@ -660,7 +660,8 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fechaEmision" type="java.sql.Timestamp" default="ec.user.nowTimestamp" format="dd-MM-yyyy"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="returnInvoiceId"/>
+            <parameter name="originalInvoiceId"/>
+            <parameter name="invoiceId"/>
         </out-parameters>
         <actions>
             <service-call name="mchile.sii.dte.DteGenerationServices.create#EmptyCreditMemo" in-map="context" out-map="context"/>
@@ -690,14 +691,15 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="invoiceId"/>
         </out-parameters>
         <actions>
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte">
-                <field-map field-name="issuerPartyId"/>
-                <field-map field-name="fiscalTaxDocumentNumber"/>
-                <field-map field-name="fiscalTaxDocumentTypeEnumId"/>
-                <field-map field-name="statusId" value="Ftd-Issued"/>
-                <field-map field-name="sentAuthStatusId" value="Ftd-SentAuthAccepted"/>
-            </entity-find-one>
-            <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument"/></if>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
+                <econdition field-name="issuerPartyId"/>
+                <econdition field-name="fiscalTaxDocumentNumber"/>
+                <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="statusId" value="Ftd-Issued"/>
+                <econdition field-name="sentAuthStatusId" operator="in" value="Ftd-SentAuthAccepted,Ftd-SentAuthAcceptedWithDiscrepancies"/>
+            </entity-find>
+            <set field="dte" from="dteList.first"/>
+            <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument in create#EmptyCreditMemo"/></if>
             <if condition="dte.invoiceId == null"><return error="true" message="FiscalTaxDocument has no invoice associated"/></if>
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="originalInvoice">
                 <field-map field-name="invoiceId" from="dte.invoiceId"/></entity-find-one>
@@ -730,7 +732,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fechaEmision" type="java.sql.Timestamp" default="ec.user.nowTimestamp" format="dd-MM-yyyy"/>
         </in-parameters>
         <out-parameters>
-            <parameter name="returnInvoiceId"/>
+            <parameter name="invoiceId"/>
         </out-parameters>
         <actions>
             <if condition="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-33','Ftdt-61'])">
@@ -767,16 +769,17 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="Debit Memos are not supported for the provided document type."/>
             </if>
 
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte">
-                <field-map field-name="issuerPartyId"/>
-                <field-map field-name="fiscalTaxDocumentNumber"/>
-                <field-map field-name="fiscalTaxDocumentTypeEnumId"/>
-                <field-map field-name="statusId" value="Ftd-Issued"/>
-                <field-map field-name="sentAuthStatusId" value="Ftd-SentAuthAccepted"/>
-            </entity-find-one>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
+                <econdition field-name="issuerPartyId"/>
+                <econdition field-name="fiscalTaxDocumentNumber"/>
+                <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
+                <econdition field-name="statusId" value="Ftd-Issued"/>
+                <econdition field-name="sentAuthStatusId" operator="in" value="Ftd-SentAuthAccepted,Ftd-SentAuthAcceptedWithDiscrepancies"/>
+            </entity-find>
+            <set field="dte" from="dteList.first"/>
 
             <if condition="!dte">
-                <return error="true" message="Could not find FiscalTaxDocument"/>
+                <return error="true" message="Could not find FiscalTaxDocument in create#EmptyDebitMemo"/>
             </if>
 
             <if condition="dte.invoiceId == null">
@@ -832,7 +835,9 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find-one>
             <if condition="dteEv.statusId != 'Ftd-Issued'"><return error="true" message="No se puede eliminar DTE que no ha sido emitido"/></if>
             <if condition="dteEv.sentRecStatusId == 'Ftd-SentRec'"><return error="true" message="No se puede eliminar DTE enviada a receptor"/></if>
-            <if condition="dteEv.sentAuthStatusId in ['Ftd-SentAuthAccepted', 'Ftd-SentAuthUnverified']"><return error="true" message="No se puede eliminar DTE enviada al SII"/></if>
+            <if condition="dteEv.sentAuthStatusId in ['Ftd-SentAuthAccepted', 'Ftd-SentAuthAcceptedWithDiscrepancies', 'Ftd-SentAuthUnverified']">
+                <return error="true" message="No se puede eliminar DTE enviada al SII"/>
+            </if>
 
             <!-- Borrado de atributos -->
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAttributes" value-field="attributesToDelete">
