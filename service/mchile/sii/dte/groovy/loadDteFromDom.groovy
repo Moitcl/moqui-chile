@@ -131,10 +131,16 @@ if (existingDteList) {
             dteMap.statusId = 'Ftd-Issued'
             dteMap.sentAuthStatusId = sentAuthStatusId
             dteMap.formaPagoEnumId = formaPagoEnumId
-            dteFieldListConstant = ['issuerPartyIdTypeEnumId', 'issuerPartyId', 'receiverPartyIdTypeEnumId', 'receiverPartyIdValue', 'date', 'receiverPartyId']
+            dteFieldListConstant = ['issuerPartyIdTypeEnumId', 'issuerPartyId', 'receiverPartyIdTypeEnumId', 'receiverPartyIdValue', 'date']
             dteFieldListConstant.each { entityFieldName ->
                 if (dteMap[entityFieldName] != dte[entityFieldName])
                     ec.message.addError("Value mismatch for attribute field ${entityFieldName}, XML value: ${dteMap[entityFieldName]}, DB value: ${dte[entityFieldName]}")
+            }
+            if (dteMap.receiverPartyId != dte.receiverPartyId) {
+                // Check if dte.receiverPartyId is descendant of dteMap.receiverPartyId
+                childPartyIdList = ec.service.sync().name("mchile.sii.dte.DteLoadServices.get#ChildrenWithoutOwnRut").parameter("partyId", dteMap.receiverPartyId).call().childPartyIdList
+                if (!(dte.receiverPartyIdValue in childPartyIdList))
+                    ec.message.addError("Mismatch for receiverPartyId, XML value: ${dteMap.receiverPartyId}, DB value: ${dte.receiverPartyId} (is not child sharing same RUT)")
             }
             dteFieldListOverwrite = ['statusId', 'sentAuthStatusId', 'formaPagoEnumId']
             dteFieldListOverwrite.each { entityFieldName ->
