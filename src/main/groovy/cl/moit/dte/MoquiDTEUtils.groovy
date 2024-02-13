@@ -92,9 +92,19 @@ class MoquiDTEUtils {
             String nombreItem = detailEntry.description
             if (detailType.equals("OrderItem"))
                 nombreItem = detailEntry.itemDescription
-            if (nombreItem == null) {
+            if (!nombreItem) {
                 EntityValue productEv = ec.entity.find("mantle.product.Product").condition("productId", detailEntry.productId).one()
                 nombreItem = productEv? productEv.productName : ''
+            }
+            if (!nombreItem) {
+                // Put detailed description as name
+                nombreItem = detailEntry.detailedDescription
+                // Do not duplicate detailedDescription if it fits completely within name
+                if (detailEntry.detailedDescription.length() <= 80)
+                    detailEntry.detailedDescription = ""
+            }
+            if (!nombreItem) {
+                nombreItem = " "
             }
             if (nombreItem.length() > 80) {
                 ec.logger.info("Truncando descripción a 80 caracteres")
