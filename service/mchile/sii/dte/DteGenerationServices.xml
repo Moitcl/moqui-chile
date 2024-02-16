@@ -826,13 +826,13 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
-            <parameter name="organizationPartyId" required="true"/>
         </in-parameters>
         <actions>
 
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteEv" for-update="true">
                 <field-map field-name="fiscalTaxDocumentId"/>
             </entity-find-one>
+            <if condition="!dteEv"><return error="true" message="No se encuentra DTE ${fiscalTaxDocumentId}"/></if>
             <if condition="dteEv.statusId != 'Ftd-Issued'"><return error="true" message="No se puede eliminar DTE que no ha sido emitido"/></if>
             <if condition="dteEv.sentRecStatusId == 'Ftd-SentRec'"><return error="true" message="No se puede eliminar DTE enviada a receptor"/></if>
             <if condition="dteEv.sentAuthStatusId in ['Ftd-SentAuthAccepted', 'Ftd-SentAuthAcceptedWithDiscrepancies', 'Ftd-SentAuthUnverified']">
@@ -882,16 +882,15 @@ along with this software (see the LICENSE.md file). If not, see
                 </then><else-if condition="envio.statusId in ['Ftde-Failed', 'Ftde-FailedAtReceiver']">
                     <!-- No es necesario modificar envío -->
                 </else-if><else-if condition="dteEv.sentAuthStatusId == 'Ftd-SentAuthRejected'">
-                    <!-- DTE fue rechazado por el SII, se puede (y debe) eliminar -->
+                    <!-- DTE fue rechazado por el SII, no se modifica -->
                 </else-if><else>
                     <return error="true" message="No se puede eliminar DTE ${fiscalTaxDocumentId}, tiene envío asociado en estado ${envio.statusId}"/>
                 </else></if>
             </iterate>
 
             <!-- Se verifica si la DTE es de un tercero -->
-
-            <set field="issuerId" from="dteEv.issuerPartyId"/>
-            <if condition="issuerId == organizationPartyId"><then>
+            <entity-find-one entity-name="mantle.party.PartyRole" value-field="issuerInternalOrgRole" auto-field-map="[partyId:dteEv.issuerPartyId, roleTypeId:'OrgInternal']"/>
+            <if condition="issuerInternalOrgRole"><then>
                 <if condition="dteEv.invoiceId">
                     <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice" auto-field-map="[invoiceId:dteEv.invoiceId]" for-update="true"/>
                     <set field="invoice.statusId" value="InvoiceInProcess"/>
