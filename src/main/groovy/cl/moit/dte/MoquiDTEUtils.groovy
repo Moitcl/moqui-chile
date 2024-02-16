@@ -100,7 +100,7 @@ class MoquiDTEUtils {
                 // Put detailed description as name
                 nombreItem = detailEntry.detailedDescription
                 // Do not duplicate detailedDescription if it fits completely within name
-                if (detailEntry.detailedDescription.length() <= 80)
+                if (detailEntry.detailedDescription != null && detailEntry.detailedDescription.length() <= 80)
                     detailEntry.detailedDescription = ""
             }
             if (!nombreItem) {
