@@ -506,10 +506,64 @@ along with this software (see the LICENSE.md file). If not, see
                     glosaError = header.GLOSA_ERR.text()
                     numeroAtencion = header.NUM_ATENCION.text()
                     ]]></script>
-                <if condition="errorCode == '0'">
+                <set field="toSentAuthStatusId" from="null"/>
+                <if condition="status == 'DOK'"><then>
+                    <if condition="errorCode != '0'"><log level="error" message="Respuesta del SII inconsistente, ESTADO ${status} y ERR_CODE ${errorCode}"/></if>
+                    <set field="toSentAuthStatusId" value="Ftd-SentAuthAccepted"/>
+                </then><else>
+                    <log level="warn" message="Respuesta del SII para documento ${fiscalTaxDocumentId}: ${glosa} (${glosaError})"/>
+                    <if condition="status == 'DNK'"><then>
+                        <!-- Documento Recibido por el SII pero Datos NO Coinciden con los registrados -->
+                        <set field="expectedErrorCode" value="1"/>
+                        <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
+                    </then><else-if condition="status == 'FAU'">
+                        <!-- Documento No Recibido por el SII -->
+                        <set field="expectedErrorCode" value="3"/>
+                    </else-if><else-if condition="status == 'FNA'">
+                        <!-- Documento No Autorizado -->
+                        <set field="expectedErrorCode" value="4"/>
+                        <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
+                    </else-if><else-if condition="status == 'FAN'">
+                        <!-- Documento Anulado -->
+                        <set field="expectedErrorCode" value="5"/>
+                        <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
+                    </else-if><else-if condition="status == 'EMP'">
+                        <!-- Empresa no autorizada a Emitir Documentos Tributarios Electrónicos -->
+                        <set field="expectedErrorCode" value="6"/>
+                        <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
+                    </else-if><else-if condition="status == 'TMD'">
+                        <!-- Existe Nota de Debito que Modifica Texto Documento -->
+                        <set field="expectedErrorCode" value="10"/>
+                        <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
+                    </else-if><else-if condition="status == 'TMC'">
+                        <!-- Existe Nota de Crédito que Modifica Textos Documento -->
+                        <set field="expectedErrorCode" value="11"/>
+                        <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
+                    </else-if><else-if condition="status == 'MMD'">
+                        <!-- Existe Nota de Debito que Modifica Montos Documento -->
+                        <set field="expectedErrorCode" value="12"/>
+                        <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
+                    </else-if><else-if condition="status == 'MMC'">
+                        <!-- Existe Nota de Crédito que Modifica Montos Documento -->
+                        <set field="expectedErrorCode" value="13"/>
+                        <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
+                    </else-if><else-if condition="status == 'AND'">
+                        <!-- Existe Nota de Debito que Anula Documento -->
+                        <set field="expectedErrorCode" value="14"/>
+                        <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
+                    </else-if><else-if condition="status == 'ANC'">
+                        <!-- Existe Nota de Crédito que Anula Documento -->
+                        <set field="expectedErrorCode" value="15"/>
+                        <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
+                    </else-if><else-if condition="errorCode == 'Otro'">
+                        <log level="error" message="Error Interno del SII al consultar documento ${fiscalTaxDocumentId}"/>
+                    </else-if></if>
+                    <if condition="errorCode != expectedErrorCode"><log level="error" message="Respuesta del SII inconsistente, ESTADO ${status} y ERR_CODE ${errorCode}"/></if>
+                </else></if>
+                <if condition="toSentAuthStatusId">
                     <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" for-update="true"/>
                     <if condition="dte.sentAuthStatusId == 'Ftd-SentAuthUnverified'">
-                        <set field="dte.sentAuthStatusId" value="Ftd-SentAuthAccepted"/>
+                        <set field="dte.sentAuthStatusId" from="toSentAuthStatusId"/>
                         <entity-update value-field="dte"/>
                     </if>
                 </if>
@@ -601,7 +655,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="dbIssuerPartyId" from="idList.first?.partyId"/>
             <if condition="issuerPartyId == null || issuerPartyId == ''"><set field="issuerPartyId" from="dbIssuerPartyId"/></if>
             <if condition="issuerPartyId != null &amp;&amp; issuerPartyId != '' &amp;&amp; issuerPartyId != dbIssuerPartyId">
-                <return error="true" message="No conincide Rut indicado en servicio (${issuerPartyId}) con el obtenido por el rut (${dbIssuerPartyId})"/>
+                <return error="true" message="No coincide Rut indicado en servicio (${issuerPartyId}) con el obtenido por el rut (${dbIssuerPartyId})"/>
             </if>
             <if condition="issuerPartyId == null"><return error="true" message="No se encuentra partyId para el rut ${envio.rutEmisor}"/></if>
             <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="[partyId:issuerPartyId]" out-map="context"/>
@@ -674,7 +728,7 @@ along with this software (see the LICENSE.md file). If not, see
                             }
                         }
                     } else {
-                        // Se tienen que revisar caso a caso
+                        // Se tienen que revisar caso a caso, incluso si todos fallaron porque así se registra en el log el motivo de falla
                         dteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("trackId", envio.trackId).list()
                         dteList.each { dte ->
                             ec.service.async().name("mchile.sii.dte.DteCommServices.verifica#DocumentoEnSii").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).call()
