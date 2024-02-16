@@ -733,6 +733,24 @@ along with this software (see the LICENSE.md file). If not, see
                         dteList.each { dte ->
                             ec.service.async().name("mchile.sii.dte.DteCommServices.verifica#DocumentoEnSii").parameter("fiscalTaxDocumentId", dte.fiscalTaxDocumentId).call()
                         }
+                        if (dteList.size() != documentosInformados)
+                            ec.message.addError("No calza documentos informados según SII (${documentosInformados}) con los documentos en BD asociados al trackId ${trackId} (${dteList.size()})")
+                        acceptCount = 0
+                        rejectCount = 0
+                        dteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("trackId", envio.trackId).list()
+                        dteList.each { dte ->
+                            if (dte.sentAuthStatusId in ['Ftd-SentAuthAccepted', 'Ftd-SentAuthAcceptedWithDiscrepancies']) {
+                                acceptCount++
+                            } else if (dte.sentAuthStatusId == 'Ftd-SentAuthUnverified') {
+                                dte.sentAuthStatusId = 'Ftd-SentAuthRejected'
+                                dte.update()
+                                rejectCount++
+                            } else if (dte.sentAuthStatusId == 'Ftd-SentAuthRejected') {
+                                rejectCount++
+                            } else {
+                                ec.message.addError("Unrecognized sentAuthStatusId in verifica#EnvioEnSii: ${dte.sentAuthStatusId}")
+                            }
+                        }
                     }
                 } else if (estado == 'RSC') {
                     ec.logger.info("Envío rechazado por Schema")
