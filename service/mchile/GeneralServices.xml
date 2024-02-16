@@ -168,7 +168,9 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="get" noun="RutForParty">
         <in-parameters>
             <parameter name="partyId"/>
+            <parameter name="inheritFromParent" type="Boolean" default="true"/>
             <parameter name="failIfNotFound" type="Boolean" default="false"/>
+            <parameter name="visitedPartyIdList" type="List"/>
         </in-parameters>
         <out-parameters>
             <parameter name="rut"/>
@@ -185,6 +187,22 @@ along with this software (see the LICENSE.md file). If not, see
                 <if condition="rutSinFormato == null"><then><set field="rutSinFormato" from="id.idValue"/></then>
                 <else-if condition="rutSinFormato != id.idValue"><return error="true" message="Rut mismatch, got ${rutSinFormato} and ${id.idValue} for party ${partyId}"/></else-if></if>
             </iterate>
+            <if condition="rutSinFormato == null &amp;&amp; inheritFromParent">
+                <entity-find entity-name="mantle.party.PartyRelationship" list="childRelList" cache="true">
+                    <econdition field-name="relationshipTypeEnumId" value="PrtOrgRollup"/>
+                    <econdition field-name="fromPartyId" from="partyId"/>
+                    <econdition field-name="toPartyId" operator="is-not-null"/>
+                    <date-filter/>
+                </entity-find>
+                <set field="parentPartyIdList" from="childRelList.toPartyId.sort().unique()"/>
+                <if condition="parentPartyIdList.size() &gt; 1"><return error="true" message="Unsupported more than 1 parent for org ${partyId}"/></if>
+                <if condition="parentPartyIdList">
+                    <set field="parentPartyId" from="parentPartyIdList[0]"/>
+                    <if condition="visitedPartyIdList == null"><set field="visitedPartyIdList" from="[]"/></if>
+                    <script>visitedPartyIdList.add(parentPartyId)</script>
+                    <service-call name="mchile.GeneralServices.get#RutForParty" in-map="context+[failIfNotFound:false, partyId:parentPartyId]" out-map="context"/>
+                </if>
+            </if>
             <if condition="rutSinFormato == null"><then>
                 <if condition="failIfNotFound"><return error="true" message="No se encuentra RUT para sujeto ${partyId}"/></if>
             </then><else>

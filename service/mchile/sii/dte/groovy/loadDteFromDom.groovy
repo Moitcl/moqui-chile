@@ -131,10 +131,16 @@ if (existingDteList) {
             dteMap.statusId = 'Ftd-Issued'
             dteMap.sentAuthStatusId = sentAuthStatusId
             dteMap.formaPagoEnumId = formaPagoEnumId
-            dteFieldListConstant = ['issuerPartyIdTypeEnumId', 'issuerPartyId', 'receiverPartyIdTypeEnumId', 'receiverPartyIdValue', 'date', 'receiverPartyId']
+            dteFieldListConstant = ['issuerPartyIdTypeEnumId', 'issuerPartyId', 'receiverPartyIdTypeEnumId', 'receiverPartyIdValue', 'date']
             dteFieldListConstant.each { entityFieldName ->
                 if (dteMap[entityFieldName] != dte[entityFieldName])
                     ec.message.addError("Value mismatch for attribute field ${entityFieldName}, XML value: ${dteMap[entityFieldName]}, DB value: ${dte[entityFieldName]}")
+            }
+            if (dteMap.receiverPartyId != dte.receiverPartyId) {
+                // Check if dte.receiverPartyId is descendant of dteMap.receiverPartyId
+                childPartyIdList = ec.service.sync().name("mchile.sii.dte.DteLoadServices.get#ChildrenWithoutOwnRut").parameter("partyId", dteMap.receiverPartyId).call().childPartyIdList
+                if (!(dte.receiverPartyId in childPartyIdList))
+                    ec.message.addError("Mismatch for receiverPartyId, XML value: ${dteMap.receiverPartyId}, DB value: ${dte.receiverPartyId} (is not child sharing same RUT)")
             }
             dteFieldListOverwrite = ['statusId', 'sentAuthStatusId', 'formaPagoEnumId']
             dteFieldListOverwrite.each { entityFieldName ->
@@ -171,25 +177,29 @@ if (existingDteList) {
             if (ec.message.hasError())
                 return
         } else {
-            if (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-ReceiverAccept'] && contentList && sendResponse) {
-                ec.logger.warn("Contenido existe, DTE está aprobado, enviando aceptación")
-                xmlInDb = ec.resource.getLocationReference(contentList.first().contentLocation).openStream().readAllBytes()
-                if (xmlInDb == dteMap.dteBytes) {
+            xmlInDb = ec.resource.getLocationReference(contentList.first().contentLocation).openStream().readAllBytes()
+            if (xmlInDb == dteMap.dteBytes)
+                isDuplicated = true
+            if (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-ReceiverAccept']) {
+                if (isDuplicated) {
+                    ec.logger.warn("Contenido existe, DTE está aprobado, enviando aceptación")
                     estadoRecepDte = 0
                     recepDteGlosa = 'ACEPTADO OK'
                     sentRecStatusId = 'Ftde-DuplicateNotProcessed'
-                    if (envioId)
+                    if (sendResponse && envioId)
                         ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
-                isDuplicated = true
-                return
+                    return
+                } else if (sendResponse) {
+                    errorMessages.add("Ya existe registrada DTE tipo ${dteMap.tipoDte} para emisor ${rutEmisor} y folio ${dteMap.fiscalTaxDocumentNumber}, diferente al recibido")
+                    estadoRecepDte = 2
+                    recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+                    if (recepDteGlosa.length()  > 256) recepDteGlosa = recepDteGlosa.substring(0, 256)
+                    return
                 }
+            } else if (!isDuplicated) {
+                ec.message.addError("No se puede procesar XML diferente al existente en BD si estado no es aceptado")
+                return
             }
-            errorMessages.add("Ya existe registrada DTE tipo ${dteMap.tipoDte} para emisor ${rutEmisor} y folio ${dteMap.fiscalTaxDocumentNumber}, diferente al recibido")
-            estadoRecepDte = 2
-            recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
-            if (recepDteGlosa.length()  > 256) recepDteGlosa = recepDteGlosa.substring(0, 256)
-            isDuplicated = true
-            return
         }
     }
 }
@@ -227,7 +237,8 @@ if (dteMap.tipoDteEnumId == 'Ftdt-52') {
     ec.service.sync().name("store#mchile.dte.GuiaDespacho").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, indTrasladoEnumId:dteMap.indTrasladoEnumId]).call()
 }
 
-ec.service.sync().name("mchile.sii.dte.DteContentServices.store#DteContent").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml',
+if (!isDuplicated)
+    ec.service.sync().name("mchile.sii.dte.DteContentServices.store#DteContent").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml',
                                                                                          documentContent:dteMap.dteBytes]).call()
 
 if (pdfBytes) {
