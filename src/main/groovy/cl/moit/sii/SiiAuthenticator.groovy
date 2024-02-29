@@ -116,7 +116,6 @@ class SiiAuthenticator {
             if (pos > 0 && pos < username.length()-1) {
                 rut = username.substring(0,pos)
                 dv = username.substring(pos+1)
-                logger.warn("rut: ${rut}, dv: ${dv}")
             }
             restClient.text("rut=${rut}&dv=${dv}&referencia=https%3A%2F%2Fmisiir.sii.cl%2Fcgi_misii%2Fsiihome.cgi&411=&rutcntr=${username}&&clave=${password}")
             try {
