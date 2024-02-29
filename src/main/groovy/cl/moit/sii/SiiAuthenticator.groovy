@@ -25,7 +25,7 @@ class SiiAuthenticator {
     protected RestClient.RequestFactory requestFactory
     protected String proxyHost = null
     protected int proxyPort = 0
-    protected boolean portalMipyme = true
+    protected boolean portalMipyme = false
     protected boolean trustAll = false
     protected boolean irrecoverableFailure = false
 
