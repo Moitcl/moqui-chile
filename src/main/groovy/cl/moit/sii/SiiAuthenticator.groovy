@@ -99,7 +99,6 @@ class SiiAuthenticator {
             }
             responseText = response.text()
         } else {
-            logger.warn("Sending user/pass")
             if (username == null || username == '')
                 throw new BaseException("No username defined")
             if (password == null || password == '')
