@@ -116,13 +116,21 @@ class SiiAuthenticator {
                 rut = username.substring(0,pos)
                 dv = username.substring(pos+1)
             }
-            restClient.text("rut=${rut}&dv=${dv}&referencia=https%3A%2F%2Fmisiir.sii.cl%2Fcgi_misii%2Fsiihome.cgi&411=&rutcntr=${username}&&clave=${password}")
+            Map parameterMap = [rut:rut,dv:dv,referencia:'https://misiir.sii.cl/cgi_misii/siihome.cgi','411':'',rutcntr:username, clave:password]
+            org.eclipse.jetty.util.Fields fields = new org.eclipse.jetty.util.Fields()
+            parameterMap.each { key, value ->
+                fields.add(key, value)
+            }
+            String parameterString = org.eclipse.jetty.client.util.FormRequestContent.convert(fields)
+            restClient.text(parameterString)
             try {
                 response = restClient.call()
             } catch (Exception e) {
                 throw new BaseException("Error calling sii CautInicio user/pass", e)
             }
             responseText = response.text()
+            if (responseText =~ /La Clave Tributaria ingresada no es correcta/)
+                throw new BaseException("Incorrect username/password")
         }
         if (responseText =~ /Debido a que usted ha sido autorizado por otros contribuyentes\s+para que los represente electrónicamente en el sitio web del SII, esta página le permitirá decidir\s+si en esta oportunidad desea realizar trámites propios o representar electrónicamente a otro\s+contribuyente/) {
             if (debug) logger.info("Selección de representar o continuar")
