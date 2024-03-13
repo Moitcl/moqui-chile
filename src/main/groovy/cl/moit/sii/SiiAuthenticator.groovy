@@ -14,8 +14,8 @@ class SiiAuthenticator {
 
     protected final static Logger logger = LoggerFactory.getLogger(SiiAuthenticator.class)
 
-    protected String rutOrganizacion
-    protected String rutRepresentado
+    protected String rutOrganizacion // Usado en PortalMipyme
+    protected String rutRepresentado // Usado para representar a otro contribuyente, salvo para Facturación (Consulta DTE, PortalMipyme)
     protected String certData
     protected String certPass
     protected String username
@@ -28,6 +28,7 @@ class SiiAuthenticator {
     protected boolean portalMipyme = false
     protected boolean trustAll = false
     protected boolean irrecoverableFailure = false
+    protected String failureEnumId = null
 
     protected boolean debug = false
 
@@ -54,6 +55,10 @@ class SiiAuthenticator {
     public SiiAuthenticator setPortalMipyme(boolean portalMipyme) { this.portalMipyme = portalMipyme; return this }
 
     public SiiAuthenticator setTrustAll(boolean trustAll) { this.trustAll = trustAll; return this }
+
+    public String getFailureEnumId() {
+        return failureEnumId
+    }
 
     public RestClient.RequestFactory getRequestFactory() {
         return requestFactory
@@ -90,7 +95,14 @@ class SiiAuthenticator {
             try {
                 response = restClient.call()
             } catch (Exception e) {
-                throw new BaseException("Error calling sii CautInicio certificate", e)
+                failureEnumId = "SiiartPasswordCredentialFailure"
+                StringBuffer sb = new StringBuffer("Error calling sii CautInicio certificate: ${e.message}")
+                Exception causingException = e.cause
+                while (causingException) {
+                    sb.append("\nCaused by: ${causingException.message}")
+                    causingException = causingException.cause
+                }
+                throw new BaseException(sb.toString(), e)
             }
             if (debug) {
                 logger.warn("Cookies after request:")
@@ -99,10 +111,14 @@ class SiiAuthenticator {
             }
             responseText = response.text()
         } else {
-            if (username == null || username == '')
+            if (username == null || username == '') {
+                failureEnumId = "SiiartPasswordCredentialFailure"
                 throw new BaseException("No username defined")
-            if (password == null || password == '')
+            }
+            if (password == null || password == '') {
+                failureEnumId = "SiiartPasswordCredentialFailure"
                 throw new BaseException("No password defined")
+            }
             requestFactory = new ClientAuthRequestFactory(null, null, proxyHost, proxyPort)
             restClient.withRequestFactory(requestFactory)
             restClient.uri("https://zeusr.sii.cl/cgi_AUT2000/CAutInicio.cgi").method("POST")
@@ -126,11 +142,14 @@ class SiiAuthenticator {
             try {
                 response = restClient.call()
             } catch (Exception e) {
+                failureEnumId = "SiiartPasswordCredentialFailure"
                 throw new BaseException("Error calling sii CautInicio user/pass", e)
             }
             responseText = response.text()
-            if (responseText =~ /La Clave Tributaria ingresada no es correcta/)
+            if (responseText =~ /La Clave Tributaria ingresada no es correcta/) {
+                failureEnumId = "SiiartPasswordCredentialFailure"
                 throw new BaseException("Incorrect username/password")
+            }
         }
         if (responseText =~ /Debido a que usted ha sido autorizado por otros contribuyentes\s+para que los represente electrónicamente en el sitio web del SII, esta página le permitirá decidir\s+si en esta oportunidad desea realizar trámites propios o representar electrónicamente a otro\s+contribuyente/) {
             if (debug) logger.info("Selección de representar o continuar")
@@ -141,6 +160,7 @@ class SiiAuthenticator {
                 try {
                     response = restClient.call()
                 } catch (Exception e) {
+                    failureEnumId = "SiiartAgencyFailure"
                     throw new BaseException("Error calling sii obteniendo RUTs a representar", e)
                 }
                 responseText = new String(response.bytes(), "iso-8859-1")
@@ -159,6 +179,7 @@ class SiiAuthenticator {
                 }
                 if (representeeMap == null) {
                     logger.error("No se pudo encontrar RUT representado")
+                    failureEnumId = "SiiartAgencyFailure"
                     return null
                 }
                 boolean hasAllFields = true
@@ -170,6 +191,7 @@ class SiiAuthenticator {
                 }
                 if (debug) logger.warn("representeeMap: ${representeeMap}")
                 if (!hasAllFields) {
+                    failureEnumId = "SiiartAgencyFailure"
                     logger.error("Received responseText: ${responseText}")
                     return null
                 }
@@ -189,12 +211,14 @@ class SiiAuthenticator {
                 try {
                     response = restClient.call()
                 } catch (Exception e) {
+                    failureEnumId = "SiiartAgencyFailure"
                     throw new BaseArtifactException("Error calling sii admRepresentar", e)
                 }
                 responseText = response.text()
                 if (responseText.contains("En este momento no lo podemos atender, pues hemos detectado un error")) {
+                    failureEnumId = "SiiartAgencyFailure"
                     logger.error("Error: ${responseText}")
-                    return null;
+                    return null
                 }
                 if (debug)
                     logger.info("responseText for representación: ${responseText}")
@@ -207,8 +231,9 @@ class SiiAuthenticator {
             } catch (Exception e) {
                 logger.error("Calling portalMipyme step 1", e)
                 logger.error("Error de comunicación con SII autenticando portalMipyme (paso 1)")
+                failureEnumId = "SiiartPortalMpLoginFailure"
                 irrecoverableFailure = true
-                return
+                return null
             }
             responseText = new String(response.bytes(), "iso-8859-1")
             if (debug)
@@ -222,7 +247,8 @@ class SiiAuthenticator {
                 } catch (Exception e) {
                     logger.error("Calling portalMipyme step 2", e)
                     logger.error("Error de comunicación con SII autenticando portalMipyme (paso 2)")
-                    return
+                    failureEnumId = "SiiartPortalMpLoginFailure"
+                    return null
                 }
                 responseText = new String(response.bytes(), "iso-8859-1")
                 if (debug)
@@ -240,12 +266,14 @@ class SiiAuthenticator {
                     } catch (Exception e) {
                         logger.error("Calling portalMipyme step 3", e)
                         logger.error("Error de comunicación con SII autenticando portalMipyme (paso 3)")
-                        return
+                        failureEnumId = "SiiartPortalMpLoginFailure"
+                        return null
                     }
                     responseText = new String(response.bytes(), "iso-8859-1")
                     if (debug)
                         logger.info("responseText: ${responseText}")
                 } else {
+                    failureEnumId = "SiiartPortalMpLoginFailure"
                     throw new BaseException("Empresa ${rutOrganizacion} no aparece entre las opciones de selección en el SII")
                 }
             }

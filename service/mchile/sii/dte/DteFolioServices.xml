@@ -339,17 +339,19 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="dvEmp" from="rutOrganizacion.substring(rutOrganizacion.length()-1, rutOrganizacion.length()).toUpperCase()"/>
             <set field="codDocto" from="fiscalTaxDocumentType.enumCode"/>
             <set field="ACEPTAR" value="Solicitar Numeración"/>
+            <set field="siiAccessLogMap" from="[partyId:organizationPartyId, purposeEnumId:'SiiapEmisionDte', authenticationTypeEnumId:'SiiaatCertificate', resultEnumId:'SiiartSuccess']"/>
             <script><![CDATA[
                 import org.moqui.util.RestClient
                 import cl.moit.sii.SiiAuthenticator
 
-                SiiAuthenticator authenticator = new SiiAuthenticator()
-                authenticator.setCertData(certData)
-                authenticator.setCertPass(passCert)
+                SiiAuthenticator authenticator = new SiiAuthenticator().setCertData(certData).setCertPass(passCert)
                 RestClient restClient = null
                 try {
                     restClient = authenticator.createRestClient()
                 } catch (Exception e) {
+                    siiAccessLogMap.errorMessage = e.message
+                    siiAccessLogMap.resultEnumId = authenticator.failureEnumId
+                    ec.service.sync().name("create#mchile.sii.SiiAccessLog").parameters(siiAccessLogMap).requireNewTransaction(true).call()
                     ec.logger.error("Error de comunicación con el SII", e)
                     ec.message.addError("Error de comunicación con el SII: ${e.toString()}")
                     return
@@ -359,6 +361,9 @@ along with this software (see the LICENSE.md file). If not, see
                 try {
                     response = restClient.call()
                 } catch (Exception e) {
+                    siiAccessLogMap.errorMessage = e.message
+                    siiAccessLogMap.resultEnumId = 'SiiartRestClientFailure'
+                    ec.service.sync().name("create#mchile.sii.SiiAccessLog").parameters(siiAccessLogMap).requireNewTransaction(true).call()
                     ec.logger.error("Error de comunicación con el SII", e)
                     ec.message.addError("Error de comunicación con el SII: ${e.toString()}")
                     return
@@ -398,6 +403,9 @@ along with this software (see the LICENSE.md file). If not, see
                 try {
                     response = restClient.text(params).call()
                 } catch (Exception e) {
+                    siiAccessLogMap.errorMessage = e.message
+                    siiAccessLogMap.resultEnumId = 'SiiartRestClientFailure'
+                    ec.service.sync().name("create#mchile.sii.SiiAccessLog").parameters(siiAccessLogMap).requireNewTransaction(true).call()
                     ec.logger.error("Error de comunicación con el SII", e)
                     ec.message.addError("Error de comunicación con el SII: ${e.toString()}")
                     return
@@ -439,7 +447,14 @@ along with this software (see the LICENSE.md file). If not, see
                 ec.logger.info("params3: ${params}")
 
                 restClient.text(params).uri("https://${hostName}/cvc_cgi/dte/of_confirma_folio")
-                response = restClient.call()
+                try {
+                    response = restClient.call()
+                } catch (Exception e) {
+                    siiAccessLogMap.errorMessage = e.message
+                    siiAccessLogMap.resultEnumId = 'SiiartRestClientFailure'
+                    ec.service.sync().name("create#mchile.sii.SiiAccessLog").parameters(siiAccessLogMap).requireNewTransaction(true).call()
+                    throw new org.moqui.BaseException(e)
+                }
                 responseText = new String(response.bytes(), "iso-8859-1")
                 paso3 = responseText
 
@@ -488,7 +503,15 @@ along with this software (see the LICENSE.md file). If not, see
                 params = fieldValues.collect { key, value -> "${key}=${value}"}.join("&")
                 ec.logger.info("params4: ${params}")
                 restClient.text(params).uri("https://${hostName}/cvc_cgi/dte/of_genera_archivo")
-                response = restClient.call()
+                try {
+                    response = restClient.call()
+                } catch (Exception e) {
+                    siiAccessLogMap.errorMessage = e.message
+                    siiAccessLogMap.resultEnumId = 'SiiartRestClientFailure'
+                    ec.service.sync().name("create#mchile.sii.SiiAccessLog").parameters(siiAccessLogMap).requireNewTransaction(true).call()
+                    throw new org.moqui.BaseException(e)
+                }
+                ec.service.sync().name("create#mchile.sii.SiiAccessLog").parameters(siiAccessLogMap).requireNewTransaction(true).call()
                 caf = new String(response.bytes(), "iso-8859-1")
 
                 if (!caf.startsWith('<?xml version="1.0"?>\n<AUTORIZACION>\n<CAF')) {
