@@ -178,9 +178,8 @@ class SiiAuthenticator {
                     }
                 }
                 if (representeeMap == null) {
-                    logger.error("No se pudo encontrar RUT representado")
                     failureEnumId = "SiiartAgencyFailure"
-                    return null
+                    throw new BaseException("No se pudo encontrar RUT representado")
                 }
                 boolean hasAllFields = true
                 ['RUT_RPDO', 'APPLS', 'NOMBRE', 'APPLSDES'].each {
@@ -192,8 +191,7 @@ class SiiAuthenticator {
                 if (debug) logger.warn("representeeMap: ${representeeMap}")
                 if (!hasAllFields) {
                     failureEnumId = "SiiartAgencyFailure"
-                    logger.error("Received responseText: ${responseText}")
-                    return null
+                    throw new BaseException("Did not receive all fields, received responseText: ${responseText}")
                 }
                 if (certData != null && certData.size() > 0 && certPass != null && certPass.size() > 0) {
                     restClient.uri('https://herculesr.sii.cl/cgi_AUT2000/admRepresentar.cgi')
@@ -217,8 +215,7 @@ class SiiAuthenticator {
                 responseText = response.text()
                 if (responseText.contains("En este momento no lo podemos atender, pues hemos detectado un error")) {
                     failureEnumId = "SiiartAgencyFailure"
-                    logger.error("Error: ${responseText}")
-                    return null
+                    throw new BaseException("Error: ${responseText}")
                 }
                 if (debug)
                     logger.info("responseText for representación: ${responseText}")
@@ -230,10 +227,9 @@ class SiiAuthenticator {
                 response = restClient.call() // Segundo llamado lleva a formulario
             } catch (Exception e) {
                 logger.error("Calling portalMipyme step 1", e)
-                logger.error("Error de comunicación con SII autenticando portalMipyme (paso 1)")
                 failureEnumId = "SiiartPortalMpLoginFailure"
                 irrecoverableFailure = true
-                return null
+                throw new BaseException("Error de comunicación con SII autenticando portalMipyme (paso 1)", e)
             }
             responseText = new String(response.bytes(), "iso-8859-1")
             if (debug)
@@ -246,9 +242,8 @@ class SiiAuthenticator {
                     response = restClient.call() // Segundo llamado lleva a formulario
                 } catch (Exception e) {
                     logger.error("Calling portalMipyme step 2", e)
-                    logger.error("Error de comunicación con SII autenticando portalMipyme (paso 2)")
                     failureEnumId = "SiiartPortalMpLoginFailure"
-                    return null
+                    throw new BaseException("Error de comunicación con SII autenticando portalMipyme (paso 2)", e)
                 }
                 responseText = new String(response.bytes(), "iso-8859-1")
                 if (debug)
@@ -265,9 +260,8 @@ class SiiAuthenticator {
                         response = restClient.call()
                     } catch (Exception e) {
                         logger.error("Calling portalMipyme step 3", e)
-                        logger.error("Error de comunicación con SII autenticando portalMipyme (paso 3)")
                         failureEnumId = "SiiartPortalMpLoginFailure"
-                        return null
+                        throw new BaseException("Error de comunicación con SII autenticando portalMipyme (paso 3)", e)
                     }
                     responseText = new String(response.bytes(), "iso-8859-1")
                     if (debug)
