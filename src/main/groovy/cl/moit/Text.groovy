@@ -1,5 +1,7 @@
 package cl.moit
 
+import java.math.RoundingMode
+
 class Text {
 
     public static void main(String[] argv) {
@@ -105,5 +107,58 @@ class Text {
             }
             return text.toString()
         }
+        throw new RuntimeException("Number is out of range: ${number}")
     }
+
+    public static String timeDurationToText(BigDecimal milliseconds) {
+        return timeDurationToText(milliseconds, true)
+    }
+    public static String timeDurationToText(BigDecimal milliseconds, boolean precise) {
+        return timeDurationToText(milliseconds, precise, false)
+    }
+    public static String timeDurationToText(BigDecimal milliseconds, boolean precise, boolean previousPrecise) {
+        if (milliseconds == null)
+            return null
+        if (milliseconds < 2)
+            milliseconds = milliseconds.setScale(3, RoundingMode.HALF_UP)
+        else
+            milliseconds = milliseconds.setScale(0, RoundingMode.HALF_UP)
+        Long upperConversion = 1000L
+        if (milliseconds < upperConversion) {
+            return milliseconds.toString() + " ms"
+        }
+        Long conversion = upperConversion
+        upperConversion = upperConversion*60
+        if (milliseconds < upperConversion) {
+            Long remainingMilliseconds = (milliseconds as Long) % conversion
+            Long upperAmount = (milliseconds as Long) / conversion
+            return upperAmount.toString() + (precise? ' seg' : (upperAmount > 1? ' segundos' : ' segundo')) + (((precise || !previousPrecise) && remainingMilliseconds > 0) ? ' ' + timeDurationToText(remainingMilliseconds, precise, true) : '')
+        }
+        conversion = upperConversion
+        upperConversion = upperConversion*60
+        if (milliseconds < upperConversion) {
+            Long remainingMilliseconds = (milliseconds as Long) % conversion
+            Long upperAmount = (milliseconds as Long) / conversion
+            return upperAmount.toString() + (precise? ' min' : (upperAmount > 1? ' minutos' : ' minuto')) + (((precise || !previousPrecise) && remainingMilliseconds > 0) ? ' ' + timeDurationToText(remainingMilliseconds, precise, true) : '')
+        }
+        conversion = upperConversion
+        upperConversion = upperConversion*24
+        if (milliseconds < upperConversion) {
+            Long remainingMilliseconds = (milliseconds as Long) % conversion
+            Long upperAmount = (milliseconds as Long) / conversion
+            return upperAmount.toString() + (precise? ' hr' : (upperAmount > 1 ? ' horas' : ' hora')) + (((precise || !previousPrecise) && remainingMilliseconds > 0) ? ' ' + timeDurationToText(remainingMilliseconds, precise, true) : '')
+        }
+        conversion = upperConversion
+        upperConversion = upperConversion*365
+        if (milliseconds < upperConversion) {
+            Long remainingMilliseconds = (milliseconds as Long) % conversion
+            Long upperAmount = (milliseconds as Long) / conversion
+            return upperAmount.toString() + (precise? ' d' : (upperAmount > 1 ? ' días' : ' día')) + (((precise || !previousPrecise) && remainingMilliseconds > 0) ? ' ' + timeDurationToText(remainingMilliseconds, precise, true) : '')
+        }
+        conversion = upperConversion
+        Long remainingMilliseconds = (milliseconds as Long) % conversion
+        Long upperAmount = (milliseconds as Long) / conversion
+        return upperAmount.toString() + (precise? ' a' : (upperAmount > 1 ? ' años' : ' año')) + (((precise || !previousPrecise) && remainingMilliseconds > 0) ? ' ' + timeDurationToText(remainingMilliseconds, precise, true) : '')
+    }
+
 }
