@@ -118,7 +118,7 @@ class Text {
     }
     public static String timeDurationToText(BigDecimal milliseconds, boolean precise, boolean previousPrecise) {
         if (milliseconds == null)
-            return null
+            return ''
         if (milliseconds < 2)
             milliseconds = milliseconds.setScale(3, RoundingMode.HALF_UP)
         else
