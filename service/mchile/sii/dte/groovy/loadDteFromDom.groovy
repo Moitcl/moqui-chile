@@ -40,8 +40,8 @@ if (rutEmisor in reserved.rutList) {
 }
 
 issuerPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutEmisor, createUnknown:createUnknownIssuer,
-      organizationPartyIdAsOwnerWhenCreating:organizationPartyIdAsOwnerWhenCreating, razonSocial:dteMap.razonSocialEmisor,
-      roleTypeId:'Supplier', giro:dteMap.giroEmisor, direccion:dteMap.direccionOrigen, comuna:dteMap.comunaOrigen,
+      organizationPartyIdAsOwnerWhenCreating:organizationPartyIdAsOwnerWhenCreating, additionalAllowedOwnerPartyIdList:additionalAllowedOwnerPartyIdList,
+      razonSocial:dteMap.razonSocialEmisor, roleTypeId:'Supplier', giro:dteMap.giroEmisor, direccion:dteMap.direccionOrigen, comuna:dteMap.comunaOrigen,
       ciudad:dteMap.ciudadOrigen, failOnDuplicate:false]).call().partyId
 issuerTaxName = null
 EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()
@@ -83,12 +83,12 @@ existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([issu
 isDuplicated = false
 
 receiverPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutReceptor, createUnknown:createUnknownReceiver,
-                                                                                                organizationPartyIdAsOwnerWhenCreating:organizationPartyIdAsOwnerWhenCreating, razonSocial:dteMap.razonSocialReceptor,
-                                                                                                roleTypeId:'Customer', giro:dteMap.giroReceptor, direccion:dteMap.direccionReceptor, comuna:dteMap.comunaReceptor, ciudad:dteMap.ciudadReceptor,
-                                                                                                failOnDuplicate: false]).call().partyId
+                     organizationPartyIdAsOwnerWhenCreating:organizationPartyIdAsOwnerWhenCreating, razonSocial:dteMap.razonSocialReceptor,
+                     additionalAllowedOwnerPartyIdList:additionalAllowedOwnerPartyIdList, roleTypeId:'Customer', giro:dteMap.giroReceptor, direccion:dteMap.direccionReceptor,
+                     comuna:dteMap.comunaReceptor, ciudad:dteMap.ciudadReceptor, failOnDuplicate: false]).call().partyId
 receiver = ec.entity.find("mantle.party.PartyDetail").condition("partyId", receiverPartyId).one()
 // Verificación de Razón Social en XML vs lo guardado en Moqui
-String razonSocialDb = receiver.taxOrganizationName
+String razonSocialDb = receiver?.taxOrganizationName
 if (razonSocialDb == null || razonSocialDb.size() == 0)
     razonSocialDb = ec.resource.expand("PartyNameOnlyTemplate", null, receiver)
 rsResult = ec.service.sync().name("mchile.sii.dte.DteInternalServices.compare#RazonSocial").parameters([rs1:dteMap.razonSocialReceptor, rs2:razonSocialDb]).call()
