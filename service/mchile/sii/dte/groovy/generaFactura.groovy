@@ -374,7 +374,7 @@ xmlBuilder.DTE(dteAttributesMap) {
                 if (codigoInternoReceptor)
                     CdgIntRecep(codigoInternoReceptor)
                 RznSocRecep(razonSocialReceptor)
-                if (giroReceptor)
+                if (giroReceptor && giroReceptor.replaceAll('\s', '') != '')
                     GiroRecep(giroReceptor)
                 if (contactoReceptor)
                     Contacto(contactoReceptor)
