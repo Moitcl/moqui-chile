@@ -508,62 +508,65 @@ along with this software (see the LICENSE.md file). If not, see
                     ]]></script>
                 <set field="toSentAuthStatusId" from="null"/>
                 <if condition="status == 'DOK'"><then>
-                    <if condition="errorCode != '0'"><log level="error" message="Respuesta del SII inconsistente, ESTADO ${status} y ERR_CODE ${errorCode}"/></if>
+                    <if condition="errorCode != '0'"><return error="true" message="Respuesta del SII inconsistente, ESTADO ${status} y ERR_CODE ${errorCode}"/></if>
                     <set field="toSentAuthStatusId" value="Ftd-SentAuthAccepted"/>
                 </then><else>
                     <log level="warn" message="Respuesta del SII para documento ${fiscalTaxDocumentId}: ${glosa} (${glosaError})"/>
                     <if condition="status == 'DNK'"><then>
-                        <!-- Documento Recibido por el SII pero Datos NO Coinciden con los registrados -->
+                        <set field="changeReasonDetail" value="Documento Recibido por el SII pero Datos NO Coinciden con los registrados"/>
                         <set field="expectedErrorCode" value="1"/>
                         <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
                     </then><else-if condition="status == 'FAU'">
-                        <!-- Documento No Recibido por el SII -->
+                        <set field="changeReasonDetail" value="Documento No Recibido por el SII"/>
                         <set field="expectedErrorCode" value="3"/>
                     </else-if><else-if condition="status == 'FNA'">
-                        <!-- Documento No Autorizado -->
+                        <set field="changeReasonDetail" value="Documento No Autorizado"/>
                         <set field="expectedErrorCode" value="4"/>
                         <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
                     </else-if><else-if condition="status == 'FAN'">
-                        <!-- Documento Anulado -->
+                        <set field="changeReasonDetail" value="Documento Anulado"/>
                         <set field="expectedErrorCode" value="5"/>
                         <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
                     </else-if><else-if condition="status == 'EMP'">
-                        <!-- Empresa no autorizada a Emitir Documentos Tributarios Electrónicos -->
+                        <set field="changeReasonDetail" value="Empresa no autorizada a Emitir Documentos Tributarios Electrónicos"/>
                         <set field="expectedErrorCode" value="6"/>
                         <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
                     </else-if><else-if condition="status == 'TMD'">
-                        <!-- Existe Nota de Debito que Modifica Texto Documento -->
+                        <set field="changeReasonDetail" value="Existe Nota de Debito que Modifica Texto Documento"/>
                         <set field="expectedErrorCode" value="10"/>
                         <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
                     </else-if><else-if condition="status == 'TMC'">
-                        <!-- Existe Nota de Crédito que Modifica Textos Documento -->
+                        <set field="changeReasonDetail" value="Existe Nota de Crédito que Modifica Textos Documento"/>
                         <set field="expectedErrorCode" value="11"/>
                         <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
                     </else-if><else-if condition="status == 'MMD'">
-                        <!-- Existe Nota de Debito que Modifica Montos Documento -->
+                        <set field="changeReasonDetail" value="Existe Nota de Debito que Modifica Montos Documento"/>
                         <set field="expectedErrorCode" value="12"/>
                         <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
                     </else-if><else-if condition="status == 'MMC'">
-                        <!-- Existe Nota de Crédito que Modifica Montos Documento -->
+                        <set field="changeReasonDetail" value="Existe Nota de Crédito que Modifica Montos Documento"/>
                         <set field="expectedErrorCode" value="13"/>
                         <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
                     </else-if><else-if condition="status == 'AND'">
-                        <!-- Existe Nota de Debito que Anula Documento -->
+                        <set field="changeReasonDetail" value="Existe Nota de Debito que Anula Documento"/>
                         <set field="expectedErrorCode" value="14"/>
                         <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
                     </else-if><else-if condition="status == 'ANC'">
-                        <!-- Existe Nota de Crédito que Anula Documento -->
+                        <set field="changeReasonDetail" value="Existe Nota de Crédito que Anula Documento"/>
                         <set field="expectedErrorCode" value="15"/>
                         <set field="toSentAuthStatusId" value="Ftd-SentAuthRejected"/>
                     </else-if><else-if condition="errorCode == 'Otro'">
                         <log level="error" message="Error Interno del SII al consultar documento ${fiscalTaxDocumentId}"/>
-                    </else-if></if>
+                    </else-if><else>
+                        <return error="true" message="Unknown status received from SII for DTE ${fiscalTaxDocumentId}: ${status}"/>
+                    </else></if>
                     <if condition="errorCode != expectedErrorCode"><log level="error" message="Respuesta del SII inconsistente, ESTADO ${status} y ERR_CODE ${errorCode}"/></if>
                 </else></if>
                 <if condition="toSentAuthStatusId">
                     <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte" for-update="true"/>
-                    <if condition="dte.sentAuthStatusId == 'Ftd-SentAuthUnverified'">
+                    <if condition="dte.sentAuthStatusId != toSentAuthStatusId">
                         <set field="dte.sentAuthStatusId" from="toSentAuthStatusId"/>
+                        <set field="sentAuthStatusId_changeReason" value="Estado recibido desde el SII: ${status}: ${changeReasonDetail}"/>
                         <entity-update value-field="dte"/>
                     </if>
                 </if>
@@ -718,7 +721,7 @@ along with this software (see the LICENSE.md file). If not, see
                         docsAcInt = documentosAceptados as Integer
                         if (dteList.size() != docsAcInt) {
                             ec.message.addError("Documentos informados y aceptados en envío ${envioId} no calza con encontrados en BD por trackId ${envio.trackId}: ${documentosAceptados} vs ${dteList.size()}")
-                            return;
+                            return
                         }
                         // Se pueden asignar todos como aceptados
                         dteList.each { dte ->
@@ -752,18 +755,21 @@ along with this software (see the LICENSE.md file). If not, see
                             }
                         }
                     }
-                } else if (estado == 'RSC') {
-                    ec.logger.info("Envío rechazado por Schema")
-                    newStatusId = 'Ftde-ProcessRejectedSchema'
-                } else if (estado == 'RFR') {
-                    ec.logger.info("Envío rechazado por Firma")
-                    newStatusId = 'Ftde-ProcessRejectedSignature'
-                } else if (estado == 'RCT') {
-                    ec.logger.info("Envío rechazado por Carátula")
-                    newStatusId = 'Ftde-ProcessRejectedEnvelope'
+                } else if (estado in ['RSC', 'RFR', 'RCT']) {
+                    estadoDescriptionMap = [RSC:'Rechazado por Schema', RFR:'Rechazado por Error en Firma', RCT:'Rechazado por Carátula']
+                    estadoStatusIdMap = [RSC:'Ftde-ProcessRejectedSchema', RFR:'Ftde-ProcessRejectedSignature', RCT:'Ftde-ProcessRejectedEnvelope']
+                    ec.logger.info("Envío rechazado sin procesar: ${estadoDescriptionMap[estado]}")
+                    newStatusId = estadoStatusIdMap[estado]
+                    dteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("trackId", envio.trackId).list()
+                    dteList.each { dte ->
+                        dte.sentAuthStatusId = 'Ftd-NotSentAuth'
+                        dte.update()
+                    }
                 } else if (estado == '001') {
                     ec.logger.info("Error con token: ${glosaEstado}")
                     hasError = true
+                } else if (estado == '106') {
+                    ec.logger.info("Error con autorización: ${glosaEstado}")
                 } else if (errorCodeGlosa != null) {
                     ec.logger.info("Consulta con error: ${errorCodeGlosa}")
                     hasError = true
@@ -774,12 +780,10 @@ along with this software (see the LICENSE.md file). If not, see
                     ec.logger.info("Consulta con error: ${errorCodeGlosa}")
                     hasError = true
                 } else {
-                    ec.logger.info("Estado no reconocido: ${estado}, errorCode ${errorCode} (${errorCodeGlosa}), sqlCode ${sqlCode} (${sqlCodeGlosa}), serverCode ${serverCode} (${serverCodeGlosa})")
-                    if (errorEnvio != null && errorEnvio != '') {
-                        newStatusId = 'Ftd-SentAuthRejected'
-                    }
+                    ec.logger.info("Estado no reconocido: ${estado} (${glosaEstado}), errorCode ${errorCode} (${errorCodeGlosa}), sqlCode ${sqlCode} (${sqlCodeGlosa}), serverCode ${serverCode} (${serverCodeGlosa})")
+                    hasError = true
                 }
-                ]]></script>
+            ]]></script>
         </actions>
     </service>
 
