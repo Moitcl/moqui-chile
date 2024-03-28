@@ -78,7 +78,7 @@ if (rutReceptorCaratula != null && rutReceptorCaratula != rutReceptor) {
     discrepancyMessages.add("Rut mismatch: carátula indica Rut receptor ${rutReceptorCaratula}, pero documento indica ${rutReceptor}")
 }
 
-existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([issuerPartyIdValue:rutEmisor, fiscalTaxDocumenTypeEnumId:dteMap.tipoDteEnumId, fiscalTaxDocumentNumber:dteMap.fiscalTaxDocumentNumber])
+existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition([issuerPartyIdValue:rutEmisor, fiscalTaxDocumentTypeEnumId:dteMap.tipoDteEnumId, fiscalTaxDocumentNumber:dteMap.fiscalTaxDocumentNumber])
         .disableAuthz().list()
 isDuplicated = false
 
