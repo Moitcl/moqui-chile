@@ -374,6 +374,7 @@ if (!draft) {
     dteEv.receiverPartyIdTypeEnumId = "PtidNationalTaxId"
     dteEv.receiverPartyIdValue = rutReceptor.trim()
     dteEv.statusId = "Ftd-Issued"
+    dteEv.issuedByUserId = ec.user.userId
     dteEv.sentAuthStatusId = "Ftd-NotSentAuth"
     dteEv.sentRecStatusId = "Ftd-NotSentRec"
     dteEv.invoiceId = invoiceId
