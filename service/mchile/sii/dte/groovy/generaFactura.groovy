@@ -24,18 +24,17 @@ if (invoiceId != null && fiscalTaxDocumentTypeEnumId in dteConstituyeVentaTypeLi
 ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInternalServices.load#DteConfig").parameter("partyId", issuerPartyId).call())
 
 if (razonSocialOrganizacion == null || razonSocialOrganizacion.size() < 3) {
-    ec.message.addError("Razón Social no puede tener menos de 3 caracteres")
-    return
+    ec.message.addError("Razón Social de emisor no puede tener menos de 3 caracteres")
 }
 
 vatTaxRate = ec.service.sync().name("mchile.TaxServices.get#VatTaxRate").parameter("date", new Timestamp(fechaEmision.time)).call().taxRate
 
 // Giro Emisor
 giroOutMap = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#GiroPrimario").parameter("partyId", issuerPartyId).call()
-if (giroOutMap == null) {
-    ec.message.addError("No se encuentra giro primario para partyId ${issuerPartyId}")
-    return
-}
+if (giroOutMap.giroId == null)
+    ec.message.addError("No se encuentra giro primario para emisor ${issuerPartyId}")
+if (giroOutMap.description == null || giroOutMap.description == '')
+    ec.message.addError("No se encuentra descripción de giro primario para emisor ${issuerPartyId}")
 giroEmisor = giroOutMap.description
 
 // Recuperación del código SII de DTE -->
@@ -268,7 +267,6 @@ if (totalNeto != null) {
 if (invoice) {
     if (invoice.invoiceTotal != totalInvoice) {
         ec.message.addError("No coinciden valores totales, calculado: ${totalInvoice}, en invoice ${invoiceId}: ${invoice.invoiceTotal}")
-        return
     }
 }
 
