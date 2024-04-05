@@ -147,11 +147,6 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="contactOut.postalAddress"><then>
                 <set field="direccionReceptor" value="${contactOut.postalAddress.address1?:''}${contactOut.postalAddress.unitNumber? (' ' + contactOut.postalAddress.unitNumber) : ''}${contactOut.postalAddress.address2? (', ' + contactOut.postalAddress.address2) : ''}"/>
                 <set field="contactoReceptor" from="contactOut.postalAddress.toName?:''"/>
-                <if condition="!contactOut.postalAddress.stateProvinceGeoId">
-                    <script>errorMessages.add("No se ha definido comuna en la dirección tributaria del receptor")</script>
-                </if>
-                <service-call name="mchile.GeoServices.get#ComunaFromGeoId" in-map="[stateProvinceGeoId:contactOut.postalAddress.stateProvinceGeoId]" out-map="comunaOut"/>
-                <set field="comunaReceptor" from="comunaOut.comuna"/>
                 <set field="ciudadReceptor" from="contactOut.postalAddress.city?:''"/>
                 <if condition="contactOut.postalAddress.countryGeoId != 'CHL'"><then>
                     <if condition="contactOut.postalAddress.countryGeoId == null &amp;&amp; requireTaxAddress"><then>
@@ -160,7 +155,17 @@ along with this software (see the LICENSE.md file). If not, see
                         <!-- Extranjero sin Rut -->
                         <set field="rutReceptor" value="55555555-5"/>
                     </else-if></if>
-                </then></if>
+                    <if condition="contactOut.postalAddress.stateProvinceGeoId"><then>
+                        <service-call name="mchile.GeoServices.get#ComunaFromGeoId" in-map="[stateProvinceGeoId:contactOut.postalAddress.stateProvinceGeoId]" out-map="comunaOut"/>
+                        <set field="comunaReceptor" from="comunaOut.comuna"/>
+                    </then><else>
+                        <entity-find-one entity-name="moqui.basic.Geo" value-field="country" auto-field-map="[geoId:contactOut.postalAddress.countryGeoId]"/>
+                        <set field="comunaReceptor" from="country.geoName"/>
+                    </else></if>
+                </then><else>
+                    <service-call name="mchile.GeoServices.get#ComunaFromGeoId" in-map="[stateProvinceGeoId:contactOut.postalAddress.stateProvinceGeoId]" out-map="comunaOut"/>
+                    <set field="comunaReceptor" from="comunaOut.comuna"/>
+                </else></if>
             </then><else>
                 <if condition="requireTaxAddress">
                     <script>errorMessages.add("Receptor no tiene dirección postal tributaria activa")</script>
@@ -169,6 +174,9 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="comunaReceptor" value=""/>
                 <set field="ciudadReceptor" value=""/>
             </else></if>
+            <if condition="!comunaReceptor">
+                <script>errorMessages.add("No se ha definido comuna en la dirección tributaria del receptor")</script>
+            </if>
             <if condition="!rutReceptor">
                 <script>errorMessages.add("Receptor no tiene RUT")</script>
             </if>
