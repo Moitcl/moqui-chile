@@ -401,11 +401,13 @@
                                         <xsl:when test="$tipo=34">FACTURA ELECTRÓNICA EXENTA</xsl:when>
                                         <xsl:when test="$tipo=39">BOLETA ELECTRÓNICA</xsl:when>
                                         <xsl:when test="$tipo=41">BOLETA ELECTRÓNICA EXENTA</xsl:when>
+                                        <xsl:when test="$tipo=43">LIQUIDACIÓN FACTURA ELECTRÓNICA</xsl:when>
+                                        <xsl:when test="$tipo=46">FACTURA DE COMPRA ELECTRÓNICA</xsl:when>
                                         <xsl:when test="$tipo=52">GUIA DE DESPACHO ELECTRÓNICA</xsl:when>
-                                        <xsl:when test="$tipo=56">NOTA DE DEBITO ELECTRÓNICA</xsl:when>
-                                        <xsl:when test="$tipo=61">NOTA DE CREDITO ELECTRÓNICA</xsl:when>
-                                        <xsl:when test="$tipo=110">FACTURA DE EXPORTACION ELECTRÓNICA</xsl:when>
-                                        <xsl:when test="$tipo=112">NOTA DE CREDITO EXPORTACION ELECTRÓNICA</xsl:when>
+                                        <xsl:when test="$tipo=56">NOTA DE DÉBITO ELECTRÓNICA</xsl:when>
+                                        <xsl:when test="$tipo=61">NOTA DE CRÉDITO ELECTRÓNICA</xsl:when>
+                                        <xsl:when test="$tipo=110">FACTURA DE EXPORTACIÓN ELECTRÓNICA</xsl:when>
+                                        <xsl:when test="$tipo=112">NOTA DE CRÉDITO EXPORTACIÓN ELECTRÓNICA</xsl:when>
                                         <xsl:otherwise>TIPO DTE NO SOPORTADO EN TEMPLATE XSL</xsl:otherwise>
                                     </xsl:choose>
                                 </fo:block>
