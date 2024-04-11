@@ -12,13 +12,12 @@ ExecutionContext ec = context.ec
 dteConstituyeVentaTypeList = ['Ftdt-101', 'Ftdt-102', 'Ftdt-109', 'Ftdt-110', 'Ftdt-30', 'Ftdt-32', 'Ftdt-33', 'Ftdt-34', 'Ftdt-35', 'Ftdt-38', 'Ftdt-39', 'Ftd-41']
 if (invoiceId != null && fiscalTaxDocumentTypeEnumId in dteConstituyeVentaTypeList) {
     existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("invoiceId", invoiceId).condition("fiscalTaxDocumentTypeEnumId", "in", dteConstituyeVentaTypeList).list()
-    // deshabilitado para pruebas
-    /*if (existingDteList) {
+    if (existingDteList) {
         existingFiscalTaxDocumentTypeEnumId = existingDteList.first.fiscalTaxDocumentTypeEnumId
         dteEnum = ec.entity.find("moqui.basic.Enumeration").condition("enumId", existingFiscalTaxDocumentTypeEnumId).one()
         ec.message.addError("Ya existe un DTE para la orden de cobro ${invoiceId}, de tipo ${dteEnum.description} (${dteEnum.enumId})")
         return
-    }*/
+    }
 }
 
 // Recuperacion de parametros de la organizacion -->
@@ -149,22 +148,28 @@ q4+htPABTvIWzZcF4LILEDnaZS791SWJYxbbE72D
     }
 }
 
-// Descuento Global (no va en Boletas)
+descuentoORecargoGlobalList.each {
+    if (it.tipo == 'D') {
+        if (it.afecto)
+            descuentoGlobalAfecto = (descuentoGlobalAfecto?:0) - it.monto
+        else
+            descuentoGlobalExento = (descuentoGlobalExento?:0) - it.monto
+    }
+}
 
 // Totales
 if (totalNeto != null) {
+    totalNeto = totalNeto - (descuentoGlobalAfecto?:0)
     long totalIVA = Math.round(totalNeto * vatTaxRate)
     montoIVARecuperable = totalIVA
-    totalInvoice = totalNeto + totalIVA + totalExento
+    totalInvoice = (totalNeto?:0) + totalIVA + (totalExento?:0)
 } else
-    totalInvoice = totalExento
+    totalInvoice = (totalExento?:0) - (descuentoGlobalExento?:0)
 
 // Chequeo de valores entre Invoice y calculados
-if (invoice) {
-    /*if (invoice.invoiceTotal != totalInvoice) {
-        ec.message.addError("No coinciden valores totales, calculado: ${totalInvoice}, en invoice ${invoiceId}: ${invoice.invoiceTotal}")
-        return
-    }*/
+if (invoice && invoice.invoiceTotal != totalInvoice) {
+    ec.message.addError("No coinciden valores totales, calculado: ${ec.l10n.formatCurrency(totalInvoice, 'CLP')}, en invoice ${invoiceId}: ${ec.l10n.formatCurrency(invoice.invoiceTotal, 'CLP')}")
+    return
 }
 
 idDocumento = "Bol-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
@@ -290,7 +295,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 //if (detalle.porcentajeDescuento)
                    // DescuentoPct(detalle.porcentajeDescuento)
                 //if (detalle.montoDescuento)
-                    //DescuentoMonto(detalle.montoDescuento)
+                //    DescuentoMonto(detalle.montoDescuento)
 
                 if(detalle.indicadorExento)
                     MontoItem(Math.round(detalle.montoItem))
@@ -299,7 +304,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
             }
         }
         //SubTotInfo{}
-        globalDiscountOrChargeList?.each { discountOrChargeMap ->
+        descuentoORecargoGlobalList?.each { discountOrChargeMap ->
             DscRcgGlobal{
                 NroLinDR(discountOrChargeMap.numeroLinea)
                 TpoMov(discountOrChargeMap.tipo)
@@ -343,7 +348,7 @@ xmlWriter.close()
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
 
-
+ec.logger.warn("facturaXml: ${facturaXml.toString()}")
 // Validacion siempre fallara por estructura de boletas (deben ir en un envio siempre)
 /*try {
     MoquiDTEUtils.validateDocumentSii(ec, facturaXml, schemaLocation)
