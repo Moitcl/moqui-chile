@@ -348,7 +348,6 @@ xmlWriter.close()
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
 
-ec.logger.warn("facturaXml: ${facturaXml.toString()}")
 // Validacion siempre fallara por estructura de boletas (deben ir en un envio siempre)
 /*try {
     MoquiDTEUtils.validateDocumentSii(ec, facturaXml, schemaLocation)
