@@ -32,6 +32,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="organizationPartyIdAsOwnerWhenCreating"/>
             <parameter name="additionalAllowedOwnerPartyIdList" type="List"/>
             <parameter name="sentAuthStatusId" default-value="Ftd-SentAuthAccepted"/>
+            <parameter name="allowReceiverChildWithDifferentRut" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
             <parameter name="tipoDte" type="Integer" required="true"/>
@@ -629,9 +630,10 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="get" noun="ChildrenWithoutOwnRut">
+    <service verb="get" noun="Children">
         <in-parameters>
             <parameter name="partyId"/>
+            <parameter name="allowOwnRut" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
             <parameter name="childPartyIdList"/>
@@ -644,19 +646,21 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="fromPartyId" operator="is-not-null"/>
             </entity-find>
             <set field="childPartyIdList" from="childRelList.fromPartyId.sort().unique()"/>
-            <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="parentRutEv">
-                <field-map field-name="partyId"/>
-                <field-map field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
-            </entity-find-one>
-            <set field="parentRut" from="parentRutEv?.idValue"/>
-            <entity-find entity-name="mantle.party.PartyIdentification" list="pidList">
-                <econdition field-name="partyId" operator="in" from="childPartyIdList"/>
-                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
-                <econdition field-name="idValue" operator="not-equals" from="parentRut" ignore-if-empty="true"/>
-            </entity-find>
-            <iterate list="pidList" entry="pid">
-                <script>childPartyIdList.remove(pid.partyId)</script>
-            </iterate>
+            <if condition="!allowOwnRut">
+                <entity-find-one entity-name="mantle.party.PartyIdentification" value-field="parentRutEv">
+                    <field-map field-name="partyId"/>
+                    <field-map field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+                </entity-find-one>
+                <set field="parentRut" from="parentRutEv?.idValue"/>
+                <entity-find entity-name="mantle.party.PartyIdentification" list="pidList">
+                    <econdition field-name="partyId" operator="in" from="childPartyIdList"/>
+                    <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+                    <econdition field-name="idValue" operator="not-equals" from="parentRut" ignore-if-empty="true"/>
+                </entity-find>
+                <iterate list="pidList" entry="pid">
+                    <script>childPartyIdList.remove(pid.partyId)</script>
+                </iterate>
+            </if>
         </actions>
     </service>
 
