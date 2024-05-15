@@ -272,7 +272,3 @@ while (line != null) {
     }
     line = reader.readLine()
 }
-
-ec.logger.info("setList: ${groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(setList))}")
-ec.logger.info("unprocessedLines:\n${unprocessedLines.join('\n')}")
-ec.logger.info("unprocessedLineNumber:\n${unprocessedLineNumber}")
