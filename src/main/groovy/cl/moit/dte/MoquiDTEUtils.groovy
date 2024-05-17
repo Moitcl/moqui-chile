@@ -68,7 +68,7 @@ class MoquiDTEUtils {
     public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType, Integer codRef, String issuerPartyId) throws BaseArtifactException {
         List detalleList = []
         // Text Correction DTEs have no detail list
-        if (detailList.size() == 0 && codRef == 2) {
+        if ((detailList == null || detailList.size()) == 0 && codRef == 2) {
             if (detailType == "InvoiceItem" || detailType == "DebitoItem") {
                 Map detailMap = [:]
                 detailMap.numeroLinea = 1
@@ -255,7 +255,6 @@ class MoquiDTEUtils {
     }
 
     public static Map<String, Object> prepareReferences(ExecutionContext ec, List<HashMap> referenciaList, String rutEmisor, Long tipoFactura) {
-        int listSize = referenciaList.size()
         List referenciaListOut = []
         String anulaBoleta = null
         String folioAnulaBoleta = null

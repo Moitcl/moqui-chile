@@ -270,5 +270,7 @@ while (line != null) {
             unprocessedLineNumber++
         }
     }
+    if (currentSet != null)
+        currentSet.expectedLines = expectedLines
     line = reader.readLine()
 }
