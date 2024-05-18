@@ -142,7 +142,7 @@ class MoquiDTEUtils {
 
             BigDecimal priceItem
             BigDecimal totalItem = 0
-            if (detailType == "ShipmentItem") {
+            if (detailType == "ShipmentItem" && detailEntry.shipmentId) {
                 //ec.logger.info("handling price for productId ${detailEntry.productId}")
                 BigDecimal quantityHandled = 0
                 List<EntityValue> sisList = ec.entity.find("mantle.shipment.ShipmentItemSource").condition([shipmentId:detailEntry.shipmentId, productId: detailEntry.productId]).list()

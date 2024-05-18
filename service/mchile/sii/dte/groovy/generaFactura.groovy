@@ -210,8 +210,12 @@ if (tipoDte == 33) {
     if (indTrasladoEnumId == null)
         ec.message.addError("No indTrasladoEnumId for tipoDte 52 (Guía de Despacho)")
     if (indTrasladoEnumId in ['IndTraslado-1', 'IndTraslado-9'] && !invoiceId)
-        ec.message.addError("No se puede generar una Guía de Despacho sin un invoiceId")
+        ec.message.addError("No se puede generar una Guía de Despacho que constituye venta sin un invoiceId")
     indTraslado = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:indTrasladoEnumId, enumTypeId:'IndTraslado']).call().siiCode
+    if (tipoDespachoEnumId == null)
+        ec.message.addError("No tipoDespachoEnumId for tipoDte 52 (Guía de Despacho)")
+    tipoDespacho = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:tipoDespachoEnumId, enumTypeId:'TipoDespacho']).call().siiCode
+
     // TODO: Si la referencia es tipo fe de erratas, Monto Item puede ser 0
     originalReferenciaList = referenciaList
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
@@ -513,9 +517,9 @@ try {
 
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
 if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
-    ec.logger.info("DTE folio ${folio} generada OK")
+    ec.logger.info("DTE tipo ${tipoDte} (${dteTypeDescription}) folio ${folio} generada OK")
 } else {
-    ec.message.addError("Error al generar DTE folio ${folio}: firma inválida")
+    ec.message.addError("Error al generar DTE tipo ${tipoDte} (${dteTypeDescription}) folio ${folio}: firma inválida")
 }
 
 if (ec.message.hasError())
