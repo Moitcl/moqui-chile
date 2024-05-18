@@ -154,6 +154,10 @@ if (tipoDte == 33) {
     referenciaList = refMap.referenciaList
     anulaBoleta = refMap.anulaBoleta
     folioAnulaBoleta = refMap.folioAnulaBoleta
+    if (referenciaList == null || referenciaList.size() == 0) {
+        ec.message.addError("No se puede crear Nota de Crédito sin referencias")
+        return
+    }
     codRef = referenciaList[0].codigo
 
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", codRef as Integer, issuerPartyId)
