@@ -319,7 +319,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="invoiceId"/>
             </entity-find>
             <if condition="existingFtdList"><return error="true" message="Ya existe una Nota de Crédito para invoice ${invoiceId}"/></if>
-            <if condition="!(invoice.statusId in ['InvoiceIncoming','InvoiceApproved','InvoicePmtSent','InvoiceReceived','InvoiceBilledThrough'])">
+            <if condition="!(invoice.statusId in ['InvoiceFinalized','InvoiceSent','InvoiceSent','InvoiceAcked','InvoicePmtReceived','InvoiceWriteOff'])">
                 <return error="true" message="Invalid statusId for credit invoice: ${invoice.statusId}"/></if>
 
             <!-- En la nota de credito se invierten fromPartyId y toPartyId (cliente le cobra al vendedor) -->
@@ -423,7 +423,7 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <if condition="existingFtdList"><return error="true" message="Ya existe una Nota de Débito para invoice ${invoiceId}"/></if>
 
-            <if condition="!(invoice.statusId in ['InvoiceInProcess','InvoiceIncoming','InvoiceApproved','InvoicePmtSent','InvoiceReceived','InvoiceBilledThrough'])">
+            <if condition="!(invoice.statusId in ['InvoiceFinalized','InvoiceSent','InvoiceSent','InvoiceAcked','InvoicePmtReceived','InvoiceWriteOff'])">
                 <return error="true" message="Invalid statusId for debit invoice: ${invoice.statusId}"/>
             </if>
 
@@ -698,6 +698,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="razonReferencia" default-value="Error de Facturación"/>
             <parameter name="fechaEmision" type="java.sql.Timestamp" default="ec.user.nowTimestamp" format="dd-MM-yyyy"/>
+            <parameter name="checkAcceptedBySii" type="Boolean" default="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="originalInvoiceId"/>
@@ -709,7 +710,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="fiscalTaxDocumentNumber"/>
                 <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
                 <econdition field-name="statusId" value="Ftd-Issued"/>
-                <econdition field-name="sentAuthStatusId" operator="in" value="Ftd-SentAuthAccepted,Ftd-SentAuthAcceptedWithDiscrepancies"/>
+                <econdition field-name="sentAuthStatusId" operator="in" value="Ftd-SentAuthAccepted,Ftd-SentAuthAcceptedWithDiscrepancies" ignore="!checkAcceptedBySii"/>
             </entity-find>
             <set field="dte" from="dteList.first"/>
             <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument in create#EmptyCreditMemo"/></if>
@@ -728,7 +729,7 @@ along with this software (see the LICENSE.md file). If not, see
                 ]]></script>
             <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:dte.receiverPartyId]" out-map="receiverRut"/>
             <set field="referenceMap" from="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId, folio:dte.fiscalTaxDocumentNumber, fecha:fecha,
-                 rutEmisorFolio:dte.issuerPartyIdValue, codigoReferenciaEnumId:'MCHRefDteCodeAnula', razonReferencia:razonReferencia, referenceTypeEnumId:'RefDteTypeInvoice']"/>
+                 rutEmisorFolio:dte.issuerPartyIdValue, razonReferencia:razonReferencia, referenceTypeEnumId:'RefDteTypeInvoice']"/>
             <service-call name="mchile.sii.dte.DteReferenceServices.add#InvoiceReference" in-map="referenceMap"/>
         </actions>
     </service>
@@ -772,6 +773,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="razonReferencia" default-value="Error de Facturación"/>
             <parameter name="fechaEmision" type="java.sql.Timestamp" default="ec.user.nowTimestamp" format="dd-MM-yyyy"/>
+            <parameter name="checkAcceptedBySii" type="Boolean" default="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="originalInvoiceId"/>
@@ -787,7 +789,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="fiscalTaxDocumentNumber"/>
                 <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
                 <econdition field-name="statusId" value="Ftd-Issued"/>
-                <econdition field-name="sentAuthStatusId" operator="in" value="Ftd-SentAuthAccepted,Ftd-SentAuthAcceptedWithDiscrepancies"/>
+                <econdition field-name="sentAuthStatusId" operator="in" value="Ftd-SentAuthAccepted,Ftd-SentAuthAcceptedWithDiscrepancies" ignore="!checkAcceptedBySii"/>
             </entity-find>
             <set field="dte" from="dteList.first"/>
 
