@@ -188,7 +188,7 @@ class MoquiDTEUtils {
                     totalItem = 0
                 } else {
                     priceItem = detailEntry.amount
-                    totalItem = (quantity ?: 0) * (priceItem ?: 0) - (montoDescuento ?: 0)
+                    totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0)
                 }
             } else if (detailType == "ReturnItem") {
                 if (codRef == 2) {
@@ -201,13 +201,13 @@ class MoquiDTEUtils {
                 }
             } else if (detailType == "OrderItem") {
                 priceItem = detailEntry.unitAmount
-                totalItem = (quantity ?: 0) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
+                totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
             } else if (detailType == "InvoiceItem") {
                 priceItem = detailEntry.amount
-                totalItem = (quantity ?: 0) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
+                totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
             } else {
                 priceItem = detailEntry.amount
-                totalItem = (quantity ?: 0) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
+                totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
             }
 
             if (itemAfecto)
