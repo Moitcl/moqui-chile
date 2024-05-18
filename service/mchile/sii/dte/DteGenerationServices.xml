@@ -1112,7 +1112,7 @@ along with this software (see the LICENSE.md file). If not, see
                     </iterate>
                     <if condition="hide"><then>
                         <if condition="ec.user.getPreference('mchile.dte.AddDiscountSubitemDescription') == 'true'">
-                            <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}Incluye ${subitem.description} por ${ec.l10n.formatCurrency((-1*subitem.amount*subitem.quantity/invoiceItem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), currencyUomId)}${invoiceItem.quantity > 1? ' (unitario)': ''}"/>
+                            <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}Incluye ${subitem.description ?: 'descuento'} por ${ec.l10n.formatCurrency((-1*subitem.amount*subitem.quantity/invoiceItem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), currencyUomId)}${subitem.quantity > 1? ' (unitario)': ''}"/>
                         </if>
                         <set field="invoiceItem.amount" from="invoiceItem.amount + (totalDiscount/invoiceItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
                     </then><else>
@@ -1169,7 +1169,7 @@ along with this software (see the LICENSE.md file). If not, see
                         <set field="glosa" from="orderItemEV.itemDescription"/>
                     </else></if>
                     <script>descuentoORecargoGlobalList.add([numeroLinea:numeroLineaDescuentoORecargoGlobal, tipo:'D', afecto:true, glosa:glosa, valor:valor, tipoValor:tipoValor, monto:itemAmount])</script>
-                </then><else><!-- ceItemEV.description, -->
+                </then><else>
                     <set field="orderItem" from="orderItemEV.getMap()"/>
                     <script>orderItemList.add(orderItem)</script>
                     <entity-find entity-name="mantle.order.OrderItem" list="subitemList">
@@ -1183,8 +1183,11 @@ along with this software (see the LICENSE.md file). If not, see
                         <if condition="subitem.itemTypeEnumId == 'ItemDetailedDescription'"><then>
                             <set field="orderItem.detailedDescription" value="${orderItem.detailedDescription ? (orderItem.detailedDescription + '; '): ''}${subitem.itemDescription}"/>
                         </then><else-if condition="subitem.itemTypeEnumId == 'ItemDiscount'">
-                            <set field="hide" from="(subItem?.hideInParent == 'Y' || ec.user.getPreference('mchile.dte.PreferHiddenDiscountInParent') == 'true' )
-                                                        &amp;&amp; (first || hide)"/>
+                            <if condition="subItem?.hideInParent == null"><then>
+                                <set field="hide" from="(first || hide) &amp;&amp; ec.user.getPreference('mchile.dte.PreferHiddenDiscountInParent') == 'true'"/>
+                            </then><else>
+                                <set field="hide" from="subItem.hideInParent == 'Y'"/>
+                            </else></if>
                             <if condition="subItem.sourcePercentage">
                                 <if condition="hide || orderItem.porcentajeDescuento == subItem.sourcePercentage"><then>
                                     <set field="orderItem.porcentajeDescuento" from="subItem.sourcePercentage"/>
@@ -1202,7 +1205,7 @@ along with this software (see the LICENSE.md file). If not, see
                     </iterate>
                     <if condition="hide"><then>
                         <if condition="ec.user.getPreference('mchile.dte.AddDiscountSubitemDescription') == 'true'">
-                            <set field="orderItem.detailedDescription" value="${orderItem.detailedDescription ? (orderItem.detailedDescription + '; '): ''}Incluye ${subitem.itemDescription} por ${ec.l10n.formatCurrency((-1*subitem.unitAmount*subitem.quantity/orderItem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), currencyUomId)}${orderItem.quantity > 1? ' (unitario)': ''}"/>
+                            <set field="orderItem.detailedDescription" value="${orderItem.detailedDescription ? (orderItem.detailedDescription + '; '): ''}Incluye ${subitem.itemDescription ?: 'descuento'} por ${ec.l10n.formatCurrency((-1*subitem.unitAmount*subitem.quantity/subItem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), currencyUomId)}${subitem.quantity > 1? ' (unitario)': ''}"/>
                         </if>
                         <set field="orderItem.amount" from="orderItem.unitAmount + (totalDiscount/orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
                     </then><else>

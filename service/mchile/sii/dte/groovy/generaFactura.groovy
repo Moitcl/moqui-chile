@@ -275,7 +275,7 @@ if (totalNeto != null) {
 // Chequeo de valores entre Invoice y calculados
 if (invoice) {
     if (invoice.invoiceTotal != totalInvoice) {
-        ec.message.addError("No coinciden valores totales, calculado: ${totalInvoice}, en invoice ${invoiceId}: ${invoice.invoiceTotal}")
+        ec.message.addError("No coinciden valores totales, calculado: ${ec.l10n.formatCurrency(totalInvoice, invoice.currencyUomId)}, en invoice ${invoiceId}: ${ec.l10n.formatCurrency(invoice.invoiceTotal, invoice.currencyUomId)}")
     }
 }
 
@@ -504,8 +504,6 @@ String facturaXmlString = xmlWriter.toString()
 facturaXmlString = facturaXmlString.replaceAll("[^\\x00-\\xFF]", "")
 xmlWriter.close()
 
-ec.logger.info(facturaXmlString);
-
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
 
@@ -516,14 +514,16 @@ try {
 }
 
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
-if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
-    ec.logger.info("DTE tipo ${tipoDte} (${dteTypeDescription}) folio ${folio} generada OK")
-} else {
+if (!MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
     ec.message.addError("Error al generar DTE tipo ${tipoDte} (${dteTypeDescription}) folio ${folio}: firma inválida")
 }
 
-if (ec.message.hasError())
+if (ec.message.hasError()) {
+    ec.logger.info(facturaXmlString);
     return
+}
+
+ec.logger.info("DTE tipo ${tipoDte} (${dteTypeDescription}) folio ${folio} generada OK")
 
 if (!draft) {
     // Creación de registro en FiscalTaxDocument -->

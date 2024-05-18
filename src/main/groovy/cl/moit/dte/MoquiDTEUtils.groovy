@@ -76,7 +76,7 @@ class MoquiDTEUtils {
                 detailMap.priceItem = 0.000001
                 detailMap.montoItem = 0
                 detalleList.add(detailMap)
-                return [detalleList:detalleList, totalNeto:0, totalExento:0, numberExentos:0, numberAfectos:0]
+                return [detalleList: detalleList, totalNeto: 0, totalExento: 0, numberExentos: 0, numberAfectos: 0]
             }
         }
 
@@ -94,7 +94,7 @@ class MoquiDTEUtils {
                 nombreItem = detailEntry.itemDescription
             if (!nombreItem) {
                 EntityValue productEv = ec.entity.find("mantle.product.Product").condition("productId", detailEntry.productId).one()
-                nombreItem = productEv? productEv.productName : ''
+                nombreItem = productEv ? productEv.productName : ''
             }
             if (!nombreItem) {
                 // Put detailed description as name
@@ -133,10 +133,10 @@ class MoquiDTEUtils {
             }
             Boolean itemAfecto = null
             if (detailEntry.productId) {
-                Map<String, Object> afectoOutMap = ec.service.sync().name("mchile.sii.dte.DteInternalServices.check#Afecto").parameters([issuerPartyId:issuerPartyId, productId:detailEntry.productId]).call()
+                Map<String, Object> afectoOutMap = ec.service.sync().name("mchile.sii.dte.DteInternalServices.check#Afecto").parameters([issuerPartyId: issuerPartyId, productId: detailEntry.productId]).call()
                 itemAfecto = afectoOutMap.afecto
             } else {
-                String productDefaultExento = ec.service.sync().name("mantle.party.PartyServices.get#PartySettingValue").parameters([partyId:issuerPartyId, partySettingTypeId:'moit.dte.ProductDefaultIsExento']).call().settingValue
+                String productDefaultExento = ec.service.sync().name("mantle.party.PartyServices.get#PartySettingValue").parameters([partyId: issuerPartyId, partySettingTypeId: 'moit.dte.ProductDefaultIsExento']).call().settingValue
                 itemAfecto = productDefaultExento != 'true'
             }
 
@@ -145,7 +145,7 @@ class MoquiDTEUtils {
             if (detailType == "ShipmentItem" && detailEntry.shipmentId) {
                 //ec.logger.info("handling price for productId ${detailEntry.productId}")
                 BigDecimal quantityHandled = 0
-                List<EntityValue> sisList = ec.entity.find("mantle.shipment.ShipmentItemSource").condition([shipmentId:detailEntry.shipmentId, productId: detailEntry.productId]).list()
+                List<EntityValue> sisList = ec.entity.find("mantle.shipment.ShipmentItemSource").condition([shipmentId: detailEntry.shipmentId, productId: detailEntry.productId]).list()
                 if (sisList) {
                     sisList.each { sis ->
                         EntityValue item
@@ -157,8 +157,8 @@ class MoquiDTEUtils {
                         if (item) {
                             totalItem = totalItem + sis.quantity * item.amount
                         } else {
-                            EntityValue shipment = ec.entity.find("mantle.shipment.Shipment").condition([shipmentId:sis.shipmentId]).one()
-                            item = ec.entity.find("mantle.product.ProductPrice").condition([productId: detailEntry.productId, productStoreId:shipment.productStoreId]).one()
+                            EntityValue shipment = ec.entity.find("mantle.shipment.Shipment").condition([shipmentId: sis.shipmentId]).one()
+                            item = ec.entity.find("mantle.product.ProductPrice").condition([productId: detailEntry.productId, productStoreId: shipment.productStoreId]).one()
                             totalItem = totalItem + sis.quantity * item.price
                         }
                         quantityHandled = quantityHandled + sis.quantity
@@ -178,17 +178,17 @@ class MoquiDTEUtils {
                     totalItem = totalItem + (quantity - quantityHandled) * priceMap.price
                 }
                 priceItem = totalItem / quantity as BigDecimal
-                totalItem = totalItem - (montoDescuento?:0)
+                totalItem = totalItem - (montoDescuento ?: 0)
                 totalItem = totalItem.setScale(0, java.math.RoundingMode.HALF_UP) as Long
             } else if (detailType == "DebitoItem") {
-                if(codRef == 2) {
+                if (codRef == 2) {
                     quantity = null
                     priceItem = null
                     nombreItem = "Corrige Dato Receptor"
                     totalItem = 0
                 } else {
                     priceItem = detailEntry.amount
-                    totalItem = (quantity?:0) * (priceItem?:0) - (montoDescuento?:0)
+                    totalItem = (quantity ?: 0) * (priceItem ?: 0) - (montoDescuento ?: 0)
                 }
             } else if (detailType == "ReturnItem") {
                 if (codRef == 2) {
@@ -201,13 +201,13 @@ class MoquiDTEUtils {
                 }
             } else if (detailType == "OrderItem") {
                 priceItem = detailEntry.unitAmount
-                totalItem = (quantity?:0) * (priceItem?:0) - (montoDescuento?:0) + (ajusteDecimal?:0)
+                totalItem = (quantity ?: 0) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
             } else if (detailType == "InvoiceItem") {
                 priceItem = detailEntry.amount
-                totalItem = (quantity?:0) * (priceItem?:0) - (montoDescuento?:0) + (ajusteDecimal?:0)
+                totalItem = (quantity ?: 0) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
             } else {
                 priceItem = detailEntry.amount
-                totalItem = (quantity?:0) * (priceItem?:0) - (montoDescuento?:0) + (ajusteDecimal?:0)
+                totalItem = (quantity ?: 0) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
             }
 
             if (itemAfecto)
@@ -218,20 +218,20 @@ class MoquiDTEUtils {
             // Agrego detalles
             Map detailMap = [:]
             detalleList.add(detailMap)
-            detailMap.numeroLinea = i+1
+            detailMap.numeroLinea = i + 1
             if (detailEntry.productId)
-                detailMap.codigoItem = [[tipoCodigo:'INT1', valorCodigo:detailEntry.productId]]
+                detailMap.codigoItem = [[tipoCodigo: 'INT1', valorCodigo: detailEntry.productId]]
             detailMap.nombreItem = nombreItem
             if (detailEntry.detailedDescription)
                 detailMap.descripcionItem = detailEntry.detailedDescription
             if (quantity != null)
                 detailMap.quantity = quantity
-            if(uom != null)
+            if (uom != null)
                 detailMap.uom = uom
             if (priceItem != null && (detailType != "ShipmentItem" || Math.round(priceItem) > 0))
                 detailMap.priceItem = priceItem
             detailMap.montoItem = totalItem
-            if(detailType == "ShipmentItem" || itemAfecto) {
+            if (detailType == "ShipmentItem" || itemAfecto) {
                 totalNeto = (totalNeto ?: 0) + totalItem
             } else {
                 totalExento = (totalExento ?: 0) + totalItem
@@ -239,11 +239,11 @@ class MoquiDTEUtils {
             }
             if (detailType == "ReturnItem" && codRef == 2) {
                 singleDet = [detailMap]
-                return [detalleList:singleDet, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos, totalDescuentos:totalDescuentos]
+                return [detalleList: singleDet, totalNeto: totalNeto, totalExento: totalExento, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos]
             }
             if (detailType == "DebitoItem" && codRef == 2) {
                 singleDet = [detailMap]
-                return [detailArray:singleDet, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos, totalDescuentos:totalDescuentos]
+                return [detailArray: singleDet, totalNeto: totalNeto, totalExento: totalExento, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos]
             }
             if (porcentajeDescuento)
                 detailMap.porcentajeDescuento = porcentajeDescuento
@@ -251,7 +251,7 @@ class MoquiDTEUtils {
                 detailMap.montoDescuento = montoDescuento
             i = i + 1
         }
-        return [detalleList:detalleList, totalNeto:totalNeto, totalExento:totalExento, numberExentos:numberExentos, numberAfectos:numberAfectos, totalDescuentos:totalDescuentos]
+        return [detalleList: detalleList, totalNeto: totalNeto, totalExento: totalExento, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos]
     }
 
     public static Map<String, Object> prepareReferences(ExecutionContext ec, List<HashMap> referenciaList, String rutEmisor, Long tipoFactura) {
@@ -266,24 +266,24 @@ class MoquiDTEUtils {
             String codRef = null
             if (referenciaEntry.codigoReferenciaEnumId != null)
                 codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as String
-                //codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as Integer
-            Timestamp fechaRef = referenciaEntry.fecha instanceof java.sql.Date? new Timestamp(referenciaEntry.fecha.time) : referenciaEntry.fecha
+            //codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as Integer
+            Timestamp fechaRef = referenciaEntry.fecha instanceof java.sql.Date ? new Timestamp(referenciaEntry.fecha.time) : referenciaEntry.fecha
 
             // Agrego referencias
             Map referenciaMap = [:]
             referenciaListOut.add(referenciaMap)
-            referenciaMap.numeroLinea = i+1
+            referenciaMap.numeroLinea = i + 1
             referenciaMap.fecha = fechaRef
-            if(referenciaEntry.razonReferencia != null)
+            if (referenciaEntry.razonReferencia != null)
                 referenciaMap.razon = referenciaEntry.razonReferencia
             referenciaMap.folio = folioRef
             if (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('Ftdt-0')) { // Used for Set de Pruebas SII
                 referenciaMap.tipoDocumento = 'SET'
             } else {
-                Map<String, Object> codeOut = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
+                Map<String, Object> codeOut = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId: referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
                 Integer tpoDocRef = codeOut.siiCode
                 referenciaMap.tipoDocumento = tpoDocRef as String
-                if(tipoFactura == 61 && (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-39") || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41")) && codRef?.equals(1) ) {
+                if (tipoFactura == 61 && (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-39") || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41")) && codRef?.equals(1)) {
                     // Nota de crédito hace referencia a Boletas Electrónicas
                     anulaBoleta = 'true'
                     folioAnulaBoleta = referenciaEntry.folio.toString()
@@ -296,19 +296,23 @@ class MoquiDTEUtils {
                 if (referenciaEntry.fiscalTaxDocumentTypeEnumId in documentosTributariosEnumIdList)
                     referenciaMap.rutOtro = referenciaEntry.rutEmisorFolio
             }
-            if(codRef != null)
+            if (codRef != null)
                 referenciaMap.codigo = codRef
             // TODO: ¿Por qué se asume que una Nota de Crédito es exenta al estar generando una nota de débito?
-            if(referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-34") || (tipoFactura == 56 && referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-61")) ) {
+            if (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-34") || (tipoFactura == 56 && referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-61"))) {
                 dteExenta = true
             }
 
             i = i + 1
         }
-        return [referenciaList:referenciaListOut, anulaBoleta:anulaBoleta, folioAnulaBoleta:folioAnulaBoleta, dteExenta:dteExenta]
+        return [referenciaList: referenciaListOut, anulaBoleta: anulaBoleta, folioAnulaBoleta: folioAnulaBoleta, dteExenta: dteExenta]
     }
 
     public static boolean verifySignature(org.w3c.dom.Node doc, String xPathExpression, String dateXPathExpression) throws NoSuchAlgorithmException, InvalidKeyException,
+            IOException, ParserConfigurationException, SAXException {
+        verifySignature(doc, xPathExpression, dateXPathExpression, false)
+    }
+    public static boolean verifySignature(org.w3c.dom.Node doc, String xPathExpression, String dateXPathExpression, boolean verbose) throws NoSuchAlgorithmException, InvalidKeyException,
             IOException, ParserConfigurationException, SAXException {
         XPath xpath = XPathFactory.newInstance().newXPath()
         xpath.setNamespaceContext(new DefaultNamespaceContext().addNamespace("sii", "http://www.sii.cl/SiiDte"))
