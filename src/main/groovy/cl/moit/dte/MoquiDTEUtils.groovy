@@ -151,13 +151,14 @@ class MoquiDTEUtils {
                         EntityValue item
                         if (sis.invoiceId) {
                             item = ec.entity.find("mantle.account.invoice.InvoiceItem").condition([invoiceId: sis.invoiceId, invoiceItemSeqId: sis.invoiceItemSeqId]).one()
+                            totalItem = totalItem + sis.quantity * item.amount
                         } else if (sis.orderId) {
                             item = ec.entity.find("mantle.account.order.OrderItem").condition([orderId: sis.orderId, orderItemSeqId: sis.orderItemSeqId]).one()
+                            totalItem = totalItem + sis.quantity * item.unitAmount
                         }
-                        if (item) {
-                            totalItem = totalItem + sis.quantity * item.amount
-                        } else {
+                        if (!item) {
                             EntityValue shipment = ec.entity.find("mantle.shipment.Shipment").condition([shipmentId: sis.shipmentId]).one()
+                            ec.service.sync().name("mantle.product.PriceServices.get#ProductPrice").parameters(productId:detailEntry.productId, quantity:sis.quantity, priceUomId:'CLP')
                             item = ec.entity.find("mantle.product.ProductPrice").condition([productId: detailEntry.productId, productStoreId: shipment.productStoreId]).one()
                             totalItem = totalItem + sis.quantity * item.price
                         }
@@ -218,6 +219,7 @@ class MoquiDTEUtils {
             // Agrego detalles
             Map detailMap = [:]
             detalleList.add(detailMap)
+            List singleDet = null
             detailMap.numeroLinea = i + 1
             if (detailEntry.productId)
                 detailMap.codigoItem = [[tipoCodigo: 'INT1', valorCodigo: detailEntry.productId]]

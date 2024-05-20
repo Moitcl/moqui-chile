@@ -217,9 +217,8 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="shipmentId" required="true"/>
-            <parameter name="indTrasladoEnumId" required="true"/>
-            <parameter name="tipoDespachoEnumId"/>
             <parameter name="settlementTermId"/>
+            <parameter name="invoiceId"/>
             <parameter name="sendToSii" type="Boolean" default="true"/>
             <parameter name="fechaEmision" type="Date" default="ec.user.nowTimestamp"/>
         </in-parameters>
@@ -239,6 +238,9 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="glosaPagos" from="settlementField.description"/>
             </if>
             <if condition="!glosaPagos"><set field="glosaPagos" value=""/></if>
+            <if condition="invoiceId">
+                <service-call name="mchile.TaxServices.calculate#SalesTaxForInvoice" in-map="[invoiceId:invoiceId]"/>
+            </if>
 
             <entity-find-one entity-name="mantle.shipment.Shipment" value-field="shipment"/>
             <if condition="!shipment">
@@ -277,7 +279,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="indTrasladoEnumId" from="shipment.indTrasladoEnumId"/>
             <set field="tipoDespachoEnumId" from="shipment.tipoDespachoEnumId"/>
 
-            <service-call name="mchile.sii.dte.DteGenerationServices.get#ReceiverInfo" in-map="[receiverPartyId:receiverPartyId]" out-map="context"/>
+            <service-call name="mchile.sii.dte.DteGenerationServices.get#ReceiverInfo" in-map="[receiverPartyId:receiverPartyId, fiscalTaxDocumentTypeEnumId:'Ftdt-52']" out-map="context"/>
 
             <set field="medioPago" value="PE"/>
             <set field="formaPago" value="2"/>
@@ -319,7 +321,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="invoiceId"/>
             </entity-find>
             <if condition="existingFtdList"><return error="true" message="Ya existe una Nota de Crédito para invoice ${invoiceId}"/></if>
-            <if condition="!(invoice.statusId in ['InvoiceFinalized','InvoiceSent','InvoiceSent','InvoiceAcked','InvoicePmtReceived','InvoiceWriteOff'])">
+            <if condition="!(invoice.statusId in ['InvoiceFinalized','InvoiceSent','InvoiceSent','InvoiceAcked','InvoicePmtRecvd','InvoiceWriteOff'])">
                 <return error="true" message="Invalid statusId for credit invoice: ${invoice.statusId}"/></if>
 
             <!-- En la nota de credito se invierten fromPartyId y toPartyId (cliente le cobra al vendedor) -->
@@ -423,7 +425,7 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <if condition="existingFtdList"><return error="true" message="Ya existe una Nota de Débito para invoice ${invoiceId}"/></if>
 
-            <if condition="!(invoice.statusId in ['InvoiceFinalized','InvoiceSent','InvoiceSent','InvoiceAcked','InvoicePmtReceived','InvoiceWriteOff'])">
+            <if condition="!(invoice.statusId in ['InvoiceFinalized','InvoiceSent','InvoiceSent','InvoiceAcked','InvoicePmtRecvd','InvoiceWriteOff'])">
                 <return error="true" message="Invalid statusId for debit invoice: ${invoice.statusId}"/>
             </if>
 
