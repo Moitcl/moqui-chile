@@ -224,8 +224,8 @@ while (line != null) {
             lineNumber++
             montoMatcher = line =~ /^ *([0-9]*)\t+ *([0-9]*) *$/
             if (montoMatcher.matches()) {
-                montoAfecto = montoMatcher[0][1]?:null
-                montoExento = montoMatcher[0][2]?:null
+                montoExento = montoMatcher[0][1]?:null
+                montoAfecto = montoMatcher[0][2]?:null
             } else
                 ec.message.addError("Unexpected line at ${lineNumber}, expected montoExento\\tmontoAfecto, got: ${line}")
             fiscalTaxDocumentTypeEnumId = tipoDocumentoMap[tipoDocumento]

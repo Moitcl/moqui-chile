@@ -663,7 +663,7 @@ class MoquiDTEUtils {
             String schemaLocation = "${schemaPrefixLocation}${fileName}"
             rr = ec.resource.getLocationReference(schemaLocation)
             if (rr == null || !rr.exists)
-                throw new RuntimeException("Unknown schema: ${schemaUri} (attempted to find it at ${schemaLocation})")
+                throw new RuntimeException("Failed to open schema: ${schemaUri} (attempted to find it at ${schemaLocation})")
 
         } else
             throw new RuntimeException("Unknown schema: ${schemaUri}")
@@ -715,7 +715,7 @@ class MoquiDTEUtils {
             ResourceReference rr = null
             if (type != "http://www.w3.org/2001/XMLSchema")
                 return null
-            if (namespaceURI == "http://www.sii.cl/SiiDte" || namespaceURI == "http://www.w3.org/2000/09/xmldsig#") {
+            if (namespaceURI == "http://www.sii.cl/SiiDte" || namespaceURI == "http://www.w3.org/2000/09/xmldsig#" || namespaceURI == "http://www.sii.cl/SiiLce") {
                 rr = ec.resource.getLocationReference(prefixLocation + systemId)
             }
 
