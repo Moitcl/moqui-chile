@@ -8,12 +8,10 @@ import org.moqui.entity.EntityValue
 
 ExecutionContext ec = ec
 
-tipoMap = [Ventas:'VENTA', Compras:'COMPRA']
-if (tipo == null)
-    ec.message.addError("Se debe especificar el tipo")
-tipoOperacion = tipoMap[tipo]
 if (tipoOperacion == null)
-    ec.message.addError("tipo debe ser 'Ventas' o 'Compras'")
+    ec.message.addError("Se debe especificar el tipo")
+if (tipoOperacion != 'VENTA' && tipoOperacion != 'COMPRA')
+    ec.message.addError("tipo debe ser 'VENTA' o 'COMPRA'")
 
 if (ec.message.hasError())
     return
@@ -58,7 +56,7 @@ ecf = ec.entity.conditionFactory
 EntityCondition facturaVentaCondition = null
 EntityCondition facturaCompraCondition = null
 EntityCondition tipoDocumentoCondition = null
-if (tipo == 'Ventas') {
+if (tipoOperacion == 'VENTA') {
     facturaVentaCondition = ecf.makeCondition([ecf.makeCondition("issuerPartyIdValue", EntityCondition.ComparisonOperator.EQUALS, dteConfig.rutOrganizacion),
                                                ecf.makeCondition("issuerPartyId", EntityCondition.ComparisonOperator.EQUALS, dteConfig.partyId),
                                                ecf.makeCondition("fiscalTaxDocumentTypeEnumId", EntityCondition.ComparisonOperator.NOT_IN, compraDteTypeList)])
@@ -133,7 +131,7 @@ documentEvList.each { EntityValue dte ->
         rutComprador = dte.receiverPartyIdValue
         partyIdComprador = dte.receiverPartyId
     }
-    if (tipo == 'Ventas') {
+    if (tipoOperacion == 'VENTA') {
         doc.rutContraparte = rutComprador
         partyIdContraparte = partyIdComprador
     } else {
@@ -186,7 +184,7 @@ documentEvList.each { EntityValue dte ->
     }
 }
 
-idLibro = "Libro${tipo}-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
+idLibro = "Libro${tipoOperacion == 'VENTA' ? 'Ventas' : 'Compras'}-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
 String schemaLocation = 'http://www.sii.cl/SiiDte LibroCV_v10.xsd'
 String tmstFirma = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
 xmlBuilder.LibroCompraVenta(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation) {
@@ -198,8 +196,13 @@ xmlBuilder.LibroCompraVenta(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'htt
             FchResol(dteConfig.fechaResolucionSii)
             NroResol(dteConfig.numeroResolucionSii)
             TipoOperacion(tipoOperacion)
-            TipoLibro('MENSUAL')
+            if (folioNotificacion)
+                TipoLibro('ESPECIAL')
+            else
+                TipoLibro('MENSUAL')
             TipoEnvio('TOTAL')
+            if (folioNotificacion)
+                FolioNotificacion(folioNotificacion)
         }
         ResumenPeriodo {
             totalesPeriodo.each { tipoDocumento, totalesPorTipo ->
