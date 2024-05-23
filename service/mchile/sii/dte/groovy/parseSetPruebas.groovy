@@ -31,16 +31,19 @@ while (line != null) {
         currentLibroVentasExpectedLine = null
         numeroAtencion = Long.parseLong(inicioSubset[0][2])
         tipoSubset = inicioSubset[0][1]
-        currentSet = [numeroAtencion:numeroAtencion, tipo:tipoSubset, unprocessedLines:[]]
+        currentSet = [numeroAtencion: numeroAtencion, tipo: tipoSubset, unprocessedLines: []]
         setList.add(currentSet)
-    } else  if (tipoSubset == "BASICO DOCUMENTOS DE EXPORTACION (1)") {
+        expectedLines = []
+    } else if (tipoSubset == "BASICO DOCUMENTOS DE EXPORTACION (1)") {
         if (currentSet.documents == null) {
             currentSet.documents = []
             currentDocument = null
         }
         def inicioCaso = line =~ /^CASO $numeroAtencion-([0-9]+)/
-        def detalleInternacional = line =~ /^([A-Z()* ]+):\s+ ([0-9.A-Z, ])$/
-        if (inicioCaso.matches()) {
+        def detalleInternacional = line =~ /^([A-Z ]+?)(?: \(\*\*\))?+:\s+([0-9.A-Za-z(),\/ ]+)$/
+        if (line in expectedLines) {
+
+        } else if (inicioCaso.matches()) {
             itemFields = null
             seqNum = inicioCaso[0][1]
             line = reader.readLine()
@@ -62,15 +65,22 @@ while (line != null) {
             }
             currentDocument = [seqNum: seqNum, fiscalTaxDocumentTypeEnumId: fiscalTaxDocumentTypeEnumId]
             currentSet.documents.add(currentDocument)
+            if (fiscalTaxDocumentTypeEnumId == 'Ftdt-112') {
+                expectedLines = ["REFERENCIA\t\tFACTURA DE EXPORTACION ELECTRONICA CORRESPONDIENTE A CASO ${numeroAtencion}-1".toString(), 'RAZON REFERENCIA\tDEVOLUCION DE MERCADERIA',
+                                 'EL PRECIO UNITARIO DEL ITEM DEBE SER EL MISMO DE LA FACTURA']
+            } else if (fiscalTaxDocumentTypeEnumId == 'Ftdt-111')
+                expectedLines = ["REFERENCIA\t\tNOTA DE CREDITO CORRESPONDIENTE A CASO ${numeroAtencion}-2".toString(), 'RAZON REFERENCIA\tANULA NOTA DE CREDITO',
+                                 '(**) VER INSTRUCCIONES AL CONTRIBUYENTE EN SET BASICO FACTURA DE EXPORTACION (2).']
         } else if (line?.startsWith("ITEM\s")) {
             itemFields = line.substring(32).split("\t+")
             currentDocument.items = []
         } else if (detalleInternacional.matches()) {
             campo = detalleInternacional[0][1]
             valor = detalleInternacional[0][2]
+            ec.logger.info("detalleInternacional, campo: ${campo}, valor: ${valor}")
             if (campo in ['MONEDA DE LA OPERACION', 'FORMA DE PAGO EXPORTACION', 'MODALIDAD DE VENTA', 'CLAUSULA DE VENTA DE EXPORTACION', 'TOTAL CLAUSULA DE VENTA',
                           'VIA DE TRANSPORTE', 'PUERTO DE EMBARQUE', 'PUERTO DE DESEMBARQUE', 'UNIDAD DE MEDIDA DE TARA', 'UNIDAD PESO BRUTO', 'UNIDAD PESO NETO',
-                          'TIPO DE BULTO', 'TOTAL BULTOS', 'FLETE (**)', 'SEGURO (**)', 'PAIS RECEPTOR Y PAIS DESTINO']) {
+                          'TIPO DE BULTO', 'TOTAL BULTOS', 'FLETE', 'SEGURO', 'PAIS RECEPTOR Y PAIS DESTINO', 'REFERENCIA']) {
                 if (currentSet.internationalSpec == null)
                     currentSet.internationalSpec = [:]
                 currentSet.internationalSpec[campo] = valor
@@ -78,7 +88,7 @@ while (line != null) {
                 currentSet.unprocessedLines.add("${lineNumber}: ${line}")
                 unprocessedLineNumber++
             }
-        } else if (line =~ /^-+$/ || line == null || line =~ /^$/) {
+        } else if (line =~ /^-+$/ || line == null || line =~ /^$/ || line == '\t') {
             itemFields = null
         } else if (itemFields != null && !(line =~ /^$/) ) {
             values = line.substring(32).split("\t+")
@@ -95,6 +105,8 @@ while (line != null) {
                 itemMap[itemFields[i]] = values[i].trim()
             }
             currentDocument.items.add(itemMap)
+        } else {
+            currentSet.unprocessedLines.add(line)
         }
     } else  if (tipoSubset in ["BASICO", "FACTURA EXENTA", "GUIA DE DESPACHO"]) {
         if (currentSet.documents == null) {
