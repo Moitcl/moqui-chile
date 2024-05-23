@@ -11,7 +11,7 @@ ExecutionContext ec = ec
 if (tipoOperacion == null)
     ec.message.addError("Se debe especificar el tipo")
 if (tipoOperacion != 'VENTA' && tipoOperacion != 'COMPRA')
-    ec.message.addError("tipo debe ser 'VENTA' o 'COMPRA'")
+    ec.message.addError("tipoOperacion debe ser 'VENTA' o 'COMPRA'")
 
 if (ec.message.hasError())
     return
@@ -184,7 +184,8 @@ documentEvList.each { EntityValue dte ->
     }
 }
 
-idLibro = "Libro${tipoOperacion == 'VENTA' ? 'Ventas' : 'Compras'}-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
+tipoLibro = (tipoOperacion == 'VENTA' ? 'Ventas' : 'Compras')
+idLibro = "Libro${tipoLibro}-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
 String schemaLocation = 'http://www.sii.cl/SiiDte LibroCV_v10.xsd'
 String tmstFirma = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
 xmlBuilder.LibroCompraVenta(xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation) {
@@ -381,13 +382,13 @@ try {
 
 ts = ec.user.nowTimestamp
 if (MoquiDTEUtils.verifySignature(doc, "/sii:LibroCompraVenta/sii:EnvioLibro", "./sii:TmstFirma/text()")) {
-    xmlContentLocation = "dbresource://moit/erp/dte//${rutOrganizacion}/${idLibro}.xml"
+    xmlContentLocation = "dbresource://moit/erp/dte/Libros/${tipoLibro}/${rutOrganizacion}/${idLibro}.xml"
     envioRr = ec.resource.getLocationReference(xmlContentLocation)
     envioRr.putBytes(libroXml)
     fileName = envioRr.fileName
     ec.logger.warn("Libro generado OK")
 } else {
-    xmlContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/${idLibro}-mala.xml"
+    xmlContentLocation = "dbresource://moit/erp/dte/Libros/${tipoLibro}/${rutOrganizacion}/${idLibro}-mala.xml"
     envioRr = ec.resource.getLocationReference(xmlContentLocation)
     envioRr.putBytes(libroXml)
     fileName = envioRr.fileName
