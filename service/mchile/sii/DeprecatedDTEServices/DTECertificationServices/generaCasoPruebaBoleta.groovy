@@ -71,6 +71,8 @@ MarkupBuilder xmlBuilder = new MarkupBuilder(xmlWriter)
 // Timbre (con item 1 de Caso 1
 String detalleIt1 = "Cambio de aceite"
 
+if (tipoDespachoEnumId)
+    tipoDespacho = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:tipoDespachoEnumId, enumTypeId:'TipoDespacho']).call().siiCode
 
 if (detalleIt1.length() > 40)
     detalleIt1 = detalleIt1.substring(0, 40)

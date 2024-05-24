@@ -15,23 +15,99 @@ String line = ""
 int lineNumber = 0
 tipoDocumentoMap = ['FACTURA ELECTRONICA':'Ftdt-33', 'FACTURA  ELECTRONICA':'Ftdt-33', 'NOTA DE CREDITO ELECTRONICA':'Ftdt-61', 'GUIA DE DESPACHO':'Ftdt-52',
                     'FACTURA NO AFECTA O EXENTA ELECTRONICA':'Ftdt-34', 'NOTA DE DEBITO ELECTRONICA':'Ftdt-56', 'FACTURA':'Ftdt-30', 'NOTA DE CREDITO':'Ftdt-60',
-                    'FACTURA DE COMPRA':'Ftdt-45', 'FACTURA DE COMPRA ELECTRONICA':'Ftdt-46']
+                    'FACTURA DE COMPRA':'Ftdt-45', 'FACTURA DE COMPRA ELECTRONICA':'Ftdt-46', 'FACTURA DE EXPORTACION ELECTRONICA':'Ftdt-110',
+                    'NOTA DE CREDITO DE EXPORTACION ELECTRONICA':'Ftdt-112', 'NOTA DE DEBITO DE EXPORTACION ELECTRONICA':'Ftdt-111']
 unprocessedLines = []
 unprocessedLineNumber = 0
 setList = []
 currentSet = null
 etapaSubset = null
+line = reader.readLine()
 while (line != null) {
-    line = reader.readLine()
     lineNumber++
-    def inicioSubset = line =~ /^SET ([A-Z ]+) - NUMERO DE ATENCI[OÓ]N: ([0-9]+)/
+    def inicioSubset = line =~ /^SET ([A-Z ()1-2]+) - NUMERO DE ATENCI[OÓ]N: ([0-9]+)/
     if (inicioSubset.matches()) {
         itemFields = null
         currentLibroVentasExpectedLine = null
         numeroAtencion = Long.parseLong(inicioSubset[0][2])
         tipoSubset = inicioSubset[0][1]
-        currentSet = [numeroAtencion:numeroAtencion, tipo:tipoSubset, unprocessedLines:[]]
+        currentSet = [numeroAtencion: numeroAtencion, tipo: tipoSubset, unprocessedLines: []]
         setList.add(currentSet)
+        expectedLines = []
+    } else if (tipoSubset == "BASICO DOCUMENTOS DE EXPORTACION (1)") {
+        if (currentSet.documents == null) {
+            currentSet.documents = []
+            currentDocument = null
+        }
+        def inicioCaso = line =~ /^CASO $numeroAtencion-([0-9]+)/
+        def detalleInternacional = line =~ /^([A-Z ]+?)(?: \(\*\*\))?+:\s+([0-9.A-Za-z(),\/ ]+)$/
+        if (line in expectedLines) {
+
+        } else if (inicioCaso.matches()) {
+            itemFields = null
+            seqNum = inicioCaso[0][1]
+            line = reader.readLine()
+            lineNumber++
+            if (line =~ /^=+$/) {
+                line = reader.readLine()
+                lineNumber++
+            } else {
+                ec.message.addError("At line number ${lineNumber} expected '==============', got: ${line}")
+            }
+            docType = line =~ /^DOCUMENTO\s+([A-Z ]+)$/
+            if (docType.matches()) {
+                fiscalTaxDocumentTypeEnumId = tipoDocumentoMap[docType[0][1]]
+                if (!fiscalTaxDocumentTypeEnumId)
+                    ec.message.addError("Línea ${lineNumber}: No se encuentra tipo de documento para ${docType[0][1]}")
+            } else {
+                ec.message.addError("At line number ${lineNumber} expected 'DOCUMENTO', got: ${line}")
+                fiscalTaxDocumentTypeEnumId = null
+            }
+            currentDocument = [seqNum: seqNum, fiscalTaxDocumentTypeEnumId: fiscalTaxDocumentTypeEnumId]
+            currentSet.documents.add(currentDocument)
+            if (fiscalTaxDocumentTypeEnumId == 'Ftdt-112') {
+                expectedLines = ["REFERENCIA\t\tFACTURA DE EXPORTACION ELECTRONICA CORRESPONDIENTE A CASO ${numeroAtencion}-1".toString(), 'RAZON REFERENCIA\tDEVOLUCION DE MERCADERIA',
+                                 'EL PRECIO UNITARIO DEL ITEM DEBE SER EL MISMO DE LA FACTURA']
+            } else if (fiscalTaxDocumentTypeEnumId == 'Ftdt-111')
+                expectedLines = ["REFERENCIA\t\tNOTA DE CREDITO CORRESPONDIENTE A CASO ${numeroAtencion}-2".toString(), 'RAZON REFERENCIA\tANULA NOTA DE CREDITO',
+                                 '(**) VER INSTRUCCIONES AL CONTRIBUYENTE EN SET BASICO FACTURA DE EXPORTACION (2).']
+        } else if (line?.startsWith("ITEM\s")) {
+            itemFields = line.substring(32).split("\t+")
+            currentDocument.items = []
+        } else if (detalleInternacional.matches()) {
+            campo = detalleInternacional[0][1]
+            valor = detalleInternacional[0][2]
+            ec.logger.info("detalleInternacional, campo: ${campo}, valor: ${valor}")
+            if (campo in ['MONEDA DE LA OPERACION', 'FORMA DE PAGO EXPORTACION', 'MODALIDAD DE VENTA', 'CLAUSULA DE VENTA DE EXPORTACION', 'TOTAL CLAUSULA DE VENTA',
+                          'VIA DE TRANSPORTE', 'PUERTO DE EMBARQUE', 'PUERTO DE DESEMBARQUE', 'UNIDAD DE MEDIDA DE TARA', 'UNIDAD PESO BRUTO', 'UNIDAD PESO NETO',
+                          'TIPO DE BULTO', 'TOTAL BULTOS', 'FLETE', 'SEGURO', 'PAIS RECEPTOR Y PAIS DESTINO', 'REFERENCIA']) {
+                if (currentSet.internationalSpec == null)
+                    currentSet.internationalSpec = [:]
+                currentSet.internationalSpec[campo] = valor
+            } else {
+                currentSet.unprocessedLines.add("${lineNumber}: ${line}")
+                unprocessedLineNumber++
+            }
+        } else if (line =~ /^-+$/ || line == null || line =~ /^$/ || line == '\t') {
+            itemFields = null
+        } else if (itemFields != null && !(line =~ /^$/) ) {
+            values = line.substring(32).split("\t+")
+            if (itemFields.size() != values.size())
+                ec.message.addError("line ${lineNumber}: Field amount mismatch, header has ${itemFields.size()}, line has ${values.size()}")
+            itemMap = [:]
+            for (int i = 0; i < itemFields.size(); i++) {
+                if (itemFields[i] == "ITEM") {
+                    if (values[i].endsWith(" AFECTO"))
+                        itemMap.tipoTributario = "AFECTO"
+                    else if (values[i].endsWith(" EXENTO"))
+                        itemMap.tipoTributario = "EXENTO"
+                }
+                itemMap[itemFields[i]] = values[i].trim()
+            }
+            currentDocument.items.add(itemMap)
+        } else {
+            currentSet.unprocessedLines.add(line)
+        }
     } else  if (tipoSubset in ["BASICO", "FACTURA EXENTA", "GUIA DE DESPACHO"]) {
         if (currentSet.documents == null) {
             currentSet.documents = []
@@ -160,8 +236,8 @@ while (line != null) {
             lineNumber++
             montoMatcher = line =~ /^ *([0-9]*)\t+ *([0-9]*) *$/
             if (montoMatcher.matches()) {
-                montoAfecto = montoMatcher[0][1]?:null
-                montoExento = montoMatcher[0][2]?:null
+                montoExento = montoMatcher[0][1]?:null
+                montoAfecto = montoMatcher[0][2]?:null
             } else
                 ec.message.addError("Unexpected line at ${lineNumber}, expected montoExento\\tmontoAfecto, got: ${line}")
             fiscalTaxDocumentTypeEnumId = tipoDocumentoMap[tipoDocumento]
@@ -206,8 +282,7 @@ while (line != null) {
             unprocessedLineNumber++
         }
     }
+    if (currentSet != null)
+        currentSet.expectedLines = expectedLines
+    line = reader.readLine()
 }
-
-ec.logger.info("setList: ${groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(setList))}")
-ec.logger.info("unprocessedLines:\n${unprocessedLines.join('\n')}")
-ec.logger.info("unprocessedLineNumber:\n${unprocessedLineNumber}")

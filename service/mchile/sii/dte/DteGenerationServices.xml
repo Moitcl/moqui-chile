@@ -38,12 +38,11 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="referenciaList" type="List"/>
             <parameter name="glosaPagos"/>
             <parameter name="indTrasladoEnumId"/>
-            <parameter name="tipoDespacho" type="Integer"/>
+            <parameter name="tipoDespachoEnumId"/>
             <parameter name="settlementTermId"/>
             <parameter name="invoiceMessage"/>
             <parameter name="fechaEmision" type="Date" default="ec.user.nowTimestamp" required="true"/>
             <parameter name="fechaVencimiento" type="Date"/>
-            <parameter name="tipoDespacho"/>
             <parameter name="codigosActividadEconomica"/>
             <parameter name="descuentoORecargoGlobalList" type="List"/>
             <parameter name="codigoInternoReceptor"/>
@@ -78,12 +77,11 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="referenciaList" type="List"/>
             <parameter name="glosaPagos"/>
             <parameter name="indTrasladoEnumId"/>
-            <parameter name="tipoDespacho" type="Integer"/>
+            <parameter name="tipoDespachoEnumId"/>
             <parameter name="settlementTermId"/>
             <parameter name="invoiceMessage"/>
             <parameter name="fechaEmision" type="Date" default="ec.user.nowTimestamp"/>
             <parameter name="fechaVencimiento" type="Date"/>
-            <parameter name="tipoDespacho"/>
             <parameter name="codigosActividadEconomica"/>
             <parameter name="descuentoORecargoGlobalList" type="List"/>
         </in-parameters>
@@ -219,9 +217,8 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="shipmentId" required="true"/>
-            <parameter name="indTrasladoEnumId" required="true"/>
-            <parameter name="tipoDespachoEnumId"/>
             <parameter name="settlementTermId"/>
+            <parameter name="invoiceId"/>
             <parameter name="sendToSii" type="Boolean" default="true"/>
             <parameter name="fechaEmision" type="Date" default="ec.user.nowTimestamp"/>
         </in-parameters>
@@ -241,6 +238,9 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="glosaPagos" from="settlementField.description"/>
             </if>
             <if condition="!glosaPagos"><set field="glosaPagos" value=""/></if>
+            <if condition="invoiceId">
+                <service-call name="mchile.TaxServices.calculate#SalesTaxForInvoice" in-map="[invoiceId:invoiceId]"/>
+            </if>
 
             <entity-find-one entity-name="mantle.shipment.Shipment" value-field="shipment"/>
             <if condition="!shipment">
@@ -279,12 +279,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="indTrasladoEnumId" from="shipment.indTrasladoEnumId"/>
             <set field="tipoDespachoEnumId" from="shipment.tipoDespachoEnumId"/>
 
-            <service-call name="mchile.sii.dte.DteGenerationServices.get#ReceiverInfo" in-map="[receiverPartyId:receiverPartyId]" out-map="context"/>
-
-            <if condition="tipoDespachoEnumId">
-                <service-call name="mchile.sii.dte.DteInternalServices.get#SiiCode" in-map="[fiscalTaxDocumentTypeEnumId:tipoDespachoEnumId, enumTypeId:'TipoDespacho']" out-map="codeOut"/>
-                <set field="tipoDespacho" from="codeOut.siiCode"/>
-            </if>
+            <service-call name="mchile.sii.dte.DteGenerationServices.get#ReceiverInfo" in-map="[receiverPartyId:receiverPartyId, fiscalTaxDocumentTypeEnumId:'Ftdt-52']" out-map="context"/>
 
             <set field="medioPago" value="PE"/>
             <set field="formaPago" value="2"/>
@@ -294,7 +289,7 @@ along with this software (see the LICENSE.md file). If not, see
                                 razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor, contactoReceptor:contactoReceptor,direccionReceptor:direccionReceptor,
                                 comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:shipmentItemDetailList, invoiceId:invoiceId, returnId:returnId,
                                 formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId, receiverPartyId:receiverPartyId,
-                                indTrasladoEnumId:indTrasladoEnumId, tipoDespacho:tipoDespacho, shipmentId:shipmentId, glosaPagos:glosaPagos, settlementTermId:settlementTermId,
+                                indTrasladoEnumId:indTrasladoEnumId, tipoDespachoEnumId:tipoDespachoEnumId, shipmentId:shipmentId, glosaPagos:glosaPagos, settlementTermId:settlementTermId,
                                 fechaEmision:fechaEmision]" out-map="context"/>
             <if condition="sendToSii">
                 <service-call name="mchile.sii.dte.DteEnvioServices.genera#Envio" in-map="[organizationPartyId:issuerPartyId, documentIdList:[fiscalTaxDocumentId]]" out-map="context"/>
@@ -326,7 +321,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="invoiceId"/>
             </entity-find>
             <if condition="existingFtdList"><return error="true" message="Ya existe una Nota de Crédito para invoice ${invoiceId}"/></if>
-            <if condition="!(invoice.statusId in ['InvoiceIncoming','InvoiceApproved','InvoicePmtSent','InvoiceReceived','InvoiceBilledThrough'])">
+            <if condition="!(invoice.statusId in ['InvoiceFinalized','InvoiceSent','InvoiceSent','InvoiceAcked','InvoicePmtRecvd','InvoiceWriteOff'])">
                 <return error="true" message="Invalid statusId for credit invoice: ${invoice.statusId}"/></if>
 
             <!-- En la nota de credito se invierten fromPartyId y toPartyId (cliente le cobra al vendedor) -->
@@ -430,7 +425,7 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <if condition="existingFtdList"><return error="true" message="Ya existe una Nota de Débito para invoice ${invoiceId}"/></if>
 
-            <if condition="!(invoice.statusId in ['InvoiceInProcess','InvoiceIncoming','InvoiceApproved','InvoicePmtSent','InvoiceReceived','InvoiceBilledThrough'])">
+            <if condition="!(invoice.statusId in ['InvoiceFinalized','InvoiceSent','InvoiceSent','InvoiceAcked','InvoicePmtRecvd','InvoiceWriteOff'])">
                 <return error="true" message="Invalid statusId for debit invoice: ${invoice.statusId}"/>
             </if>
 
@@ -705,6 +700,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="razonReferencia" default-value="Error de Facturación"/>
             <parameter name="fechaEmision" type="java.sql.Timestamp" default="ec.user.nowTimestamp" format="dd-MM-yyyy"/>
+            <parameter name="checkAcceptedBySii" type="Boolean" default="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="originalInvoiceId"/>
@@ -716,7 +712,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="fiscalTaxDocumentNumber"/>
                 <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
                 <econdition field-name="statusId" value="Ftd-Issued"/>
-                <econdition field-name="sentAuthStatusId" operator="in" value="Ftd-SentAuthAccepted,Ftd-SentAuthAcceptedWithDiscrepancies"/>
+                <econdition field-name="sentAuthStatusId" operator="in" value="Ftd-SentAuthAccepted,Ftd-SentAuthAcceptedWithDiscrepancies" ignore="!checkAcceptedBySii"/>
             </entity-find>
             <set field="dte" from="dteList.first"/>
             <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument in create#EmptyCreditMemo"/></if>
@@ -735,7 +731,7 @@ along with this software (see the LICENSE.md file). If not, see
                 ]]></script>
             <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:dte.receiverPartyId]" out-map="receiverRut"/>
             <set field="referenceMap" from="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId, folio:dte.fiscalTaxDocumentNumber, fecha:fecha,
-                 rutEmisorFolio:dte.issuerPartyIdValue, codigoReferenciaEnumId:'MCHRefDteCodeAnula', razonReferencia:razonReferencia, referenceTypeEnumId:'RefDteTypeInvoice']"/>
+                 rutEmisorFolio:dte.issuerPartyIdValue, razonReferencia:razonReferencia, referenceTypeEnumId:'RefDteTypeInvoice']"/>
             <service-call name="mchile.sii.dte.DteReferenceServices.add#InvoiceReference" in-map="referenceMap"/>
         </actions>
     </service>
@@ -779,6 +775,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="razonReferencia" default-value="Error de Facturación"/>
             <parameter name="fechaEmision" type="java.sql.Timestamp" default="ec.user.nowTimestamp" format="dd-MM-yyyy"/>
+            <parameter name="checkAcceptedBySii" type="Boolean" default="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="originalInvoiceId"/>
@@ -794,7 +791,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="fiscalTaxDocumentNumber"/>
                 <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
                 <econdition field-name="statusId" value="Ftd-Issued"/>
-                <econdition field-name="sentAuthStatusId" operator="in" value="Ftd-SentAuthAccepted,Ftd-SentAuthAcceptedWithDiscrepancies"/>
+                <econdition field-name="sentAuthStatusId" operator="in" value="Ftd-SentAuthAccepted,Ftd-SentAuthAcceptedWithDiscrepancies" ignore="!checkAcceptedBySii"/>
             </entity-find>
             <set field="dte" from="dteList.first"/>
 
@@ -944,28 +941,6 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="cancel" noun="Dte">
-        <description>
-            Marca una DTE (inicialmente boleta) como anulada
-        </description>
-        <in-parameters>
-            <parameter name="fiscalTaxDocumentId" required="true"/>
-            <parameter name="organizationPartyId" required="true"/>
-        </in-parameters>
-        <actions>
-            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dteEv" for-update="true">
-                <field-map field-name="fiscalTaxDocumentId" from="fiscalTaxDocumentId"/>
-            </entity-find-one>
-
-            <if condition="!dteEv">
-                <return error="true" message="Boleta a anular no existe"/>
-            </if>
-
-            <set field="dteEv.statusId" value="Ftd-Cancelled"/>
-            <entity-update value-field="dteEv"/>
-        </actions>
-    </service>
-
     <service verb="get" noun="PaymentMethodInfo">
         <description>
             Obtains payment method and means for an invoice
@@ -1044,6 +1019,8 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="parentItemSeqId" operator="is-null"/>
                 <order-by field-name="invoiceItemSeqId"/>
             </entity-find>
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
+            <set field="currencyUomId" from="invoice.currencyUomId"/>
             <set field="invoiceItemList" from="[]"/>
             <set field="descuentoORecargoGlobalList" from="[]"/>
             <set field="numeroLineaDescuentoORecargoGlobal" from="0"/>
@@ -1117,7 +1094,7 @@ along with this software (see the LICENSE.md file). If not, see
                     </iterate>
                     <if condition="hide"><then>
                         <if condition="ec.user.getPreference('mchile.dte.AddDiscountSubitemDescription') == 'true'">
-                            <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}Incluye ${subitem.description} por ${ec.l10n.formatCurrency((-1*subitem.amount*subitem.quantity/invoiceItem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), invoice.currencyUomId)}${invoiceItem.quantity > 1? ' (unitario)': ''}"/>
+                            <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}Incluye ${subitem.description ?: 'descuento'} por ${ec.l10n.formatCurrency((-1*subitem.amount*subitem.quantity/invoiceItem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), currencyUomId)}${subitem.quantity > 1? ' (unitario)': ''}"/>
                         </if>
                         <set field="invoiceItem.amount" from="invoiceItem.amount + (totalDiscount/invoiceItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
                     </then><else>
@@ -1148,8 +1125,10 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="orderPartSeqId"/>
                 <econdition field-name="itemTypeEnumId" operator="not-in"  from="['ItemSalesTax', 'ItemVatTax', 'ItemDetailedDescription']" or-null="true"/>
                 <econdition field-name="parentItemSeqId" operator="is-null"/>
-                <order-by field-name="oreritemSeqId"/>
+                <order-by field-name="orderItemSeqId"/>
             </entity-find>
+            <entity-find-one entity-name="mantle.order.OrderHeader" value-field="orderHeader"/>
+            <set field="currencyUomId" from="orderHeader.currencyUomId"/>
             <set field="orderItemList" from="[]"/>
             <set field="descuentoORecargoGlobalList" from="[]"/>
             <set field="numeroLineaDescuentoORecargoGlobal" from="0"/>
@@ -1172,7 +1151,7 @@ along with this software (see the LICENSE.md file). If not, see
                         <set field="glosa" from="orderItemEV.itemDescription"/>
                     </else></if>
                     <script>descuentoORecargoGlobalList.add([numeroLinea:numeroLineaDescuentoORecargoGlobal, tipo:'D', afecto:true, glosa:glosa, valor:valor, tipoValor:tipoValor, monto:itemAmount])</script>
-                </then><else><!-- ceItemEV.description, -->
+                </then><else>
                     <set field="orderItem" from="orderItemEV.getMap()"/>
                     <script>orderItemList.add(orderItem)</script>
                     <entity-find entity-name="mantle.order.OrderItem" list="subitemList">
@@ -1186,8 +1165,11 @@ along with this software (see the LICENSE.md file). If not, see
                         <if condition="subitem.itemTypeEnumId == 'ItemDetailedDescription'"><then>
                             <set field="orderItem.detailedDescription" value="${orderItem.detailedDescription ? (orderItem.detailedDescription + '; '): ''}${subitem.itemDescription}"/>
                         </then><else-if condition="subitem.itemTypeEnumId == 'ItemDiscount'">
-                            <set field="hide" from="(subItem?.hideInParent == 'Y' || ec.user.getPreference('mchile.dte.PreferHiddenDiscountInParent') == 'true' )
-                                                        &amp;&amp; (first || hide)"/>
+                            <if condition="subItem?.hideInParent == null"><then>
+                                <set field="hide" from="(first || hide) &amp;&amp; ec.user.getPreference('mchile.dte.PreferHiddenDiscountInParent') == 'true'"/>
+                            </then><else>
+                                <set field="hide" from="subItem.hideInParent == 'Y'"/>
+                            </else></if>
                             <if condition="subItem.sourcePercentage">
                                 <if condition="hide || orderItem.porcentajeDescuento == subItem.sourcePercentage"><then>
                                     <set field="orderItem.porcentajeDescuento" from="subItem.sourcePercentage"/>
@@ -1205,7 +1187,7 @@ along with this software (see the LICENSE.md file). If not, see
                     </iterate>
                     <if condition="hide"><then>
                         <if condition="ec.user.getPreference('mchile.dte.AddDiscountSubitemDescription') == 'true'">
-                            <set field="orderItem.detailedDescription" value="${orderItem.detailedDescription ? (orderItem.detailedDescription + '; '): ''}Incluye ${subitem.itemDescription} por ${ec.l10n.formatCurrency((-1*subitem.unitAmount*subitem.quantity/orderItem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), invoice.currencyUomId)}${orderItem.quantity > 1? ' (unitario)': ''}"/>
+                            <set field="orderItem.detailedDescription" value="${orderItem.detailedDescription ? (orderItem.detailedDescription + '; '): ''}Incluye ${subitem.itemDescription ?: 'descuento'} por ${ec.l10n.formatCurrency((-1*subitem.unitAmount*subitem.quantity/subItem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), currencyUomId)}${subitem.quantity > 1? ' (unitario)': ''}"/>
                         </if>
                         <set field="orderItem.amount" from="orderItem.unitAmount + (totalDiscount/orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
                     </then><else>

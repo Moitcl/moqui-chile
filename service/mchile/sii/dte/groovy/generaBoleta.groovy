@@ -182,6 +182,9 @@ if (giroReceptor && giroReceptor.length() > 39)
     giroReceptor = giroReceptor.substring(0,39)
 razonSocialReceptorTimbre = razonSocialReceptor.length() > 39? razonSocialReceptor.substring(0,39): razonSocialReceptor
 
+if (tipoDespachoEnumId)
+    tipoDespacho = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:tipoDespachoEnumId, enumTypeId:'TipoDespacho']).call().siiCode
+
 // Timbre
 String detalleIt1 = detalleList.get(0).nombreItem
 

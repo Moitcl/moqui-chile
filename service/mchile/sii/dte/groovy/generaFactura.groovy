@@ -38,7 +38,9 @@ if (giroOutMap.description == null || giroOutMap.description == '')
 giroEmisor = giroOutMap.description
 
 // Recuperación del código SII de DTE -->
-tipoDte = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]).call().siiCode
+tipoDteMap = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]).call()
+tipoDte = tipoDteMap.siiCode
+dteTypeDescription = tipoDteMap.dteTypeDescription
 
 formaPagoEv = ec.entity.find("moqui.basic.Enumeration").condition([enumTypeId:"FiscalTaxDocumentFormaPago"]).condition([enumCode:(formaPago as String)]).one()
 formaPagoEnumId = formaPagoEv?.enumId
@@ -114,6 +116,7 @@ else if (invoice != null && invoice.unpaidTotal == 0) {
 } else
     formaPago = 2 // Crédito (usar GlosaPagos)
 
+ec.logger.info("Creando DTE tipo ${tipoDte} (${dteTypeDescription})")
 if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
@@ -131,6 +134,7 @@ if (tipoDte == 33) {
     referenciaList = refMap.referenciaList
     totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 34) {
+    // Factura Exenta Electrónica
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
@@ -148,12 +152,15 @@ if (tipoDte == 33) {
     totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 61) {
     // Nota de Crédito Electrónica
-    ec.logger.warn("Creando DTE tipo 61")
     originalReferenciaList = referenciaList
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
     anulaBoleta = refMap.anulaBoleta
     folioAnulaBoleta = refMap.folioAnulaBoleta
+    if (referenciaList == null || referenciaList.size() == 0) {
+        ec.message.addError("No se puede crear Nota de Crédito sin referencias")
+        return
+    }
     codRef = referenciaList[0].codigo
 
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", codRef as Integer, issuerPartyId)
@@ -167,7 +174,7 @@ if (tipoDte == 33) {
     }
 
     // Si la razon es modifica texto (2) no van los montos
-    ec.logger.warn("Codref: " + codRef + ", dteExenta: " + dteExenta)
+    //ec.logger.warn("Codref: " + codRef + ", dteExenta: " + dteExenta)
     if (codRef == 2) {
         totalNeto = 0
         totalExento = 0
@@ -175,7 +182,6 @@ if (tipoDte == 33) {
     totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 56) {
     // Nota de Débito Electrónica
-    ec.logger.warn("Creando DTE tipo 56")
     originalReferenciaList = referenciaList
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
@@ -200,13 +206,16 @@ if (tipoDte == 33) {
     }
     totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 52) {
-    // Guías de Despacho
-    ec.logger.warn("Creando DTE tipo 52")
+    // Guías de Despacho Electrónica
     if (indTrasladoEnumId == null)
         ec.message.addError("No indTrasladoEnumId for tipoDte 52 (Guía de Despacho)")
     if (indTrasladoEnumId in ['IndTraslado-1', 'IndTraslado-9'] && !invoiceId)
-        ec.message.addError("No se puede generar una Guía de Despacho sin un invoiceId")
+        ec.message.addError("No se puede generar una Guía de Despacho que constituye venta sin un invoiceId")
     indTraslado = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:indTrasladoEnumId, enumTypeId:'IndTraslado']).call().siiCode
+    if (tipoDespachoEnumId == null)
+        ec.message.addError("No tipoDespachoEnumId for tipoDte 52 (Guía de Despacho)")
+    tipoDespacho = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:tipoDespachoEnumId, enumTypeId:'TipoDespacho']).call().siiCode
+
     // TODO: Si la referencia es tipo fe de erratas, Monto Item puede ser 0
     originalReferenciaList = referenciaList
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
@@ -266,7 +275,7 @@ if (totalNeto != null) {
 // Chequeo de valores entre Invoice y calculados
 if (invoice) {
     if (invoice.invoiceTotal != totalInvoice) {
-        ec.message.addError("No coinciden valores totales, calculado: ${totalInvoice}, en invoice ${invoiceId}: ${invoice.invoiceTotal}")
+        ec.message.addError("No coinciden valores totales, calculado: ${ec.l10n.formatCurrency(totalInvoice, invoice.currencyUomId)}, en invoice ${invoiceId}: ${ec.l10n.formatCurrency(invoice.invoiceTotal, invoice.currencyUomId)}")
     }
 }
 
@@ -495,8 +504,6 @@ String facturaXmlString = xmlWriter.toString()
 facturaXmlString = facturaXmlString.replaceAll("[^\\x00-\\xFF]", "")
 xmlWriter.close()
 
-ec.logger.warn(facturaXmlString);
-
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
 
@@ -507,14 +514,16 @@ try {
 }
 
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
-if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
-    ec.logger.warn("DTE folio ${folio} generada OK")
-} else {
-    ec.message.addError("Error al generar DTE folio ${folio}: firma inválida")
+if (!MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
+    ec.message.addError("Error al generar DTE tipo ${tipoDte} (${dteTypeDescription}) folio ${folio}: firma inválida")
 }
 
-if (ec.message.hasError())
+if (ec.message.hasError()) {
+    ec.logger.info(facturaXmlString);
     return
+}
+
+ec.logger.info("DTE tipo ${tipoDte} (${dteTypeDescription}) folio ${folio} generada OK")
 
 if (!draft) {
     // Creación de registro en FiscalTaxDocument -->

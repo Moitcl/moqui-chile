@@ -152,6 +152,8 @@
             <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentType" enumId="Ftdt-43" enumCode="43" sequenceNum="43" parentEnumId="Ftdt-DTE" description="Liquidación Factura Electrónica"/>
             <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentType" enumId="Ftdt-45" enumCode="45" sequenceNum="45" parentEnumId="Ftdt-DT" description="Factura de Compra"/>
             <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentType" enumId="Ftdt-46" enumCode="46" sequenceNum="46" parentEnumId="Ftdt-DTE" description="Factura de Compra Electrónica"/>
+            <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentType" enumId="Ftdt-47" enumCode="47" sequenceNum="47" parentEnumId="Ftdt-DTE" description="Vale Electrónico"/>
+            <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentType" enumId="Ftdt-48" enumCode="48" sequenceNum="48" parentEnumId="Ftdt-DTE" description="Comprobante de Pago Electrónico"/>
             <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentType" enumId="Ftdt-50" enumCode="50" sequenceNum="50" parentEnumId="Ftdt-DT" description="Guía de Despacho"/>
             <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentType" enumId="Ftdt-52" enumCode="52" sequenceNum="52" parentEnumId="Ftdt-DTE" description="Guía de Despacho Electrónica"/>
             <moqui.basic.Enumeration enumTypeId="FiscalTaxDocumentType" enumId="Ftdt-55" enumCode="55" sequenceNum="55" parentEnumId="Ftdt-DT" description="Nota de Débito"/>
@@ -214,14 +216,24 @@
     <entity entity-name="GuiaDespacho" package="mchile.dte">
         <field name="fiscalTaxDocumentId" type="id" is-pk="true"/>
         <field name="indTrasladoEnumId" type="id" enable-audit-log="update"><description>Sólo para guías de despacho, indica si traslado es por venta u otros motivos</description></field>
+        <field name="anulacionEnumId" type="id" enable-audit-log="true"><description>Tipo de anulación, si fue anulada</description></field>
         <field name="facturaFiscalTaxDocumentId" type="id"><description>Factura emitida para guía de despacho que genera venta</description></field>
         <relationship type="one" related="mchile.dte.FiscalTaxDocument" fk-name="GuiaDespachoFiscalTaxDocumentId"/>
-        <relationship type="one" related="moqui.basic.Enumeration" title="IndTraslado">
+        <relationship type="one" related="moqui.basic.Enumeration" title="IndTraslado" short-alias="indTraslado">
             <key-map field-name="indTrasladoEnumId"/>
         </relationship>
         <relationship type="one-nofk" related="mchile.dte.FiscalTaxDocument" short-alias="factura" fk-name="GuiaDespachoFacturaFiscalTaxDocumentId">
             <key-map field-name="facturaFiscalTaxDocumentId"/>
         </relationship>
+        <relationship type="one" related="moqui.basic.Enumeration" title="AnulacionGuiaDespachoType" short-alias="anulacion">
+            <key-map field-name="anulacionEnumId"/>
+        </relationship>
+        <seed-data>
+            <moqui.basic.EnumerationType enumTypeId="AnulacionGuiaDespachoType" description="Tipo de anulación de Guía de Despacho"/>
+            <moqui.basic.Enumeration enumTypeId="AnulacionGuiaDespachoType" enumId="AgdtAnuladoPreEnvioSii" description="Anulado Previo a su Envio al SII" enumCode="1"/>
+            <moqui.basic.Enumeration enumTypeId="AnulacionGuiaDespachoType" enumId="AgdtAnuladoPostEnvioSii" description="Anulado Posterior a su Envio al SII" enumCode="2"/>
+            <moqui.basic.Enumeration enumTypeId="AnulacionGuiaDespachoType" enumId="AgdtRecepcionParcial" description="Productos Recibidos Parcialmente" enumCode="3"/>
+        </seed-data>
     </entity>
 
     <view-entity entity-name="DteAndGuiaDespacho" package="mchile.dte">
@@ -231,6 +243,19 @@
         </member-entity>
         <alias-all entity-alias="FTD"/>
         <alias-all entity-alias="GD"/>
+    </view-entity>
+
+    <view-entity entity-name="GuiaDespachoDetails" package="mchile.dte">
+        <member-entity entity-alias="DTE" entity-name="mchile.dte.FiscalTaxDocument"/>
+        <member-entity entity-alias="GUIADESPACHO" entity-name="mchile.dte.GuiaDespacho" join-from-alias="DTE" join-optional="true">
+            <key-map field-name="fiscalTaxDocumentId"/>
+        </member-entity>
+        <member-entity entity-alias="DTEATTRIB" entity-name="mchile.dte.FiscalTaxDocumentAttributes" join-from-alias="DTE" join-optional="true">
+            <key-map field-name="fiscalTaxDocumentId"/>
+        </member-entity>
+        <alias-all entity-alias="DTE"/>
+        <alias-all entity-alias="GUIADESPACHO"/>
+        <alias-all entity-alias="DTEATTRIB"/>
     </view-entity>
 
     <entity entity-name="FiscalTaxDocumentContent" package="mchile.dte">
@@ -529,7 +554,14 @@
         <field name="documentoAnulado" type="text-medium"/>
         <field name="montoExento" type="number-decimal"/>
         <field name="montoIVARecuperable" type="number-decimal"/>
-        <field name="codigoIVANoRecuperable" type="text-short"/>
+        <field name="codigoIVANoRecuperable" type="text-short"><description>
+            1: Compras Destinadas a Generar Operaciones No Gravadas o Exentas
+            2: Facturas de Proveedores Registradas Fuera de Plazo
+            3: Gastos Rechazados
+            4: Entrega Gratuita
+            9: Otros
+            (Fuente: Definición Libro de Ventas)
+        </description></field>
         <field name="montoIVANoRecuperable" type="number-decimal"/>
         <field name="montoIVAUsoComun" type="number-decimal"/>
         <field name="codigoOtroImpuestoORetencion" type="text-medium"/>
