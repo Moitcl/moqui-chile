@@ -23,6 +23,8 @@ if (invoiceId != null && fiscalTaxDocumentTypeEnumId in dteConstituyeVentaTypeLi
 // Recuperacion de parametros de la organizacion -->
 ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInternalServices.load#DteConfig").parameter("partyId", issuerPartyId).call())
 
+telefonosEmisor = [fonoContacto]
+
 if (razonSocialOrganizacion == null || razonSocialOrganizacion.size() < 3) {
     ec.message.addError("Razón Social de emisor no puede tener menos de 3 caracteres")
 }
@@ -47,26 +49,6 @@ formaPagoEnumId = formaPagoEv?.enumId
 if (formaPagoEnumId == null)
     formaPagoEnumId = 'Ftdfp-Credito'
 
-codRef = 0 as Integer
-
-// Indicador Servicio
-// 3 para Factura de Servicios
-// Para Facturas de Exportación:
-// 4 Servicios de Hotelería
-// 5 Servicio de Transporte Terrestre Internacional
-//iddoc.setIndServicio(BigInteger.valueOf(3))
-
-// Campos para elaboración de libro
-montoIVARecuperable = 0 as Long
-totalNeto = 0 as Long
-totalExento = 0 as Long
-totalDescuentos = 0 as Long
-
-// Campo para guardar resumen atributos -->
-amount = 0 as Long
-uom = null
-
-// Reference to buying order
 EntityValue invoice = null
 if (invoiceId) {
     referenciaTypeEnumId = "RefDteTypeFactura"
@@ -117,11 +99,14 @@ else if (invoice != null && invoice.unpaidTotal == 0) {
     formaPago = 2 // Crédito (usar GlosaPagos)
 
 ec.logger.info("Creando DTE tipo ${tipoDte} (${dteTypeDescription})")
+tasaIva = ec.l10n.format(vatTaxRate*100, "##")
 if (tipoDte == 33) {
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
-    totalExento = detMap.totalExento
+    montoIva = Math.round((totalNeto?:0) * vatTaxRate)
+    if (detMap.totalExento > 0)
+        totalExento = detMap.totalExento
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
     if (numberAfectos == 0 && numberExentos > 0) {
@@ -133,11 +118,24 @@ if (tipoDte == 33) {
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
     totalDescuentos = detMap.totalDescuentos
+} else if (tiopDte == 110) {
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId)
+    detalleList = detMap.detalleList
+    totalNeto = null
+    totalExento = detMap.totalExento
+    numberAfectos = detMap.numberAfectos
+    numberExentos = detMap.numberExentos
+    originalReferenciaList = referenciaList
+    Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
+    referenciaList = refMap.referenciaList
+    totalDescuentos = detMap.totalDescuentos
+    tasaIva = null
 } else if (tipoDte == 34) {
     // Factura Exenta Electrónica
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    montoIva = Math.round((totalNeto?:0) * vatTaxRate)
     totalExento = detMap.totalExento
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
@@ -150,6 +148,7 @@ if (tipoDte == 33) {
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
     totalDescuentos = detMap.totalDescuentos
+    tasaIva = null
 } else if (tipoDte == 61) {
     // Nota de Crédito Electrónica
     originalReferenciaList = referenciaList
@@ -166,6 +165,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", codRef as Integer, issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    montoIva = Math.round((totalNeto?:0) * vatTaxRate)
     totalExento = detMap.totalExento
 
     if (codRef == 2 && detalleList.size() > 1) {
@@ -191,6 +191,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "DebitoItem", codRef as Integer, issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    montoIva = Math.round((totalNeto?:0) * vatTaxRate)
     totalExento = detMap.totalExento
 
     if (codRef == 2 && detalleList.size() > 1) {
@@ -211,7 +212,7 @@ if (tipoDte == 33) {
         ec.message.addError("No indTrasladoEnumId for tipoDte 52 (Guía de Despacho)")
     if (indTrasladoEnumId in ['IndTraslado-1', 'IndTraslado-9'] && !invoiceId)
         ec.message.addError("No se puede generar una Guía de Despacho que constituye venta sin un invoiceId")
-    indTraslado = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:indTrasladoEnumId, enumTypeId:'IndTraslado']).call().siiCode
+    indicadorTraslado = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:indTrasladoEnumId, enumTypeId:'IndTraslado']).call().siiCode
     if (tipoDespachoEnumId == null)
         ec.message.addError("No tipoDespachoEnumId for tipoDte 52 (Guía de Despacho)")
     tipoDespacho = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:tipoDespachoEnumId, enumTypeId:'TipoDespacho']).call().siiCode
@@ -226,6 +227,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "ShipmentItem", codRef as Integer, issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    montoIva = Math.round((totalNeto?:0) * vatTaxRate)
     totalExento = detMap.totalExento
     totalDescuentos = detMap.totalDescuentos
 }
@@ -289,15 +291,15 @@ if (giroReceptor && giroReceptor.length() > 39)
     giroReceptor = giroReceptor.substring(0,39)
 razonSocialReceptorTimbre = razonSocialReceptor.length() > 39? razonSocialReceptor.substring(0,39): razonSocialReceptor
 
-StringWriter xmlWriterTimbre = new StringWriter()
-MarkupBuilder xmlBuilderTimbre = new MarkupBuilder(new IndentPrinter(new PrintWriter(xmlWriterTimbre), "", false))
+StringWriter xmlWriter = new StringWriter()
+MarkupBuilder xmlBuilder = new MarkupBuilder(new IndentPrinter(new PrintWriter(xmlWriter), "", false))
 
 // Timbre
 String detalleIt1 = detalleList.get(0).nombreItem
 if (detalleIt1.length() > 40)
     detalleIt1 = detalleIt1.substring(0, 40)
 
-xmlBuilderTimbre.DD() {
+xmlBuilder.DD() {
     RE(rutOrganizacion)
     TD(tipoDte)
     F(folio)
@@ -306,120 +308,333 @@ xmlBuilderTimbre.DD() {
     RSR(razonSocialReceptorTimbre)
     MNT(totalInvoice)
     IT1(detalleIt1)
-    xmlBuilderTimbre.getMkp().yieldUnescaped(folioResult.cafFragment.replaceAll('>\\s*<', '><').trim())
+    xmlBuilder.getMkp().yieldUnescaped(folioResult.cafFragment.replaceAll('>\\s*<', '><').trim())
     TSTED(ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss"))
 }
-datosTed = xmlWriterTimbre.toString()
+datosTed = xmlWriter.toString()
+xmlWriter.close()
 
-StringWriter xmlWriter = new StringWriter()
-MarkupBuilder xmlBuilder = new MarkupBuilder(xmlWriter)
-
-String schemaLocation = 'http://www.sii.cl/SiiDte DTE_v10.xsd'
-if (rutReceptor == '61603000-0') {
-    // Fonasa no soporta recibir el schemaLocation dentro del XML de intercambio (Envío DTE)
-    dteAttributesMap = [xmlns: 'http://www.sii.cl/SiiDte', version: '1.0']
-} else
-    dteAttributesMap = [xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation]
-
-xmlBuilder.DTE(dteAttributesMap) {
-    Documento(ID: idDocumento) {
-        Encabezado {
-            IdDoc {
-                TipoDTE(tipoDte)
-                Folio(folio)
-                FchEmis(ec.l10n.format(fechaEmision, "yyyy-MM-dd"))
-                //IndNoRebaja()
-                if (tipoDespacho)
-                    TipoDespacho(tipoDespacho)
-                if (tipoDte == 52)
-                    IndTraslado(indTraslado)
-                if (indServicio)
-                    IndServicio(indServicio)
-                FmaPago(formaPago)
-                if (fechaCancelacion)
-                    FchCancel(ec.l10n.format(fechaCancelacion, 'yyyy-MM-dd'))
-                if (montoCancelacion)
-                    MntCancel(montoCancelacion)
-                if (saldoInsoluto)
-                    SaldoInsol(saldoInsoluto)
-                //MntPagos{}
-                //PeriodoDesde()
-                //PeriodoHasta()
-                MedioPago(medioPago?:'PE')
-                //TpoCtaPago()
-                //NumCtaPago()
-                //BcoPago()
-                //TermPagoCdg
-                if (glosaPagos)
-                    TermPagoGlosa(glosaPagos)
-                //TermPagoDias
-                if (fechaVencimiento)
-                    FchVenc(ec.l10n.format(fechaVencimiento, "yyyy-MM-dd"))
+xmlWriter = new StringWriter()
+xmlBuilder = new MarkupBuilder(xmlWriter)
+xmlBuilder.printer.incrementIndent()
+xmlBuilder.printer.incrementIndent()
+xmlBuilder.Encabezado() {
+    IdDoc {
+        TipoDTE(tipoDte)
+        Folio(folio)
+        FchEmis(ec.l10n.format(fechaEmision, "yyyy-MM-dd"))
+        if (indicacionNoRebaja)
+            IndNoRebaja(indicacionNoRebaja)
+        if (tipoDespacho)
+            TipoDespacho(tipoDespacho)
+        if (tipoDte == 52)
+            IndTraslado(indicadorTraslado)
+        if (tipoImpresion)
+            TpoImpresion(tipoImpresion)
+        if (indicadorServicio)
+            IndServicio(indicadorServicio)
+        if (indicadorMontosBrutos)
+            MntBruto(indicadorMontosBrutos)
+        if (tipoTransaccionComprador)
+            TpoTranCompra(tipoTransaccionCompra)
+        if (tipoTransaccionVendedor)
+            TpoTranVenta(tipoTransaccionVendedor)
+        if (formaPago)
+            FmaPago(formaPago)
+        if (formaPagoExportacion)
+            FmaPagoExp(formaPagoExportacion)
+        if (fechaCancelacion)
+            FchCancel(ec.l10n.format(fechaCancelacion, 'yyyy-MM-dd'))
+        if (montoCancelacion)
+            MntCancel(montoCancelacion)
+        if (saldoInsoluto)
+            SaldoInsol(saldoInsoluto)
+        pagos.each { pago ->
+            MntPagos {
+                FchPago(ec.l10n.format(pago.fechaPago, 'yyyy-MM-dd'))
+                MntPago(pago.monto)
+                if (pago.glosa)
+                    GlosaPagos(pago.glosa)
             }
-            Emisor {
-                RUTEmisor(rutOrganizacion)
-                RznSoc(razonSocialOrganizacion)
-                GiroEmis(giroEmisor)
-                Telefono(fonoContacto)
-                CorreoEmisor(mailContacto)
-                codigosActividadEconomica.split(',').each { codigoActividad ->
-                    Acteco(codigoActividad)
-                }
-                //Sucursal(sucursal)
-                if (codigoSucursalSii)
-                    CdgSIISucur(codigoSucursalSii)
-                DirOrigen(direccionOrigen)
-                CmnaOrigen(comunaOrigen)
-                CiudadOrigen(ciudadOrigen)
-                if (codigoVendedor)
-                    CdgVendedor(codigoVendedor)
-                if (identificadorAdicionalEmisor)
-                    IdAdicEmisor(identificadorAdicionalEmisor)
-            }
-            Receptor {
-                RUTRecep(rutReceptor)
-                if (codigoInternoReceptor)
-                    CdgIntRecep(codigoInternoReceptor)
-                RznSocRecep(razonSocialReceptor)
-                if (giroReceptor && giroReceptor.replaceAll('\s', '') != '')
-                    GiroRecep(giroReceptor)
-                if (contactoReceptor)
-                    Contacto(contactoReceptor)
-                if (correoReceptor)
-                    CorreoReceptor(correoReceptor)
-                DirRecep(direccionReceptor)
-                CmnaRecep(comunaReceptor)
-                CiudadRecep(ciudadReceptor)
-                //DirPostal
-                //CmnaPostal
-                //CiudadPostal
-            }
-            //RUTSolicita()
-            //Transporte{}
-            Totales {
-                MntNeto(Math.round(totalNeto?:0))
-                if (totalExento != null && totalExento > 0)
-                    MntExe(totalExento)
-                //MntBase()
-                //MntMargenCom()
-                if (tipoDte != 34) TasaIVA(ec.l10n.format(vatTaxRate*100, "##"))
-                IVA(Math.round((totalNeto?:0) * vatTaxRate))
-                //IVAProp()
-                //IVATerc()
-                //ImptoReten{}
-                //IVANoRet()
-                //CredEC()
-                //GrntDep()
-                //Comisiones{}
-                MntTotal(totalInvoice as Integer)
-                if (montoNoFacturable)
-                    MontoNF(montoNoFacturable)
-                //MontoPeriodo()
-                //SaldoAnterior()
-                //VlrPagar()
-            }
-            //OtraMoneda{}
         }
+        if (periodoDesde)
+            PeriodoDesde(ec.l10n.format(periodoDesde, 'yyyy-MM-dd'))
+        if (periodoHasta)
+            PeriodoHasta(ec.l10n.format(periodoHasta, 'yyyy-MM-dd'))
+        if (medioPago)
+            MedioPago(medioPago)
+        if (tipoCuentaPago)
+            TpoCtaPago(tipoCuentaPago)
+        if (numeroCuentaPago)
+            NumCtaPago(numeroCuentaPago)
+        if (bancoPago)
+            BcoPago(bancoPago)
+        if (terminoPagoCodigo)
+            TermPagoCdg(terminoPagoCodigo)
+        if (terminoPagoGlosa)
+            TermPagoGlosa(terminoPagoGlosa)
+        if (terminoPagoDias)
+            TermPagoDias(terminoPagoDias)
+        if (fechaVencimiento)
+            FchVenc(ec.l10n.format(fechaVencimiento, "yyyy-MM-dd"))
+        if (tipoFacturaEspecial)
+            TipoFactEsp(tipoFacturaEspecial)
+    }
+    Emisor {
+        RUTEmisor(rutOrganizacion)
+        RznSoc(razonSocialOrganizacion)
+        GiroEmis(giroEmisor)
+        telefonosEmisor.each { telefono ->
+            Telefono(telefono)
+        }
+        CorreoEmisor(mailContacto)
+        codigosActividadEconomica.split(',').each { codigoActividad ->
+            Acteco(codigoActividad)
+        }
+        if (guiaExportacion)
+            GuiaExport {
+                if (guiaExportacion.codigoTraslado)
+                    CdgTraslado(guiaExportacion.codigoTraslado)
+                if (guiaExportacion.folioAutorizacion)
+                    FolioAut(guiaExportacion.folioAutorizacion)
+                if (guiaExportacion.fechaAutorizacion)
+                    FchAut(l10n.format(guiaExportacion.fechaAutorizacion, 'yyyy-MM-dd'))
+            }
+        if (sucursal)
+            Sucursal(sucursal)
+        if (codigoSucursalSii)
+            CdgSIISucur(codigoSucursalSii)
+        if (codigoAdicionalSucursal)
+            CdgAdicSucur(codigoAdicionalSucursal)
+        if (direccionOrigen)
+            DirOrigen(direccionOrigen)
+        if (comunaOrigen)
+            CmnaOrigen(comunaOrigen)
+        if (ciudadOrigen)
+            CiudadOrigen(ciudadOrigen)
+        if (codigoVendedor)
+            CdgVendedor(codigoVendedor)
+        if (identificadorAdicionalEmisor)
+            IdAdicEmisor(identificadorAdicionalEmisor)
+    }
+    if (rutMandante)
+        RUTMandante(rutMandante)
+    Receptor {
+        RUTRecep(rutReceptor)
+        if (codigoInternoReceptor)
+            CdgIntRecep(codigoInternoReceptor)
+        RznSocRecep(razonSocialReceptor)
+        if (extranjero)
+            Extranjero{
+                if (extrajero.idValue)
+                    NumId(extranjero.idValue)
+                if (extranjero.nacionalidad)
+                    Nacionalidad(extranjero.nacionalidad)
+                if (extranjero.tipoDocumento)
+                    TipoDocID(extranjero.tipoDocumento)
+            }
+        if (giroReceptor && giroReceptor.replaceAll('\s', '') != '')
+            GiroRecep(giroReceptor)
+        if (contactoReceptor)
+            Contacto(contactoReceptor)
+        if (correoReceptor)
+            CorreoRecep(correoReceptor)
+        if (direccionReceptor)
+            DirRecep(direccionReceptor)
+        if (comunaReceptor)
+            CmnaRecep(comunaReceptor)
+        if (ciudadRecepotr)
+            CiudadRecep(ciudadReceptor)
+        if (direccionPostalReceptor)
+            DirPostal(direccionPostalReceptor)
+        if (comunaPostalReceptor)
+            CmnaPostal(comunaPostalReceptor)
+        if (ciudadPostalReceptor)
+            CiudadPostal(ciudadPostalReceptor)
+    }
+    if (rutSolicitante)
+        RUTSolicita(rutSolicitante)
+    if (transporte)
+        Transporte{
+            if (transporte.patente)
+                Patente(transporte.patente)
+            if (transporte.rutTransportista)
+                RUTTrans(transporte.rutTransportista)
+            if (chofer)
+                Chofer {
+                    if (chofer.rutChofer)
+                        RUTChofer(transporte.rutChofer)
+                    if (chofer.nombreChofer)
+                        NombreChofer(transporte.nombreChofer)
+                }
+            if (transporte.direccionDestino)
+                DirDest(transporte.direccionDestino)
+            if (transporte.comunaDestino)
+                CmnaDest(transporte.comunaDestino)
+            if (transporte.ciudadDestino)
+                CiudadDest(transporte.ciudadDestino)
+        }
+    if (aduana)
+        Aduana {
+            if (aduana.codigoModalidadVenta)
+                CodModVenta(aduana.codigoModalidadVenta)
+            if (aduana.codigoClausulaVenta)
+                CodClauVenta(aduana.codigoClausulaVenta)
+            if (aduana.totalClausulaVenta)
+                TotClauVenta(aduana.totalClausulaVenta)
+            if (aduana.codigoViaTransporte)
+                CodViaTransp(aduana.codigoViaTransporte)
+            if (aduana.nombreMedioTransporte)
+                NombreTransp(aduana.nombreMedioTransporte)
+            if (aduana.rutCompaniaTransporte)
+                RUTCiaTransp(aduana.rutCompaniaTransporte)
+            if (aduana.nombreCompaniaTransporte)
+                NomCiaTransp(aduana.nombreCompaniaTransporte)
+            if (aduana.idAdicionalCompaniaTransporte)
+                IdAdicTransp(aduana.idAdicionalCompaniaTransporte)
+            if (aduana.booking)
+                Booking(aduana.booking)
+            if (aduana.operador)
+                Operador(aduana.operador)
+            if (aduana.codigoPuertoEmbarque)
+                CodPtoEmbarque(aduana.codigoPuertoEmbarque)
+            if (aduana.idAdicionalPuertoEmbarque)
+                IdAdicPtoEmb(aduana.idAdicionalPuertoEmbarque)
+            if (aduana.codigoPuertoDesembarque)
+                CodPtoDesemb(aduana.codigoPuertoDesembarque)
+            if (aduana.idAdicionalPuertoDesembarque)
+                IdAdicPtoDesemb(aduana.idAdicionalPuertoDesembarque)
+            if (aduana.tara)
+                Tara(aduana.tara)
+            if (aduana.unidadMedidaTara)
+                CodUnidMedTara(aduana.unidadMedidaTara)
+            if (aduana.pesoBruto)
+                PesoBruto(aduana.pesoBruto)
+            if (aduana.unidadMedidaPesoBruto)
+                CodUnidPesoBruto(aduana.unidadMedidaPesoBruto)
+            if (aduana.pesoNeto)
+                PesoNeto(aduana.pesoNeto)
+            if (aduana.unidadMedidaPesoNeto)
+                CodUnidPesoNeto(aduana.unidadMedidaPesoNeto)
+            if (aduana.totalItems)
+                TotItems(aduana.totalItems)
+            if (aduana.totalBultos)
+                TotBultos(aduana.totalBultos)
+            aduana.tipoBultos?.each { tipoBulto ->
+                TipoBultos {
+                    if (tipoBulto.codigoTipo)
+                        CodTpoBultos(tipoBulto.codigoTipo)
+                    if (tipoBulto.cantidadBultos)
+                        CantBultos(tipoBulto.cantidadBultos)
+                    if (tipoBulto.marcas)
+                        Marcas(tipoBulto.marcas)
+                    if (tipoBulto.idContainer)
+                        IdContainer(tipoBulto.idContainer)
+                    if (tipoBulto.sello)
+                        Sello(tipoBulto.sello)
+                    if (tipoBulto.emisorSello)
+                        EmisorSello(tipoBulto.emisorSello)
+                }
+            }
+            if (aduana.montoFlete)
+                MntFlete(aduana.montoFlete)
+            if (aduana.montoSeguro)
+                MntSeguro(aduana.montoSeguro)
+            if (aduana.codigoPaisReceptor)
+                CodPaisRecep(aduana.codigoPaisReceptor)
+            if (aduana.codigoPaisDestino)
+                CodPaisDestin(aduana.codigoPaisDestino)
+        }
+    Totales {
+        if (tipoMoneda)
+            TpoMoneda(tipoMoneda)
+        if (totalNeto != null)
+            MntNeto(Math.round(totalNeto?:0))
+        if (totalExento)
+            MntExe(totalExento)
+        if (montoBase)
+            MntBase(montoBase)
+        if (montoMargenComercializacion)
+            MntMargenCom(montoMargenComercializacion)
+        if (tasaIva)
+            TasaIVA(tasaIva)
+        if (montoIva)
+            IVA(montoIva)
+        if (ivaPropio)
+            IVAProp(ivaPropio)
+        if (ivaTerceros)
+            IVATerc(ivaTerceros)
+        impuestoRetenido.each { impRet ->
+            ImptoReten{
+                TipoImp(impRet.tipo)
+                if (impRet.tasa)
+                    TasaImp(impRet.tasa)
+                MontoImp(impRet.monto)
+            }
+        }
+        if (ivaNoRetenido)
+            IVANoRet(ivaNoRetenido)
+        if (creditoEmpresasConstructoras)
+            CredEC(creditoEmpresasConstructoras)
+        if (garantiaEnvases)
+            GrntDep(garantiaEnvases)
+        if (comisiones)
+            Comisiones {
+                if (comisiones.valorNeto)
+                    ValComNeto(comisiones.valorNeto)
+                if (comisiones.valorExento)
+                    ValComExe(comisiones.valorExento)
+                if (comisiones.valorIva)
+                    ValComIVA(comisiones.valorIva)
+            }
+        MntTotal(totalInvoice as Integer)
+        if (montoNoFacturable)
+            MontoNF(montoNoFacturable)
+        if (montoPeriodo)
+            MontoPeriodo(montoPeriodo)
+        if (saldoAnterior)
+            SaldoAnterior(saldoAnterior)
+        if (valorPagar)
+            VlrPagar(valorPagar)
+    }
+    if (otraMoneda)
+        OtraMoneda{
+            if (otraMoneda.tipo)
+                TpoMoneda(otraMoneda.tipo)
+            if (otraMoneda.tipoCambio)
+                TpoCambio(otraMoneda.tipoCambio)
+            if (otraMoneda.montoNeto)
+                MntNetoOtrMnda(otraMoneda.montoNeto)
+            if (otraMoneda.montoExento)
+                MntExeOtrMnda(otraMoneda.montoExento)
+            if (otraMoneda.montoFaenamientoCarne)
+                MntFaeCarneOtrMnda(otraMoneda.montoFaenamientoCarne)
+            if (otraMoneda.margenComercializacion)
+                MntMargComOtrMnda(otraMoneda.margenComercializacion)
+            if (otraMoneda.iva)
+                IVAOtrMnda(otraMoneda.iva)
+            otraMoneda.impuestosRentenciones?.each { ret ->
+                ImpRetOtrMnda {
+                    TipoImpOtrMnda(ret.tipo)
+                    if (ret.tasa)
+                        TasaImpOtrMnda(ret.tasa)
+                    VlrImpOtrMnda(ret.valor)
+                }
+            }
+            if (otraMoneda.ivaNoRetenido)
+                IVANoRetOtrMnda(otraMoneda.ivaNoRetenido)
+            MntTotOtrMnda(otraMoneda.montoTotal)
+        }
+}
+encabezado = xmlWriter.toString()
+xmlWriter.close()
+
+if (detalleList) {
+    xmlWriter = new StringWriter()
+    xmlBuilder = new MarkupBuilder(xmlWriter)
+    xmlBuilder.printer.incrementIndent()
+    xmlBuilder.printer.incrementIndent()
+    xmlBuilder.DetallesContainer {
         detalleList.each { detalle ->
             Detalle {
                 NroLinDet(detalle.numeroLinea)
@@ -429,38 +644,130 @@ xmlBuilder.DTE(dteAttributesMap) {
                         VlrCodigo(codigoItem.valorCodigo)
                     }
                 }
+                if (detalle.tipoDocumentoLiquidacion)
+                    TpoDocLiq(detalle.tipoDocumentoLiquidacion)
                 if (detalle.indicadorExento)
                     IndExe(detalle.indicadorExento)
-                //Retenedor{}
+                if (detalle.retenedor)
+                    Retenedor {
+                        IndAgente(detalle.retenedor.indicadorAgente)
+                        if (detalle.retenedor.montoBase)
+                            MntBaseFaena(detalle.retenedor.montoBase)
+                        if (detalle.retenedor.montoMargenComercializacion)
+                            MntMargComer(detalle.retenedor.montoMargenComercializacion)
+                        if (detalle.retenedor.precioUnitarioConsumidorFinal)
+                            PrcConsFinal(detalle.retenedor.precioUnitarioConsumidorFinal)
+                    }
                 NmbItem(detalle.nombreItem)
                 if (detalle.descripcionItem)
                     DscItem(detalle.descripcionItem)
-                //QtyRef()
-                //UnmdRef()
-                //PrcRef()
+                if (detalle.cantidadUnidadReferencia)
+                    QtyRef(detalle.cantidadUnidadReferencia)
+                if (detalle.unidadMedidaReferencia)
+                    UnmdRef(detalle.unidadMedidaReferencia)
+                if (detalle.precioUnidadReferencia)
+                    PrcRef(detalle.precioUnidadReferencia)
                 if (detalle.quantity != null)
                     QtyItem(detalle.quantity)
-                //Subcantidad{}
-                //FchElabor()
-                //FchVencim()
+                detalle.subcantidad?.each { subcant ->
+                    SubCantidad {
+                        SubQty(subcant.quantity)
+                        SubCod(subcant.codigo)
+                        if (subcant.tipoCodigo)
+                            TipCodSubQty(subcant.tipoCodigo)
+                    }
+                }
+                if (detalle.fechaElaboracion)
+                    FchElabor(detalle.fechaElaboracion)
+                if (detalle.fechaVencimiento)
+                    FchVencim(detalle.fechaVencimiento)
                 if (detalle.uom)
-                    UnmdItem(uom)
+                    UnmdItem(detalle.uom)
                 if (detalle.priceItem != null && detalle.priceItem != 0 && detalle.priceItem != "0")
                     PrcItem((detalle.priceItem as BigDecimal).setScale(6, java.math.RoundingMode.HALF_UP))
-                //OtrMnda{}
+                if (detalle.otraMoneda)
+                    OtrMnda {
+                        PrcOtrMon(detalle.otraMoneda.precio)
+                        Moneda(detalle.otraMoneda.moneda)
+                        if (detalle.otraMoneda.factorConversion)
+                            FctConv(detalle.otraMoneda.factorConversion)
+                        if (detalle.otraMoneda.descuento)
+                            DctoOtrMnda(detalle.otraMoneda.descuento)
+                        if (detalle.otraMoneda.recargo)
+                            RecargoOtrMnda(detalle.otraMoneda.recargo)
+                        MontoItemOtrMnda(detalle.otraMoneda.monto)
+                    }
                 if (detalle.porcentajeDescuento)
                     DescuentoPct(detalle.porcentajeDescuento)
                 if (detalle.montoDescuento)
                     DescuentoMonto(detalle.montoDescuento)
-                //SubDscto{}
-                //RecargoPct()
-                //RecargoMonto()
-                //SubRecargo{}
-                //CodImpAdic()
+                detalle.subDescuento?.each { sd ->
+                    SubDscto {
+                        TipoDscto(sd.tipo)
+                        ValorDscto(sd.valor)
+                    }
+                }
+                if (detalle.recargoPorcentaje)
+                    RecargoPct(detalle.recargoPorcentaje)
+                if (detalle.recargoMonto)
+                    RecargoMonto(detalle.recargoMonto)
+                detalle.subRecargo?.each { sr ->
+                    SubRecargo {
+                        TipoRecargo(sr.tipo)
+                        ValorRecargo(sr.valor)
+                    }
+                }
+                detalle.codigoImpuestoAdicional?.each { codigoImpuestoAdicional ->
+                    CodImpAdic(codigoImpuestoAdicional)
+                }
                 MontoItem(detalle.montoItem as Integer)
             }
         }
-        //SubTotInfo{}
+    }
+    detalles = xmlWriter.toString().replaceFirst("\\s*<DetallesContainer>", "").replaceFirst("\\s*</DetallesContainer>", "")
+    xmlWriter.close()
+} else
+    detalles = ""
+
+if (subTototales) {
+    xmlWriter = new StringWriter()
+    xmlBuilder = new MarkupBuilder(xmlWriter)
+    xmlBuilder.printer.incrementIndent()
+    xmlBuilder.printer.incrementIndent()
+    xmlBuilder.SubtotalesContainer {
+        subTototales?.each {
+            SubTotInfo { subTot ->
+                NroSTI(subTot.seqNum)
+                GlosaSTI(subTot.glosa)
+                if (subTot.orden)
+                    OrdenSTI(subTot.orden)
+                if (subTot.valorNeto)
+                    SubTotNetoSTI(subTot.valorNeto)
+                if (subTot.valorIva)
+                    SubTotIVASTI(subTot.valorIva)
+                if (subTot.impustosAdicionales)
+                    SubTotAdicSTI(subTot.impustosAdicionales)
+                if (subTot.valorExento)
+                    SubTotExeSTI(subTot.valorExento)
+                if (subTot.total)
+                    ValSubtotSTI(subTot.total)
+                subTot.numeroLineasDetalle?.each { nroLinDet ->
+                    LineasDeta(nroLinDet)
+                }
+            }
+        }
+    }
+    subTotales = xmlWriter.toString().replaceFirst("\\s*<SubtotalesContainer>", "").replaceFirst("\\s*</SubtotalesContainer>", "")
+    xmlWriter.close()
+} else
+    subTotales = ""
+
+if (descuentoORecargoGlobalList) {
+    xmlWriter = new StringWriter()
+    xmlBuilder = new MarkupBuilder(xmlWriter)
+    xmlBuilder.printer.incrementIndent()
+    xmlBuilder.printer.incrementIndent()
+    xmlBuilder.DescuentoORecargoGlobalContainer {
         descuentoORecargoGlobalList?.each { discountOrChargeMap ->
             DscRcgGlobal{
                 NroLinDR(discountOrChargeMap.numeroLinea)
@@ -468,10 +775,24 @@ xmlBuilder.DTE(dteAttributesMap) {
                 GlosaDR(discountOrChargeMap.glosa)
                 TpoValor(discountOrChargeMap.tipoValor)
                 ValorDR(discountOrChargeMap.valor)
-                //ValorDROtrMnda()
-                //IndExeDR()
+                if (discountOrChargeMap.valorOtraMoneda)
+                    ValorDROtrMnda(discountOrChargeMap.valorOtraMoneda)
+                if (discountOrChargeMap.indicadorExento)
+                    IndExeDR(discountOrChargeMap.indicadorExento)
             }
         }
+    }
+    descuentosORecargosGlobales = xmlWriter.toString().replaceFirst("\\s*<DescuentoORecargoGlobalContainer>", "").replaceFirst("\\s*</DescuentoORecargoGlobalContainer>", "")
+    xmlWriter.close()
+} else
+    descuentosORecargosGlobales = ""
+
+if (referenciaList) {
+    xmlWriter = new StringWriter()
+    xmlBuilder = new MarkupBuilder(xmlWriter)
+    xmlBuilder.printer.incrementIndent()
+    xmlBuilder.printer.incrementIndent()
+    xmlBuilder.ReferenciasContainer {
         referenciaList.each { referencia ->
             Referencia {
                 NroLinRef(referencia.numeroLinea)
@@ -489,13 +810,152 @@ xmlBuilder.DTE(dteAttributesMap) {
                     RazonRef(referencia.razon)
             }
         }
-        //Comisiones{}
-        TED (version:"1.0") {
-            xmlBuilder.getMkp().yieldUnescaped(datosTed)
-            FRMT(algoritmo:"SHA1withRSA", MoquiDTEUtils.firmaTimbre(datosTed, folioResult.privateKey))
-        }
-        TmstFirma(ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss"))
     }
+    referencias = xmlWriter.toString().replaceFirst("\\s*<ReferenciasContainer>", "").replaceFirst("\\s*</ReferenciasContainer>", "")
+    xmlWriter.close()
+} else
+    referencias = ""
+
+if (comisionesList) {
+    xmlWriter = new StringWriter()
+    xmlBuilder = new MarkupBuilder(xmlWriter)
+    xmlBuilder.printer.incrementIndent()
+    xmlBuilder.printer.incrementIndent()
+    xmlBuilder.ComisionesContainer {
+        comisionesList?.each {
+            Comisiones { comision ->
+                NroLinCom(comision.seqNum)
+                TipoMovim(comision.tipoMovimiento)
+                Glosa(comision.glosa)
+                if (comision.tasa)
+                    TasaComision(comision.tasa)
+                if (comision.valorComisionNeto)
+                    ValComNeto(comision.valorComisionNeto)
+                if (comision.valorComisionExento)
+                    ValComExe(comision.valorComisionExento)
+                if (comision.valorComisionIva)
+                    ValComIva(comision.valorComisionIva)
+            }
+        }
+    }
+    comisiones = xmlWriter.toString().replaceFirst("\\s*<ComisionesContainer>", "").replaceFirst("\\s*</ComisionesContainer>", "")
+    xmlWriter.close()
+} else
+    comisiones = ""
+
+xmlWriter = new StringWriter()
+xmlBuilder = new MarkupBuilder(xmlWriter)
+
+String schemaLocation = 'http://www.sii.cl/SiiDte DTE_v10.xsd'
+if (rutReceptor == '61603000-0') {
+    // Fonasa no soporta recibir el schemaLocation dentro del XML de intercambio (Envío DTE)
+    dteAttributesMap = [xmlns: 'http://www.sii.cl/SiiDte', version: '1.0']
+} else
+    dteAttributesMap = [xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation]
+
+if (tipoDte in [33, 34, 46, 52, 56, 61]) {
+    descripcionTipo = "${tipoDte}"
+    signingTag = "Documento"
+    notAllowedFieldList = ['codigoAdicionalSucursal', 'tipoMoneda']
+    requiredFieldList = []
+    if (tipoDte == 52) {
+        descripcionTipo = "Guía de Despacho"
+        requiredFieldList = ['indicadorTraslado']
+    }
+    notAllowedFieldListDetalle = ['tipoDocumentoLiquidacion']
+    notAllowedFieldListDetalleSubcantidad = ['tipoCodigo']
+} else if (tipoDte in [110, 111, 112]) {
+    descripcionTipo = "Facturas de Exportación"
+    notAllowedFieldList = ['tipoDespacho', 'tipoImpresion', 'indicadorMontosBrutos', 'tipoTransaccionComprador', 'tipoTransaccionVendedor', 'tipoFacturaEspecial', 'rutMandante',
+                           'rutSolicitante', 'totalNeto', 'montoBase', 'montoMargenComercializacion', 'tasaIva', 'montoIva', 'ivaPropio', 'ivaTerceros', 'impuestoRetenido',
+                           'ivaNoRetenido', 'creditoEmpresasConstructoras', 'garantiaEnvases', 'comisiones', 'montoNoFacturable', 'montoPeriodo', 'saldoAnterior', 'valorPagar',
+                           'otraMoneda.montoNeto', 'otraMoneda.montoFaenamientoCarne', 'otraMoneda.margenComercializacion', 'otraMoneda.iva', 'otraMoneda.impuestosRentenciones',
+                           'otraMoneda.ivaNoRetenido']
+    notAllowedFieldListDetalle = ['retenedor', 'codigoImpuestoAdicional', 'tipoDocumentoLiquidacion']
+    requiredFieldList = ['tipoMoneda']
+    signingTag = "Exportaciones"
+} else if (tipoDte in [43]) {
+    notAllowedFieldList = ['indicacionNoRebajat', 'tipoDespacho', 'tipoImpresion', 'formaPagoExportacion', 'tipoFacturaEspecial', 'guiaExportacion', 'codigoAdicionalSucursal',
+                           'identificadorAdicionalEmisor', 'rutMandante', 'rutSolicitante', 'transporte', 'aduana', 'tipoMoneda', 'montoBase', 'montoMargenComercializacion',
+                           'ivaNoRetenido', 'creditoEmpresasConstructoras', 'garantiaEnvases', 'montoNoFacturable', 'otraMoneda']
+    notAllowedFieldListDetalle = ['retenedor', 'otraMoneda', 'porcentajeDescuento', 'montoDescuento', 'subDescuento', 'recargoPorcentaje', 'recargoMonto', 'subRecargo']
+    notAllowedFieldListReferencia = ['rutOtro']
+    notAllowedFieldListDetalleSubcantidad = ['tipoCodigo']
+} else {
+    ec.message.addError("Unable to generate DTE of type ${tipoDte}")
+}
+notAllowedFieldList.each { fieldName ->
+    if (ec.context[fieldName] != null)
+        ec.message.addError("${descripcionTipo} no puede tener campo ${fieldName}")
+}
+requiredFieldList.each { fieldName ->
+    if (ec.context[fieldName] == null)
+        ec.message.addError("${descripcionTipo} debe tener campo ${fieldName}")
+}
+detalleList.each { detalle ->
+    notAllowedFieldListDetalle.each { fieldName ->
+        if (detalle[fieldName != null])
+            ec.message.addError("${descripcionTipo} debe tener campo ${fieldName} en detalles")
+    }
+    detalle.subcantidad?.each { subcantidad ->
+        notAllowedFieldListDetalleSubcantidad.each { fieldName ->
+            if (subcantidad[fieldName != null])
+                ec.message.addError("${descripcionTipo} debe tener campo ${fieldName} en detalles.subcantidad")
+        }
+    }
+}
+referenciaList.each { referencia ->
+    notAllowedFieldListReferencia.each { fieldName ->
+        if (referencia[fieldName != null])
+            ec.message.addError("${descripcionTipo} debe tener campo ${fieldName} en referencia")
+    }
+}
+notAllowedFieldListDetalle
+
+if (ec.message.hasError())
+    return
+
+xmlBuilder.DTE(dteAttributesMap) {
+    if (tipoDte in [33, 34, 46, 52, 56, 61])
+        Documento(ID: idDocumento) {
+            xmlBuilder.getMkp().yieldUnescaped(encabezado)
+            xmlBuilder.getMkp().yieldUnescaped(detalles)
+            xmlBuilder.getMkp().yieldUnescaped(subTotales)
+            xmlBuilder.getMkp().yieldUnescaped(descuentosORecargosGlobales)
+            xmlBuilder.getMkp().yieldUnescaped(referencias)
+            xmlBuilder.getMkp().yieldUnescaped(comisiones)
+            TED (version:"1.0") {
+                xmlBuilder.getMkp().yieldUnescaped(datosTed)
+                FRMT(algoritmo:"SHA1withRSA", MoquiDTEUtils.firmaTimbre(datosTed, folioResult.privateKey))
+            }
+            TmstFirma(ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss"))
+        }
+    else if (tipoDte in [110, 111, 112])
+        Exportaciones(ID: idDocumento) {
+            xmlBuilder.getMkp().yieldUnescaped(encabezado)
+            xmlBuilder.getMkp().yieldUnescaped(detalles)
+            xmlBuilder.getMkp().yieldUnescaped(subTotales)
+            xmlBuilder.getMkp().yieldUnescaped(descuentosORecargosGlobales)
+            xmlBuilder.getMkp().yieldUnescaped(referencias)
+            TED (version:"1.0") {
+                xmlBuilder.getMkp().yieldUnescaped(datosTed)
+                FRMT(algoritmo:"SHA1withRSA", MoquiDTEUtils.firmaTimbre(datosTed, folioResult.privateKey))
+            }
+            TmstFirma(ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss"))
+        }
+    else if (tipoDte == 43)
+        Liquidacion(ID: idDocumento) {
+            xmlBuilder.getMkp().yieldUnescaped(encabezado)
+            xmlBuilder.getMkp().yieldUnescaped(detalles)
+            xmlBuilder.getMkp().yieldUnescaped(subTotales)
+            xmlBuilder.getMkp().yieldUnescaped(referencias)
+            xmlBuilder.getMkp().yieldUnescaped(comisiones)
+            TED (version:"1.0") {
+                xmlBuilder.getMkp().yieldUnescaped(datosTed)
+                FRMT(algoritmo:"SHA1withRSA", MoquiDTEUtils.firmaTimbre(datosTed, folioResult.privateKey))
+            }
+            TmstFirma(ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss"))
+        }
 }
 
 uri = "#" + idDocumento
@@ -505,7 +965,7 @@ facturaXmlString = facturaXmlString.replaceAll("[^\\x00-\\xFF]", "")
 xmlWriter.close()
 
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
-byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Documento")
+byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, signingTag)
 
 try {
     MoquiDTEUtils.validateDocumentSii(ec, facturaXml, schemaLocation)
@@ -514,7 +974,7 @@ try {
 }
 
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
-if (!MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
+if (!MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:${signingTag}", "/sii:DTE/sii:${signingTag}/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
     ec.message.addError("Error al generar DTE tipo ${tipoDte} (${dteTypeDescription}) folio ${folio}: firma inválida")
 }
 

@@ -77,13 +77,12 @@ while (line != null) {
         } else if (detalleInternacional.matches()) {
             campo = detalleInternacional[0][1]
             valor = detalleInternacional[0][2]
-            ec.logger.info("detalleInternacional, campo: ${campo}, valor: ${valor}")
             if (campo in ['MONEDA DE LA OPERACION', 'FORMA DE PAGO EXPORTACION', 'MODALIDAD DE VENTA', 'CLAUSULA DE VENTA DE EXPORTACION', 'TOTAL CLAUSULA DE VENTA',
                           'VIA DE TRANSPORTE', 'PUERTO DE EMBARQUE', 'PUERTO DE DESEMBARQUE', 'UNIDAD DE MEDIDA DE TARA', 'UNIDAD PESO BRUTO', 'UNIDAD PESO NETO',
                           'TIPO DE BULTO', 'TOTAL BULTOS', 'FLETE', 'SEGURO', 'PAIS RECEPTOR Y PAIS DESTINO', 'REFERENCIA']) {
-                if (currentSet.internationalSpec == null)
-                    currentSet.internationalSpec = [:]
-                currentSet.internationalSpec[campo] = valor
+                if (currentSet.terms == null)
+                    currentSet.terms = [:]
+                currentSet.terms[campo] = valor
             } else {
                 currentSet.unprocessedLines.add("${lineNumber}: ${line}")
                 unprocessedLineNumber++
