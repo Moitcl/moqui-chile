@@ -33,34 +33,23 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="value" from="1 as BigDecimal"/>
                 <return/>
             </if>
-            <if condition="!(fromCurrencyUomId in ['CLP', 'CLF', 'CLM', 'USD'])">
-                <return error="true" message="Exchangerate from unit '${fromCurrencyUomId}' is not yet implemented."/>
-            </if>
             <if condition="toCurrencyUomId != 'CLP'">
-                <if condition="toCurrencyUomId in ['CLF', 'CLM', 'USD']"><then>
-                    <if condition="fromCurrencyUomId == 'CLP'"><then>
-                        <set field="toClpMap" from="[value:(1 as BigDecimal)]"/>
-                    </then><else>
-                        <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="context+[toCurrencyUomId:'CLP']" out-map="toClpMap" ignore-error="true"/>
-                    </else></if>
-                    <if condition="toCurrencyUomId == 'CLP'"><then>
-                        <set field="fromClpMap" from="[value:(1 as BigDecimal)]"/>
-                    </then><else>
-                        <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="context+[toCurrencyUomId:'CLP',fromCurrencyUomId:toCurrencyUomId]" out-map="fromClpMap" ignore-error="true"/>
-                    </else></if>
-                    <if condition="toClpMap.value != null &amp;&amp; fromClpMap.value != null">
-                        <set field="value" from="toClpMap.value/fromClpMap.value"/>
-                        <set field="fromDate" from="toClpMap.fromDate"/>
-                        <if condition="fromDate == null || fromDate.time &lt; fromClpMap.fromDate?.time"><set field="fromDate" from="fromClpMap.fromDate"/></if>
-                        <set field="thruDate" from="toClpMap.thruDate"/>
-                        <if condition="thruDate == null || thruDate.time &gt; fromClpMap.thruDate?.time"><set field="thruDate" from="fromClpMap.thruDate"/></if>
-                    </if>
-                    <return/>
+                <if condition="fromCurrencyUomId == 'CLP'"><then>
+                    <set field="toClpMap" from="[value:(1 as BigDecimal)]"/>
                 </then><else>
-                    <return error="true" message="Exchangerate to unit '${toCurrencyUomId}' is not yet implemented."/>
+                    <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="context+[toCurrencyUomId:'CLP']" out-map="toClpMap" ignore-error="true"/>
                 </else></if>
+                <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="context+[toCurrencyUomId:'CLP',fromCurrencyUomId:toCurrencyUomId]" out-map="fromClpMap" ignore-error="true"/>
+                <if condition="toClpMap.value != null &amp;&amp; fromClpMap.value != null">
+                    <set field="value" from="toClpMap.value/fromClpMap.value"/>
+                    <set field="fromDate" from="toClpMap.fromDate"/>
+                    <if condition="fromDate == null || fromDate.time &lt; fromClpMap.fromDate?.time"><set field="fromDate" from="fromClpMap.fromDate"/></if>
+                    <set field="thruDate" from="toClpMap.thruDate"/>
+                    <if condition="thruDate == null || thruDate.time &gt; fromClpMap.thruDate?.time"><set field="thruDate" from="fromClpMap.thruDate"/></if>
+                </if>
+                <return/>
             </if>
-            <service-call name="mchile.CurrencyServices.get#LastAvailableExchangeratePeriodDates" in-map="[currencyUomId:fromCurrencyUomId]" out-map="lastPeriod"/>
+            <service-call name="mchile.CurrencyServices.get#LastAvailableExchangeratePeriodDates" in-map="[fromCurrencyUomId:fromCurrencyUomId, toCurrencyUomId:toCurrencyUomId]" out-map="lastPeriod"/>
             <if condition="date > lastPeriod.thruDate"><return error="true" message="No se puede obtener un valor para ${fromCurrencyUomId} en la fecha ${date} en estos momentos"/></if>
             <set field="timestamp" from="new java.sql.Timestamp(date.time)"/>
             <entity-find entity-name="mchile.currency.Exchangerate" list="foundRate">
@@ -118,9 +107,6 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="force" type="Boolean" default="false"/>
         </in-parameters>
         <actions>
-            <if condition="toCurrencyUomId != 'CLP'">
-                <return error="true" message="Unsupported fromCurrency ${toCurrencyUomId}"/>
-            </if>
             <script>
                 def Calendar cal = Calendar.instance
                 cal.setTime(date)
@@ -135,10 +121,8 @@ along with this software (see the LICENSE.md file). If not, see
                     cal.add(Calendar.DAY_OF_MONTH, 1)
                 else if (fromCurrencyUomId == 'CLM')
                     cal.add(Calendar.MONTH, 1)
-                else if (fromCurrencyUomId == 'USD')
-                    cal.add(Calendar.DAY_OF_MONTH, 1)
                 else
-                    ec.message.addError("Unsupported fromCurrency ${fromCurrencyUomId}")
+                    cal.add(Calendar.DAY_OF_MONTH, 1)
                 cal.add(Calendar.MILLISECOND, -1)
                 thruDate = cal.time
             </script>
@@ -150,15 +134,15 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="fetch" noun="ExchangerateValues">
         <in-parameters>
             <parameter name="fromCurrencyUomId" required="true"/>
+            <parameter name="toCurrencyUomId" default-value="CLP"/>
             <parameter name="fromDate" type="Timestamp"/>
             <parameter name="thruDate" type="Timestamp"/>
             <parameter name="exchangerateTypeEnumId"/>
             <parameter name="attemptUpstream" type="Boolean" default="true"/>
         </in-parameters>
         <actions>
-            <set field="toCurrencyUomId" value="CLP"/>
             <if condition="fromDate == null &amp;&amp; thruDate == null">
-                <service-call name="mchile.CurrencyServices.get#LastAvailableExchangeratePeriodDates" in-map="[currencyUomId:fromCurrencyUomId]" out-map="lastPeriod"/>
+                <service-call name="mchile.CurrencyServices.get#LastAvailableExchangeratePeriodDates" in-map="[fromCurrencyUomId:fromCurrencyUomId, toCurrencyUomId:toCurrencyUomId]" out-map="lastPeriod"/>
                 <set field="fromDate" from="lastPeriod.fromDate"/>
                 <set field="thruDate" from="lastPeriod.thruDate"/>
             </if>
@@ -197,8 +181,8 @@ along with this software (see the LICENSE.md file). If not, see
                 thruDateS = new Timestamp(cal.time.time)
             ]]></script>
             <if condition="ec.user.getPreference('mchile.bcentral.ws.username')"><then>
-                <log message="Fetching ExchangeRate from Banco Central for ${fromCurrencyUomId} between ${fromDate} to ${thruDate}"/>
-                <service-call name="mchile.CurrencyServices.get#ExchangerateDataSeriesDetail" in-map="[currencyUomId:fromCurrencyUomId]" out-map="context"/>
+                <log message="Fetching ExchangeRate from Banco Central for ${fromCurrencyUomId} to ${toCurrencyUomId} between ${fromDate} to ${thruDate}"/>
+                <service-call name="mchile.CurrencyServices.get#ExchangerateDataSeriesDetail" in-map="[fromCurrencyUomId:fromCurrencyUomId, toCurrencyUomId:toCurrencyUomId]" out-map="context"/>
                 <service-call name="mchile.datacollect.DataCollectServices.update#SeriesData" in-map="[fetchFromDate:fromDate, fetchThruDate:thruDate, dataSeriesId:dataSeriesId]"/>
                 <!-- get from existing dataseries values -->
                 <entity-find entity-name="mchile.datacollect.DataSeriesValue" list="dataSeriesValues">
@@ -233,15 +217,19 @@ along with this software (see the LICENSE.md file). If not, see
                             <return/>
                         </if>
                     </if>
-                    <service-call name="mchile.CurrencyServices.fetch#ExchangerateValuesFromBCentral" in-map="[currencyUomId:fromCurrencyUomId, fromDate:fromDateS, thruDate:thruDateS]"/>
+                    <log message="Calling fetch#ExchangerateValuesFromBCentral, fromCurrencyUomId: ${fromCurrencyUomId}"/>
+                    <service-call name="mchile.CurrencyServices.fetch#ExchangerateValuesFromBCentral" in-map="[fromCurrencyUomId:fromCurrencyUomId, toCurrencyUomId:toCurrencyUomId, fromDate:fromDateS, thruDate:thruDateS]"/>
+                    <log message="After calling fetch#ExchangerateValuesFromBCentral"/>
+                    <log message="Calling fetch#ExchangerateValues"/>
                     <service-call name="mchile.CurrencyServices.fetch#ExchangerateValues" in-map="context+[attemptUpstream:false]"/>
+                    <log message="After calling fetch#ExchangerateValues"/>
                 </if>
             </then><else>
                 <!-- fetch from Moit -->
                 <log message="Fetching ExchangeRate from Moit for ${fromCurrencyUomId} between ${fromDate} to ${thruDate}"/>
                 <service-call name="mchile.CurrencyServices.fetch#ExchangerateValuesFromMoit" in-map="[fromCurrencyUomId:fromCurrencyUomId, toCurrencyUomId:toCurrencyUomId, fromDate:fromDate, thruDate:thruDate]" out-map="moit"/>
                 <iterate entry="erv" list="moit.exchangeRateValues.exchangeRateValues">
-                    <service-call name="mchile.CurrencyServices.set#ExchangerateValue" in-map="[fromCurrencyUomId:erv['fromCurrencyUomId'], toCurrencyUomId:erv.toCurrencyUomId, date:new Timestamp(erv.fromDate), value:erv.factor]"/>
+                    <service-call name="mchile.CurrencyServices.set#ExchangerateValue" in-map="[fromCurrencyUomId:erv.fromCurrencyUomId, toCurrencyUomId:erv.toCurrencyUomId, date:(new Timestamp(erv.fromDate)), value:erv.factor]"/>
                 </iterate>
             </else></if>
         </actions>
@@ -249,19 +237,24 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="get" noun="ExchangerateDataSeriesDetail">
         <in-parameters>
-            <parameter name="currencyUomId"/>
+            <parameter name="fromCurrencyUomId"/>
+            <parameter name="toCurrencyUomId" default-value="CLP"/>
         </in-parameters>
         <out-parameters>
             <parameter name="dataSeries"/>
             <parameter name="dataSeriesId"/>
         </out-parameters>
         <actions>
-            <set field="dataseriesIdMap" from="[CLF:'F073.UFF.PRE.Z.D', CLM:'F073.UTR.PRE.Z.M', USD:'F073.TCO.PRE.Z.D']"/>
-            <if condition="!dataseriesIdMap[currencyUomId]">
-                <return error="true" message="Unsupported Currency ${currencyUomId}"/>
+            <if condition="toCurrencyUomId == 'CLP' &amp;&amp; fromCurrencyUomId in ['CLF', 'CLM', 'USD']"><then>
+                <set field="dataSeriesIdMap" from="[CLF:'F073.UFF.PRE.Z.D', CLM:'F073.UTR.PRE.Z.M', USD:'F073.TCO.PRE.Z.D']"/>
+                <set field="dataSeriesId" from="dataSeriesIdMap[fromCurrencyUomId]"/>
+            </then><else>
+                <set field="dataSeriesId" value="F072.${toCurrencyUomId}.${fromCurrencyUomId}.N.O.D"/>
+            </else></if>
+            <entity-find-one value-field="dataSeries" entity-name="mchile.datacollect.DataSeries" auto-field-map="[originSeriesId:dataSeriesId, originPartyId:'CHLBCENTRAL']"/>
+            <if condition="!dataSeries">
+                <return error="true" message="Unsupported exchangerate from ${fromCurrencyUomId} to ${toCurrencyUomId}, dataSeriesId:${dataSeriesId}"/>
             </if>
-            <entity-find-one value-field="dataSeries" entity-name="mchile.datacollect.DataSeries" auto-field-map="[originSeriesId:dataseriesIdMap[currencyUomId], originPartyId:'CHLBCENTRAL']"/>
-            <if condition="!dataSeries"><return error="true" message="Error: did not find data series for ${currencyUomId}!"/></if>
             <set field="dataSeriesId" from="dataSeries.dataSeriesId"/>
         </actions>
     </service>
@@ -318,7 +311,7 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="toCurrencyUomId != 'CLP'"><return error="true" message="Only CLP supported as toCurrencyUomId for now"/></if>
             <if condition="!(fromCurrencyUomId in ['CLF', 'CLM', 'USD'])"><return error="true" message="Only CLF ('Unidad de Fomento') or CLM ('Unidad Tributaria Mensual') allowed for fromCurrencyUomId for now"/></if>
             <if condition="fromTimestamp > thruTimestamp"><return/></if>
-            <service-call name="mchile.CurrencyServices.get#LastAvailableExchangeratePeriodDates" in-map="[currencyUomId:fromCurrencyUomId]" out-map="lastPeriod"/>
+            <service-call name="mchile.CurrencyServices.get#LastAvailableExchangeratePeriodDates" in-map="[fromCurrencyUomId:fromCurrencyUomId, toCurrencyUomId:toCurrencyUomId]" out-map="lastPeriod"/>
             <if condition="thruTimestamp > lastPeriod.thruDate"><set field="thruTimestamp" from="lastPeriod.thruDate"/></if>
             <if condition="(thruTimestamp.time - fromTimestamp.time) > 1000L*60*60*24*90"><return error="true" message="Time Period too long, maximum allowed is 90 days."/></if>
 
@@ -367,7 +360,7 @@ along with this software (see the LICENSE.md file). If not, see
                 fetchPeriods = []
                 for (Map theDate : requestedDates) {
                     if (currentPeriod == null || theDate.fromDate >= currentPeriod.thruDate) {
-                        currentPeriod = ec.service.sync().name("mchile.CurrencyServices.get#ExchangeratePeriodDates").parameters([currencyUomId: fromCurrencyUomId, date: new java.sql.Timestamp(theDate.fromDate.time)]).call()
+                        currentPeriod = ec.service.sync().name("mchile.CurrencyServices.get#ExchangeratePeriodDates").parameters([fromCurrencyUomId: fromCurrencyUomId, toCurrencyUomId: toCurrencyUomId, date: new java.sql.Timestamp(theDate.fromDate.time)]).call()
                     }
                     if (exchangeRateValues.size() > currentItem && theDate.fromDate.time > exchangeRateValues.get(currentItem).fromDate.time) {
                         lastItem = exchangeRateValues.get(currentItem)
@@ -410,12 +403,14 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="fetch" noun="ExchangerateValuesFromBCentral">
         <in-parameters>
-            <parameter name="currencyUomId"/>
+            <parameter name="fromCurrencyUomId" default-value="CLP"/>
+            <parameter name="toCurrencyUomId" required="true"/>
             <parameter name="fromDate" type="Date"/>
             <parameter name="thruDate" type="Date"/>
         </in-parameters>
         <actions>
-            <service-call name="mchile.CurrencyServices.get#LastAvailableExchangeratePeriodDates" in-map="[currencyUomId:currencyUomId]" out-map="lastPeriod"/>
+            <log message="in fetch#ExchangerateValuesFromBCentral, fromCurrencyUomId ${fromCurrencyUomId}"/>
+            <service-call name="mchile.CurrencyServices.get#LastAvailableExchangeratePeriodDates" in-map="[fromCurrencyUomId:fromCurrencyUomId, toCurrencyUomId:toCurrencyUomId]" out-map="lastPeriod"/>
             <if condition="thruDate == null || lastPeriod.thruDate &lt; thruDate">
                 <set field="thruDate" from="new java.sql.Date(lastPeriod.thruDate.time)"/>
             </if>
@@ -423,14 +418,15 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="fromDate" from="new java.sql.Date(lastPeriod.fromDate.time)"/>
             </if>
             <!--<if condition="fromDate > thruDate"><return/></if>-->
-            <service-call name="mchile.CurrencyServices.get#ExchangerateDataSeriesDetail" in-map="[currencyUomId:currencyUomId]" out-map="context"/>
+            <service-call name="mchile.CurrencyServices.get#ExchangerateDataSeriesDetail" in-map="[fromCurrencyUomId:fromCurrencyUomId, toCurrencyUomId:toCurrencyUomId]" out-map="context"/>
             <service-call name="mchile.datacollect.DataCollectServices.update#SeriesData" in-map="[fetchFromDate:fromDate, fetchThruDate:thruDate, dataSeriesId:dataSeriesId]"/>
         </actions>
     </service>
 
     <service verb="get" noun="LastAvailableExchangeratePeriodDates">
         <in-parameters>
-            <parameter name="currencyUomId" required="true"/>
+            <parameter name="fromCurrencyUomId" required="true"/>
+            <parameter name="toCurrencyUomId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fromDate" type="java.util.Date"/>
@@ -443,7 +439,8 @@ along with this software (see the LICENSE.md file). If not, see
 
     <service verb="get" noun="ExchangeratePeriodDates">
         <in-parameters>
-            <parameter name="currencyUomId" required="true"/>
+            <parameter name="fromCurrencyUomId" required="true"/>
+            <parameter name="toCurrencyUomId" required="true"/>
             <parameter name="date" type="Timestamp"/></in-parameters>
         <out-parameters>
             <parameter name="fromDate" type="java.util.Date"/>
@@ -455,10 +452,10 @@ along with this software (see the LICENSE.md file). If not, see
                 if (!date && cal.get(Calendar.DAY_OF_MONTH) >= 9) {
                     cal.add(Calendar.MONTH, 1)
                 }
-                if (!date && currencyUomId == 'CLF') {
+                if (!date && fromCurrencyUomId == 'CLF') {
                     cal.add(Calendar.MONTH, -1)
                 }
-                if (currencyUomId == 'CLF') cal.set(Calendar.DAY_OF_MONTH, 10)
+                if (fromCurrencyUomId == 'CLF') cal.set(Calendar.DAY_OF_MONTH, 10)
                 else cal.set(Calendar.DAY_OF_MONTH, 1)
                 cal.set(Calendar.MILLISECOND, 0)
                 cal.set(Calendar.SECOND, 0)
