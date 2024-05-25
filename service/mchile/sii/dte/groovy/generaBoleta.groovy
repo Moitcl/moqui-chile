@@ -168,7 +168,7 @@ if (totalNeto != null) {
 
 // Chequeo de valores entre Invoice y calculados
 if (invoice && invoice.invoiceTotal != totalInvoice) {
-    ec.message.addError("No coinciden valores totales, calculado: ${ec.l10n.formatCurrency(totalInvoice, 'CLP')}, en invoice ${invoiceId}: ${ec.l10n.formatCurrency(invoice.invoiceTotal, 'CLP')}")
+    ec.message.addError("No coinciden valores totales de Boleta, calculado: ${ec.l10n.formatCurrency(totalInvoice, 'CLP')}, en invoice ${invoiceId}: ${ec.l10n.formatCurrency(invoice.invoiceTotal, 'CLP')}")
     return
 }
 

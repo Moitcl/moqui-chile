@@ -118,11 +118,11 @@ if (tipoDte == 33) {
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
     totalDescuentos = detMap.totalDescuentos
-} else if (tiopDte == 110) {
+} else if (tipoDte == 110) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
+    totalExento = (detMap.totalExento?:0) + (detMap.totalNeto?:0)
     totalNeto = null
-    totalExento = detMap.totalExento
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
     originalReferenciaList = referenciaList
@@ -130,6 +130,11 @@ if (tipoDte == 33) {
     referenciaList = refMap.referenciaList
     totalDescuentos = detMap.totalDescuentos
     tasaIva = null
+    ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInfoServices.get#CurrencyUomMap").call())
+    if (detMap.originCurrencyUomId)
+        tipoMoneda = uomToSiiCurrencyMap[detMap.originCurrencyUomId]
+    else
+        tipoMoneda = uomToSiiCurrencyMap['CLP']
 } else if (tipoDte == 34) {
     // Factura Exenta Electrónica
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId)
@@ -277,7 +282,7 @@ if (totalNeto != null) {
 // Chequeo de valores entre Invoice y calculados
 if (invoice) {
     if (invoice.invoiceTotal != totalInvoice) {
-        ec.message.addError("No coinciden valores totales, calculado: ${ec.l10n.formatCurrency(totalInvoice, invoice.currencyUomId)}, en invoice ${invoiceId}: ${ec.l10n.formatCurrency(invoice.invoiceTotal, invoice.currencyUomId)}")
+        ec.message.addError("No coinciden valores totales de DTE, calculado: ${ec.l10n.formatCurrency(totalInvoice, invoice.currencyUomId)}, en invoice ${invoiceId}: ${ec.l10n.formatCurrency(invoice.invoiceTotal, invoice.currencyUomId)}")
     }
 }
 
@@ -868,7 +873,7 @@ if (tipoDte in [33, 34, 46, 52, 56, 61]) {
     descripcionTipo = "Facturas de Exportación"
     notAllowedFieldList = ['tipoDespacho', 'tipoImpresion', 'indicadorMontosBrutos', 'tipoTransaccionComprador', 'tipoTransaccionVendedor', 'tipoFacturaEspecial', 'rutMandante',
                            'rutSolicitante', 'totalNeto', 'montoBase', 'montoMargenComercializacion', 'tasaIva', 'montoIva', 'ivaPropio', 'ivaTerceros', 'impuestoRetenido',
-                           'ivaNoRetenido', 'creditoEmpresasConstructoras', 'garantiaEnvases', 'comisiones', 'montoNoFacturable', 'montoPeriodo', 'saldoAnterior', 'valorPagar',
+                           'ivaNoRetenido', 'creditoEmpresasConstructoras', 'garantiaEnvases', 'comisionesList', 'montoNoFacturable', 'montoPeriodo', 'saldoAnterior', 'valorPagar',
                            'otraMoneda.montoNeto', 'otraMoneda.montoFaenamientoCarne', 'otraMoneda.margenComercializacion', 'otraMoneda.iva', 'otraMoneda.impuestosRentenciones',
                            'otraMoneda.ivaNoRetenido']
     notAllowedFieldListDetalle = ['retenedor', 'codigoImpuestoAdicional', 'tipoDocumentoLiquidacion']

@@ -86,12 +86,21 @@ class MoquiDTEUtils {
         int numberAfectos = 0
         int numberExentos = 0
         Long totalDescuentos = 0
+        String originCurrencyUomId = null
 
         detailList.each { detailEntryObj ->
             HashMap detailEntry = (detailEntryObj instanceof EntityValue) ? detailEntryObj.getMap() : detailEntryObj
             String nombreItem = detailEntry.description
             if (detailType.equals("OrderItem"))
                 nombreItem = detailEntry.itemDescription
+            else if (detailType.equals("InvoiceItem")) {
+                if (detailEntryObj.originCurrencyUomId) {
+                    if (originCurrencyUomId == null || originCurrencyUomId == detailEntryObj.originCurrencyUomId)
+                        originCurrencyUomId = detailEntryObj.originCurrencyUomId
+                    else
+                        throw new BaseArtifactException("Multiple originCurrencyUomId values found: ${originCurrencyUomId}, ${detailEntryObj.originCurrencyUomId}")
+                }
+            }
             if (!nombreItem) {
                 EntityValue productEv = ec.entity.find("mantle.product.Product").condition("productId", detailEntry.productId).one()
                 nombreItem = productEv ? productEv.productName : ''
@@ -241,11 +250,13 @@ class MoquiDTEUtils {
             }
             if (detailType == "ReturnItem" && codRef == 2) {
                 singleDet = [detailMap]
-                return [detalleList: singleDet, totalNeto: totalNeto, totalExento: totalExento, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos]
+                return [detalleList: singleDet, totalNeto: totalNeto, totalExento: totalExento, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos,
+                        originCurrencyUomId:originCurrencyUomId]
             }
             if (detailType == "DebitoItem" && codRef == 2) {
                 singleDet = [detailMap]
-                return [detailArray: singleDet, totalNeto: totalNeto, totalExento: totalExento, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos]
+                return [detailArray: singleDet, totalNeto: totalNeto, totalExento: totalExento, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos,
+                        originCurrencyUomId:originCurrencyUomId]
             }
             if (porcentajeDescuento)
                 detailMap.porcentajeDescuento = porcentajeDescuento
@@ -253,7 +264,8 @@ class MoquiDTEUtils {
                 detailMap.montoDescuento = montoDescuento
             i = i + 1
         }
-        return [detalleList: detalleList, totalNeto: totalNeto, totalExento: totalExento, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos]
+        return [detalleList: detalleList, totalNeto: totalNeto, totalExento: totalExento, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos,
+                originCurrencyUomId:originCurrencyUomId]
     }
 
     public static Map<String, Object> prepareReferences(ExecutionContext ec, List<HashMap> referenciaList, String rutEmisor, Long tipoFactura) {
