@@ -583,14 +583,14 @@ xmlBuilder.Encabezado() {
             CredEC(creditoEmpresasConstructoras)
         if (garantiaEnvases)
             GrntDep(garantiaEnvases)
-        if (comisiones)
+        if (totalesComisiones)
             Comisiones {
-                if (comisiones.valorNeto)
-                    ValComNeto(comisiones.valorNeto)
-                if (comisiones.valorExento)
-                    ValComExe(comisiones.valorExento)
-                if (comisiones.valorIva)
-                    ValComIVA(comisiones.valorIva)
+                if (totalesComisiones.valorNeto)
+                    ValComNeto(totalesComisiones.valorNeto)
+                if (totalesComisiones.valorExento)
+                    ValComExe(totalesComisiones.valorExento)
+                if (totalesComisiones.valorIva)
+                    ValComIVA(totalesComisiones.valorIva)
             }
         MntTotal(totalInvoice as Integer)
         if (montoNoFacturable)
@@ -631,7 +631,7 @@ xmlBuilder.Encabezado() {
             MntTotOtrMnda(otraMoneda.montoTotal)
         }
 }
-encabezado = xmlWriter.toString()
+xmlEncabezado = xmlWriter.toString()
 xmlWriter.close()
 
 if (detalleList) {
@@ -729,12 +729,12 @@ if (detalleList) {
             }
         }
     }
-    detalles = xmlWriter.toString().replaceFirst("\\s*<DetallesContainer>", "").replaceFirst("\\s*</DetallesContainer>", "")
+    xmlDetalles = xmlWriter.toString().replaceFirst("\\s*<DetallesContainer>", "").replaceFirst("\\s*</DetallesContainer>", "")
     xmlWriter.close()
 } else
     detalles = ""
 
-if (subTototales) {
+if (subTotales) {
     xmlWriter = new StringWriter()
     xmlBuilder = new MarkupBuilder(xmlWriter)
     xmlBuilder.printer.incrementIndent()
@@ -762,10 +762,10 @@ if (subTototales) {
             }
         }
     }
-    subTotales = xmlWriter.toString().replaceFirst("\\s*<SubtotalesContainer>", "").replaceFirst("\\s*</SubtotalesContainer>", "")
+    xmlSubTotales = xmlWriter.toString().replaceFirst("\\s*<SubtotalesContainer>", "").replaceFirst("\\s*</SubtotalesContainer>", "")
     xmlWriter.close()
 } else
-    subTotales = ""
+    xmlSubTotales = ""
 
 if (descuentoORecargoGlobalList) {
     xmlWriter = new StringWriter()
@@ -787,10 +787,10 @@ if (descuentoORecargoGlobalList) {
             }
         }
     }
-    descuentosORecargosGlobales = xmlWriter.toString().replaceFirst("\\s*<DescuentoORecargoGlobalContainer>", "").replaceFirst("\\s*</DescuentoORecargoGlobalContainer>", "")
+    xmlDescuentosORecargosGlobales = xmlWriter.toString().replaceFirst("\\s*<DescuentoORecargoGlobalContainer>", "").replaceFirst("\\s*</DescuentoORecargoGlobalContainer>", "")
     xmlWriter.close()
 } else
-    descuentosORecargosGlobales = ""
+    xmlDescuentosORecargosGlobales = ""
 
 if (referenciaList) {
     xmlWriter = new StringWriter()
@@ -816,10 +816,10 @@ if (referenciaList) {
             }
         }
     }
-    referencias = xmlWriter.toString().replaceFirst("\\s*<ReferenciasContainer>", "").replaceFirst("\\s*</ReferenciasContainer>", "")
+    xmlReferencias = xmlWriter.toString().replaceFirst("\\s*<ReferenciasContainer>", "").replaceFirst("\\s*</ReferenciasContainer>", "")
     xmlWriter.close()
 } else
-    referencias = ""
+    xmlReferencias = ""
 
 if (comisionesList) {
     xmlWriter = new StringWriter()
@@ -843,10 +843,10 @@ if (comisionesList) {
             }
         }
     }
-    comisiones = xmlWriter.toString().replaceFirst("\\s*<ComisionesContainer>", "").replaceFirst("\\s*</ComisionesContainer>", "")
+    xmlComisiones = xmlWriter.toString().replaceFirst("\\s*<ComisionesContainer>", "").replaceFirst("\\s*</ComisionesContainer>", "")
     xmlWriter.close()
 } else
-    comisiones = ""
+    xmlComisiones = ""
 
 xmlWriter = new StringWriter()
 xmlBuilder = new MarkupBuilder(xmlWriter)
@@ -923,12 +923,12 @@ if (ec.message.hasError())
 xmlBuilder.DTE(dteAttributesMap) {
     if (tipoDte in [33, 34, 46, 52, 56, 61])
         Documento(ID: idDocumento) {
-            xmlBuilder.getMkp().yieldUnescaped(encabezado)
-            xmlBuilder.getMkp().yieldUnescaped(detalles)
-            xmlBuilder.getMkp().yieldUnescaped(subTotales)
-            xmlBuilder.getMkp().yieldUnescaped(descuentosORecargosGlobales)
-            xmlBuilder.getMkp().yieldUnescaped(referencias)
-            xmlBuilder.getMkp().yieldUnescaped(comisiones)
+            xmlBuilder.getMkp().yieldUnescaped(xmlEncabezado)
+            xmlBuilder.getMkp().yieldUnescaped(xmlDetalles)
+            xmlBuilder.getMkp().yieldUnescaped(xmlSubTotales)
+            xmlBuilder.getMkp().yieldUnescaped(xmlDescuentosORecargosGlobales)
+            xmlBuilder.getMkp().yieldUnescaped(xmlReferencias)
+            xmlBuilder.getMkp().yieldUnescaped(xmlComisiones)
             TED (version:"1.0") {
                 xmlBuilder.getMkp().yieldUnescaped(datosTed)
                 FRMT(algoritmo:"SHA1withRSA", MoquiDTEUtils.firmaTimbre(datosTed, folioResult.privateKey))
@@ -937,11 +937,11 @@ xmlBuilder.DTE(dteAttributesMap) {
         }
     else if (tipoDte in [110, 111, 112])
         Exportaciones(ID: idDocumento) {
-            xmlBuilder.getMkp().yieldUnescaped(encabezado)
-            xmlBuilder.getMkp().yieldUnescaped(detalles)
-            xmlBuilder.getMkp().yieldUnescaped(subTotales)
-            xmlBuilder.getMkp().yieldUnescaped(descuentosORecargosGlobales)
-            xmlBuilder.getMkp().yieldUnescaped(referencias)
+            xmlBuilder.getMkp().yieldUnescaped(xmlEncabezado)
+            xmlBuilder.getMkp().yieldUnescaped(xmlDetalles)
+            xmlBuilder.getMkp().yieldUnescaped(xmlSubTotales)
+            xmlBuilder.getMkp().yieldUnescaped(xmlDescuentosORecargosGlobales)
+            xmlBuilder.getMkp().yieldUnescaped(xmlReferencias)
             TED (version:"1.0") {
                 xmlBuilder.getMkp().yieldUnescaped(datosTed)
                 FRMT(algoritmo:"SHA1withRSA", MoquiDTEUtils.firmaTimbre(datosTed, folioResult.privateKey))
@@ -950,11 +950,11 @@ xmlBuilder.DTE(dteAttributesMap) {
         }
     else if (tipoDte == 43)
         Liquidacion(ID: idDocumento) {
-            xmlBuilder.getMkp().yieldUnescaped(encabezado)
-            xmlBuilder.getMkp().yieldUnescaped(detalles)
-            xmlBuilder.getMkp().yieldUnescaped(subTotales)
-            xmlBuilder.getMkp().yieldUnescaped(referencias)
-            xmlBuilder.getMkp().yieldUnescaped(comisiones)
+            xmlBuilder.getMkp().yieldUnescaped(xmlEncabezado)
+            xmlBuilder.getMkp().yieldUnescaped(xmlDetalles)
+            xmlBuilder.getMkp().yieldUnescaped(xmlSubTotales)
+            xmlBuilder.getMkp().yieldUnescaped(xmlReferencias)
+            xmlBuilder.getMkp().yieldUnescaped(xmlComisiones)
             TED (version:"1.0") {
                 xmlBuilder.getMkp().yieldUnescaped(datosTed)
                 FRMT(algoritmo:"SHA1withRSA", MoquiDTEUtils.firmaTimbre(datosTed, folioResult.privateKey))
