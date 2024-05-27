@@ -1024,6 +1024,8 @@ if (!draft) {
     xmlContentLocation = xmlContentFile.getAbsolutePath()
 }
 
+if (ec.message.hasError()) return
+
 ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
 ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteContentServices.generate#Pdf").parameters(
         [xmlLocation:xmlContentLocation, templatePartyId:issuerPartyId, invoiceMessage:invoiceMessage, draft:draft]).call())

@@ -36,7 +36,7 @@
     <xsl:decimal-format name="european" decimal-separator=',' grouping-separator='.'/>
 
     <xsl:param name="versionParam" select="'1.0'"/>
-    <xsl:template match="/">
+    <xsl:template match="/siidte:DTE/siidte:Documento | /DTE/Documento | /siidte:DTE/siidte:Liquidacion | /DTE/Liquidacion | /siidte:DTE/siidte:Exportaciones | /DTE/Exportaciones">
         <fo:root xmlns:fo="http://www.w3.org/1999/XSL/Format">
             <fo:layout-master-set>
                 <fo:simple-page-master master-name="simple" page-height="27.9cm" page-width="21.6cm" margin-top="1cm" margin-bottom="2cm" margin-left="0.8cm" margin-right="1cm">
@@ -55,29 +55,29 @@
                 </fo:simple-page-master>
             </fo:layout-master-set>
 
-            <xsl:variable name="tipo" select="siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE | DTE/Documento/Encabezado/IdDoc/TipoDTE"/>
-            <xsl:variable name="folio" select="siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:Folio | DTE/Documento/Encabezado/IdDoc/Folio"/>
+            <xsl:variable name="tipo" select="siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE | Encabezado/IdDoc/TipoDTE"/>
+            <xsl:variable name="folio" select="siidte:Encabezado/siidte:IdDoc/siidte:Folio | Encabezado/IdDoc/Folio"/>
             <xsl:if test="$draft = 'Y'"><xsl:variable name="folio" select="'SIN FOLIO'"/></xsl:if>
-            <xsl:variable name="rutEmisor" select="siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Emisor/siidte:RUTEmisor | DTE/Documento/Encabezado/Emisor/RUTEmisor"/>
-            <xsl:variable name="razonSocialEmisor" select="siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Emisor/siidte:RznSoc | DTE/Documento/Encabezado/Emisor/RznSoc | siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Emisor/siidte:RznSocEmisor | DTE/Documento/Encabezado/Emisor/RznSocEmisor"/>
+            <xsl:variable name="rutEmisor" select="siidte:Encabezado/siidte:Emisor/siidte:RUTEmisor | Encabezado/Emisor/RUTEmisor"/>
+            <xsl:variable name="razonSocialEmisor" select="Encabezado/siidte:Emisor/siidte:RznSoc | Encabezado/Emisor/RznSoc | siidte:Encabezado/siidte:Emisor/siidte:RznSocEmisor | Encabezado/Emisor/RznSocEmisor"/>
             <fo:declarations>
                 <x:xmpmeta xmlns:x="adobe:ns:meta/">
                     <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
                         <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
                             <!-- Dublin Core properties go here -->
                             <dc:title><xsl:choose>
-                                    <xsl:when test="$tipo=33">Factura Electrónica</xsl:when>
-                                    <xsl:when test="$tipo=34">Factura Electrónica Exenta</xsl:when>
-                                    <xsl:when test="$tipo=39">Boleta Electrónica</xsl:when>
-                                    <xsl:when test="$tipo=41">Boleta Electrónica Exenta</xsl:when>
-                                    <xsl:when test="$tipo=52">Guía de Despacho Electrónica</xsl:when>
-                                    <xsl:when test="$tipo=56">Nota de Débito Electrónica</xsl:when>
-                                    <xsl:when test="$tipo=61">Nota de Crédito Electrónica</xsl:when>
-                                    <xsl:when test="$tipo=110">Factura de Exportación Electrónica</xsl:when>
-                                    <xsl:when test="$tipo=112">Nota de Crédito Exportación Electrónica</xsl:when>
-                                    <xsl:otherwise>DTE tipo <xsl:value-of select="$tipo"/></xsl:otherwise>
-                                </xsl:choose> Folio <xsl:value-of select="$folio"/> RUT <xsl:value-of select="$rutEmisor"/>
-                            </dc:title>
+                                <xsl:when test="$tipo=33">Factura Electrónica</xsl:when>
+                                <xsl:when test="$tipo=34">Factura Electrónica Exenta</xsl:when>
+                                <xsl:when test="$tipo=39">Boleta Electrónica</xsl:when>
+                                <xsl:when test="$tipo=41">Boleta Electrónica Exenta</xsl:when>
+                                <xsl:when test="$tipo=52">Guía de Despacho Electrónica</xsl:when>
+                                <xsl:when test="$tipo=56">Nota de Débito Electrónica</xsl:when>
+                                <xsl:when test="$tipo=61">Nota de Crédito Electrónica</xsl:when>
+                                <xsl:when test="$tipo=110">Factura de Exportación Electrónica</xsl:when>
+                                <xsl:when test="$tipo=111">Nota de Débito Exportación Electrónica</xsl:when>
+                                <xsl:when test="$tipo=112">Nota de Crédito Exportación Electrónica</xsl:when>
+                                <xsl:otherwise>DTE tipo <xsl:value-of select="$tipo"/></xsl:otherwise>
+                            </xsl:choose> Folio <xsl:value-of select="$folio"/> RUT <xsl:value-of select="$rutEmisor"/></dc:title>
                             <dc:creator><xsl:value-of select="$razonSocialEmisor"/></dc:creator>
                             <dc:description>Representación impresa de Documento Tributario Electrónico (DTE) de acuerdo a las definiciones del Servicio de Impuestos Internos de Chile</dc:description>
                         </rdf:Description>
@@ -91,10 +91,10 @@
 
             <fo:page-sequence master-reference="simple">
                 <fo:flow flow-name="xsl-region-body">
-                    <xsl:apply-templates select="siidte:DTE/siidte:Documento | DTE/Documento"/>
+                    <xsl:call-template name="Documento"/>
                 </fo:flow>
             </fo:page-sequence>
-            <xsl:if test="(count(/siidte:DTE/siidte:Documento/siidte:Detalle | /DTE/Documento/Detalle) > $maxItems and $showExcessItemsInOtherPage = 'Y') or (count(/siidte:DTE/siidte:Documento/siidte:Referencia | /DTE/Documento/Referencia) > $maxRefs and $showExcessRefsInOtherPage = 'Y')">
+            <xsl:if test="(count(siidte:Detalle | Detalle) > $maxItems and $showExcessItemsInOtherPage = 'Y') or (count(siidte:Referencia | Referencia) > $maxRefs and $showExcessRefsInOtherPage = 'Y')">
                 <fo:page-sequence master-reference="simple" id="adjunto">
                     <fo:static-content flow-name="xsl-region-after">
                         <fo:block text-align="center" font-size="8.4pt" language="es" font-family="Helvetica, Arial, sans-serif">
@@ -110,7 +110,7 @@
         </fo:root>
     </xsl:template>
 
-    <xsl:template match="siidte:DTE/siidte:Documento | DTE/Documento">
+    <xsl:template name="Documento">
         <fo:block>
             <fo:block-container absolute-position="absolute" top="0cm" left="0cm">
                 <xsl:apply-templates select="siidte:Encabezado/siidte:Emisor | Encabezado/Emisor">
@@ -503,6 +503,69 @@
                                     </xsl:otherwise>
                                 </xsl:choose>
                             </xsl:when>
+                            <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=110) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=110)">
+                                <!-- Factura de Exportación -->
+                                <fo:table-row>
+                                    <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Señor(es)</fo:inline></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:value-of select="siidte:RznSocRecep | RznSocRecep"/></fo:inline></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Fecha</fo:inline></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
+                                </fo:table-row>
+                                <fo:table-row>
+                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">RUT</fo:inline></fo:block></fo:table-cell>
+                                    <xsl:call-template name="RutFormat">
+                                        <xsl:with-param name="rut"><xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param>
+                                    </xsl:call-template>
+                                    <fo:table-cell><fo:block font-weight="bold">Código Interno</fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block><xsl:value-of select="siidte:CdgIntRecep | CdgIntRecep"/></fo:block></fo:table-cell>
+                                </fo:table-row>
+                                <fo:table-row>
+                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Dirección</fo:inline></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:DirRecep | DirRecep"/></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Ciudad</fo:inline></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:CiudadRecep | CiudadRecep"/></fo:block></fo:table-cell>
+                                </fo:table-row>
+                                <xsl:if test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:OtraMoneda | /DTE/Documento/Encabezado/OtraMoneda)">
+                                    <fo:table-row>
+                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Tipo Moneda</fo:inline></fo:block></fo:table-cell>
+                                        <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:OtraMoneda/siidte:TpoMoneda | /DTE/Documento/Encabezado/OtraMoneda/TpoMoneda"/></fo:block></fo:table-cell>
+                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Tipo Cambio</fo:inline></fo:block></fo:table-cell>
+                                        <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:OtraMoneda/siidte:TpoCambio | /DTE/Documento/Encabezado/OtraMoneda/TpoCambio"/></fo:block></fo:table-cell>
+                                    </fo:table-row>
+                                </xsl:if>
+                                <xsl:if test="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:CodPtoEmbarque | /DTE/Documento/Aduana/CodPtoEmbarque | /siidte:DTE/siidte:Documento/siidte:Aduana/siidte:CodPtoDesemb | /DTE/Documento/Aduana/CodPtoDesemb)">
+                                    <fo:table-row>
+                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Puerto Embarque</fo:inline></fo:block></fo:table-cell>
+                                        <fo:table-cell><fo:block margin-top="4pt">
+                                            <xsl:call-template name="CodigoPuertoDetail"><xsl:with-param name="codigoPuerto"><xsl:value-of select="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:CodPtoEmbarque | /DTE/Documento/Aduana/CodPtoEmbarque)"/></xsl:with-param></xsl:call-template>
+                                            <xsl:if test="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:IdAdicPtoEmb | /DTE/Documento/Aduana/IdAdicPtoEmb)">
+                                                (<xsl:value-of select="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:IdAdicPtoEmb | /DTE/Documento/Aduana/IdAdicPtoEmb)"/>)
+                                            </xsl:if>
+                                        </fo:block></fo:table-cell>
+                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Puerto Desembarque</fo:inline></fo:block></fo:table-cell>
+                                        <fo:table-cell><fo:block margin-top="4pt">
+                                            <xsl:call-template name="CodigoPuertoDetail"><xsl:with-param name="codigoPuerto"><xsl:value-of select="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:CodPtoDesemb | /DTE/Documento/Aduana/CodPtoDesemb)"/></xsl:with-param></xsl:call-template>
+                                            <xsl:if test="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:IdAdicPtoDesemb | /DTE/Documento/Aduana/IdAdicPtoDesemb)">
+                                                (<xsl:value-of select="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:IdAdicPtoDesemb | /DTE/Documento/Aduana/IdAdicPtoDesemb)"/>)
+                                            </xsl:if>
+                                        </fo:block></fo:table-cell>
+                                    </fo:table-row>
+                                </xsl:if>
+                                <fo:table-row>
+                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Booking</fo:inline></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:Booking | /DTE/Documento/Aduana/Booking"/></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Operador</fo:inline></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:Operador | /DTE/Documento/Aduana/Operador"/></fo:block></fo:table-cell>
+                                </fo:table-row>
+                                <fo:table-row>
+                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Total Bultos</fo:inline></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:TotBultos | /DTE/Documento/Aduana/TotBultos"/></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Modalidad Venta</fo:inline></fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block margin-top="4pt">
+                                        <xsl:call-template name="CodigoModalidadVenta"><xsl:with-param name="codigoModalidadVenta"><xsl:value-of select="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:CodModVenta | /DTE/Documento/Aduana/CodModVenta)"/></xsl:with-param></xsl:call-template>
+                                    </fo:block></fo:table-cell>
+                                </fo:table-row>
+                            </xsl:when>
                             <xsl:otherwise>
                                 <!-- Otros DTE -->
                                 <fo:table-row>
@@ -756,6 +819,7 @@
                     <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=814">Certificado de Depósito Bolsa Prod. Chile</xsl:when>
                     <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=815">Vale de Prenda Bolsa Prod. Chile</xsl:when>
                     <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=820">Código de Inscripción en el Registro de Acuerdos con Plazo de Pago Excepcional</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=HES">Hoja de Entrada en Servicio (HES)</xsl:when>
                     <xsl:otherwise>Tipo <xsl:value-of select="siidte:TpoDocRef | TpoDocRef"/></xsl:otherwise>
                 </xsl:choose>
             </fo:block></fo:table-cell>
@@ -925,4 +989,361 @@
         </fo:block>
     </xsl:template>
 
+    <xsl:template name="CodigoPuertoDetail">
+        <xsl:param name="codigoPuerto"/>
+        <xsl:choose>
+            <xsl:when test="$codigoPuerto=111">Montreal, Canadá</xsl:when>
+            <xsl:when test="$codigoPuerto=112">Otros Costa del Pacífico, Canadá</xsl:when>
+            <xsl:when test="$codigoPuerto=113">Halifax, Canadá</xsl:when>
+            <xsl:when test="$codigoPuerto=114">Vancouver, Canadá</xsl:when>
+            <xsl:when test="$codigoPuerto=115">Saint John, Canadá</xsl:when>
+            <xsl:when test="$codigoPuerto=116">Toronto, Canadá</xsl:when>
+            <xsl:when test="$codigoPuerto=117">Otros Puertos de Canadá</xsl:when>
+            <xsl:when test="$codigoPuerto=118">Bayside, Canadá</xsl:when>
+            <xsl:when test="$codigoPuerto=120">Port Carties, Canadá</xsl:when>
+            <xsl:when test="$codigoPuerto=121">Costa del Atlántico, Otros entre Maine y Key West, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=122">Golfo de México, Otros entre Key West y Brownsville, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=123">Otros Costa del Pacífico, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=124">Quebec, Canadá</xsl:when>
+            <xsl:when test="$codigoPuerto=125">Prince Rupert, Canadá</xsl:when>
+            <xsl:when test="$codigoPuerto=126">Halmilton, Canadá</xsl:when>
+            <xsl:when test="$codigoPuerto=131">Boston, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=132">New Haven, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=133">Bridgeport, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=134">New York, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=135">Filadelfia, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=136">Baltimore, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=137">Norfolk, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=139">Charleston, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=140">Savanah, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=141">Miami, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=142">Everglades, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=143">Jacksonville, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=145">Palm Beach, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=146">Baton Rouge, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=147">Columbres, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=148">Pittsburgh, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=149">Duluth, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=150">Milwaukee, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=151">Tampa, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=152">Pensacola, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=153">Mobile, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=154">New Orleans, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=155">Port Arthur, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=156">Galvestón, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=157">Corpus Cristi, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=158">Brownsville, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=159">Houston, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=160">Oakland, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=161">Stockton, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=171">Seattle, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=172">Portland, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=173">San Francisco, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=174">Los Angeles, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=175">Long Beach, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=176">San Diego, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=180">Otros Puertos No Especificados, USA</xsl:when>
+            <xsl:when test="$codigoPuerto=199">Los Vilos, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=201">Puchoco, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=202">Oxiquim, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=204">Patache, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=205">Calbuco, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=206">Michilla, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=207">Puerto Angamos, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=208">Poseidón, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=209">Tres Puentes, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=210">Otros Puertos No Especificados, México</xsl:when>
+            <xsl:when test="$codigoPuerto=211">Tampico, México</xsl:when>
+            <xsl:when test="$codigoPuerto=212">Otros Costa del Pacífico, México</xsl:when>
+            <xsl:when test="$codigoPuerto=213">Veracruz, México</xsl:when>
+            <xsl:when test="$codigoPuerto=214">Coatzacoalcos, México</xsl:when>
+            <xsl:when test="$codigoPuerto=215">Guaymas, México</xsl:when>
+            <xsl:when test="$codigoPuerto=216">Mazatlán, México</xsl:when>
+            <xsl:when test="$codigoPuerto=217">Manzanillo, México</xsl:when>
+            <xsl:when test="$codigoPuerto=218">Acapulco, México</xsl:when>
+            <xsl:when test="$codigoPuerto=219">Otros Golfo de México, México</xsl:when>
+            <xsl:when test="$codigoPuerto=220">Altamira, México</xsl:when>
+            <xsl:when test="$codigoPuerto=221">Cristobal, Panamá</xsl:when>
+            <xsl:when test="$codigoPuerto=222">Balboa, Panamá</xsl:when>
+            <xsl:when test="$codigoPuerto=223">Colón, Panamá</xsl:when>
+            <xsl:when test="$codigoPuerto=224">Otros Puertos No Especificados, Panamá</xsl:when>
+            <xsl:when test="$codigoPuerto=231">Otros Puertos No Especificados, Colombia</xsl:when>
+            <xsl:when test="$codigoPuerto=232">Buenaventura, Colombia</xsl:when>
+            <xsl:when test="$codigoPuerto=233">Barranquilla, Colombia</xsl:when>
+            <xsl:when test="$codigoPuerto=241">Otros Puertos No Especificados, Ecuador</xsl:when>
+            <xsl:when test="$codigoPuerto=242">Guayaquil, Ecuador</xsl:when>
+            <xsl:when test="$codigoPuerto=251">Otros Puertos No Especificados, Perú</xsl:when>
+            <xsl:when test="$codigoPuerto=252">Callao, Perú</xsl:when>
+            <xsl:when test="$codigoPuerto=253">Ilo, Perú</xsl:when>
+            <xsl:when test="$codigoPuerto=254">Iquitos, Perú</xsl:when>
+            <xsl:when test="$codigoPuerto=261">Otros Puertos No Especificados, Argentina</xsl:when>
+            <xsl:when test="$codigoPuerto=262">Buenos Aires, Argentina</xsl:when>
+            <xsl:when test="$codigoPuerto=263">Necochea, Argentina</xsl:when>
+            <xsl:when test="$codigoPuerto=264">Mendoza, Argentina</xsl:when>
+            <xsl:when test="$codigoPuerto=265">Cordoba, Argentina</xsl:when>
+            <xsl:when test="$codigoPuerto=266">Bahía Blanca, Argentina</xsl:when>
+            <xsl:when test="$codigoPuerto=267">Comodoro Rivadavia, Argentina</xsl:when>
+            <xsl:when test="$codigoPuerto=268">Puerto Madryn, Argentina</xsl:when>
+            <xsl:when test="$codigoPuerto=269">Mar del Plata, Argentina</xsl:when>
+            <xsl:when test="$codigoPuerto=270">Rosario, Argentina</xsl:when>
+            <xsl:when test="$codigoPuerto=271">Otros Puertos No Especificados, Uruguay</xsl:when>
+            <xsl:when test="$codigoPuerto=272">Montevideo, Uruguay</xsl:when>
+            <xsl:when test="$codigoPuerto=281">Otros Puertos No Especificados, Venezuela</xsl:when>
+            <xsl:when test="$codigoPuerto=282">La Guaira, Venezuela</xsl:when>
+            <xsl:when test="$codigoPuerto=285">Maracaibo, Venezuela</xsl:when>
+            <xsl:when test="$codigoPuerto=291">Otros Puertos No Especificados, Brasil</xsl:when>
+            <xsl:when test="$codigoPuerto=292">Santos, Brasil</xsl:when>
+            <xsl:when test="$codigoPuerto=293">Río de Janeiro, Brasil</xsl:when>
+            <xsl:when test="$codigoPuerto=294">Río Grande del Sur, Brasil</xsl:when>
+            <xsl:when test="$codigoPuerto=295">Paranaguá, Brasil</xsl:when>
+            <xsl:when test="$codigoPuerto=296">Sao Paulo, Brasil</xsl:when>
+            <xsl:when test="$codigoPuerto=297">Salvador, Brasil</xsl:when>
+            <xsl:when test="$codigoPuerto=301">Otros Puertos No Especificados, Antillas Holandesas</xsl:when>
+            <xsl:when test="$codigoPuerto=302">Curazao, Antillas Holandesas</xsl:when>
+            <xsl:when test="$codigoPuerto=399">Otros Puertos de América No Especificados, Antillas Holandesas</xsl:when>
+            <xsl:when test="$codigoPuerto=411">Shangai, China</xsl:when>
+            <xsl:when test="$codigoPuerto=412">Dairén, China</xsl:when>
+            <xsl:when test="$codigoPuerto=413">Otros Puertos No Especificados, China</xsl:when>
+            <xsl:when test="$codigoPuerto=420">Otros Puertos No Especificados, Corea del Norte</xsl:when>
+            <xsl:when test="$codigoPuerto=421">Nampo, Corea del Norte</xsl:when>
+            <xsl:when test="$codigoPuerto=422">Busan CY (Pusan), Corea del Norte</xsl:when>
+            <xsl:when test="$codigoPuerto=423">Otros Puertos No Especificados, Corea del Sur</xsl:when>
+            <xsl:when test="$codigoPuerto=431">Manila, Corea del Sur</xsl:when>
+            <xsl:when test="$codigoPuerto=432">Otros Puertos No Especificados, Filipinas</xsl:when>
+            <xsl:when test="$codigoPuerto=441">Otros Puertos No Especificados, Japón</xsl:when>
+            <xsl:when test="$codigoPuerto=442">Osaka, Japón</xsl:when>
+            <xsl:when test="$codigoPuerto=443">Kobe, Japón</xsl:when>
+            <xsl:when test="$codigoPuerto=444">Yokohama, Japón</xsl:when>
+            <xsl:when test="$codigoPuerto=445">Nagoya, Japón</xsl:when>
+            <xsl:when test="$codigoPuerto=446">Shimizui, Japón</xsl:when>
+            <xsl:when test="$codigoPuerto=447">Moji, Japón</xsl:when>
+            <xsl:when test="$codigoPuerto=448">Yawata, Japón</xsl:when>
+            <xsl:when test="$codigoPuerto=449">Fukuyama, Japón</xsl:when>
+            <xsl:when test="$codigoPuerto=451">Kaohsiung, Taiwán</xsl:when>
+            <xsl:when test="$codigoPuerto=452">Keelung, Taiwán</xsl:when>
+            <xsl:when test="$codigoPuerto=453">Otros Puertos No Especificados, Taiwán</xsl:when>
+            <xsl:when test="$codigoPuerto=461">Karhg Island, Irán</xsl:when>
+            <xsl:when test="$codigoPuerto=462">Otros Puertos No Especificados, Irán</xsl:when>
+            <xsl:when test="$codigoPuerto=471">Calculta, India</xsl:when>
+            <xsl:when test="$codigoPuerto=472">Otros Puertos No Especificados, India</xsl:when>
+            <xsl:when test="$codigoPuerto=481">Chalna, Bangladesh</xsl:when>
+            <xsl:when test="$codigoPuerto=482">Otros Puertos No Especificados, Bangladesh</xsl:when>
+            <xsl:when test="$codigoPuerto=491">Otros Puertos No Especificados, Singapur</xsl:when>
+            <xsl:when test="$codigoPuerto=492">Hong Kong, Singapur</xsl:when>
+            <xsl:when test="$codigoPuerto=499">Otros Puertos Asiáticos No Especificados, Singapur</xsl:when>
+            <xsl:when test="$codigoPuerto=511">Constanza, Rumania</xsl:when>
+            <xsl:when test="$codigoPuerto=512">Otros Puertos No Especificados, Rumania</xsl:when>
+            <xsl:when test="$codigoPuerto=521">Varna, Bulgaria</xsl:when>
+            <xsl:when test="$codigoPuerto=522">Otros Puertos No Especificados, Bulgaria</xsl:when>
+            <xsl:when test="$codigoPuerto=531">Rijeka</xsl:when>
+            <xsl:when test="$codigoPuerto=532">Otros Puertos No Especificados, Yugoeslavia</xsl:when>
+            <xsl:when test="$codigoPuerto=533">Belgrado, República de Serbia</xsl:when>
+            <xsl:when test="$codigoPuerto=534">Otros Puertos No Especificados, República de Serbia</xsl:when>
+            <xsl:when test="$codigoPuerto=535">Podgoritsa, Montenegro</xsl:when>
+            <xsl:when test="$codigoPuerto=536">Otros Puertos No Especificados, Montenegro</xsl:when>
+            <xsl:when test="$codigoPuerto=537">Otros Puertos No Especificados, Croacia</xsl:when>
+            <xsl:when test="$codigoPuerto=538">Rijeka, Italia</xsl:when>
+            <xsl:when test="$codigoPuerto=541">Otros Puertos No Especificados, Italia</xsl:when>
+            <xsl:when test="$codigoPuerto=542">Genova, Italia</xsl:when>
+            <xsl:when test="$codigoPuerto=543">Liorna, Livorno, Italia</xsl:when>
+            <xsl:when test="$codigoPuerto=544">Napoles, Italia</xsl:when>
+            <xsl:when test="$codigoPuerto=545">Salerno, Italia</xsl:when>
+            <xsl:when test="$codigoPuerto=546">Augusta, Italia</xsl:when>
+            <xsl:when test="$codigoPuerto=547">Savona, Italia</xsl:when>
+            <xsl:when test="$codigoPuerto=551">Otros Puertos No Especificados, Francia</xsl:when>
+            <xsl:when test="$codigoPuerto=552">La Pallice, Francia</xsl:when>
+            <xsl:when test="$codigoPuerto=553">Le Havre, Francia</xsl:when>
+            <xsl:when test="$codigoPuerto=554">Marsella, Francia</xsl:when>
+            <xsl:when test="$codigoPuerto=555">Burdeos, Francia</xsl:when>
+            <xsl:when test="$codigoPuerto=556">Calais, Francia</xsl:when>
+            <xsl:when test="$codigoPuerto=557">Brest, Francia</xsl:when>
+            <xsl:when test="$codigoPuerto=558">Ruan, Francia</xsl:when>
+            <xsl:when test="$codigoPuerto=561">Otros Puertos No Especificados, España</xsl:when>
+            <xsl:when test="$codigoPuerto=562">Cadiz, España</xsl:when>
+            <xsl:when test="$codigoPuerto=563">Barcelona, España</xsl:when>
+            <xsl:when test="$codigoPuerto=564">Bilbao, España</xsl:when>
+            <xsl:when test="$codigoPuerto=565">Huelva, España</xsl:when>
+            <xsl:when test="$codigoPuerto=566">Sevilla, España</xsl:when>
+            <xsl:when test="$codigoPuerto=567">Tarragona, España</xsl:when>
+            <xsl:when test="$codigoPuerto=568">Algeciras, España</xsl:when>
+            <xsl:when test="$codigoPuerto=569">Valencia, España</xsl:when>
+            <xsl:when test="$codigoPuerto=571">Liverpool, Inglaterra</xsl:when>
+            <xsl:when test="$codigoPuerto=572">Londres, Inglaterra</xsl:when>
+            <xsl:when test="$codigoPuerto=573">Rochester, Inglaterra</xsl:when>
+            <xsl:when test="$codigoPuerto=574">Eten Salverry, Inglaterra</xsl:when>
+            <xsl:when test="$codigoPuerto=576">Otros Puertos No Especificados, Inglaterra</xsl:when>
+            <xsl:when test="$codigoPuerto=577">Dover, Finlandia</xsl:when>
+            <xsl:when test="$codigoPuerto=578">Plymouth, Finlandia</xsl:when>
+            <xsl:when test="$codigoPuerto=581">Helsinki, Finlandia</xsl:when>
+            <xsl:when test="$codigoPuerto=582">Otros Puertos No Especificados, Finlandia</xsl:when>
+            <xsl:when test="$codigoPuerto=583">Hanko, Finlandia</xsl:when>
+            <xsl:when test="$codigoPuerto=584">Kemi, Finlandia</xsl:when>
+            <xsl:when test="$codigoPuerto=585">Kokkola, Finlandia</xsl:when>
+            <xsl:when test="$codigoPuerto=586">Kotka, Finlandia</xsl:when>
+            <xsl:when test="$codigoPuerto=587">Oulo, Finlandia</xsl:when>
+            <xsl:when test="$codigoPuerto=588">Pietarsaari, Finlandia</xsl:when>
+            <xsl:when test="$codigoPuerto=589">Pori, Finlandia</xsl:when>
+            <xsl:when test="$codigoPuerto=591">Bremen, Alemania</xsl:when>
+            <xsl:when test="$codigoPuerto=592">Hamburgo, Alemania</xsl:when>
+            <xsl:when test="$codigoPuerto=593">Nuremberg, Alemania</xsl:when>
+            <xsl:when test="$codigoPuerto=594">Frankfurt, Alemania</xsl:when>
+            <xsl:when test="$codigoPuerto=595">Dusseldorf, Alemania</xsl:when>
+            <xsl:when test="$codigoPuerto=596">Otros Puertos No Especificados, Alemania</xsl:when>
+            <xsl:when test="$codigoPuerto=597">Cuxhaven, Bélgica</xsl:when>
+            <xsl:when test="$codigoPuerto=598">Rostock, Bélgica</xsl:when>
+            <xsl:when test="$codigoPuerto=599">Oldenburg, Bélgica</xsl:when>
+            <xsl:when test="$codigoPuerto=601">Amberes, Bélgica</xsl:when>
+            <xsl:when test="$codigoPuerto=602">Otros Puertos No Especificados, Bélgica</xsl:when>
+            <xsl:when test="$codigoPuerto=603">Zeebrugge, Bélgica</xsl:when>
+            <xsl:when test="$codigoPuerto=604">Ghent, Bélgica</xsl:when>
+            <xsl:when test="$codigoPuerto=605">Oostende, Bélgica</xsl:when>
+            <xsl:when test="$codigoPuerto=611">Lisboa, Portugal</xsl:when>
+            <xsl:when test="$codigoPuerto=612">Otros Puertos No Especificados, Portugal</xsl:when>
+            <xsl:when test="$codigoPuerto=613">Setubal, Portugal</xsl:when>
+            <xsl:when test="$codigoPuerto=621">Amsterdam, Holanda</xsl:when>
+            <xsl:when test="$codigoPuerto=622">Rotterdam, Holanda</xsl:when>
+            <xsl:when test="$codigoPuerto=623">Otros Puertos No Especificados, Holanda</xsl:when>
+            <xsl:when test="$codigoPuerto=631">Gotemburgo</xsl:when>
+            <xsl:when test="$codigoPuerto=632">Otros Puertos No Especificados, Suecia</xsl:when>
+            <xsl:when test="$codigoPuerto=633">Malmo, Suecia</xsl:when>
+            <xsl:when test="$codigoPuerto=634">Helsimborg, Suecia</xsl:when>
+            <xsl:when test="$codigoPuerto=635">Kalmar, Suecia</xsl:when>
+            <xsl:when test="$codigoPuerto=641">Aarhus, Dinamarca</xsl:when>
+            <xsl:when test="$codigoPuerto=642">Copenhagen, Dinamarca</xsl:when>
+            <xsl:when test="$codigoPuerto=643">Otros Puertos No Especificados, Dinamarca</xsl:when>
+            <xsl:when test="$codigoPuerto=644">Aalborg, Dinamarca</xsl:when>
+            <xsl:when test="$codigoPuerto=645">Odense, Dinamarca</xsl:when>
+            <xsl:when test="$codigoPuerto=651">Oslo, Noruega</xsl:when>
+            <xsl:when test="$codigoPuerto=652">Otros Puertos No Especificados, Noruega</xsl:when>
+            <xsl:when test="$codigoPuerto=653">Stavanger, Noruega</xsl:when>
+            <xsl:when test="$codigoPuerto=699">Otros Puertos de Europa No Especificados</xsl:when>
+            <xsl:when test="$codigoPuerto=711">Durbam, Sudáfrica</xsl:when>
+            <xsl:when test="$codigoPuerto=712">Ciudad del Cabo, Sudáfrica</xsl:when>
+            <xsl:when test="$codigoPuerto=713">Otros Puertos No Especificados, Sudáfrica</xsl:when>
+            <xsl:when test="$codigoPuerto=714">Saldanha, Sudáfrica</xsl:when>
+            <xsl:when test="$codigoPuerto=715">Port-Elizabeth, Sudáfrica</xsl:when>
+            <xsl:when test="$codigoPuerto=716">Mossel-Bay, Sudáfrica</xsl:when>
+            <xsl:when test="$codigoPuerto=717">East-London, Sudáfrica</xsl:when>
+            <xsl:when test="$codigoPuerto=799">Otros Puertos No Especificados, África</xsl:when>
+            <xsl:when test="$codigoPuerto=811">Sidney, Australia</xsl:when>
+            <xsl:when test="$codigoPuerto=812">Fremantle, Australia</xsl:when>
+            <xsl:when test="$codigoPuerto=813">Otros Puertos No Especificados, Australia</xsl:when>
+            <xsl:when test="$codigoPuerto=814">Adelaida, Australia</xsl:when>
+            <xsl:when test="$codigoPuerto=815">Darwin, Australia</xsl:when>
+            <xsl:when test="$codigoPuerto=816">Geraldton, Australia</xsl:when>
+            <xsl:when test="$codigoPuerto=899">Otros Puertos No Especificados, Oceanía</xsl:when>
+            <xsl:when test="$codigoPuerto=900">Rancho de Naves y Aeronaves de Transporte Internacional</xsl:when>
+            <xsl:when test="$codigoPuerto=901">Arica, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=902">Iquique, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=903">Antofagasta, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=904">Coquimbo, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=905">Valparaíso, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=906">San Antonio, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=907">Talcahuano, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=908">San Vicente, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=909">Lirquén, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=910">Puerto Montt, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=911">Chacabuco / Puerto Aysén, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=912">Punta Arenas, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=913">Patillos, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=914">Tocopilla, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=915">Mejillones, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=916">Taltal, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=917">Chañaral / Barquito, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=918">Caldera, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=919">Calderilla, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=920">Huasco / Guacolda, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=921">Quintero, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=922">Juan Fernandez, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=923">Constitución, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=924">Tomé, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=925">Penco, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=926">Coronel, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=927">Lota, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=928">Lebu, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=929">Isla de Pascua, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=930">Corral, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=931">Ancud, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=932">Castro, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=933">Quellón, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=934">Chaitén, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=935">Tortel, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=936">Natales, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=937">Guarello, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=938">Puerto Andino, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=939">Percy, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=940">Clarencia, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=941">Gregorio, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=942">Cabo Negro, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=943">Puerto Williams, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=944">Territorio Antártico Chileno, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=945">Aeropuerto Carriel Sur, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=946">Guayacán, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=947">Punta Delgada, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=948">Ventanas, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=949">Pino Hachado (Liucura), Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=950">Caleta Coloso, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=951">Aguas Negras, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=952">Zona Franca Iquique</xsl:when>
+            <xsl:when test="$codigoPuerto=953">Zona Franca Punta Arenas</xsl:when>
+            <xsl:when test="$codigoPuerto=954">Río Mayer, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=955">Río Mosco, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=956">Visviri, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=957">Chacalluta, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=958">Chungará, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=959">Colchane, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=960">Abra de Napa, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=961">Ollague, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=962">San Pedro de Atacama, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=963">Socompa, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=964">San Francisco, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=965">Los Libertadores, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=966">Mahuil Malal, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=967">Cardenal Samore, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=968">Perez Rosales, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=969">Futaleufu, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=970">Palena - Carrenleufu, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=971">Panguipulli, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=972">Huahum, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=973">Lago Verde, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=974">Appeleg, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=975">Pampa Alta, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=976">Huemules, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=977">Chile Chico, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=978">Baker, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=979">Dorotea, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=980">Casas Viejas, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=981">Monte Aymond, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=982">San Sebastián, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=983">Coyhaique Alto, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=984">Triana, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=985">Ibañez Palavicini, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=986">Villa O'Higgins, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=987">Aerop. Chacalluta, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=988">Aerop. Diego Aracena, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=989">Aerop. Cerro Moreno, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=990">Aerop. El Tepual, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=991">Aerop. C.I. del Campo, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=992">Aerop. A.M. Benitez, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=993">CAP. Huachipato, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=994">Estación de Ferrocarril Arica - Tacna, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=995">Estación de Ferrocarril Arica - La Paz, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=996">Terminal Petrolero ENAP, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=997">Otros Puertos Chilenos, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=998">Paso Jama, Chile</xsl:when>
+            <xsl:when test="$codigoPuerto=''">-</xsl:when>
+            <xsl:otherwise><xsl:value-of select="$codigoPuerto"/>(desconocido)</xsl:otherwise>
+        </xsl:choose>
+    </xsl:template>
+
+    <xsl:template name="CodigoModalidadVenta">
+        <xsl:param name="codigoModalidadVenta"/>
+        <xsl:choose>
+            <xsl:when test="$codigoModalidadVenta=1">A Firme</xsl:when>
+            <xsl:when test="$codigoModalidadVenta=2">Bajo Condición</xsl:when>
+            <xsl:when test="$codigoModalidadVenta=3">En Consignación Libre</xsl:when>
+            <xsl:when test="$codigoModalidadVenta=4">En Consignación con un Mínimo a Firme</xsl:when>
+            <xsl:when test="$codigoModalidadVenta=9">Sin Pago</xsl:when>
+        </xsl:choose>
+    </xsl:template>
 </xsl:stylesheet>
