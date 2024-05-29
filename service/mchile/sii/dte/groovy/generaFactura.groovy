@@ -101,12 +101,15 @@ else if (invoice != null && invoice.unpaidTotal == 0) {
 ec.logger.info("Creando DTE tipo ${tipoDte} (${dteTypeDescription})")
 tasaIva = ec.l10n.format(vatTaxRate*100, "##")
 if (tipoDte == 33) {
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalNetoClp = detMap.totalNetoClp
     montoIva = Math.round((totalNeto?:0) * vatTaxRate)
     if (detMap.totalExento > 0)
         totalExento = detMap.totalExento
+    if (detMap.totalExentoClp > 0)
+        totalExentoClp = detMap.totalExentoClp
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
     if (numberAfectos == 0 && numberExentos > 0) {
@@ -119,9 +122,13 @@ if (tipoDte == 33) {
     referenciaList = refMap.referenciaList
     totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 110) {
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
-    totalExento = (detMap.totalExento?:0) + (detMap.totalNeto?:0)
+    totalExento = detMap.totalExento?:0
+    if (detMap.totalNeto > 0)
+        ec.message.addError("No se puede tener valor neto en factura de exportación")
+    if (detMap.totalExentoClp > 0)
+        totalExentoClp = detMap.totalExentoClp
     totalNeto = null
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
@@ -131,13 +138,21 @@ if (tipoDte == 33) {
     totalDescuentos = detMap.totalDescuentos
     tasaIva = null
     ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInfoServices.get#CurrencyUomMap").call())
-    if (detMap.originCurrencyUomId)
+    if (detMap.originCurrencyUomId) {
         tipoMoneda = uomToSiiCurrencyMap[detMap.originCurrencyUomId]
+        /*
+        if (totalesOtraMonedaMap == null)
+            totalesOtraMonedaMap = [:]
+        totalesOtraMonedaMap.codigo = tipoMoneda
+        if (detMap.totalExentoOriginCurrency)
+            totalExento = detMap.totalExentoOriginCurrency
+         */
+    }
     else
         tipoMoneda = uomToSiiCurrencyMap['CLP']
 } else if (tipoDte == 34) {
     // Factura Exenta Electrónica
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
     montoIva = Math.round((totalNeto?:0) * vatTaxRate)
@@ -167,7 +182,7 @@ if (tipoDte == 33) {
     }
     codRef = referenciaList[0].codigo
 
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", codRef as Integer, issuerPartyId)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "InvoiceItem", codRef as Integer, issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
     montoIva = Math.round((totalNeto?:0) * vatTaxRate)
@@ -193,7 +208,7 @@ if (tipoDte == 33) {
     dteExenta = refMap.dteExenta
     codRef = referenciaList[0].codigo
 
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "DebitoItem", codRef as Integer, issuerPartyId)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "DebitoItem", codRef as Integer, issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
     montoIva = Math.round((totalNeto?:0) * vatTaxRate)
@@ -229,7 +244,7 @@ if (tipoDte == 33) {
     dteExenta = refMap.dteExenta
     codRef = refMap.codigo
 
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "ShipmentItem", codRef as Integer, issuerPartyId)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "ShipmentItem", codRef as Integer, issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
     montoIva = Math.round((totalNeto?:0) * vatTaxRate)
@@ -264,20 +279,56 @@ q4+htPABTvIWzZcF4LILEDnaZS791SWJYxbbE72D
 descuentoORecargoGlobalList.each {
     if (it.tipo == 'D') {
         if (it.afecto)
-            descuentoGlobalAfecto = (descuentoGlobalAfecto?:0) - it.monto
+            if (it.montoOrigin != null) {
+                descuentoGlobalAfecto = (descuentoGlobalAfecto?:0.0) - it.montoOrigin
+                descuentoGlobalAfectoClp = (descuentoGlobalAfecto?:0.0) - it.monto
+            } else {
+                descuentoGlobalAfecto = (descuentoGlobalAfecto?:0.0) - it.monto
+            }
         else
-            descuentoGlobalExento = (descuentoGlobalExento?:0) - it.monto
+            if (it.montoOrigin != null) {
+                descuentoGlobalExento = (descuentoGlobalExento?:0.0) - it.montoOrigin
+                descuentoGlobalExentoClp = (descuentoGlobalExento?:0.0) - it.monto
+            } else {
+                descuentoGlobalExento = (descuentoGlobalExento?:0.0) - it.monto
+            }
+    } else if (it.tipo == 'R') {
+        if (it.afecto)
+            if (it.montoOrigin != null) {
+                recargoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + it.montoOrigin
+                recargoGlobalAfectoClp = (descuentoGlobalAfecto?:0.0) + it.monto
+            } else {
+                recargoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + it.monto
+            }
+        else
+            if (it.montoOrigin != null) {
+                recargoGlobalExento = (descuentoGlobalExento?:0.0) + it.montoOrigin
+                recargoGlobalExentoClp = (descuentoGlobalExento?:0.0) + it.monto
+            } else {
+                recargoGlobalExento = (descuentoGlobalExento?:0.0) + it.monto
+            }
     }
 }
 
 // Totales
-if (totalNeto != null) {
-    totalNeto = totalNeto - (descuentoGlobalAfecto?:0)
-    long totalIVA = Math.round(totalNeto * vatTaxRate)
-    montoIVARecuperable = totalIVA
-    totalInvoice = (totalNeto?:0) + totalIVA + (totalExento?:0)
-} else
-    totalInvoice = (totalExento?:0) - (descuentoGlobalExento?:0)
+if (totalNeto != null || descuentoGlobalAfecto != null || recargoGlobalAfecto != null) {
+    if (totalNetoClp != null) {
+        totalNetoClp = totalNetoClp - (descuentoGlobalAfectoClp?:0.0) + (recargoGlobalExentoClp?:0.0)
+        long totalIVAClp = Math.round(totalNetoClp * vatTaxRate)
+        montoIVARecuperable = totalIVA
+        totalInvoice = (totalNetoClp?:0) + totalIVAClp + (totalExentoClp?:0) - (descuentoGlobalExentoClp?:0.0) + (recargoGlobalExentoClp?:0.0)
+    } else {
+        totalNeto = totalNeto - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
+        long totalIVA = Math.round(totalNeto * vatTaxRate)
+        montoIVARecuperable = totalIVA
+        totalInvoice = (totalNeto?:0) + totalIVA + (totalExento?:0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
+    }
+} else {
+    if (totalExentoClp != null)
+        totalInvoice = (totalExentoClp?:0) - (descuentoGlobalExentoClp?:0.0) + (recargoGlobalExentoClp?:0.0)
+    else
+        totalInvoice = (totalExento?:0) - (descuentoGlobalExento?:0) + (recargoGlobalExento?:0)
+}
 
 // Chequeo de valores entre Invoice y calculados
 if (invoice) {
@@ -346,15 +397,15 @@ xmlBuilder.Encabezado() {
             TpoTranVenta(tipoTransaccionVendedor)
         if (formaPago)
             FmaPago(formaPago)
-        if (formaPagoExportacion)
-            FmaPagoExp(formaPagoExportacion)
+        if (condicionesComercialesExportacionMap?.formaPagoExportacion)
+            FmaPagoExp(condicionesComercialesExportacionMap?.formaPagoExportacion)
         if (fechaCancelacion)
             FchCancel(ec.l10n.format(fechaCancelacion, 'yyyy-MM-dd'))
         if (montoCancelacion)
             MntCancel(montoCancelacion)
         if (saldoInsoluto)
             SaldoInsol(saldoInsoluto)
-        pagos.each { pago ->
+        pagosList.each { pago ->
             MntPagos {
                 FchPago(ec.l10n.format(pago.fechaPago, 'yyyy-MM-dd'))
                 MntPago(pago.monto)
@@ -396,14 +447,14 @@ xmlBuilder.Encabezado() {
         codigosActividadEconomica.split(',').each { codigoActividad ->
             Acteco(codigoActividad)
         }
-        if (guiaExportacion)
+        if (guiaExportacionMap)
             GuiaExport {
-                if (guiaExportacion.codigoTraslado)
-                    CdgTraslado(guiaExportacion.codigoTraslado)
-                if (guiaExportacion.folioAutorizacion)
-                    FolioAut(guiaExportacion.folioAutorizacion)
-                if (guiaExportacion.fechaAutorizacion)
-                    FchAut(l10n.format(guiaExportacion.fechaAutorizacion, 'yyyy-MM-dd'))
+                if (guiaExportacionMap.codigoTraslado)
+                    CdgTraslado(guiaExportacionMap.codigoTraslado)
+                if (guiaExportacionMap.folioAutorizacion)
+                    FolioAut(guiaExportacionMap.folioAutorizacion)
+                if (guiaExportacionMap.fechaAutorizacion)
+                    FchAut(l10n.format(guiaExportacionMap.fechaAutorizacion, 'yyyy-MM-dd'))
             }
         if (sucursal)
             Sucursal(sucursal)
@@ -459,73 +510,73 @@ xmlBuilder.Encabezado() {
     }
     if (rutSolicitante)
         RUTSolicita(rutSolicitante)
-    if (transporte)
+    if (transporteMap)
         Transporte{
-            if (transporte.patente)
-                Patente(transporte.patente)
-            if (transporte.rutTransportista)
-                RUTTrans(transporte.rutTransportista)
-            if (chofer)
+            if (transporteMap.patente)
+                Patente(transporteMap.patente)
+            if (transporteMap.rutTransportista)
+                RUTTrans(transporteMap.rutTransportista)
+            if (transporteMap.rutChofer || transporteMap.nombreChofer)
                 Chofer {
-                    if (chofer.rutChofer)
-                        RUTChofer(transporte.rutChofer)
+                    if (transporteMap.rutChofer)
+                        RUTChofer(transporteMap.rutChofer)
                     if (chofer.nombreChofer)
-                        NombreChofer(transporte.nombreChofer)
+                        NombreChofer(transporteMap.nombreChofer)
                 }
-            if (transporte.direccionDestino)
-                DirDest(transporte.direccionDestino)
-            if (transporte.comunaDestino)
-                CmnaDest(transporte.comunaDestino)
-            if (transporte.ciudadDestino)
-                CiudadDest(transporte.ciudadDestino)
+            if (transporteMap.direccionDestino)
+                DirDest(transporteMap.direccionDestino)
+            if (transporteMap.comunaDestino)
+                CmnaDest(transporteMap.comunaDestino)
+            if (transporteMap.ciudadDestino)
+                CiudadDest(transporteMap.ciudadDestino)
         }
-    if (aduana)
+    if (aduanaMap)
         Aduana {
-            if (aduana.codigoModalidadVenta)
-                CodModVenta(aduana.codigoModalidadVenta)
-            if (aduana.codigoClausulaVenta)
-                CodClauVenta(aduana.codigoClausulaVenta)
-            if (aduana.totalClausulaVenta)
-                TotClauVenta(aduana.totalClausulaVenta)
-            if (aduana.codigoViaTransporte)
-                CodViaTransp(aduana.codigoViaTransporte)
-            if (aduana.nombreMedioTransporte)
-                NombreTransp(aduana.nombreMedioTransporte)
-            if (aduana.rutCompaniaTransporte)
-                RUTCiaTransp(aduana.rutCompaniaTransporte)
-            if (aduana.nombreCompaniaTransporte)
-                NomCiaTransp(aduana.nombreCompaniaTransporte)
-            if (aduana.idAdicionalCompaniaTransporte)
-                IdAdicTransp(aduana.idAdicionalCompaniaTransporte)
-            if (aduana.booking)
-                Booking(aduana.booking)
-            if (aduana.operador)
-                Operador(aduana.operador)
-            if (aduana.codigoPuertoEmbarque)
-                CodPtoEmbarque(aduana.codigoPuertoEmbarque)
-            if (aduana.idAdicionalPuertoEmbarque)
-                IdAdicPtoEmb(aduana.idAdicionalPuertoEmbarque)
-            if (aduana.codigoPuertoDesembarque)
-                CodPtoDesemb(aduana.codigoPuertoDesembarque)
-            if (aduana.idAdicionalPuertoDesembarque)
-                IdAdicPtoDesemb(aduana.idAdicionalPuertoDesembarque)
-            if (aduana.tara)
-                Tara(aduana.tara)
-            if (aduana.unidadMedidaTara)
-                CodUnidMedTara(aduana.unidadMedidaTara)
-            if (aduana.pesoBruto)
-                PesoBruto(aduana.pesoBruto)
-            if (aduana.unidadMedidaPesoBruto)
-                CodUnidPesoBruto(aduana.unidadMedidaPesoBruto)
-            if (aduana.pesoNeto)
-                PesoNeto(aduana.pesoNeto)
-            if (aduana.unidadMedidaPesoNeto)
-                CodUnidPesoNeto(aduana.unidadMedidaPesoNeto)
-            if (aduana.totalItems)
-                TotItems(aduana.totalItems)
-            if (aduana.totalBultos)
-                TotBultos(aduana.totalBultos)
-            aduana.tipoBultos?.each { tipoBulto ->
+            if (aduanaMap.codigoModalidadVenta)
+                CodModVenta(aduanaMap.codigoModalidadVenta)
+            if (aduanaMap.codigoClausulaVenta)
+                CodClauVenta(aduanaMap.codigoClausulaVenta)
+            if (aduanaMap.totalClausulaVenta)
+                TotClauVenta(aduanaMap.totalClausulaVenta)
+            if (aduanaMap.codigoViaTransporte)
+                CodViaTransp(aduanaMap.codigoViaTransporte)
+            if (aduanaMap.nombreMedioTransporte)
+                NombreTransp(aduanaMap.nombreMedioTransporte)
+            if (aduanaMap.rutCompaniaTransporte)
+                RUTCiaTransp(aduanaMap.rutCompaniaTransporte)
+            if (aduanaMap.nombreCompaniaTransporte)
+                NomCiaTransp(aduanaMap.nombreCompaniaTransporte)
+            if (aduanaMap.idAdicionalCompaniaTransporte)
+                IdAdicTransp(aduanaMap.idAdicionalCompaniaTransporte)
+            if (aduanaMap.booking)
+                Booking(aduanaMap.booking)
+            if (aduanaMap.operador)
+                Operador(aduanaMap.operador)
+            if (aduanaMap.codigoPuertoEmbarque)
+                CodPtoEmbarque(aduanaMap.codigoPuertoEmbarque)
+            if (aduanaMap.idAdicionalPuertoEmbarque)
+                IdAdicPtoEmb(aduanaMap.idAdicionalPuertoEmbarque)
+            if (aduanaMap.codigoPuertoDesembarque)
+                CodPtoDesemb(aduanaMap.codigoPuertoDesembarque)
+            if (aduanaMap.idAdicionalPuertoDesembarque)
+                IdAdicPtoDesemb(aduanaMap.idAdicionalPuertoDesembarque)
+            if (aduanaMap.tara)
+                Tara(aduanaMap.tara)
+            if (aduanaMap.unidadMedidaTara)
+                CodUnidMedTara(aduanaMap.unidadMedidaTara)
+            if (aduanaMap.pesoBruto)
+                PesoBruto(aduanaMap.pesoBruto)
+            if (aduanaMap.unidadMedidaPesoBruto)
+                CodUnidPesoBruto(aduanaMap.unidadMedidaPesoBruto)
+            if (aduanaMap.pesoNeto)
+                PesoNeto(aduanaMap.pesoNeto)
+            if (aduanaMap.unidadMedidaPesoNeto)
+                CodUnidPesoNeto(aduanaMap.unidadMedidaPesoNeto)
+            if (aduanaMap.totalItems)
+                TotItems(aduanaMap.totalItems)
+            if (aduanaMap.totalBultos)
+                TotBultos(aduanaMap.totalBultos)
+            aduanaTipoBultos.each { tipoBulto ->
                 TipoBultos {
                     if (tipoBulto.codigoTipo)
                         CodTpoBultos(tipoBulto.codigoTipo)
@@ -541,14 +592,14 @@ xmlBuilder.Encabezado() {
                         EmisorSello(tipoBulto.emisorSello)
                 }
             }
-            if (aduana.montoFlete)
-                MntFlete(aduana.montoFlete)
-            if (aduana.montoSeguro)
-                MntSeguro(aduana.montoSeguro)
-            if (aduana.codigoPaisReceptor)
-                CodPaisRecep(aduana.codigoPaisReceptor)
-            if (aduana.codigoPaisDestino)
-                CodPaisDestin(aduana.codigoPaisDestino)
+            if (aduanaMap.montoFlete)
+                MntFlete(aduanaMap.montoFlete)
+            if (aduanaMap.montoSeguro)
+                MntSeguro(aduanaMap.montoSeguro)
+            if (aduanaMap.codigoPaisReceptor)
+                CodPaisRecep(aduanaMap.codigoPaisReceptor)
+            if (aduanaMap.codigoPaisDestino)
+                CodPaisDestin(aduanaMap.codigoPaisDestino)
         }
     Totales {
         if (tipoMoneda)
@@ -602,23 +653,22 @@ xmlBuilder.Encabezado() {
         if (valorPagar)
             VlrPagar(valorPagar)
     }
-    if (otraMoneda)
+    if (totalesOtraMonedaMap)
         OtraMoneda{
-            if (otraMoneda.tipo)
-                TpoMoneda(otraMoneda.tipo)
-            if (otraMoneda.tipoCambio)
-                TpoCambio(otraMoneda.tipoCambio)
-            if (otraMoneda.montoNeto)
-                MntNetoOtrMnda(otraMoneda.montoNeto)
-            if (otraMoneda.montoExento)
-                MntExeOtrMnda(otraMoneda.montoExento)
-            if (otraMoneda.montoFaenamientoCarne)
-                MntFaeCarneOtrMnda(otraMoneda.montoFaenamientoCarne)
-            if (otraMoneda.margenComercializacion)
-                MntMargComOtrMnda(otraMoneda.margenComercializacion)
-            if (otraMoneda.iva)
-                IVAOtrMnda(otraMoneda.iva)
-            otraMoneda.impuestosRentenciones?.each { ret ->
+            TpoMoneda(totalesOtraMonedaMap.codigo)
+            if (totalesOtraMonedaMap.tipoCambio)
+                TpoCambio(totalesOtraMonedaMap.tipoCambio)
+            if (totalesOtraMonedaMap.montoNeto)
+                MntNetoOtrMnda(totalesOtraMonedaMap.montoNeto)
+            if (totalesOtraMonedaMap.montoExento)
+                MntExeOtrMnda(totalesOtraMonedaMap.montoExento)
+            if (totalesOtraMonedaMap.montoFaenamientoCarne)
+                MntFaeCarneOtrMnda(totalesOtraMonedaMap.montoFaenamientoCarne)
+            if (totalesOtraMonedaMap.margenComercializacion)
+                MntMargComOtrMnda(totalesOtraMonedaMap.margenComercializacion)
+            if (totalesOtraMonedaMap.iva)
+                IVAOtrMnda(totalesOtraMonedaMap.iva)
+            totalesOtraMonedaMap.impuestosRentenciones.each { ret ->
                 ImpRetOtrMnda {
                     TipoImpOtrMnda(ret.tipo)
                     if (ret.tasa)
@@ -626,9 +676,9 @@ xmlBuilder.Encabezado() {
                     VlrImpOtrMnda(ret.valor)
                 }
             }
-            if (otraMoneda.ivaNoRetenido)
-                IVANoRetOtrMnda(otraMoneda.ivaNoRetenido)
-            MntTotOtrMnda(otraMoneda.montoTotal)
+            if (totalesOtraMonedaMap.ivaNoRetenido)
+                IVANoRetOtrMnda(totalesOtraMonedaMap.ivaNoRetenido)
+            MntTotOtrMnda(totalesOtraMonedaMap.montoTotal)
         }
 }
 xmlEncabezado = xmlWriter.toString()
@@ -643,7 +693,7 @@ if (detalleList) {
         detalleList.each { detalle ->
             Detalle {
                 NroLinDet(detalle.numeroLinea)
-                detalle.codigoItem?.each { codigoItem ->
+                detalle.codigoItem.each { codigoItem ->
                     CdgItem {
                         TpoCodigo(codigoItem.tipoCodigo)
                         VlrCodigo(codigoItem.valorCodigo)
@@ -674,7 +724,7 @@ if (detalleList) {
                     PrcRef(detalle.precioUnidadReferencia)
                 if (detalle.quantity != null)
                     QtyItem(detalle.quantity)
-                detalle.subcantidad?.each { subcant ->
+                detalle.subcantidad.each { subcant ->
                     SubCantidad {
                         SubQty(subcant.quantity)
                         SubCod(subcant.codigo)
@@ -706,7 +756,7 @@ if (detalleList) {
                     DescuentoPct(detalle.porcentajeDescuento)
                 if (detalle.montoDescuento)
                     DescuentoMonto(detalle.montoDescuento)
-                detalle.subDescuento?.each { sd ->
+                detalle.subDescuento.each { sd ->
                     SubDscto {
                         TipoDscto(sd.tipo)
                         ValorDscto(sd.valor)
@@ -716,13 +766,13 @@ if (detalleList) {
                     RecargoPct(detalle.recargoPorcentaje)
                 if (detalle.recargoMonto)
                     RecargoMonto(detalle.recargoMonto)
-                detalle.subRecargo?.each { sr ->
+                detalle.subRecargo.each { sr ->
                     SubRecargo {
                         TipoRecargo(sr.tipo)
                         ValorRecargo(sr.valor)
                     }
                 }
-                detalle.codigoImpuestoAdicional?.each { codigoImpuestoAdicional ->
+                detalle.codigoImpuestoAdicional.each { codigoImpuestoAdicional ->
                     CodImpAdic(codigoImpuestoAdicional)
                 }
                 MontoItem(detalle.montoItem as Integer)
@@ -740,7 +790,7 @@ if (subTotales) {
     xmlBuilder.printer.incrementIndent()
     xmlBuilder.printer.incrementIndent()
     xmlBuilder.SubtotalesContainer {
-        subTototales?.each {
+        subTototales.each {
             SubTotInfo { subTot ->
                 NroSTI(subTot.seqNum)
                 GlosaSTI(subTot.glosa)
@@ -756,7 +806,7 @@ if (subTotales) {
                     SubTotExeSTI(subTot.valorExento)
                 if (subTot.total)
                     ValSubtotSTI(subTot.total)
-                subTot.numeroLineasDetalle?.each { nroLinDet ->
+                subTot.numeroLineasDetalle.each { nroLinDet ->
                     LineasDeta(nroLinDet)
                 }
             }
@@ -773,7 +823,7 @@ if (descuentoORecargoGlobalList) {
     xmlBuilder.printer.incrementIndent()
     xmlBuilder.printer.incrementIndent()
     xmlBuilder.DescuentoORecargoGlobalContainer {
-        descuentoORecargoGlobalList?.each { discountOrChargeMap ->
+        descuentoORecargoGlobalList.each { discountOrChargeMap ->
             DscRcgGlobal{
                 NroLinDR(discountOrChargeMap.numeroLinea)
                 TpoMov(discountOrChargeMap.tipo)
@@ -827,7 +877,7 @@ if (comisionesList) {
     xmlBuilder.printer.incrementIndent()
     xmlBuilder.printer.incrementIndent()
     xmlBuilder.ComisionesContainer {
-        comisionesList?.each {
+        comisionesList.each {
             Comisiones { comision ->
                 NroLinCom(comision.seqNum)
                 TipoMovim(comision.tipoMovimiento)
@@ -874,15 +924,15 @@ if (tipoDte in [33, 34, 46, 52, 56, 61]) {
     notAllowedFieldList = ['tipoDespacho', 'tipoImpresion', 'indicadorMontosBrutos', 'tipoTransaccionComprador', 'tipoTransaccionVendedor', 'tipoFacturaEspecial', 'rutMandante',
                            'rutSolicitante', 'totalNeto', 'montoBase', 'montoMargenComercializacion', 'tasaIva', 'montoIva', 'ivaPropio', 'ivaTerceros', 'impuestoRetenido',
                            'ivaNoRetenido', 'creditoEmpresasConstructoras', 'garantiaEnvases', 'comisionesList', 'montoNoFacturable', 'montoPeriodo', 'saldoAnterior', 'valorPagar',
-                           'otraMoneda.montoNeto', 'otraMoneda.montoFaenamientoCarne', 'otraMoneda.margenComercializacion', 'otraMoneda.iva', 'otraMoneda.impuestosRentenciones',
-                           'otraMoneda.ivaNoRetenido']
+                           'totalesOtraMonedaMap.montoNeto', 'totalesOtraMonedaMap.montoFaenamientoCarne', 'totalesOtraMonedaMap.margenComercializacion', 'totalesOtraMonedaMap.iva', 'totalesOtraMonedaMap.impuestosRentenciones',
+                           'totalesOtraMonedaMap.ivaNoRetenido']
     notAllowedFieldListDetalle = ['retenedor', 'codigoImpuestoAdicional', 'tipoDocumentoLiquidacion']
     requiredFieldList = ['tipoMoneda']
     signingTag = "Exportaciones"
 } else if (tipoDte in [43]) {
-    notAllowedFieldList = ['indicacionNoRebajat', 'tipoDespacho', 'tipoImpresion', 'formaPagoExportacion', 'tipoFacturaEspecial', 'guiaExportacion', 'codigoAdicionalSucursal',
-                           'identificadorAdicionalEmisor', 'rutMandante', 'rutSolicitante', 'transporte', 'aduana', 'tipoMoneda', 'montoBase', 'montoMargenComercializacion',
-                           'ivaNoRetenido', 'creditoEmpresasConstructoras', 'garantiaEnvases', 'montoNoFacturable', 'otraMoneda']
+    notAllowedFieldList = ['indicacionNoRebajat', 'tipoDespacho', 'tipoImpresion', 'condicionesComercialesExportacionMap', 'tipoFacturaEspecial', 'guiaExportacionMap', 'codigoAdicionalSucursal',
+                           'identificadorAdicionalEmisor', 'rutMandante', 'rutSolicitante', 'transporteMap', 'aduanaMap', 'tipoMoneda', 'montoBase', 'montoMargenComercializacion',
+                           'ivaNoRetenido', 'creditoEmpresasConstructoras', 'garantiaEnvases', 'montoNoFacturable', 'totalesOtraMonedaMap']
     notAllowedFieldListDetalle = ['retenedor', 'otraMoneda', 'porcentajeDescuento', 'montoDescuento', 'subDescuento', 'recargoPorcentaje', 'recargoMonto', 'subRecargo']
     notAllowedFieldListReferencia = ['rutOtro']
     notAllowedFieldListDetalleSubcantidad = ['tipoCodigo']
@@ -902,7 +952,7 @@ detalleList.each { detalle ->
         if (detalle[fieldName != null])
             ec.message.addError("${descripcionTipo} debe tener campo ${fieldName} en detalles")
     }
-    detalle.subcantidad?.each { subcantidad ->
+    detalle.subcantidad.each { subcantidad ->
         notAllowedFieldListDetalleSubcantidad.each { fieldName ->
             if (subcantidad[fieldName != null])
                 ec.message.addError("${descripcionTipo} debe tener campo ${fieldName} en detalles.subcantidad")
@@ -987,6 +1037,7 @@ if (ec.message.hasError()) {
     ec.logger.info(facturaXmlString);
     return
 }
+ec.logger.info(facturaXmlString);
 
 ec.logger.info("DTE tipo ${tipoDte} (${dteTypeDescription}) folio ${folio} generada OK")
 

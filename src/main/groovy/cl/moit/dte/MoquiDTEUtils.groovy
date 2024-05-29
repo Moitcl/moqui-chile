@@ -81,12 +81,14 @@ class MoquiDTEUtils {
         }
 
         int i = 0
-        Long totalNeto = null
-        Long totalExento = null
-        Long totalExentoOriginCurrency = null
+        BigDecimal totalNeto = null
+        BigDecimal totalNetoClp = null
+        BigDecimal totalExento = null
+        BigDecimal totalExentoClp = null
         int numberAfectos = 0
         int numberExentos = 0
-        Long totalDescuentos = 0
+        BigDecimal totalDescuentos = 0.0
+        BigDecimal totalDescuentosClp = 0.0
         String originCurrencyUomId = null
 
         detailList.each { detailEntryObj ->
@@ -115,11 +117,10 @@ class MoquiDTEUtils {
             }
             BigDecimal quantity = detailEntry.quantity
             BigDecimal montoDescuento = detailEntry.montoDescuento
+            BigDecimal montoDescuentoClp = null
             BigDecimal montoDescuentoOriginCurrency = detailEntry.montoDescuentoOriginCurrency
             BigDecimal porcentajeDescuento = detailEntry.porcentajeDescuento
             BigDecimal ajusteDecimal = detailEntry.ajusteDecimal
-            if (montoDescuento)
-                totalDescuentos += montoDescuento
             String uom = null
             if (!detailType.equals("ShipmentItem")) {
                 if (detailEntry.quantityUomId.equals('TF_hr'))
@@ -147,9 +148,8 @@ class MoquiDTEUtils {
             }
 
             BigDecimal priceItem = null
-            BigDecimal priceItemOriginCurrency = null
-            BigDecimal totalItem = 0
-            BigDecimal totalItemOriginCurrency = null
+            BigDecimal totalItem = 0.0
+            BigDecimal totalItemClp = 0.0
             if (detailType == "ShipmentItem" && detailEntry.shipmentId) {
                 //ec.logger.info("handling price for productId ${detailEntry.productId}")
                 BigDecimal quantityHandled = 0
@@ -221,15 +221,24 @@ class MoquiDTEUtils {
                         originCurrencyUomId = detailEntry.originCurrencyUomId
                     else
                         throw new BaseArtifactException("Multiple originCurrencyUomId values found: ${originCurrencyUomId}, ${detailEntry.originCurrencyUomId}")
-                    priceItemOriginCurrency = detailEntry.originalAmount as BigDecimal
-                    totalItemOriginCurrency = (quantity ?: 1) * (priceItemOriginCurrency ?: 0) - (montoDescuentoOriginCurrency ?: 0)
+                    montoDescuentoClp = montoDescuento
+                    BigDecimal priceItemClp = detailEntry.amount as BigDecimal
+                    totalItemClp = (quantity ?: 1) * (priceItemClp ?: 0) - (montoDescuentoClp ?: 0) + (ajusteDecimal ?: 0)
+                    montoDescuento = montoDescuentoOriginCurrency
+                    priceItem = detailEntry.originAmount as BigDecimal
+                    totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0)
+                } else {
+                    priceItem = detailEntry.amount as BigDecimal
+                    totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
                 }
-                priceItem = detailEntry.amount
-                totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
             } else {
                 priceItem = detailEntry.amount as BigDecimal
                 totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
             }
+            if (montoDescuento)
+                totalDescuentos += montoDescuento
+            if (montoDescuentoClp)
+                totalDescuentosClp += montoDescuentoClp
 
             if (itemAfecto)
                 numberAfectos++
@@ -251,20 +260,15 @@ class MoquiDTEUtils {
             if (uom != null)
                 detailMap.uom = uom
             if (priceItem != null && (detailType != "ShipmentItem" || Math.round(priceItem) > 0)) {
-                if (priceItemOriginCurrency)
-                    detailMap.priceItem = priceItemOriginCurrency
-                else
-                    detailMap.priceItem = priceItem
+                detailMap.priceItem = priceItem
             }
-            if (totalItemOriginCurrency)
-                detailMap.montoItem = totalItemOriginCurrency
-            else
-                detailMap.montoItem = totalItem
+            detailMap.montoItem = totalItem
             if (detailType == "ShipmentItem" || itemAfecto) {
-                totalNeto = (totalNeto ?: 0) + totalItem
+                totalNeto = (totalNeto ?: 0.0) + totalItem
             } else {
-                totalExento = (totalExento ?: 0) + totalItem
-                totalExentoOriginCurrency = (totalExentoOriginCurrency ?: 0.0) + totalItemOriginCurrency
+                totalExento = (totalExento ?: 0.0) + totalItem
+                if (totalItemClp)
+                    totalExentoClp = (totalExentoClp ?: 0.0) + totalItemClp
                 detailMap.indicadorExento = 1
             }
             if (detailType == "ReturnItem" && codRef == 2) {
@@ -285,8 +289,8 @@ class MoquiDTEUtils {
                 detailMap.otraMoneda = otraMoneda
             i = i + 1
         }
-        return [detalleList: detalleList, totalNeto: totalNeto, totalExento: totalExento, totalExentoOriginCurrency: totalExentoOriginCurrency, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos,
-                originCurrencyUomId:originCurrencyUomId]
+        return [detalleList: detalleList, totalNeto: totalNeto, totalNetoClp: totalNetoClp, totalExento: totalExento, totalExentoClp: totalExentoClp, numberExentos: numberExentos,
+                numberAfectos: numberAfectos, totalDescuentos: totalDescuentos, totalDescuentosClp: totalDescuentosClp, originCurrencyUomId:originCurrencyUomId]
     }
 
     public static Map<String, Object> prepareReferences(ExecutionContext ec, List<HashMap> referenciaList, String rutEmisor, Long tipoFactura) {
