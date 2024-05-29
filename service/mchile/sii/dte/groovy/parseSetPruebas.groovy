@@ -71,8 +71,9 @@ while (line != null) {
             } else if (fiscalTaxDocumentTypeEnumId == 'Ftdt-111')
                 expectedLines = ["REFERENCIA\t\tNOTA DE CREDITO CORRESPONDIENTE A CASO ${numeroAtencion}-2".toString(), 'RAZON REFERENCIA\tANULA NOTA DE CREDITO',
                                  '(**) VER INSTRUCCIONES AL CONTRIBUYENTE EN SET BASICO FACTURA DE EXPORTACION (2).']
-        } else if (line?.startsWith("ITEM\s")) {
-            itemFields = line.substring(32).split("\t+")
+        } else if (itemFields == null && line?.startsWith("ITEM\s")) {
+            itemFields = ['ITEM']
+            itemFields.addAll(line.substring(32).split("\t+"))
             currentDocument.items = []
         } else if (detalleInternacional.matches()) {
             campo = detalleInternacional[0][1]
@@ -90,7 +91,8 @@ while (line != null) {
         } else if (line =~ /^-+$/ || line == null || line =~ /^$/ || line == '\t') {
             itemFields = null
         } else if (itemFields != null && !(line =~ /^$/) ) {
-            values = line.substring(32).split("\t+")
+            values = [line.substring(0,32).trim()]
+            values.addAll(line.substring(32).split("\t+"))
             if (itemFields.size() != values.size())
                 ec.message.addError("line ${lineNumber}: Field amount mismatch, header has ${itemFields.size()}, line has ${values.size()}")
             itemMap = [:]
