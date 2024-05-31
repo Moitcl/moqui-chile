@@ -343,6 +343,8 @@ if (invoice) {
 }
 
 totalInvoice = ec.l10n.roundCurrency(totalInvoice, currencyUomId) as Integer
+if (totalExento != null)
+    totalExento = ec.l10n.roundCurrency(totalExento, currencyUomId) as Integer
 
 idDocumento = "Dte-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
 String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")

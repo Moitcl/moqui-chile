@@ -174,14 +174,14 @@ libroXmlString = libroXmlString.replaceAll("[^\\x00-\\xFF]", "")
 xmlWriter.close()
 Document doc2 = MoquiDTEUtils.parseDocument(libroXmlString.getBytes())
 byte[] libroXml = MoquiDTEUtils.sign(doc2, "#" + idLibro, dteConfig.pkey, dteConfig.certificate, "#" + idLibro, "EnvioLibro")
-libroXmlString = new String(libroXml, "ISO-8859-1")
+libroGuiaString = new String(libroXml, "ISO-8859-1")
 
 doc = MoquiDTEUtils.parseDocument(libroXml)
 
 try {
     MoquiDTEUtils.validateDocumentSii(ec, libroXml, schemaLocation)
 } catch (Exception e) {
-    ec.logger.info("Failed validation for libro: ${libroXmlString}")
+    ec.logger.info("Failed validation for libro: ${libroGuiaString}")
     ec.message.addError("Failed validation: " + e.getMessage())
 }
 
