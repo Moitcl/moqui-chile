@@ -17,6 +17,11 @@ tipoDocumentoMap = ['FACTURA ELECTRONICA':'Ftdt-33', 'FACTURA  ELECTRONICA':'Ftd
                     'FACTURA NO AFECTA O EXENTA ELECTRONICA':'Ftdt-34', 'NOTA DE DEBITO ELECTRONICA':'Ftdt-56', 'FACTURA':'Ftdt-30', 'NOTA DE CREDITO':'Ftdt-60',
                     'FACTURA DE COMPRA':'Ftdt-45', 'FACTURA DE COMPRA ELECTRONICA':'Ftdt-46', 'FACTURA DE EXPORTACION ELECTRONICA':'Ftdt-110',
                     'NOTA DE CREDITO DE EXPORTACION ELECTRONICA':'Ftdt-112', 'NOTA DE DEBITO DE EXPORTACION ELECTRONICA':'Ftdt-111']
+// Depende del contexto, porque en el set de pruebas se menciona "NOTA DE CREDITO" en lugar del nombre completo "NOTA DE CREDITO DE EXPORTACION".
+tipoDocumentoMapExp = ['FACTURA ELECTRONICA':'Ftdt-33', 'FACTURA  ELECTRONICA':'Ftdt-33', 'NOTA DE CREDITO ELECTRONICA':'Ftdt-61', 'GUIA DE DESPACHO':'Ftdt-52',
+                       'FACTURA NO AFECTA O EXENTA ELECTRONICA':'Ftdt-34', 'NOTA DE DEBITO ELECTRONICA':'Ftdt-56', 'FACTURA':'Ftdt-30', 'NOTA DE CREDITO':'Ftdt-112',
+                       'FACTURA DE COMPRA':'Ftdt-45', 'FACTURA DE COMPRA ELECTRONICA':'Ftdt-46', 'FACTURA DE EXPORTACION ELECTRONICA':'Ftdt-110',
+                       'NOTA DE CREDITO DE EXPORTACION ELECTRONICA':'Ftdt-112', 'NOTA DE DEBITO DE EXPORTACION ELECTRONICA':'Ftdt-111']
 unprocessedLines = []
 unprocessedLineNumber = 0
 setList = []
@@ -41,6 +46,7 @@ while (line != null) {
         }
         def inicioCaso = line =~ /^CASO $numeroAtencion-([0-9]+)/
         def detalleInternacional = line =~ /^([A-Z ]+?)(?: \(\*\*\))?+:\s+([0-9.A-Za-z(),\/ ]+)$/
+        def referencia = line =~ /^REFERENCIA\s+([A-Z ]+) CORRESPONDIENTE A CASO ([0-9]+)-([0-9]+)$/
         if (line in expectedLines) {
 
         } else if (inicioCaso.matches()) {
@@ -56,7 +62,7 @@ while (line != null) {
             }
             docType = line =~ /^DOCUMENTO\s+([A-Z ]+)$/
             if (docType.matches()) {
-                fiscalTaxDocumentTypeEnumId = tipoDocumentoMap[docType[0][1]]
+                fiscalTaxDocumentTypeEnumId = tipoDocumentoMapExp[docType[0][1]]
                 if (!fiscalTaxDocumentTypeEnumId)
                     ec.message.addError("Línea ${lineNumber}: No se encuentra tipo de documento para ${docType[0][1]}")
             } else {
@@ -66,11 +72,34 @@ while (line != null) {
             currentDocument = [seqNum: seqNum, fiscalTaxDocumentTypeEnumId: fiscalTaxDocumentTypeEnumId]
             currentSet.documents.add(currentDocument)
             if (fiscalTaxDocumentTypeEnumId == 'Ftdt-112') {
-                expectedLines = ["REFERENCIA\t\tFACTURA DE EXPORTACION ELECTRONICA CORRESPONDIENTE A CASO ${numeroAtencion}-1".toString(), 'RAZON REFERENCIA\tDEVOLUCION DE MERCADERIA',
-                                 'EL PRECIO UNITARIO DEL ITEM DEBE SER EL MISMO DE LA FACTURA']
-            } else if (fiscalTaxDocumentTypeEnumId == 'Ftdt-111')
-                expectedLines = ["REFERENCIA\t\tNOTA DE CREDITO CORRESPONDIENTE A CASO ${numeroAtencion}-2".toString(), 'RAZON REFERENCIA\tANULA NOTA DE CREDITO',
-                                 '(**) VER INSTRUCCIONES AL CONTRIBUYENTE EN SET BASICO FACTURA DE EXPORTACION (2).']
+                expectedLines = ['RAZON REFERENCIA\tDEVOLUCION DE MERCADERIA', 'EL PRECIO UNITARIO DEL ITEM DEBE SER EL MISMO DE LA FACTURA']
+            } else if (fiscalTaxDocumentTypeEnumId == 'Ftdt-111') {
+                expectedLines = ['RAZON REFERENCIA\tANULA NOTA DE CREDITO', '(**) VER INSTRUCCIONES AL CONTRIBUYENTE EN SET BASICO FACTURA DE EXPORTACION (2).']
+            } else if (fiscalTaxDocumentTypeEnumId == 'Ftdt-110') {
+
+            } else {
+                ec.message.addError("unrecognized fiscalTaxDocumentTypeEnumId: ${fiscalTaxDocumentTypeEnumId}")
+            }
+        } else if (referencia.matches()) {
+            String fiscalTaxDocumentTypeEnumId = tipoDocumentoMapExp[referencia[0][1]]
+            Long numeroAtencionReferencia = Long.parseLong(referencia[0][2])
+            String seqNumReferencia = referencia[0][3]
+            if (!fiscalTaxDocumentTypeEnumId)
+                ec.message.addError("Línea ${lineNumber}: No se encuentra tipo de documento para ${referencia[0][1]}")
+            if (numeroAtencionReferencia != numeroAtencion)
+                ec.message.addError("Mismatch numeroAtencion: current is ${numeroAtencion}, reference has ${numeroAtencionReferencia}")
+            if (currentDocument.referencias == null)
+                currentDocument.referencias = []
+            line = reader.readLine()
+            lineNumber++
+            razonReferenciaMatch = line =~ /^RAZON REFERENCIA\t([A-Z ]+)$/
+            if (razonReferenciaMatch.matches()) {
+                razonReferencia = razonReferenciaMatch[0][1]
+            } else {
+                ec.message.addError("At line number ${lineNumber} expected 'RAZON REFERENCIA', got: '${line}'")
+                razonReferencia = null
+            }
+            currentDocument.referencias.add([seqNumReferencia:seqNumReferencia, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, razonReferencia:razonReferencia])
         } else if (itemFields == null && line?.startsWith("ITEM\s")) {
             itemFields = ['ITEM']
             itemFields.addAll(line.substring(32).split("\t+"))

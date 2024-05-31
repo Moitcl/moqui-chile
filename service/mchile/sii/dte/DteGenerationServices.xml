@@ -308,6 +308,7 @@ along with this software (see the LICENSE.md file). If not, see
         <description>Obtiene datos para llamar a método generar#Factura para Nota de Crédito</description>
         <in-parameters>
             <parameter name="invoiceId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" default-value="Ftdt-61"/>
             <parameter name="sendToSii" type="Boolean" default="true"/>
         </in-parameters>
         <out-parameters>
@@ -317,12 +318,12 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.TaxServices.calculate#SalesTaxForInvoice" in-map="[invoiceId:invoiceId]"/>
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
             <if condition="!invoice"><return error="true" message="Could not find invoice ${invoiceId]"/></if>
-            <if condition="!(invoice.invoiceTypeEnumId in ['InvoiceReturn', 'InvoiceCreditMemo'])">
+            <if condition="!(invoice.invoiceTypeEnumId in ['InvoiceReturn', 'InvoiceCreditMemo', 'InvoiceCreditMemoExport'])">
                 <return error="true" message="Invalid invoice type for Nota Credito ${invoice.invoiceTypeEnumId}, invoice ${invoiceId}"/>
             </if>
             <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="existingFtdList">
                 <econdition field-name="issuerPartyId" from="invoice.toPartyId"/>
-                <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" value="Ftdt-61,Ftdt-60"/>
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" value="Ftdt-61,Ftdt-60,Ftdt-112"/>
                 <econdition field-name="invoiceId"/>
             </entity-find>
             <if condition="existingFtdList"><return error="true" message="Ya existe una Nota de Crédito para invoice ${invoiceId}"/></if>
@@ -393,9 +394,8 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.sii.dte.DteGenerationServices.get#ReceiverInfo" in-map="[receiverPartyId:receiverPartyId, fiscalTaxDocumentTypeEnumId:'Ftdt-61']" out-map="context"/>
 
             <!-- Generacion de nota de crédito -->
-            <service-call name="mchile.sii.dte.DteGenerationServices.generate#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-61', rutEmisor:rutEmisor, rutReceptor:rutReceptor, razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor,
-                          contactoReceptor:contactoReceptor, direccionReceptor:direccionReceptor, comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:items,
-                          invoiceId:invoiceId, returnId:returnId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId, receiverPartyId:receiverPartyId]" out-map="context"/>
+            <set field="detailList" from="items"/>
+            <service-call name="mchile.sii.dte.DteGenerationServices.generate#Factura" in-map="context" out-map="context"/>
             <if condition="sendToSii">
                 <service-call name="mchile.sii.dte.DteEnvioServices.genera#Envio" in-map="[organizationPartyId:issuerPartyId, documentIdList:[fiscalTaxDocumentId]]" out-map="context"/>
                 <service-call name="mchile.sii.dte.DteInternalServices.check#ProductionEnvironment" out-map="systemProd"/>
@@ -410,6 +410,7 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="invoiceId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" default-value="Ftdt-56"/>
             <parameter name="sendToSii" type="Boolean" default="true"/>
         </in-parameters>
         <out-parameters>
@@ -419,7 +420,7 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.TaxServices.calculate#SalesTaxForInvoice" in-map="[invoiceId:invoiceId]"/>
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice"/>
             <if condition="!invoice"><return error="true" message="Could not find invoice ${invoiceId]"/></if>
-            <if condition="invoice.invoiceTypeEnumId != 'InvoiceDebitMemo'">
+            <if condition="!(invoice.invoiceTypeEnumId in ['InvoiceDebitMemo', 'InvoiceDebitMemoExport'])">
                 <return error="true" message="Invalid invoice type for Nota Débito ${invoice.invoiceTypeEnumId}, invoice ${invoiceId}"/>
             </if>
 
@@ -502,9 +503,8 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.sii.dte.DteGenerationServices.get#ReceiverInfo" in-map="[receiverPartyId:receiverPartyId, fiscalTaxDocumentTypeEnumId:'Ftdt-56']" out-map="context"/>
 
             <!-- Generacion de nota de débito -->
-            <service-call name="mchile.sii.dte.DteGenerationServices.generate#Factura" in-map="[fiscalTaxDocumentTypeEnumId:'Ftdt-56', rutEmisor:rutEmisor, rutReceptor:rutReceptor, razonSocialReceptor:razonSocialReceptor, giroReceptor:giroReceptor,
-                          contactoReceptor:contactoReceptor, direccionReceptor:direccionReceptor, comunaReceptor:comunaReceptor, ciudadReceptor:ciudadReceptor, detailList:items,
-                          invoiceId:invoiceId, returnId:returnId, formaPago:formaPago, medioPago:medioPago, referenciaList:referenciaList, issuerPartyId:issuerPartyId, receiverPartyId:receiverPartyId]" out-map="context"/>
+            <set field="detailList" from="items"/>
+            <service-call name="mchile.sii.dte.DteGenerationServices.generate#Factura" in-map="context" out-map="context"/>
             <if condition="sendToSii">
                 <service-call name="mchile.sii.dte.DteEnvioServices.genera#Envio" in-map="[organizationPartyId:issuerPartyId, documentIdList:[fiscalTaxDocumentId]]"
                               out-map="context"/>
@@ -540,7 +540,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="issuerPartyId" from="invoice.fromPartyId"/>
             <set field="receiverPartyId" from="invoice.toPartyId"/>
 
-            <if condition="fiscalTaxDocumentTypeEnumId == 'Ftdt-61'">
+            <if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-61', 'Ftdt-112']">
                 <set field="issuerPartyId" from="invoice.toPartyId"/>
                 <set field="receiverPartyId" from="invoice.fromPartyId"/>
             </if>
@@ -666,13 +666,13 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="debitMemo" for-update="true"/>
-            <if condition="debitMemo.invoiceTypeEnumId != 'InvoiceDebitMemo'"><return error="true" message="Cannot find Debit Memo with ID ${invoiceId}"/></if>
+            <if condition="!(debitMemo.invoiceTypeEnumId in ['InvoiceDebitMemo', 'InvoiceDebitMemoExport'])"><return error="true" message="Cannot find Debit Memo with ID ${invoiceId}"/></if>
             <if condition="!(debitMemo.statusId in ['InvoiceInProcess','InvoiceIncoming','InvoiceApproved','InvoicePmtSent','InvoiceReceived','InvoiceBilledThrough'])"><return error="true" message="Invalid statusId for debitMemo: ${debitMemo.statusId}"/></if>
 
             <set field="debitMemo.statusId" value="InvoiceApproved"/>
             <entity-update value-field="debitMemo"/>
-            <service-call name="mchile.sii.dte.DteGenerationServices.create#DteFromInvoice" in-map="context+[fiscalTaxDocumentTypeEnumId:'Ftdt-56']" out-map="context"/>
-
+            <set field="fiscalTaxDocumentTypeEnumId" from="debitMemo.invoiceTypeEnumId == 'InvoiceDebitMemo' ? 'Ftdt-56' : 'Ftdt-111'"/>
+            <service-call name="mchile.sii.dte.DteGenerationServices.create#DteFromInvoice" in-map="context" out-map="context"/>
         </actions>
     </service>
 
@@ -685,12 +685,13 @@ along with this software (see the LICENSE.md file). If not, see
         </out-parameters>
         <actions>
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="creditMemo" for-update="true"/>
-            <if condition="creditMemo.invoiceTypeEnumId != 'InvoiceCreditMemo'"><return error="true" message="Cannot find Credit Memo with ID ${invoiceId}"/></if>
+            <if condition="!(creditMemo.invoiceTypeEnumId in ['InvoiceCreditMemo', 'InvoiceCreditMemoExport'])"><return error="true" message="Cannot find Credit Memo with ID ${invoiceId}"/></if>
             <if condition="!(creditMemo.statusId in ['InvoiceIncoming','InvoiceInProcess','InvoiceApproved','InvoicePmtSent','InvoiceReceived','InvoiceBilledThrough'])"><return error="true" message="Invalid statusId for creditMemo: ${creditMemo.statusId}"/></if>
 
             <set field="creditMemo.statusId" value="InvoiceApproved"/>
             <entity-update value-field="creditMemo"/>
-            <service-call name="mchile.sii.dte.DteGenerationServices.create#DteFromInvoice" in-map="context+[fiscalTaxDocumentTypeEnumId:'Ftdt-61']" out-map="context"/>
+            <set field="fiscalTaxDocumentTypeEnumId" from="debitMemo.invoiceTypeEnumId == 'InvoiceCreditMemo' ? 'Ftdt-61' : 'Ftdt-112'"/>
+            <service-call name="mchile.sii.dte.DteGenerationServices.create#DteFromInvoice" in-map="context" out-map="context"/>
         </actions>
     </service>
 
@@ -750,18 +751,18 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="dte" from="dteList.first"/>
             <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument in create#EmptyCreditMemo"/></if>
             <if condition="dte.invoiceId == null"><return error="true" message="FiscalTaxDocument has no invoice associated"/></if>
+            <set field="invoiceTypeMapping" from="['Ftdt-33':'InvoiceCreditMemo', 'Ftdt-34':'InvoiceCreditMemo', 'Ftdt-56':'InvoiceCreditMemo', 'Ftdt-110':'InvoiceCreditMemoExport', 'Ftdt-111':'InvoiceCreditMemoExport']"/>
+            <set field="invoiceTypeEnumId" from="invoiceTypeMapping[dte.fiscalTaxDocumentTypeEnumId]"/>
+            <if condition="!invoiceTypeEnumId"><return error="true" message="Invalid DTE type to reference for Credit Note: ${dte.fiscalTaxDocumentTypeEnumId}"/></if>
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="originalInvoice">
                 <field-map field-name="invoiceId" from="dte.invoiceId"/></entity-find-one>
             <if condition="!originalInvoice"><return error="true" message="Could not find invoice ${dte.invoiceId}"/></if>
             <set field="originalInvoiceId" from="originalInvoice.invoiceId"/>
             <service-call name="mantle.account.InvoiceServices.create#Invoice" out-map="context"
-                          in-map="[originalInvoiceId:originalInvoice.invoiceId, invoiceTypeEnumId:'InvoiceCreditMemo', fromPartyId:originalInvoice.toPartyId,
+                          in-map="[originalInvoiceId:originalInvoice.invoiceId, invoiceTypeEnumId:invoiceTypeEnumId, fromPartyId:originalInvoice.toPartyId,
                            toPartyId:originalInvoice.fromPartyId, invoiceDate:fechaEmision, currencyUomId:originalInvoice.currencyUomId, otherPartyOrderId:originalInvoice.otherPartyOrderId,
                         productStoreId:originalInvoice.productStoreId, systemMessageRemoteId:originalInvoice.systemMessageRemoteId, referenceNumber:originalInvoiceId]"/>
-            <script><![CDATA[
-                java.text.SimpleDateFormat formatDate = new java.text.SimpleDateFormat("yyyy-MM-dd")
-                fecha = formatDate.format(dte.date)
-                ]]></script>
+            <set field="fecha" from="ec.l10n.format(dte.date, 'yyyy-MM-dd')"/>
             <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:dte.receiverPartyId]" out-map="receiverRut"/>
             <set field="referenceMap" from="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId, folio:dte.fiscalTaxDocumentNumber, fecha:fecha,
                  rutEmisorFolio:dte.issuerPartyIdValue, razonReferencia:razonReferencia, referenceTypeEnumId:'RefDteTypeInvoice']"/>
@@ -784,10 +785,6 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="invoiceId"/>
         </out-parameters>
         <actions>
-            <if condition="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-33','Ftdt-34','Ftdt-61'])">
-                <return error="true" message="Debit Memos are not supported for the provided document type."/>
-            </if>
-
             <service-call name="mchile.sii.dte.DteGenerationServices.create#EmptyDebitMemo" in-map="context" out-map="context"/>
             <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="itemList">
                 <econdition field-name="invoiceId" from="originalInvoiceId"/>
@@ -809,16 +806,13 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="razonReferencia" default-value="Error de Facturación"/>
             <parameter name="fechaEmision" type="java.sql.Timestamp" default="ec.user.nowTimestamp" format="dd-MM-yyyy"/>
             <parameter name="checkAcceptedBySii" type="Boolean" default="true"/>
+            <parameter name="invoiceTypeEnumId" default-value="InvoiceDebitMemo"/>
         </in-parameters>
         <out-parameters>
             <parameter name="originalInvoiceId"/>
             <parameter name="invoiceId"/>
         </out-parameters>
         <actions>
-            <if condition="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-33','Ftdt-34','Ftdt-61'])">
-                <return error="true" message="Debit Memos are not supported for the provided document type."/>
-            </if>
-
             <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
                 <econdition field-name="issuerPartyId"/>
                 <econdition field-name="fiscalTaxDocumentNumber"/>
@@ -827,11 +821,10 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="sentAuthStatusId" operator="in" value="Ftd-SentAuthAccepted,Ftd-SentAuthAcceptedWithDiscrepancies" ignore="!checkAcceptedBySii"/>
             </entity-find>
             <set field="dte" from="dteList.first"/>
-
-            <if condition="!dte">
-                <return error="true" message="Could not find FiscalTaxDocument in create#EmptyDebitMemo"/>
-            </if>
-
+            <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument in create#EmptyDebitMemo"/></if>
+            <set field="invoiceTypeMapping" from="['Ftdt-33':'InvoiceDebitMemo', 'Ftdt-34':'InvoiceDebitMemo', 'Ftdt-61':'InvoiceDebitMemo', 'Ftdt-110':'InvoiceDebitMemoExport', 'Ftdt-112':'InvoiceDebitMemoExport']"/>
+            <set field="invoiceTypeEnumId" from="invoiceTypeMapping[dte.fiscalTaxDocumentTypeEnumId]"/>
+            <if condition="!invoiceTypeEnumId"><return error="true" message="Invalid DTE type to reference for Debit Note: ${dte.fiscalTaxDocumentTypeEnumId}"/></if>
             <if condition="dte.invoiceId == null">
                 <return error="true" message="FiscalTaxDocument has no invoice associated"/>
             </if>
@@ -846,7 +839,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Si el DTE de referencia es una Nota de Crédito, se invierten fromPartyId y toPartyId (cliente le cobra al vendedor) -->
             <!-- Si es una factura, se mantienen ambos roles (vendedor le cobra al cliente) -->
-            <if condition="dte.fiscalTaxDocumentTypeEnumId == 'Ftdt-61'"><then>
+            <if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-61', 'Ftdt-112']"><then>
                 <set field="fromPartyId" from="originalInvoice.toPartyId"/>
                 <set field="toPartyId" from="originalInvoice.fromPartyId"/>
             </then><else>
@@ -856,13 +849,10 @@ along with this software (see the LICENSE.md file). If not, see
 
             <set field="originalInvoiceId" from="originalInvoice.invoiceId"/>
             <service-call name="mantle.account.InvoiceServices.create#Invoice" out-map="context"
-                          in-map="[originalInvoiceId:originalInvoice.invoiceId, invoiceTypeEnumId:'InvoiceDebitMemo', fromPartyId:fromPartyId,
+                          in-map="[originalInvoiceId:originalInvoice.invoiceId, invoiceTypeEnumId:invoiceTypeEnumId, fromPartyId:fromPartyId,
                             toPartyId:toPartyId, invoiceDate:fechaEmision, currencyUomId:originalInvoice.currencyUomId, otherPartyOrderId:originalInvoice.otherPartyOrderId,
                             productStoreId:originalInvoice.productStoreId, systemMessageRemoteId:originalInvoice.systemMessageRemoteId, referenceNumber:originalInvoiceId]"/>
-            <script><![CDATA[
-                java.text.SimpleDateFormat formatDate = new java.text.SimpleDateFormat("yyyy-MM-dd")
-                fecha = formatDate.format(dte.date)
-                ]]></script>
+            <set field="fecha" from="ec.l10n.format(dte.date, 'yyyy-MM-dd')"/>
             <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:dte.receiverPartyId]" out-map="receiverRut"/>
             <set field="referenceMap" from="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId, folio:dte.fiscalTaxDocumentNumber, fecha:fecha,
                  rutEmisorFolio:dte.issuerPartyIdValue, codigoReferenciaEnumId:'MCHRefDteCodeAnula', razonReferencia:razonReferencia, referenceTypeEnumId:'RefDteTypeInvoice']"/>

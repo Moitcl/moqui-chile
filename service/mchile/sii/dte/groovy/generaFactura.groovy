@@ -98,6 +98,7 @@ else if (invoice != null && invoice.unpaidTotal == 0) {
 } else
     formaPago = 2 // Crédito (usar GlosaPagos)
 
+currencyUomId = 'CLP'
 ec.logger.info("Creando DTE tipo ${tipoDte} (${dteTypeDescription})")
 tasaIva = ec.l10n.format(vatTaxRate*100, "##")
 if (tipoDte == 33) {
@@ -121,7 +122,8 @@ if (tipoDte == 33) {
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
     totalDescuentos = detMap.totalDescuentos
-} else if (tipoDte == 110) {
+} else if (tipoDte in [110, 111, 112]) {
+    // DTE Exportación: Factura de Exportación Electrónica, Nota de Débito de Exportación Electrónica, Nota de Crédito de Exportación Electrónica
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     totalExento = detMap.totalExento?:0
@@ -139,6 +141,7 @@ if (tipoDte == 33) {
     tasaIva = null
     ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInfoServices.get#CurrencyUomMap").call())
     if (detMap.originCurrencyUomId) {
+        currencyUomId = detMap.originCurrencyUomId
         tipoMoneda = uomToSiiCurrencyMap[detMap.originCurrencyUomId]
         /*
         if (totalesOtraMonedaMap == null)
@@ -227,15 +230,15 @@ if (tipoDte == 33) {
     }
     totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == 52) {
-    // Guías de Despacho Electrónica
+    // Guía de Despacho Electrónica
     if (indTrasladoEnumId == null)
         ec.message.addError("No indTrasladoEnumId for tipoDte 52 (Guía de Despacho)")
     if (indTrasladoEnumId in ['IndTraslado-1', 'IndTraslado-9'] && !invoiceId)
         ec.message.addError("No se puede generar una Guía de Despacho que constituye venta sin un invoiceId")
-    indicadorTraslado = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:indTrasladoEnumId, enumTypeId:'IndTraslado']).call().siiCode
+    indicadorTraslado = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId: indTrasladoEnumId, enumTypeId: 'IndTraslado']).call().siiCode
     if (tipoDespachoEnumId == null)
         ec.message.addError("No tipoDespachoEnumId for tipoDte 52 (Guía de Despacho)")
-    tipoDespacho = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:tipoDespachoEnumId, enumTypeId:'TipoDespacho']).call().siiCode
+    tipoDespacho = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId: tipoDespachoEnumId, enumTypeId: 'TipoDespacho']).call().siiCode
 
     // TODO: Si la referencia es tipo fe de erratas, Monto Item puede ser 0
     originalReferenciaList = referenciaList
@@ -247,9 +250,11 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "ShipmentItem", codRef as Integer, issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
-    montoIva = Math.round((totalNeto?:0) * vatTaxRate)
+    montoIva = Math.round((totalNeto ?: 0) * vatTaxRate)
     totalExento = detMap.totalExento
     totalDescuentos = detMap.totalDescuentos
+} else {
+    ec.message.addError("Cálculo de totales no implementado para tipo ${tipoDte}")
 }
 
 //Obtención de folio y CAF -->
@@ -336,6 +341,8 @@ if (invoice) {
         ec.message.addError("No coinciden valores totales de DTE, calculado: ${ec.l10n.formatCurrency(totalInvoice, invoice.currencyUomId)}, en invoice ${invoiceId}: ${ec.l10n.formatCurrency(invoice.invoiceTotal, invoice.currencyUomId)}")
     }
 }
+
+totalInvoice = ec.l10n.roundCurrency(totalInvoice, currencyUomId) as Integer
 
 idDocumento = "Dte-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
 String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
@@ -643,7 +650,7 @@ xmlBuilder.Encabezado() {
                 if (totalesComisiones.valorIva)
                     ValComIVA(totalesComisiones.valorIva)
             }
-        MntTotal(totalInvoice as Integer)
+        MntTotal(totalInvoice)
         if (montoNoFacturable)
             MontoNF(montoNoFacturable)
         if (montoPeriodo)
@@ -1119,3 +1126,5 @@ if (draft) {
                              rutEmisorFolio:rutEmisorFolio, nroLinea:nroLinea, tipoDocumento:tipoEnumEv.enumCode]).call()
     }
 }
+
+return
