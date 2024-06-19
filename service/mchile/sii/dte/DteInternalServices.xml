@@ -381,15 +381,29 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fechaLimiteAccionSii" type="Timestamp"/>
         </out-parameters>
         <actions>
-            <if condition="fechaRecepcionSii == null">
+            <if condition="!fechaRecepcionSii">
                 <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAndAttributes" value-field="dte"/>
                 <set field="fechaRecepcionSii" from="dte?.fechaRecepcionSii"/>
             </if>
-            <if condition="fechaRecepcionSii instanceof java.sql.Date">
-                <set field="fechaRecepcionSii" from="new Timestamp(fechaRecepcionSii.time)"/>
-            </if>
-            <if condition="fechaRecepcionSii">
-                <set field="fechaLimiteAccionSii" from="fechaRecepcionSii + 8"/>
+            <if condition="fechaRecepcionSii instanceof java.sql.Date"><then>
+                <set field="fechaRecepcionSiiEpoch" from="fechaRecepcionSii.time"/>
+            </then><else-if condition="fechaRecepcionSii instanceof java.sql.Timestamp">
+                <set field="fechaRecepcionSiiEpoch" from="fechaRecepcionSii.time"/>
+            </else-if><else-if condition="fechaRecepcionSii != null">
+                <return error="true" message="Invalid fechaRecepcionSii class: ${fechaRecepcionSii.class}"/>
+            </else-if></if>
+            <if condition="fechaRecepcionSiiEpoch">
+                <set field="cal" from="Calendar.instance"/>
+                <script>
+                    Calendar cal = Calendar.instance
+                    cal.setTimeInMillis(fechaRecepcionSiiEpoch)
+                    cal.set(Calendar.HOUR_OF_DAY, 0)
+                    cal.set(Calendar.MINUTE, 0)
+                    cal.set(Calendar.SECOND, 0)
+                    cal.set(Calendar.MILLISECOND, 0)
+                    cal.add(Calendar.DAY_OF_MONTH, 9)
+                </script>
+                <set field="fechaLimiteAccionSii" from="new Timestamp(cal.timeInMillis)"/>
             </if>
         </actions>
     </service>
