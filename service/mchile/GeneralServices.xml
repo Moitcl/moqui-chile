@@ -347,23 +347,59 @@ along with this software (see the LICENSE.md file). If not, see
             </else-if></if>
             <!-- Not Found, check whether need to create -->
             <if condition="createUnknown"><then>
-                <service-call name="mantle.party.PartyServices.create#Organization" in-map="[ownerPartyId:(organizationPartyIdAsOwnerWhenCreating?:'_NA_'), organizationName:razonSocial, taxOrganizationName:razonSocial, roleTypeId:createRoleTypeId]"
-                              out-map="context"/>
+                <set field="semaphoreParameter" value="${ownerPartyId}-${idValue}"/>
+                <service-call name="mchile.GeneralServices.create#UnknownOrganization" in-map="[ownerPartyId:(organizationPartyIdAsOwnerWhenCreating?:'_NA_'),
+                                organizationName:razonSocial, taxOrganizationName:razonSocial, roleTypeId:createRoleTypeId, giro:giro, idValue:idValue, comuna:comuna,
+                                ciudad:ciudad, direccion:direccion, semaphoreParameter:semaphoreParameter]" out-map="context"/>
                 <set field="created" from="true"/>
-                <service-call name="create#mantle.party.PartyIdentification" in-map="[partyId:partyId, partyIdTypeEnumId:'PtidNationalTaxId', idValue:idValue]"/>
-                <if condition="giro != null &amp;&amp; giro != ''">
-                    <service-call name="create#mchile.dte.PartyGiro" in-map="[partyId:partyId, description:giro, isPrimary:'Y']"/>
-                </if>
-                <entity-find entity-name="moqui.basic.GeoAssocAndToDetail" list="comunaList">
-                    <econdition field-name="geoId" value="CHL"/>
-                    <econdition field-name="geoName" ignore-case="true" from="comuna"/>
-                </entity-find>
-                <set field="comunaId" from="comunaList.first?.geoId"/>
-                <service-call name="mantle.party.ContactServices.store#PartyContactInfo"
-                              in-map="[partyId:partyId, address1:direccion, postalContactMechPurposeId:'PostalTax', stateProvinceGeoId:comunaId, countryGeoId:'CHL', city:ciudad]"/>
             </then><else-if condition="failOnNotFound">
                 <return error="true" message="No existe organización con RUT ${idValue} definida en el sistema"/>
             </else-if></if>
+        </actions>
+    </service>
+
+    <service verb="create" noun="UnknownOrganization" semaphore="wait" semaphore-parameter="semaphoreParameter">
+        <in-parameters>
+            <parameter name="ownerPartyId" required="true"/>
+            <parameter name="organizationName" required="true"/>
+            <parameter name="taxOrganizationName" required="true"/>
+            <parameter name="roleTypeId"/>
+            <parameter name="giro"/>
+            <parameter name="idValue" required="true"/>
+            <parameter name="comuna"/>
+            <parameter name="ciudad"/>
+            <parameter name="direccion"/>
+            <parameter name="partyIdTypeEnumId" default-value="PtidNationalTaxId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="partyId"/>
+        </out-parameters>
+        <actions>
+            <!-- Check to see if it was created during semaphore wait -->
+            <entity-find entity-name="mantle.party.PartyIdentification" list="identificationList">
+                <econdition field-name="idValue"/>
+                <econdition field-name="partyIdTypeEnumId"/>
+            </entity-find>
+            <entity-find entity-name="mantle.party.Party" list="partyList">
+                <econdition field-name="partyId" operator="in" from="identificationList.partyId"/>
+                <econdition field-name="ownerPartyId"/>
+            </entity-find>
+            <if condition="partyList">
+                <set field="partyId" from="partyList.first.partyId"/>
+                <return/>
+            </if>
+            <service-call name="mantle.party.PartyServices.create#Organization" in-map="context" out-map="context"/>
+            <service-call name="create#mantle.party.PartyIdentification" in-map="context"/>
+            <if condition="giro != null &amp;&amp; giro != ''">
+                <service-call name="create#mchile.dte.PartyGiro" in-map="[partyId:partyId, description:giro, isPrimary:'Y']"/>
+            </if>
+            <entity-find entity-name="moqui.basic.GeoAssocAndToDetail" list="comunaList">
+                <econdition field-name="geoId" value="CHL"/>
+                <econdition field-name="geoName" ignore-case="true" from="comuna"/>
+            </entity-find>
+            <set field="comunaId" from="comunaList.first?.geoId"/>
+            <service-call name="mantle.party.ContactServices.store#PartyContactInfo"
+                          in-map="[partyId:partyId, address1:direccion, postalContactMechPurposeId:'PostalTax', stateProvinceGeoId:comunaId, countryGeoId:'CHL', city:ciudad]"/>
         </actions>
     </service>
 
