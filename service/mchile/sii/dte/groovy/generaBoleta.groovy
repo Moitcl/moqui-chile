@@ -190,7 +190,7 @@ String detalleIt1 = detalleList.get(0).nombreItem
 
 if (detalleIt1.length() > 40)
     detalleIt1 = detalleIt1.substring(0, 40)
-datosTed = "<DD><RE>${rutOrganizacion}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptorTimbre}</RSR><MNT>${totalInvoice}</MNT><IT1>${detalleIt1}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
+datosTed = "<DD><RE>${rutOrganizacion}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptorTimbre}</RSR><MNT>${Math.round(totalInvoice)}</MNT><IT1>${detalleIt1}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
 
 String schemaLocation = ''
 xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
@@ -248,7 +248,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 if (totalNeto)
                     MntNeto(Math.round(totalNeto))
                 if (totalExento != null && totalExento > 0)
-                    MntExe(totalExento)
+                    MntExe(Math.round(totalExento))
                 //TasaIVA(ec.l10n.format(vatTaxRate*100, "##"))
                 if (totalNeto)
                     IVA(Math.round((totalNeto?:0) * vatTaxRate))
@@ -259,7 +259,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 //CredEC()
                 //GrntDep()
                 //Comisiones{}
-                MntTotal(totalInvoice)
+                MntTotal(Math.round(totalInvoice))
                 //if (montoNoFacturable)
                 //    MontoNF(montoNoFacturable)
                 //MontoPeriodo()

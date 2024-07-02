@@ -371,7 +371,7 @@ xmlBuilder.DD() {
     FE(ec.l10n.format(fechaEmision, "yyyy-MM-dd"))
     RR(rutReceptor)
     RSR(razonSocialReceptorTimbre)
-    MNT(totalInvoice)
+    MNT(Math.round(totalInvoice))
     IT1(detalleIt1)
     xmlBuilder.getMkp().yieldUnescaped(folioResult.cafFragment.replaceAll('>\\s*<', '><').trim())
     TSTED(ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss"))
@@ -652,7 +652,7 @@ xmlBuilder.Encabezado() {
                 if (totalesComisiones.valorIva)
                     ValComIVA(totalesComisiones.valorIva)
             }
-        MntTotal(totalInvoice)
+        MntTotal(Math.round(totalInvoice))
         if (montoNoFacturable)
             MontoNF(montoNoFacturable)
         if (montoPeriodo)
