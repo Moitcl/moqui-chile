@@ -105,7 +105,6 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
-    totalNetoClp = detMap.totalNetoClp
     montoIva = Math.round((totalNeto?:0) * vatTaxRate)
     if (detMap.totalExento > 0)
         totalExento = detMap.totalExento
