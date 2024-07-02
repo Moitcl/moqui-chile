@@ -28,6 +28,23 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
             <service-call name="mchile.GeneralServices.verify#Rut" in-map="[rut:entityValue.idValue]" out-map="context"/>
             <set field="entityValue.idValue" from="new String(rut) + '-' + dv"/>
+            <!-- Enforce unique Rut for owners within child and parent -->
+            <entity-find-one entity-name="mantle.party.Party" value-field="party" auto-field-map="entityValue"/>
+            <service-call name="mantle.ledger.LedgerServices.expand#ParentOrganizationList" in-map="[organizationPartyId:party.ownerPartyId]" out-map="parentMap"/>
+            <service-call name="mantle.ledger.LedgerServices.expand#ChildOrganizationList" in-map="[organizationPartyId:party.ownerPartyId]" out-map="childMap"/>
+            <set field="relatedPartyIdList" from="parentMap.orgPartyIdList"/>
+            <script>
+                relatedPartyIdList.addAll(childMap.orgPartyIdList)
+                relatedPartyIdList.sort().unique()
+            </script>
+            <entity-find entity-name="mchile.party.PartyAndIdentification" list="existingIdList">
+                <econdition field-name="idValue" from="entityValue.idValue"/>
+                <econdition field-name="partyIdTypeEnumId" operator="in" value="PtidUniqueNationalId,PtidNationalTaxId"/>
+                <econdition field-name="ownerPartyId" operator="in" from="relatedPartyIdList"/>
+            </entity-find>
+            <if condition="existingIdList">
+                <return error="true" message="Duplicated Rut ${entityValue.idValue} for ${partyId}, owner ${party.ownerPartyId}, existing: ${existingIdList.first.partyId}, owner ${existingIdList.first.ownerPartyId}"/>
+            </if>
         </actions>
     </service>
 
