@@ -117,6 +117,7 @@ if (tipoDte == 33) {
         ec.message.addMessage("Factura Electrónica solamente tiene ítemes exentos, cambiando tipo a Factura Electrónica Exenta")
         tipoDte = 34
         fiscalTaxDocumentTypeEnumId = 'Ftdt-34'
+        tasaIva = null
     }
     originalReferenciaList = referenciaList
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
