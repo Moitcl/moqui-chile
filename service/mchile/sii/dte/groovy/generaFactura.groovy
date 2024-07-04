@@ -380,6 +380,9 @@ xmlBuilder.DD() {
 datosTed = xmlWriter.toString()
 xmlWriter.close()
 
+if (forceIva)
+    totalIva = forceIva
+
 xmlWriter = new StringWriter()
 xmlBuilder = new MarkupBuilder(xmlWriter)
 xmlBuilder.printer.incrementIndent()
