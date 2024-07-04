@@ -56,6 +56,7 @@ montoExento = 0 as Long
 montoIVARecuperable = 0 as Long
 totalNeto = 0 as Long
 totalExento = 0 as Long
+totalIva = 0 as Long
 
 // Campo para guardar resumen atributos -->
 amount = 0 as Long
@@ -101,6 +102,7 @@ if (tipoDte == 39) {
         totalExento = detMap.totalExento
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
+    totalIva = Math.round(detMap.totalIva)
 
     if (numberAfectos == 0 && numberExentos > 0) {
         ec.message.addMessage("Boleta Electrónica solamente tiene ítemes exentos, cambiando tipo a Boleta Electrónica Exenta")
@@ -114,6 +116,7 @@ if (tipoDte == 39) {
     detalleList = detMap.detalleList
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
+    totalIva = Math.round(detMap.totalIva)
     if (numberAfectos > 0) {
         ec.message.addMessage("Boleta Electrónica Exenta tiene ítemes afectos, cambiando tipo a Boleta Electrónica")
         tipoDte = 39
@@ -160,9 +163,11 @@ descuentoORecargoGlobalList.each {
 // Totales
 if (totalNeto != null) {
     totalNeto = totalNeto - (descuentoGlobalAfecto?:0)
-    long totalIVA = Math.round(totalNeto * vatTaxRate)
-    montoIVARecuperable = totalIVA
-    totalInvoice = (totalNeto?:0) + totalIVA + (totalExento?:0)
+    long calculatedIva = Math.round(totalNeto * vatTaxRate)
+    if (totalIva != calculatedIva)
+        ec.message.addError("IVA mismatch, received from details ${totalIva}, calculated from Neto: ${calculatedIva}")
+    montoIVARecuperable = totalIva
+    totalInvoice = (totalNeto?:0) + totalIva + (totalExento?:0)
 } else
     totalInvoice = (totalExento?:0) - (descuentoGlobalExento?:0)
 
@@ -250,8 +255,8 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 if (totalExento != null && totalExento > 0)
                     MntExe(Math.round(totalExento))
                 //TasaIVA(ec.l10n.format(vatTaxRate*100, "##"))
-                if (totalNeto)
-                    IVA(Math.round((totalNeto?:0) * vatTaxRate))
+                if (totalIva)
+                    IVA(Math.round(totalIva))
                 //IVAProp()
                 //IVATerc()
                 //ImptoReten{}

@@ -76,13 +76,15 @@ class MoquiDTEUtils {
                 detailMap.priceItem = 0.000001
                 detailMap.montoItem = 0
                 detalleList.add(detailMap)
-                return [detalleList: detalleList, totalNeto: 0, totalExento: 0, numberExentos: 0, numberAfectos: 0]
+                return [detalleList: detalleList, totalNeto: 0, totalExento: 0, numberExentos: 0, numberAfectos: 0, totalIva:0]
             }
         }
 
         int i = 0
         BigDecimal totalNeto = null
+        BigDecimal totalIva = null
         BigDecimal totalNetoClp = null
+        BigDecimal totalIvaClp = null
         BigDecimal totalExento = null
         BigDecimal totalExentoClp = null
         int numberAfectos = 0
@@ -91,12 +93,17 @@ class MoquiDTEUtils {
         BigDecimal totalDescuentosClp = 0.0
         String originCurrencyUomId = null
 
+        List singleDet = null
         detailList.each { detailEntryObj ->
             HashMap detailEntry = (detailEntryObj instanceof EntityValue) ? detailEntryObj.getMap() : detailEntryObj
             String nombreItem = detailEntry.description
             Map otraMoneda = null
             if (detailType.equals("OrderItem"))
                 nombreItem = detailEntry.itemDescription
+            if (detailEntry.itemTypeEnumId == "ItemVatTax") {
+                totalIva = (totalIva?:0) + detailEntry.amount * (detailEntry.quantity?:1)
+                return
+            }
             if (!nombreItem) {
                 EntityValue productEv = ec.entity.find("mantle.product.Product").condition("productId", detailEntry.productId).one()
                 nombreItem = productEv ? productEv.productName : ''
@@ -248,7 +255,6 @@ class MoquiDTEUtils {
             // Agrego detalles
             Map detailMap = [:]
             detalleList.add(detailMap)
-            List singleDet = null
             detailMap.numeroLinea = i + 1
             if (detailEntry.productId)
                 detailMap.codigoItem = [[tipoCodigo: 'INT1', valorCodigo: detailEntry.productId]]
@@ -272,14 +278,14 @@ class MoquiDTEUtils {
                 detailMap.indicadorExento = 1
             }
             if (detailType == "ReturnItem" && codRef == 2) {
-                singleDet = [detailMap]
-                return [detalleList: singleDet, totalNeto: totalNeto, totalExento: totalExento, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos,
-                        originCurrencyUomId:originCurrencyUomId]
+                if (singleDet == null)
+                    singleDet = [detailMap]
+                return
             }
             if (detailType == "DebitoItem" && codRef == 2) {
-                singleDet = [detailMap]
-                return [detailArray: singleDet, totalNeto: totalNeto, totalExento: totalExento, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos,
-                        originCurrencyUomId:originCurrencyUomId]
+                if (singleDet == null)
+                    singleDet = [detailMap]
+                return
             }
             if (porcentajeDescuento)
                 detailMap.porcentajeDescuento = porcentajeDescuento
@@ -289,7 +295,9 @@ class MoquiDTEUtils {
                 detailMap.otraMoneda = otraMoneda
             i = i + 1
         }
-        return [detalleList: detalleList, totalNeto: totalNeto, totalNetoClp: totalNetoClp, totalExento: totalExento, totalExentoClp: totalExentoClp, numberExentos: numberExentos,
+        if (singleDet)
+            detalleList = singleDet
+        return [detalleList: detalleList, totalNeto: totalNeto, totalIva:totalIva, totalNetoClp: totalNetoClp, totalIvaClp:totalIvaClp, totalExento: totalExento, totalExentoClp: totalExentoClp, numberExentos: numberExentos,
                 numberAfectos: numberAfectos, totalDescuentos: totalDescuentos, totalDescuentosClp: totalDescuentosClp, originCurrencyUomId:originCurrencyUomId]
     }
 

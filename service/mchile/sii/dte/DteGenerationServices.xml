@@ -338,12 +338,9 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="No existe receptor asociado a Nota de Crédito invoiceId ${invoiceId}"/>
             </if>
 
-            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="items">
-                <econdition field-name="invoiceId"/>
-                <econdition field-name="itemTypeEnumId" operator="not-in" value="ItemSalesTax,ItemVatTax"/>
-                <order-by field-name="invoiceItemSeqId"/>
-            </entity-find>
-            <if condition="!items">
+            <service-call name="mchile.sii.dte.DteGenerationServices.get#InvoiceItemsForDte" in-map="[invoiceId:invoiceId]" out-map="context"/>
+
+            <if condition="!invoiceItemList">
                 <return error="true" message="Deben existir items a corregir en Nota de Crédito"/>
             </if>
 
@@ -394,7 +391,7 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="mchile.sii.dte.DteGenerationServices.get#ReceiverInfo" in-map="[receiverPartyId:receiverPartyId, fiscalTaxDocumentTypeEnumId:'Ftdt-61']" out-map="context"/>
 
             <!-- Generacion de nota de crédito -->
-            <set field="detailList" from="items"/>
+            <set field="detailList" from="invoiceItemList"/>
             <service-call name="mchile.sii.dte.DteGenerationServices.generate#Factura" in-map="context" out-map="context"/>
             <if condition="sendToSii">
                 <service-call name="mchile.sii.dte.DteEnvioServices.genera#Envio" in-map="[organizationPartyId:issuerPartyId, documentIdList:[fiscalTaxDocumentId]]" out-map="context"/>
@@ -1038,7 +1035,7 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- Items de invoice -->
             <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="invoiceItemEVList">
                 <econdition field-name="invoiceId"/>
-                <econdition field-name="itemTypeEnumId" operator="not-in" from="['ItemSalesTax', 'ItemVatTax', 'ItemDetailedDescription']" or-null="true"/>
+                <econdition field-name="itemTypeEnumId" operator="not-in" from="['ItemSalesTax', 'ItemDetailedDescription']" or-null="true"/>
                 <econdition field-name="parentItemSeqId" operator="is-null"/>
                 <order-by field-name="invoiceItemSeqId"/>
             </entity-find>
@@ -1068,7 +1065,7 @@ along with this software (see the LICENSE.md file). If not, see
                             <set field="tipoValor" from="'$'"/>
                         </else></if>
                     </then><else>
-                        <set field="valor" from="(-orderItem.unitAmount*orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                        <set field="valor" from="(-invoiceItemEV.amount*invoiceItemEV.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
                         <set field="tipoValor" from="'$'"/>
                     </else></if>
                     <!-- ToDo: determine whether discount is afecto or exento -->

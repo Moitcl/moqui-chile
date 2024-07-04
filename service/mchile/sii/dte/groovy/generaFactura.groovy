@@ -105,7 +105,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
-    montoIva = Math.round((totalNeto?:0) * vatTaxRate)
+    totalIva = detMap.totalIva
     if (detMap.totalExento > 0)
         totalExento = detMap.totalExento
     if (detMap.totalExentoClp > 0)
@@ -158,7 +158,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
-    montoIva = Math.round((totalNeto?:0) * vatTaxRate)
+    totalIva = detMap.totalIva
     totalExento = detMap.totalExento
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
@@ -188,7 +188,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "InvoiceItem", codRef as Integer, issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
-    montoIva = Math.round((totalNeto?:0) * vatTaxRate)
+    totalIva = detMap.totalIva
     totalExento = detMap.totalExento
 
     if (codRef == 2 && detalleList.size() > 1) {
@@ -214,7 +214,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "DebitoItem", codRef as Integer, issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
-    montoIva = Math.round((totalNeto?:0) * vatTaxRate)
+    totalIva = detMap.totalIva
     totalExento = detMap.totalExento
 
     if (codRef == 2 && detalleList.size() > 1) {
@@ -250,7 +250,7 @@ if (tipoDte == 33) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "ShipmentItem", codRef as Integer, issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
-    montoIva = Math.round((totalNeto ?: 0) * vatTaxRate)
+    totalIva = detMap.totalIva
     totalExento = detMap.totalExento
     totalDescuentos = detMap.totalDescuentos
 } else {
@@ -319,14 +319,12 @@ descuentoORecargoGlobalList.each {
 if (totalNeto != null || descuentoGlobalAfecto != null || recargoGlobalAfecto != null) {
     if (totalNetoClp != null) {
         totalNetoClp = totalNetoClp - (descuentoGlobalAfectoClp?:0.0) + (recargoGlobalExentoClp?:0.0)
-        long totalIVAClp = Math.round(totalNetoClp * vatTaxRate)
-        montoIVARecuperable = totalIVA
+        montoIVARecuperable = totalIVAClp
         totalInvoice = (totalNetoClp?:0) + totalIVAClp + (totalExentoClp?:0) - (descuentoGlobalExentoClp?:0.0) + (recargoGlobalExentoClp?:0.0)
     } else {
         totalNeto = totalNeto - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
-        long totalIVA = Math.round(totalNeto * vatTaxRate)
-        montoIVARecuperable = totalIVA
-        totalInvoice = (totalNeto?:0) + totalIVA + (totalExento?:0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
+        montoIVARecuperable = totalIva
+        totalInvoice = (totalNeto?:0) + totalIva + (totalExento?:0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
     }
 } else {
     if (totalExentoClp != null)
@@ -334,6 +332,9 @@ if (totalNeto != null || descuentoGlobalAfecto != null || recargoGlobalAfecto !=
     else
         totalInvoice = (totalExento?:0) - (descuentoGlobalExento?:0) + (recargoGlobalExento?:0)
 }
+
+if (Math.round(totalIva?:0) != Math.round((totalNeto?:0) * (vatTaxRate?:0)))
+    ec.message.addError("Error en Iva, recibido de detalles: ${totalIva}, calculado: ${(totalNeto?:0) * (vatTaxRate?:0)}")
 
 // Chequeo de valores entre Invoice y calculados
 if (invoice) {
@@ -623,8 +624,8 @@ xmlBuilder.Encabezado() {
             MntMargenCom(montoMargenComercializacion)
         if (tasaIva)
             TasaIVA(tasaIva)
-        if (montoIva)
-            IVA(montoIva)
+        if (totalIva)
+            IVA(totalIva)
         if (ivaPropio)
             IVAProp(ivaPropio)
         if (ivaTerceros)
@@ -931,7 +932,7 @@ if (tipoDte in [33, 34, 46, 52, 56, 61]) {
 } else if (tipoDte in [110, 111, 112]) {
     descripcionTipo = "Facturas de Exportación"
     notAllowedFieldList = ['tipoDespacho', 'tipoImpresion', 'indicadorMontosBrutos', 'tipoTransaccionComprador', 'tipoTransaccionVendedor', 'tipoFacturaEspecial', 'rutMandante',
-                           'rutSolicitante', 'totalNeto', 'montoBase', 'montoMargenComercializacion', 'tasaIva', 'montoIva', 'ivaPropio', 'ivaTerceros', 'impuestoRetenido',
+                           'rutSolicitante', 'totalNeto', 'montoBase', 'montoMargenComercializacion', 'tasaIva', 'totalIva', 'ivaPropio', 'ivaTerceros', 'impuestoRetenido',
                            'ivaNoRetenido', 'creditoEmpresasConstructoras', 'garantiaEnvases', 'comisionesList', 'montoNoFacturable', 'montoPeriodo', 'saldoAnterior', 'valorPagar',
                            'totalesOtraMonedaMap.montoNeto', 'totalesOtraMonedaMap.montoFaenamientoCarne', 'totalesOtraMonedaMap.margenComercializacion', 'totalesOtraMonedaMap.iva', 'totalesOtraMonedaMap.impuestosRentenciones',
                            'totalesOtraMonedaMap.ivaNoRetenido']
