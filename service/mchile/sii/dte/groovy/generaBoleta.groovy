@@ -56,6 +56,7 @@ montoExento = 0 as Long
 montoIVARecuperable = 0 as Long
 totalNeto = 0 as Long
 totalExento = 0 as Long
+totalIva = 0 as Long
 
 // Campo para guardar resumen atributos -->
 amount = 0 as Long
@@ -93,7 +94,7 @@ else if (invoice != null && invoice.unpaidTotal == 0) {
     formaPago = 2 // Crédito (usar GlosaPagos)
 
 if (tipoDte == 39) {
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     //throw new BaseArtifactException("Lista:"+detMap.totalExento)
     totalNeto = detMap.totalNeto
@@ -101,6 +102,7 @@ if (tipoDte == 39) {
         totalExento = detMap.totalExento
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
+    totalIva = Math.round(detMap.totalIva)
 
     if (numberAfectos == 0 && numberExentos > 0) {
         ec.message.addMessage("Boleta Electrónica solamente tiene ítemes exentos, cambiando tipo a Boleta Electrónica Exenta")
@@ -110,10 +112,11 @@ if (tipoDte == 39) {
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
 } else if (tipoDte == 41) {
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, detailList, "InvoiceItem", issuerPartyId)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
+    totalIva = Math.round(detMap.totalIva)
     if (numberAfectos > 0) {
         ec.message.addMessage("Boleta Electrónica Exenta tiene ítemes afectos, cambiando tipo a Boleta Electrónica")
         tipoDte = 39
@@ -160,15 +163,17 @@ descuentoORecargoGlobalList.each {
 // Totales
 if (totalNeto != null) {
     totalNeto = totalNeto - (descuentoGlobalAfecto?:0)
-    long totalIVA = Math.round(totalNeto * vatTaxRate)
-    montoIVARecuperable = totalIVA
-    totalInvoice = (totalNeto?:0) + totalIVA + (totalExento?:0)
+    long calculatedIva = Math.round(totalNeto * vatTaxRate)
+    if (totalIva != calculatedIva)
+        ec.message.addError("IVA mismatch, received from details ${totalIva}, calculated from Neto: ${calculatedIva}")
+    montoIVARecuperable = totalIva
+    totalInvoice = (totalNeto?:0) + totalIva + (totalExento?:0)
 } else
     totalInvoice = (totalExento?:0) - (descuentoGlobalExento?:0)
 
 // Chequeo de valores entre Invoice y calculados
 if (invoice && invoice.invoiceTotal != totalInvoice) {
-    ec.message.addError("No coinciden valores totales, calculado: ${ec.l10n.formatCurrency(totalInvoice, 'CLP')}, en invoice ${invoiceId}: ${ec.l10n.formatCurrency(invoice.invoiceTotal, 'CLP')}")
+    ec.message.addError("No coinciden valores totales de Boleta, calculado: ${ec.l10n.formatCurrency(totalInvoice, 'CLP')}, en invoice ${invoiceId}: ${ec.l10n.formatCurrency(invoice.invoiceTotal, 'CLP')}")
     return
 }
 
@@ -190,7 +195,7 @@ String detalleIt1 = detalleList.get(0).nombreItem
 
 if (detalleIt1.length() > 40)
     detalleIt1 = detalleIt1.substring(0, 40)
-datosTed = "<DD><RE>${rutOrganizacion}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptorTimbre}</RSR><MNT>${totalInvoice}</MNT><IT1>${detalleIt1}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
+datosTed = "<DD><RE>${rutOrganizacion}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptorTimbre}</RSR><MNT>${Math.round(totalInvoice)}</MNT><IT1>${detalleIt1}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
 
 String schemaLocation = ''
 xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
@@ -248,10 +253,10 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 if (totalNeto)
                     MntNeto(Math.round(totalNeto))
                 if (totalExento != null && totalExento > 0)
-                    MntExe(totalExento)
+                    MntExe(Math.round(totalExento))
                 //TasaIVA(ec.l10n.format(vatTaxRate*100, "##"))
-                if (totalNeto)
-                    IVA(Math.round((totalNeto?:0) * vatTaxRate))
+                if (totalIva)
+                    IVA(Math.round(totalIva))
                 //IVAProp()
                 //IVATerc()
                 //ImptoReten{}
@@ -259,7 +264,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 //CredEC()
                 //GrntDep()
                 //Comisiones{}
-                MntTotal(totalInvoice)
+                MntTotal(Math.round(totalInvoice))
                 //if (montoNoFacturable)
                 //    MontoNF(montoNoFacturable)
                 //MontoPeriodo()

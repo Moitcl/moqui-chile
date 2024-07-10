@@ -28,6 +28,9 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="doctypeName"/>
             <parameter name="folio"/>
             <parameter name="amount" type="BigDecimal"/>
+            <parameter name="assigneePartyId"/>
+            <parameter name="assigneeName"/>
+            <parameter name="assigneeRut"/>
         </out-parameters>
         <actions>
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAndAttributes" value-field="dte"/>
@@ -45,6 +48,17 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="doctypeName" from="docTypeEnum.description ?: 'desconocido'"/>
             <set field="folio" from="dte.fiscalTaxDocumentNumber"/>
             <set field="amount" from="dte.amount"/>
+            <entity-find entity-name="mchile.dte.DteFactoringAssignment" list="assignmentList" limit="1">
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <order-by field-name="-assignmentDate"/>
+            </entity-find>
+            <set field="lastAssignment" from="assignmentList.first"/>
+            <if condition="lastAssignment">
+                <set field="assigneePartyId" from="lastAssignment.assigneePartyId"/>
+                <set field="assigneeName" from="lastAssignment.assigneeName"/>
+                <service-call name="mchile.GeneralServices.format#Rut" in-map="[rut:lastAssignment.assigneePartyIdValue]" out-map="assigneeRutMap"/>
+                <set field="assigneeRut" from="assigneeRutMap.rut"/>
+            </if>
         </actions>
     </service>
 
@@ -112,6 +126,23 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="fiscalTaxDocumentId"/>
                 <order-by field-name="messageSeqId"/>
             </entity-find>
+        </actions>
+    </service>
+
+    <service verb="get" noun="CurrencyUomMap">
+        <out-parameters>
+            <parameter name="uomToSiiCurrencyMap" type="Map"/>
+            <parameter name="siiToUomCurrencyMap" type="Map"/>
+        </out-parameters>
+        <actions>
+            <set field="uomToSiiCurrencyMap" from="[VEB:'BOLIVAR', BOB:'BOLIVIANO', TZS:'CHELIN', DKK:'CORONA DIN', NOK:'CORONA NOR', SEK:'CORONA SC', BRL:'CRUZEIRO REAL',
+                            AED:'DIRHAM', AUD:'DOLAR AUST', CAD:'DOLAR CAN', HKD:'DOLAR HK', NZD:'DOLAR NZ', SGD:'DOLAR SIN', TWD:'DOLAR TAI', USD:'DOLAR USA',
+                            EUR:'EURO', CHF:'FRANCO SZ', PYG:'GUARANI', GBP:'LIBRA EST', ARS:'PESO', CLP:'PESO CL', COP:'PESO COL', MXN:'PESO MEX', UYP:'PESO URUG',
+                            ZAR:'RAND', INR:'RUPIA', ECS:'SUCRE', JPY:'YEN', ADP:'PESETA']"/>
+            <set field="siiToUomCurrencyMap" from="[:]"/>
+            <iterate list="uomToSiiCurrencyMap" key="uom" entry="siiCurrency">
+                <set field="siiToUomCurrencyMap[siiCurrency]" from="uom"/>
+            </iterate>
         </actions>
     </service>
 

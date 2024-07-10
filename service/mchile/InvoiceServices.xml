@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a 
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+
+    <service verb="create" noun="EntireOrderPartInvoice">
+        <!-- Invoice based on OrderPart (for non-shipping orders or orders invoiced before shipping) -->
+        <in-parameters>
+            <parameter name="orderId" required="true"/>
+            <parameter name="orderPartSeqId" required="true"/>
+            <parameter name="statusId"><description>If specified after create set to this statusId (always created
+                initially in InvoiceInProcess or InvoiceIncoming, so there must be a transition to specified status).</description></parameter>
+            <parameter name="invoiceDate" type="Timestamp" default="ec.user.nowTimestamp"/>
+            <parameter name="partialOrderItemList" type="List"><description>If specified used instead of all items in
+                the OrderPart. Must be a list of OrderItem EntityValue objects in the OrderPart.</description>
+                <parameter name="orderItem" type="Map"><auto-parameters entity-name="mantle.order.OrderItem" include="all"/></parameter>
+            </parameter>
+            <parameter name="currencyUomId" default-value="CLP"/>
+            <parameter name="exchangeRate" type="BigDecimal"><description>Exchange rate: amount of specified currency (currencyUomId) units per order's currency unit</description></parameter>
+            <parameter name="exchangeRateTypeEnumId"/>
+            <parameter name="exchangeRateDate" type="Timestamp"/>
+        </in-parameters>
+        <out-parameters><parameter name="invoiceId"/></out-parameters>
+        <actions>
+            <entity-find-one entity-name="mantle.order.OrderHeader" value-field="orderHeader"/>
+            <if condition="orderHeader.currencyUomId != currencyUomId"><then>
+                <if condition="exchangeRate == null">
+                    <!-- ToDo: attempt to find exchangeRate for known currencies, e.g. CLF, CLM -->
+                    <return error="true" message="Need to specify exchange rate for invoice"/>
+                </if>
+            </then><else>
+                <if condition="exchangeRate == null"><then>
+                    <set field="exchangeRate" from="1"/>
+                </then><else-if condition="exchangeRate != 1">
+                    <return error="true" message="Exchange rate to convert from ${currencyUomId} to itself is not 1 but ${exchangeRate}"/>
+                </else-if></if>
+            </else></if>
+            <service-call name="mantle.account.InvoiceServices.create#EntireOrderPartInvoice" in-map="context" out-map="context"/>
+            <if condition="exchangeRate == 1"><return/></if>
+            <!-- Change Invoice and InvoiceItems to specified currency -->
+            <service-call name="update#mantle.account.invoice.Invoice" in-map="[invoiceId:invoiceId, currencyUomId:currencyUomId]"/>
+            <service-call name="create#mantle.account.invoice.SettlementTerm" in-map="[termTypeEnumId:'FtddttomTipoCambio', termValue:exchangeRate]" out-map="context"/>
+            <entity-find entity-name="mantle.account.invoice.InvoiceItem" list="itemList">
+                <econdition field-name="invoiceId"/>
+            </entity-find>
+            <service-call name="create#mantle.account.invoice.InvoiceTerm" in-map="[invoiceId:invoiceId, invoiceItemSeqId:itemList.first.invoiceItemSeqId, settlementTermId:settlementTermId]"/>
+            <iterate list="itemList" entry="item">
+                <if condition="item.amount">
+                    <set field="item.originCurrencyUomId" from="orderHeader.currencyUomId"/>
+                    <set field="item.originCurrencyExchangeRateTypeEnumId" from="exchangeRateTypeEnumId"/>
+                    <set field="item.originCurrencyExchangeRateDate" from="exchangeRateDate"/>
+                    <set field="item.originAmount" from="item.amount"/>
+                    <set field="item.amount" from="ec.l10n.roundCurrency(item.originAmount * exchangeRate, currencyUomId)"/>
+                    <entity-update value-field="item"/>
+                </if>
+            </iterate>
+        </actions>
+    </service>
+   
+</services>

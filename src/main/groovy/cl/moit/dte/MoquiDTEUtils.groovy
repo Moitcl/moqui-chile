@@ -61,11 +61,11 @@ class MoquiDTEUtils {
 
     protected final static Logger logger = LoggerFactory.getLogger(MoquiDTEUtils.class)
 
-    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType, String issuerPartyId) throws BaseArtifactException {
-        return prepareDetails(ec, detailList, detailType, null, issuerPartyId)
+    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, String issuerPartyId) throws BaseArtifactException {
+        return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, null, issuerPartyId)
     }
 
-    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, List<HashMap> detailList, String detailType, Integer codRef, String issuerPartyId) throws BaseArtifactException {
+    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, Integer codRef, String issuerPartyId) throws BaseArtifactException {
         List detalleList = []
         // Text Correction DTEs have no detail list
         if ((detailList == null || detailList.size()) == 0 && codRef == 2) {
@@ -76,22 +76,34 @@ class MoquiDTEUtils {
                 detailMap.priceItem = 0.000001
                 detailMap.montoItem = 0
                 detalleList.add(detailMap)
-                return [detalleList: detalleList, totalNeto: 0, totalExento: 0, numberExentos: 0, numberAfectos: 0]
+                return [detalleList: detalleList, totalNeto: 0, totalExento: 0, numberExentos: 0, numberAfectos: 0, totalIva:0]
             }
         }
 
         int i = 0
-        Long totalNeto = null
-        Long totalExento = null
+        BigDecimal totalNeto = null
+        BigDecimal totalIva = null
+        BigDecimal totalNetoClp = null
+        BigDecimal totalIvaClp = null
+        BigDecimal totalExento = null
+        BigDecimal totalExentoClp = null
         int numberAfectos = 0
         int numberExentos = 0
-        Long totalDescuentos = 0
+        BigDecimal totalDescuentos = 0.0
+        BigDecimal totalDescuentosClp = 0.0
+        String originCurrencyUomId = null
 
+        List singleDet = null
         detailList.each { detailEntryObj ->
             HashMap detailEntry = (detailEntryObj instanceof EntityValue) ? detailEntryObj.getMap() : detailEntryObj
             String nombreItem = detailEntry.description
+            Map otraMoneda = null
             if (detailType.equals("OrderItem"))
                 nombreItem = detailEntry.itemDescription
+            if (detailEntry.itemTypeEnumId == "ItemVatTax") {
+                totalIva = (totalIva?:0) + detailEntry.amount * (detailEntry.quantity?:1)
+                return
+            }
             if (!nombreItem) {
                 EntityValue productEv = ec.entity.find("mantle.product.Product").condition("productId", detailEntry.productId).one()
                 nombreItem = productEv ? productEv.productName : ''
@@ -112,10 +124,10 @@ class MoquiDTEUtils {
             }
             BigDecimal quantity = detailEntry.quantity
             BigDecimal montoDescuento = detailEntry.montoDescuento
+            BigDecimal montoDescuentoClp = null
+            BigDecimal montoDescuentoOriginCurrency = detailEntry.montoDescuentoOriginCurrency
             BigDecimal porcentajeDescuento = detailEntry.porcentajeDescuento
             BigDecimal ajusteDecimal = detailEntry.ajusteDecimal
-            if (montoDescuento)
-                totalDescuentos += montoDescuento
             String uom = null
             if (!detailType.equals("ShipmentItem")) {
                 if (detailEntry.quantityUomId.equals('TF_hr'))
@@ -132,7 +144,9 @@ class MoquiDTEUtils {
                     uom = "Ltr"
             }
             Boolean itemAfecto = null
-            if (detailEntry.productId) {
+            if (fiscalTaxDocumentTypeEnumId in ['Ftdt-110', 'Ftdt-111', 'Ftdt-112'])
+                itemAfecto = false
+            else if (detailEntry.productId) {
                 Map<String, Object> afectoOutMap = ec.service.sync().name("mchile.sii.dte.DteInternalServices.check#Afecto").parameters([issuerPartyId: issuerPartyId, productId: detailEntry.productId]).call()
                 itemAfecto = afectoOutMap.afecto
             } else {
@@ -140,8 +154,9 @@ class MoquiDTEUtils {
                 itemAfecto = productDefaultExento != 'true'
             }
 
-            BigDecimal priceItem
-            BigDecimal totalItem = 0
+            BigDecimal priceItem = null
+            BigDecimal totalItem = 0.0
+            BigDecimal totalItemClp = 0.0
             if (detailType == "ShipmentItem" && detailEntry.shipmentId) {
                 //ec.logger.info("handling price for productId ${detailEntry.productId}")
                 BigDecimal quantityHandled = 0
@@ -198,18 +213,39 @@ class MoquiDTEUtils {
                     nombreItem = "Corrige Dato Receptor"
                     totalItem = 0
                 } else {
-                    priceItem = detailEntry.returnPrice
+                    priceItem = detailEntry.returnPrice as BigDecimal
                 }
             } else if (detailType == "OrderItem") {
-                priceItem = detailEntry.unitAmount
+                priceItem = detailEntry.unitAmount as BigDecimal
                 totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
             } else if (detailType == "InvoiceItem") {
-                priceItem = detailEntry.amount
-                totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
+                if (detailEntry.originCurrencyUomId || originCurrencyUomId) {
+                    if (!detailEntry.originCurrencyUomId)
+                        throw new BaseArtifactException("Some but not all items have originCurrencyUomId")
+                    if (!detailEntry.originAmount)
+                        throw new BaseArtifactException("Item ${detailEntry.invoiceItemSeqId} has originCurrencyUomId but no originAmount")
+                    if (originCurrencyUomId == null || originCurrencyUomId == detailEntry.originCurrencyUomId)
+                        originCurrencyUomId = detailEntry.originCurrencyUomId
+                    else
+                        throw new BaseArtifactException("Multiple originCurrencyUomId values found: ${originCurrencyUomId}, ${detailEntry.originCurrencyUomId}")
+                    montoDescuentoClp = montoDescuento
+                    BigDecimal priceItemClp = detailEntry.amount as BigDecimal
+                    totalItemClp = (quantity ?: 1) * (priceItemClp ?: 0) - (montoDescuentoClp ?: 0) + (ajusteDecimal ?: 0)
+                    montoDescuento = montoDescuentoOriginCurrency
+                    priceItem = detailEntry.originAmount as BigDecimal
+                    totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0)
+                } else {
+                    priceItem = detailEntry.amount as BigDecimal
+                    totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
+                }
             } else {
-                priceItem = detailEntry.amount
+                priceItem = detailEntry.amount as BigDecimal
                 totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
             }
+            if (montoDescuento)
+                totalDescuentos += montoDescuento
+            if (montoDescuentoClp)
+                totalDescuentosClp += montoDescuentoClp
 
             if (itemAfecto)
                 numberAfectos++
@@ -219,7 +255,6 @@ class MoquiDTEUtils {
             // Agrego detalles
             Map detailMap = [:]
             detalleList.add(detailMap)
-            List singleDet = null
             detailMap.numeroLinea = i + 1
             if (detailEntry.productId)
                 detailMap.codigoItem = [[tipoCodigo: 'INT1', valorCodigo: detailEntry.productId]]
@@ -230,30 +265,40 @@ class MoquiDTEUtils {
                 detailMap.quantity = quantity
             if (uom != null)
                 detailMap.uom = uom
-            if (priceItem != null && (detailType != "ShipmentItem" || Math.round(priceItem) > 0))
+            if (priceItem != null && (detailType != "ShipmentItem" || Math.round(priceItem) > 0)) {
                 detailMap.priceItem = priceItem
+            }
             detailMap.montoItem = totalItem
             if (detailType == "ShipmentItem" || itemAfecto) {
-                totalNeto = (totalNeto ?: 0) + totalItem
+                totalNeto = (totalNeto ?: 0.0) + totalItem
             } else {
-                totalExento = (totalExento ?: 0) + totalItem
+                totalExento = (totalExento ?: 0.0) + totalItem
+                if (totalItemClp)
+                    totalExentoClp = (totalExentoClp ?: 0.0) + totalItemClp
                 detailMap.indicadorExento = 1
             }
             if (detailType == "ReturnItem" && codRef == 2) {
-                singleDet = [detailMap]
-                return [detalleList: singleDet, totalNeto: totalNeto, totalExento: totalExento, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos]
+                if (singleDet == null)
+                    singleDet = [detailMap]
+                return
             }
             if (detailType == "DebitoItem" && codRef == 2) {
-                singleDet = [detailMap]
-                return [detailArray: singleDet, totalNeto: totalNeto, totalExento: totalExento, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos]
+                if (singleDet == null)
+                    singleDet = [detailMap]
+                return
             }
             if (porcentajeDescuento)
                 detailMap.porcentajeDescuento = porcentajeDescuento
             if (montoDescuento)
                 detailMap.montoDescuento = montoDescuento
+            if (otraMoneda)
+                detailMap.otraMoneda = otraMoneda
             i = i + 1
         }
-        return [detalleList: detalleList, totalNeto: totalNeto, totalExento: totalExento, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos]
+        if (singleDet)
+            detalleList = singleDet
+        return [detalleList: detalleList, totalNeto: totalNeto, totalIva:totalIva, totalNetoClp: totalNetoClp, totalIvaClp:totalIvaClp, totalExento: totalExento, totalExentoClp: totalExentoClp, numberExentos: numberExentos,
+                numberAfectos: numberAfectos, totalDescuentos: totalDescuentos, totalDescuentosClp: totalDescuentosClp, originCurrencyUomId:originCurrencyUomId]
     }
 
     public static Map<String, Object> prepareReferences(ExecutionContext ec, List<HashMap> referenciaList, String rutEmisor, Long tipoFactura) {
