@@ -23,6 +23,9 @@ if (invoiceId != null && fiscalTaxDocumentTypeEnumId in dteConstituyeVentaTypeLi
 // Recuperacion de parametros de la organizacion -->
 ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInternalServices.load#DteConfig").parameter("partyId", issuerPartyId).call())
 
+if (codigosActividadEconomica == '')
+    ec.message.addError("Emisor no define códigos de Actividad Económica")
+
 telefonosEmisor = [fonoContacto]
 
 if (razonSocialOrganizacion == null || razonSocialOrganizacion.size() < 3) {
@@ -324,7 +327,7 @@ if (totalNeto != null || descuentoGlobalAfecto != null || recargoGlobalAfecto !=
     } else {
         totalNeto = totalNeto - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
         montoIVARecuperable = totalIva
-        totalInvoice = (totalNeto?:0) + totalIva + (totalExento?:0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
+        totalInvoice = (totalNeto?:0) + (totalIva?:0) + (totalExento?:0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
     }
 } else {
     if (totalExentoClp != null)

@@ -44,6 +44,7 @@ import javax.xml.xpath.XPath
 import javax.xml.xpath.XPathConstants
 import javax.xml.xpath.XPathExpression
 import javax.xml.xpath.XPathFactory
+import java.math.RoundingMode
 import java.security.*
 import java.security.cert.CertificateExpiredException
 import java.security.cert.CertificateNotYetValidException
@@ -92,6 +93,7 @@ class MoquiDTEUtils {
         BigDecimal totalDescuentos = 0.0
         BigDecimal totalDescuentosClp = 0.0
         String originCurrencyUomId = null
+        BigDecimal vatTaxRate = null
 
         List singleDet = null
         detailList.each { detailEntryObj ->
@@ -269,7 +271,13 @@ class MoquiDTEUtils {
                 detailMap.priceItem = priceItem
             }
             detailMap.montoItem = totalItem
-            if (detailType == "ShipmentItem" || itemAfecto) {
+            if (itemAfecto) {
+                if (detailType == "ShipmentItem") {
+                    if (vatTaxRate == null) {
+                        vatTaxRate = ec.service.sync().name("mchile.TaxServices.get#VatTaxRate").parameter("date", ec.user.nowTimestamp).call().taxRate
+                    }
+                    totalIva = (totalIva ?: 0.0) + (totalItem * vatTaxRate)
+                }
                 totalNeto = (totalNeto ?: 0.0) + totalItem
             } else {
                 totalExento = (totalExento ?: 0.0) + totalItem
@@ -297,6 +305,9 @@ class MoquiDTEUtils {
         }
         if (singleDet)
             detalleList = singleDet
+        if (detailType == "ShipmentItem" && totalIva) {
+            totalIva = totalIva.setScale(0, RoundingMode.HALF_UP)
+        }
         return [detalleList: detalleList, totalNeto: totalNeto, totalIva:totalIva, totalNetoClp: totalNetoClp, totalIvaClp:totalIvaClp, totalExento: totalExento, totalExentoClp: totalExentoClp, numberExentos: numberExentos,
                 numberAfectos: numberAfectos, totalDescuentos: totalDescuentos, totalDescuentosClp: totalDescuentosClp, originCurrencyUomId:originCurrencyUomId]
     }
