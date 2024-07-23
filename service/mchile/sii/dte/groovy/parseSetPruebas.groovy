@@ -16,17 +16,20 @@ int lineNumber = 0
 tipoDocumentoMap = ['FACTURA ELECTRONICA':'Ftdt-33', 'FACTURA  ELECTRONICA':'Ftdt-33', 'NOTA DE CREDITO ELECTRONICA':'Ftdt-61', 'GUIA DE DESPACHO':'Ftdt-52',
                     'FACTURA NO AFECTA O EXENTA ELECTRONICA':'Ftdt-34', 'NOTA DE DEBITO ELECTRONICA':'Ftdt-56', 'FACTURA':'Ftdt-30', 'NOTA DE CREDITO':'Ftdt-60',
                     'FACTURA DE COMPRA':'Ftdt-45', 'FACTURA DE COMPRA ELECTRONICA':'Ftdt-46', 'FACTURA DE EXPORTACION ELECTRONICA':'Ftdt-110',
-                    'NOTA DE CREDITO DE EXPORTACION ELECTRONICA':'Ftdt-112', 'NOTA DE DEBITO DE EXPORTACION ELECTRONICA':'Ftdt-111']
+                    'NOTA DE CREDITO DE EXPORTACION ELECTRONICA':'Ftdt-112', 'NOTA DE DEBITO DE EXPORTACION ELECTRONICA':'Ftdt-111',
+                    'LIQUIDACION FACTURA ELECTRONICA':'Ftdt-43']
 // Depende del contexto, porque en el set de pruebas se menciona "NOTA DE CREDITO" en lugar del nombre completo "NOTA DE CREDITO DE EXPORTACION".
 tipoDocumentoMapExp = ['FACTURA ELECTRONICA':'Ftdt-33', 'FACTURA  ELECTRONICA':'Ftdt-33', 'NOTA DE CREDITO ELECTRONICA':'Ftdt-61', 'GUIA DE DESPACHO':'Ftdt-52',
                        'FACTURA NO AFECTA O EXENTA ELECTRONICA':'Ftdt-34', 'NOTA DE DEBITO ELECTRONICA':'Ftdt-56', 'FACTURA':'Ftdt-30', 'NOTA DE CREDITO':'Ftdt-112',
                        'FACTURA DE COMPRA':'Ftdt-45', 'FACTURA DE COMPRA ELECTRONICA':'Ftdt-46', 'FACTURA DE EXPORTACION ELECTRONICA':'Ftdt-110',
-                       'NOTA DE CREDITO DE EXPORTACION ELECTRONICA':'Ftdt-112', 'NOTA DE DEBITO DE EXPORTACION ELECTRONICA':'Ftdt-111']
+                       'NOTA DE CREDITO DE EXPORTACION ELECTRONICA':'Ftdt-112', 'NOTA DE DEBITO DE EXPORTACION ELECTRONICA':'Ftdt-111',
+                       'LIQUIDACION FACTURA ELECTRONICA':'Ftdt-43']
 globalUnprocessedLines = []
-globalUnprocessedLineNumber = 0
+globalUnprocessedLineCount = 0
 setList = []
 currentSet = null
 etapaSubset = null
+def enInstrucciones = false
 line = reader.readLine()
 while (line != null) {
     lineNumber++
@@ -39,18 +42,33 @@ while (line != null) {
         currentSet = [numeroAtencion: numeroAtencion, tipo: tipoSubset, unprocessedLines: []]
         setList.add(currentSet)
         expectedLines = []
-    } else if (tipoSubset == "BASICO DOCUMENTOS DE EXPORTACION (1)") {
+    } else if (tipoSubset =~ /BASICO DOCUMENTOS DE EXPORTACION \([12]\)/) {
         if (currentSet.documents == null) {
             currentSet.documents = []
             currentDocument = null
         }
         def inicioCaso = line =~ /^CASO $numeroAtencion-([0-9]+)/
         def detalleInternacional = line =~ /^([A-Z ]+?)(?: \(\*\*\))?+:\s+([0-9.A-Za-z(),\/ ]+)$/
+        def recargoComisionesInternacional = line =~ /^%([0-9]+) RECARGO EN LA LINEA DE ITEM POR COMISIONES EN EL EXTERIOR$/
+        def comisionesExtranjero = line =~ /^COMISIONES EN EL EXTRANJERO \(RECARGOS GLOBALES\):\s+([0-9]+)% DEL TOTAL DE LA CLAUSULA$/
+        def descuentoLinea = line =~ /^DESCUENTO LINEA # ([0-9]):\s+([0-9])%$/
         def referencia = line =~ /^REFERENCIA\s+([A-Z ]+) CORRESPONDIENTE A CASO ([0-9]+)-([0-9]+)$/
+        def instrucciones = line =~ /^INSTRUCCIONES AL CONTRIBUYENTE:$/
         if (line in expectedLines) {
 
+        } else if (enInstrucciones) {
+            if (line =~ /^[-]+$/) {
+                enInstrucciones = false
+            } else {
+                if (currentSet.instrucciones == null)
+                    currentSet.instrucciones = []
+                currentSet.instrucciones.add(line)
+            }
+        } else if (instrucciones.matches()) {
+            enInstrucciones = true
         } else if (inicioCaso.matches()) {
             itemFields = null
+            currentLibroVentasExpectedLine = null
             seqNum = inicioCaso[0][1]
             line = reader.readLine()
             lineNumber++
@@ -109,16 +127,24 @@ while (line != null) {
             valor = detalleInternacional[0][2]
             if (campo in ['MONEDA DE LA OPERACION', 'FORMA DE PAGO EXPORTACION', 'MODALIDAD DE VENTA', 'CLAUSULA DE VENTA DE EXPORTACION', 'TOTAL CLAUSULA DE VENTA',
                           'VIA DE TRANSPORTE', 'PUERTO DE EMBARQUE', 'PUERTO DE DESEMBARQUE', 'UNIDAD DE MEDIDA DE TARA', 'UNIDAD PESO BRUTO', 'UNIDAD PESO NETO',
-                          'TIPO DE BULTO', 'TOTAL BULTOS', 'FLETE', 'SEGURO', 'PAIS RECEPTOR Y PAIS DESTINO', 'REFERENCIA']) {
+                          'TIPO DE BULTO', 'TOTAL BULTOS', 'FLETE', 'SEGURO', 'PAIS RECEPTOR Y PAIS DESTINO', 'REFERENCIA', 'DESCUENTO LINEA # 1', 'NACIONALIDAD']) {
                 if (currentDocument.terms == null)
                     currentDocument.terms = [:]
                 currentDocument.terms[campo] = valor
             } else {
                 currentSet.unprocessedLines.add("${lineNumber}: ${line}")
-                unprocessedLineNumber++
+                globalUnprocessedLineCount++
             }
+        } else if (descuentoLinea.matches()) {
+            currentDocument.terms.descuentoLineaNumeroItem = descuentoLinea[0][1]
+            currentDocument.terms.descuentoLineaPorcentaje = descuentoLinea[0][2]
+        } else if (comisionesExtranjero.matches()) {
+            currentDocument.terms.recargoPorComisionesExterior = comisionesExtranjero[0][1]
+        } else if (recargoComisionesInternacional.matches()) {
+            currentDocument.terms.recargoItemComisionesExterior = recargoComisionesInternacional[0][1]
         } else if (line =~ /^-+$/ || line == null || line =~ /^$/ || line == '\t') {
             itemFields = null
+            currentLibroVentasExpectedLine = null
         } else if (itemFields != null && !(line =~ /^$/) ) {
             values = [line.substring(0,32).trim()]
             values.addAll(line.substring(32).split("\t+"))
@@ -136,9 +162,11 @@ while (line != null) {
             }
             currentDocument.items.add(itemMap)
         } else {
-            currentSet.unprocessedLines.add(line)
+            currentSet.unprocessedLines.add("${lineNumber}: ${line}")
+            globalUnprocessedLineCount++
         }
-    } else  if (tipoSubset in ["BASICO", "FACTURA EXENTA", "GUIA DE DESPACHO"]) {
+    } else  if (tipoSubset in ["BASICO", "FACTURA EXENTA", "GUIA DE DESPACHO", "BASICO LIQUIDACIONES", "BASICO CASO GENERAL DE EMISOR DE FACTURA DE COMPRA"]) {
+        expectedLines = [ 'LOS PRECIOS UNITARIOS DE LOS ITEMS DEBEN SER LOS MISMOS DE LA FACTURA' ]
         if (currentSet.documents == null) {
             currentSet.documents = []
             currentDocument = null
@@ -151,6 +179,7 @@ while (line != null) {
         def indicacionMatch = line =~ /^(INDICACIÓN|IMPORTANTE):\s*(.*)\s*$/
         if (inicioCaso.matches()) {
             itemFields = null
+            comisionesFields = null
             seqNum = inicioCaso[0][1]
             line = reader.readLine()
             lineNumber++
@@ -169,8 +198,10 @@ while (line != null) {
                 ec.message.addError("At line number ${lineNumber} expected 'DOCUMENTO', got: ${line}")
                 fiscalTaxDocumentTypeEnumId = null
             }
-            currentDocument = [seqNum:seqNum, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]
+            currentDocument = [seqNum: seqNum, fiscalTaxDocumentTypeEnumId: fiscalTaxDocumentTypeEnumId]
             currentSet.documents.add(currentDocument)
+        } else if (line in expectedLines) {
+
         } else if (referencia.matches()) {
             String fiscalTaxDocumentTypeEnumId = tipoDocumentoMap[referencia[0][1]]
             Long numeroAtencionReferencia = Long.parseLong(referencia[0][2])
@@ -183,7 +214,7 @@ while (line != null) {
                 currentDocument.referencias = []
             line = reader.readLine()
             lineNumber++
-            razonReferenciaMatch = line =~ /^RAZON REFERENCIA\t([A-Z ]+)$/
+            razonReferenciaMatch = line =~ /^RAZON REFERENCIA\t([A-Z 12]+)$/
             if (razonReferenciaMatch.matches()) {
                 razonReferencia = razonReferenciaMatch[0][1]
             } else {
@@ -198,12 +229,30 @@ while (line != null) {
         } else if (line?.startsWith("ITEM\t")) {
             itemFields = line.split("\t+")
             currentDocument.items = []
-        } else if (line =~ /^-+$/ || line == null) {
+        } else if (line?.startsWith("COMISIONES Y OTROS CARGOS\t")) {
+            comisionesFields = line.split("\t+")
+            currentDocument.comisionesYCargos = []
             itemFields = null
+        } else if (line =~ /^-+$/ || line == null || line =~ /^$/) {
+            itemFields = null
+            comisionesFields = null
+        } else if (comisionesFields != null && !(line =~ /^$/) ) {
+            values = line.split("\t+")
+            if (comisionesFields.size() != values.size()) {
+                ec.message.addError("line ${lineNumber}: Field amount mismatch, header has ${comisionesFields.size()}, line has ${values.size()}")
+                ec.message.addError("line: ${line}")
+            }
+            comisionMap = [:]
+            for (int i = 0; i < comisionesFields.size(); i++) {
+                comisionMap[comisionesFields[i]] = values[i].trim()
+            }
+            currentDocument.comisionesYCargos.add(comisionMap)
         } else if (itemFields != null && !(line =~ /^$/) ) {
             values = line.split("\t+")
-            if (itemFields.size() != values.size())
+            if (itemFields.size() != values.size()) {
                 ec.message.addError("line ${lineNumber}: Field amount mismatch, header has ${itemFields.size()}, line has ${values.size()}")
+                ec.message.addError("line: ${line}")
+            }
             itemMap = [:]
             for (int i = 0; i < itemFields.size(); i++) {
                 if (itemFields[i] == "ITEM") {
@@ -229,9 +278,9 @@ while (line != null) {
                     currentDocument.indicaciones = []
                 currentDocument.indicaciones.add(indicacionMatch[0][2])
             }
-        } else if (!(line =~ /^$/) ) {
+        } else if (!(line =~ /^\s*$/ || line == null) ) {
             currentSet.unprocessedLines.add("${lineNumber}: ${line}")
-            unprocessedLineNumber++
+            globalUnprocessedLineCount++
         }
     } else if (tipoSubset == "LIBRO DE COMPRAS") {
         expectedLines = ['==========================================================================', 'TIPO DOCUMENTO\t\t\t\tFOLIO', 'OBSERVACIONES', 'MONTO EXENTO\tMONTO AFECTO', '==========================================================================']
@@ -309,7 +358,7 @@ while (line != null) {
     } else if (!(line =~ /^$/) ) {
         if (! (line.trim() in knownOuterLines)) {
             globalUnprocessedLines.add("${lineNumber}: ${line}")
-            globalUnprocessedLineNumber++
+            globalUnprocessedLineCount++
         }
     }
     if (currentSet != null)
