@@ -120,7 +120,7 @@ while (line != null) {
             currentDocument.referencias.add([seqNumReferencia:seqNumReferencia, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, razonReferencia:razonReferencia])
         } else if (itemFields == null && line?.startsWith("ITEM\s")) {
             itemFields = ['ITEM']
-            itemFields.addAll(line.substring(32).split("\t+"))
+            itemFields.addAll(line.substring(6).trim().split("\t+"))
             currentDocument.items = []
         } else if (detalleInternacional.matches()) {
             campo = detalleInternacional[0][1]
@@ -146,8 +146,17 @@ while (line != null) {
             itemFields = null
             currentLibroVentasExpectedLine = null
         } else if (itemFields != null && !(line =~ /^$/) ) {
-            values = [line.substring(0,32).trim()]
-            values.addAll(line.substring(32).split("\t+"))
+            ec.logger.info("Processing line ${line}")
+            itemMatcher = line =~ /^([A-Z 0-9\/]+)\s\s+([0-9]+)\s*(.*)/
+            if (itemMatcher.matches()) {
+                values = [itemMatcher[0][1], itemMatcher[0][2]]
+                if (itemMatcher[0][3] != '') {
+                    ec.logger.info("itemMatcher[0][3]: ${itemMatcher[0][3]}")
+                    values.addAll(itemMatcher[0][3].trim().split("\t+"))
+                }
+            } else {
+                ec.message.addError("No se reconoce item: ${line}")
+            }
             if (itemFields.size() != values.size())
                 ec.message.addError("line ${lineNumber}: Field amount mismatch, header has ${itemFields.size()}, line has ${values.size()}")
             itemMap = [:]
