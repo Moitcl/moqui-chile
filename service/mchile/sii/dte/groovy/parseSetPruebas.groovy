@@ -141,17 +141,19 @@ while (line != null) {
         } else if (comisionesExtranjero.matches()) {
             currentDocument.terms.recargoPorComisionesExterior = comisionesExtranjero[0][1]
         } else if (recargoComisionesInternacional.matches()) {
-            currentDocument.terms.recargoItemComisionesExterior = recargoComisionesInternacional[0][1]
+            if (currentDocument.items?.size() != 1) {
+                ec.message.addError("Más de 1 item para agregar recargo comisiones")
+                return
+            }
+            currentDocument.items[0].recargoComisionesPorcentaje = recargoComisionesInternacional[0][1]
         } else if (line =~ /^-+$/ || line == null || line =~ /^$/ || line == '\t') {
             itemFields = null
             currentLibroVentasExpectedLine = null
         } else if (itemFields != null && !(line =~ /^$/) ) {
-            ec.logger.info("Processing line ${line}")
             itemMatcher = line =~ /^([A-Z 0-9\/]+)\s\s+([0-9]+)\s*(.*)/
             if (itemMatcher.matches()) {
                 values = [itemMatcher[0][1], itemMatcher[0][2]]
                 if (itemMatcher[0][3] != '') {
-                    ec.logger.info("itemMatcher[0][3]: ${itemMatcher[0][3]}")
                     values.addAll(itemMatcher[0][3].trim().split("\t+"))
                 }
             } else {

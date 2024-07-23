@@ -1095,10 +1095,10 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="first" from="true" type="Boolean"/>
                     <set field="totalDiscount" from="0" type="BigDecimal"/>
                     <set field="totalDiscountOriginCurrency" from="0" type="BigDecimal"/>
+                    <set field="totalSurcharge" from="0" type="BigDecimal"/>
+                    <set field="totalSurchargeOriginCurrency" from="0" type="BigDecimal"/>
                     <iterate list="subitemList" entry="subitem">
-                        <if condition="subitem.itemTypeEnumId == 'ItemDetailedDescription'"><then>
-                            <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}${subitem.description}"/>
-                        </then><else-if condition="subitem.itemTypeEnumId == 'ItemDiscount'">
+                        <if condition="subitem.itemTypeEnumId in ['ItemDiscount', 'ItemSurcharge']">
                             <entity-find entity-name="mantle.order.OrderItemBilling" list="billingList">
                                 <econdition field-name="invoiceId" from="invoiceId"/>
                                 <econdition field-name="invoiceItemSeqId" from="subitem.invoiceItemSeqId"/>
@@ -1108,18 +1108,29 @@ along with this software (see the LICENSE.md file). If not, see
                                 <set field="hide" from="orderItem?.hideInParent == 'Y' &amp;&amp; (first || hide)"/>
                                 <if condition="orderItem.sourcePercentage">
                                     <if condition="hide || invoiceItem.porcentajeDescuento == orderItem.sourcePercentage"><then>
-                                        <set field="invoiceItem.porcentajeDescuento" from="orderItem.sourcePercentage"/>
+                                        <set field="porcentajeDescuentoORecargo" from="orderItem.sourcePercentage"/>
                                     </then><else>
-                                        <set field="invoiceItem.porcentajeDescuento" from="null"/>
+                                        <set field="porcentajeDescuentoORecargo" from="null"/>
                                     </else></if>
                                 </if>
                             </then><else>
                                 <set field="hide" from="ec.user.getPreference('mchile.dte.PreferHiddenDiscountInParent') == 'true' &amp;&amp; (first || hide)"/>
                                 <set field="invoiceItem.porcentajeDescuento" from="null"/>
                             </else></if>
+                        </if>
+                        <if condition="subitem.itemTypeEnumId == 'ItemDetailedDescription'"><then>
+                            <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}${subitem.description}"/>
+                        </then><else-if condition="subitem.itemTypeEnumId == 'ItemDiscount'">
+                            <set field="invoiceItem.porcentajeDescuento" from="porcentajeDescuentoORecargo"/>
                             <set field="totalDiscount" from="totalDiscount + (subitem.amount*subitem.quantity as BigDecimal).setScale(0,java.math.RoundingMode.HALF_UP)"/>
                             <if condition="subitem.originAmount">
                                 <set field="totalDiscountOriginCurrency" from="totalDiscountOriginCurrency + ec.l10n.roundCurrency(subitem.originAmount*subitem.quantity as BigDecimal, subitem.originCurrencyUomId)"/>
+                            </if>
+                        </else-if><else-if condition="subitem.itemTypeEnumId == 'ItemSurcharge'">
+                            <set field="invoiceItem.porcentajeRecargo" from="porcentajeDescuentoORecargo"/>
+                            <set field="totalSurcharge" from="totalSurcharge + (subitem.amount*subitem.quantity as BigDecimal).setScale(0,java.math.RoundingMode.HALF_UP)"/>
+                            <if condition="subitem.originAmount">
+                                <set field="totalSurchargeOriginCurrency" from="totalSurchargeOriginCurrency + ec.l10n.roundCurrency(subitem.originAmount*subitem.quantity as BigDecimal, subitem.originCurrencyUomId)"/>
                             </if>
                         </else-if><else-if condition="subitem.itemTypeEnumId == 'ItemDteRoundingAdjust'">
                             <set field="invoiceItem.ajusteDecimal" from="invoiceItem.ajusteDecimal?:0 + subitem.amount*subitem.quantity"/>
@@ -1132,15 +1143,18 @@ along with this software (see the LICENSE.md file). If not, see
                         <if condition="ec.user.getPreference('mchile.dte.AddDiscountSubitemDescription') == 'true'">
                             <set field="invoiceItem.detailedDescription" value="${invoiceItem.detailedDescription ? (invoiceItem.detailedDescription + '; '): ''}Incluye ${subitem.description ?: 'descuento'} por ${ec.l10n.formatCurrency((-1*subitem.amount*subitem.quantity/invoiceItem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), currencyUomId)}${subitem.quantity > 1? ' (unitario)': ''}"/>
                         </if>
-                        <set field="invoiceItem.amount" from="invoiceItem.amount + (totalDiscount/invoiceItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                        <set field="invoiceItem.amount" from="invoiceItem.amount + (totalDiscount/invoiceItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)
+                                            + (totalSurcharge/invoiceItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
                         <if condition="invoiceItem.originAmount">
-                            <set field="invoiceItem.originAmount" from="invoiceItem.originAmount + ec.l10n.roundCurrency(totalDiscountOriginCurrency/invoiceItem.quantity, invoiceItem.originCurrencyUomId)"/>
+                            <set field="invoiceItem.originAmount" from="invoiceItem.originAmount
+                                        + ec.l10n.roundCurrency(totalDiscountOriginCurrency/invoiceItem.quantity, invoiceItem.originCurrencyUomId)
+                                        + ec.l10n.roundCurrency(totalSurchargeOriginCurrency/invoiceItem.quantity, invoiceItem.originCurrencyUomId)"/>
                         </if>
                     </then><else>
                         <set field="invoiceItem.montoDescuento" from="-totalDiscount"/>
-                        <if condition="totalDiscountOriginCurrency">
-                            <set field="invoiceItem.montoDescuentoOriginCurrency" from="-totalDiscountOriginCurrency"/>
-                        </if>
+                        <set field="invoiceItem.montoRecargo" from="totalSurcharge"/>
+                        <if condition="totalDiscountOriginCurrency"><set field="invoiceItem.montoDescuentoOriginCurrency" from="-totalDiscountOriginCurrency"/></if>
+                        <if condition="totalSurchargeOriginCurrency"><set field="invoiceItem.montoRecargoOriginCurrency" from="totalSurchargeOriginCurrency"/></if>
                     </else></if>
                 </else></if>
             </iterate>
@@ -1203,15 +1217,16 @@ along with this software (see the LICENSE.md file). If not, see
                     </entity-find>
                     <set field="first" from="true" type="Boolean"/>
                     <set field="totalDiscount" from="0" type="BigDecimal"/>
+                    <set field="totalSurcharge" from="0" type="BigDecimal"/>
                     <iterate list="subitemList" entry="subitem">
+                        <if condition="subItem?.hideInParent == null"><then>
+                            <set field="hide" from="(first || hide) &amp;&amp; ec.user.getPreference('mchile.dte.PreferHiddenDiscountInParent') == 'true'"/>
+                        </then><else>
+                            <set field="hide" from="subItem.hideInParent == 'Y'"/>
+                        </else></if>
                         <if condition="subitem.itemTypeEnumId == 'ItemDetailedDescription'"><then>
                             <set field="orderItem.detailedDescription" value="${orderItem.detailedDescription ? (orderItem.detailedDescription + '; '): ''}${subitem.itemDescription}"/>
                         </then><else-if condition="subitem.itemTypeEnumId == 'ItemDiscount'">
-                            <if condition="subItem?.hideInParent == null"><then>
-                                <set field="hide" from="(first || hide) &amp;&amp; ec.user.getPreference('mchile.dte.PreferHiddenDiscountInParent') == 'true'"/>
-                            </then><else>
-                                <set field="hide" from="subItem.hideInParent == 'Y'"/>
-                            </else></if>
                             <if condition="subItem.sourcePercentage">
                                 <if condition="hide || orderItem.porcentajeDescuento == subItem.sourcePercentage"><then>
                                     <set field="orderItem.porcentajeDescuento" from="subItem.sourcePercentage"/>
@@ -1220,6 +1235,15 @@ along with this software (see the LICENSE.md file). If not, see
                                 </else></if>
                             </if>
                             <set field="totalDiscount" from="totalDiscount + (subitem.unitAmount*subitem.quantity as BigDecimal).setScale(0,java.math.RoundingMode.HALF_UP)"/>
+                        </else-if><else-if condition="subitem.itemTypeEnumId == 'ItemSurcharge'">
+                            <if condition="subItem.sourcePercentage">
+                                <if condition="hide || orderItem.porcentajeRecargo == subItem.sourcePercentage"><then>
+                                    <set field="orderItem.porcentajeRecargo" from="subItem.sourcePercentage"/>
+                                </then><else>
+                                    <set field="orderItem.porcentajeRecargo" from="null"/>
+                                </else></if>
+                            </if>
+                            <set field="totalSurcharge" from="totalSurcharge + (subitem.unitAmount*subitem.quantity as BigDecimal).setScale(0,java.math.RoundingMode.HALF_UP)"/>
                         </else-if><else-if condition="subitem.itemTypeEnumId == 'ItemDteRoundingAdjust'">
                             <set field="orderItem.ajusteDecimal" from="orderItem.ajusteDecimal?:0 + subitem.unitAmount*subitem.quantity"/>
                         </else-if><else>
@@ -1231,9 +1255,10 @@ along with this software (see the LICENSE.md file). If not, see
                         <if condition="ec.user.getPreference('mchile.dte.AddDiscountSubitemDescription') == 'true'">
                             <set field="orderItem.detailedDescription" value="${orderItem.detailedDescription ? (orderItem.detailedDescription + '; '): ''}Incluye ${subitem.itemDescription ?: 'descuento'} por ${ec.l10n.formatCurrency((-1*subitem.unitAmount*subitem.quantity/subItem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), currencyUomId)}${subitem.quantity > 1? ' (unitario)': ''}"/>
                         </if>
-                        <set field="orderItem.amount" from="orderItem.unitAmount + (totalDiscount/orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                        <set field="orderItem.amount" from="orderItem.unitAmount + (totalDiscount/orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP) + (totalSurcharge/orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
                     </then><else>
                         <set field="orderItem.montoDescuento" from="-totalDiscount"/>
+                        <set field="orderItem.montoRecargo" from="totalSurcharge"/>
                     </else></if>
                 </else></if>
             </iterate>

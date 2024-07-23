@@ -91,7 +91,9 @@ class MoquiDTEUtils {
         int numberAfectos = 0
         int numberExentos = 0
         BigDecimal totalDescuentos = 0.0
+        BigDecimal totalRecargos = 0.0
         BigDecimal totalDescuentosClp = 0.0
+        BigDecimal totalRecargosClp = 0.0
         String originCurrencyUomId = null
         BigDecimal vatTaxRate = null
 
@@ -126,9 +128,13 @@ class MoquiDTEUtils {
             }
             BigDecimal quantity = detailEntry.quantity
             BigDecimal montoDescuento = detailEntry.montoDescuento
+            BigDecimal montoRecargo = detailEntry.montoRecargo
             BigDecimal montoDescuentoClp = null
+            BigDecimal montoRecargoClp = null
             BigDecimal montoDescuentoOriginCurrency = detailEntry.montoDescuentoOriginCurrency
+            BigDecimal montoRecargoOriginCurrency = detailEntry.montoRecargoOriginCurrency
             BigDecimal porcentajeDescuento = detailEntry.porcentajeDescuento
+            BigDecimal porcentajeRecargo = detailEntry.porcentajeRecargo
             BigDecimal ajusteDecimal = detailEntry.ajusteDecimal
             String uom = null
             if (!detailType.equals("ShipmentItem")) {
@@ -196,7 +202,7 @@ class MoquiDTEUtils {
                     totalItem = totalItem + (quantity - quantityHandled) * priceMap.price
                 }
                 priceItem = totalItem / quantity as BigDecimal
-                totalItem = totalItem - (montoDescuento ?: 0)
+                totalItem = totalItem - (montoDescuento ?: 0) + (montoRecargo ?: 0)
                 totalItem = totalItem.setScale(0, java.math.RoundingMode.HALF_UP) as Long
             } else if (detailType == "DebitoItem") {
                 if (codRef == 2) {
@@ -206,7 +212,7 @@ class MoquiDTEUtils {
                     totalItem = 0
                 } else {
                     priceItem = detailEntry.amount
-                    totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0)
+                    totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (montoRecargo ?: 0)
                 }
             } else if (detailType == "ReturnItem") {
                 if (codRef == 2) {
@@ -219,7 +225,7 @@ class MoquiDTEUtils {
                 }
             } else if (detailType == "OrderItem") {
                 priceItem = detailEntry.unitAmount as BigDecimal
-                totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
+                totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (montoRecargo ?: 0) + (ajusteDecimal ?: 0)
             } else if (detailType == "InvoiceItem") {
                 if (detailEntry.originCurrencyUomId || originCurrencyUomId) {
                     if (!detailEntry.originCurrencyUomId)
@@ -231,23 +237,29 @@ class MoquiDTEUtils {
                     else
                         throw new BaseArtifactException("Multiple originCurrencyUomId values found: ${originCurrencyUomId}, ${detailEntry.originCurrencyUomId}")
                     montoDescuentoClp = montoDescuento
+                    montoRecargoClp = montoRecargo
                     BigDecimal priceItemClp = detailEntry.amount as BigDecimal
-                    totalItemClp = (quantity ?: 1) * (priceItemClp ?: 0) - (montoDescuentoClp ?: 0) + (ajusteDecimal ?: 0)
+                    totalItemClp = (quantity ?: 1) * (priceItemClp ?: 0) - (montoDescuentoClp ?: 0) + (montoRecargo ?: 0) + (ajusteDecimal ?: 0)
                     montoDescuento = montoDescuentoOriginCurrency
+                    montoRecargo = montoRecargoOriginCurrency
                     priceItem = detailEntry.originAmount as BigDecimal
-                    totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0)
+                    totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (montoRecargo ?: 0)
                 } else {
                     priceItem = detailEntry.amount as BigDecimal
-                    totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
+                    totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (montoRecargo ?: 0) + (ajusteDecimal ?: 0)
                 }
             } else {
                 priceItem = detailEntry.amount as BigDecimal
-                totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (ajusteDecimal ?: 0)
+                totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (montoRecargo ?: 0) + (ajusteDecimal ?: 0)
             }
             if (montoDescuento)
                 totalDescuentos += montoDescuento
+            if (montoRecargo)
+                totalRecargos += montoRecargo
             if (montoDescuentoClp)
                 totalDescuentosClp += montoDescuentoClp
+            if (montoRecargoClp)
+                totalRecargosClp += montoRecargoClp
 
             if (itemAfecto)
                 numberAfectos++
@@ -297,8 +309,12 @@ class MoquiDTEUtils {
             }
             if (porcentajeDescuento)
                 detailMap.porcentajeDescuento = porcentajeDescuento
+            if (porcentajeRecargo)
+                detailMap.porcentajeRecargo = porcentajeRecargo
             if (montoDescuento)
                 detailMap.montoDescuento = montoDescuento
+            if (montoRecargo)
+                detailMap.montoRecargo = montoRecargo
             if (otraMoneda)
                 detailMap.otraMoneda = otraMoneda
             i = i + 1
@@ -308,8 +324,9 @@ class MoquiDTEUtils {
         if (detailType == "ShipmentItem" && totalIva) {
             totalIva = totalIva.setScale(0, RoundingMode.HALF_UP)
         }
-        return [detalleList: detalleList, totalNeto: totalNeto, totalIva:totalIva, totalNetoClp: totalNetoClp, totalIvaClp:totalIvaClp, totalExento: totalExento, totalExentoClp: totalExentoClp, numberExentos: numberExentos,
-                numberAfectos: numberAfectos, totalDescuentos: totalDescuentos, totalDescuentosClp: totalDescuentosClp, originCurrencyUomId:originCurrencyUomId]
+        return [detalleList: detalleList, totalNeto: totalNeto, totalIva:totalIva, totalNetoClp: totalNetoClp, totalIvaClp:totalIvaClp, totalExento: totalExento,
+                totalExentoClp: totalExentoClp, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos, totalRecargos: totalRecargos,
+                totalDescuentosClp: totalDescuentosClp, totalRecargosClp: totalRecargosClp, originCurrencyUomId:originCurrencyUomId]
     }
 
     public static Map<String, Object> prepareReferences(ExecutionContext ec, List<HashMap> referenciaList, String rutEmisor, Long tipoFactura) {
