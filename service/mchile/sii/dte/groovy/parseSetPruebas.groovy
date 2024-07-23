@@ -22,8 +22,8 @@ tipoDocumentoMapExp = ['FACTURA ELECTRONICA':'Ftdt-33', 'FACTURA  ELECTRONICA':'
                        'FACTURA NO AFECTA O EXENTA ELECTRONICA':'Ftdt-34', 'NOTA DE DEBITO ELECTRONICA':'Ftdt-56', 'FACTURA':'Ftdt-30', 'NOTA DE CREDITO':'Ftdt-112',
                        'FACTURA DE COMPRA':'Ftdt-45', 'FACTURA DE COMPRA ELECTRONICA':'Ftdt-46', 'FACTURA DE EXPORTACION ELECTRONICA':'Ftdt-110',
                        'NOTA DE CREDITO DE EXPORTACION ELECTRONICA':'Ftdt-112', 'NOTA DE DEBITO DE EXPORTACION ELECTRONICA':'Ftdt-111']
-unprocessedLines = []
-unprocessedLineNumber = 0
+globalUnprocessedLines = []
+globalUnprocessedLineNumber = 0
 setList = []
 currentSet = null
 etapaSubset = null
@@ -307,9 +307,9 @@ while (line != null) {
             unprocessedLineNumber++
         }
     } else if (!(line =~ /^$/) ) {
-        if (! line.trim() in knownOuterLines) {
-            unprocessedLines.add("${lineNumber}: ${line}")
-            unprocessedLineNumber++
+        if (! (line.trim() in knownOuterLines)) {
+            globalUnprocessedLines.add("${lineNumber}: ${line}")
+            globalUnprocessedLineNumber++
         }
     }
     if (currentSet != null)
