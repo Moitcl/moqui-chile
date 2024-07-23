@@ -622,7 +622,7 @@ xmlBuilder.Encabezado() {
             TpoMoneda(tipoMoneda)
         if (totalNeto != null)
             MntNeto(Math.round(totalNeto?:0))
-        if (totalExento)
+        if (totalExento != null)
             MntExe(totalExento)
         if (montoBase)
             MntBase(montoBase)
