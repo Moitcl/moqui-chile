@@ -771,7 +771,7 @@ if (detalleList) {
                 if (detalle.porcentajeDescuento)
                     DescuentoPct(detalle.porcentajeDescuento)
                 if (detalle.montoDescuento)
-                    DescuentoMonto(detalle.montoDescuento)
+                    DescuentoMonto(detalle.montoDescuento.setScale(0, java.math.RoundingMode.HALF_UP))
                 detalle.subDescuento.each { sd ->
                     SubDscto {
                         TipoDscto(sd.tipo)

@@ -51,7 +51,7 @@ while (line != null) {
         def detalleInternacional = line =~ /^([A-Z ]+?)(?: \(\*\*\))?+:\s+([0-9.A-Za-z(),\/ ]+)$/
         def recargoComisionesInternacional = line =~ /^%([0-9]+) RECARGO EN LA LINEA DE ITEM POR COMISIONES EN EL EXTERIOR$/
         def comisionesExtranjero = line =~ /^COMISIONES EN EL EXTRANJERO \(RECARGOS GLOBALES\):\s+([0-9]+)% DEL TOTAL DE LA CLAUSULA$/
-        def descuentoLinea = line =~ /^DESCUENTO LINEA # ([0-9]):\s+([0-9])%$/
+        def descuentoLinea = line =~ /^DESCUENTO LINEA # ([0-9]):\s+([0-9]%)$/
         def referencia = line =~ /^REFERENCIA\s+([A-Z ]+) CORRESPONDIENTE A CASO ([0-9]+)-([0-9]+)$/
         def instrucciones = line =~ /^INSTRUCCIONES AL CONTRIBUYENTE:$/
         if (line in expectedLines) {
@@ -136,8 +136,11 @@ while (line != null) {
                 globalUnprocessedLineCount++
             }
         } else if (descuentoLinea.matches()) {
-            currentDocument.terms.descuentoLineaNumeroItem = descuentoLinea[0][1]
-            currentDocument.terms.descuentoLineaPorcentaje = descuentoLinea[0][2]
+            itemNumber = descuentoLinea[0][1] as Integer
+            if(currentDocument.items.size() < itemNumber)
+                ec.message.addError("Especificación de descuento a item fuera de rango: ${itemNumber}, cantidad de ítemes: ${currentDocument.items.size()}")
+            item = currentDocument.items[itemNumber-1]
+            item.'DESCUENTO ITEM' = descuentoLinea[0][2]
         } else if (comisionesExtranjero.matches()) {
             currentDocument.terms.recargoPorComisionesExterior = comisionesExtranjero[0][1]
         } else if (recargoComisionesInternacional.matches()) {
