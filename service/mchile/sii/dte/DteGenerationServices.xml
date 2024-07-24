@@ -30,6 +30,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="comunaReceptor" required="true"/>
             <parameter name="draft" type="Boolean" default="false"/>
             <parameter name="ciudadReceptor" default-value="${comunaReceptor}"/>
+            <parameter name="receptorExtranjero" type="Map"/>
             <parameter name="detailList" type="List"/>
             <parameter name="invoiceId"/>
             <parameter name="shipmentId"/>
@@ -75,6 +76,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="direccionReceptor"/>
             <parameter name="comunaReceptor"/>
             <parameter name="ciudadReceptor"/>
+            <parameter name="receptorExtranjero" type="Map"/>
             <parameter name="detailList" type="List"/>
             <parameter name="invoiceId"/>
             <parameter name="shipmentId"/>
@@ -111,6 +113,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="contactoReceptor"/>
             <parameter name="direccionReceptor"/>
             <parameter name="comunaReceptor"/>
+            <parameter name="receptorExtranjero" type="Map"/>
             <parameter name="errorMessages" type="List"/>
         </out-parameters>
         <actions>
@@ -136,6 +139,7 @@ along with this software (see the LICENSE.md file). If not, see
                 </entity-find>
                 <if condition="rpidList"><then>
                     <set field="rutReceptor" value="55555555-5"/>
+                    <set field="receptorExtranjero" from="[idValue:rpidList.first.idValue]"/>
                 </then><else-if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-39','Ftdt-41']">
                     <set field="rutReceptor" value="66666666-6"/>
                 </else-if><else>
@@ -155,9 +159,11 @@ along with this software (see the LICENSE.md file). If not, see
                 <if condition="contactOut.postalAddress.countryGeoId != 'CHL'"><then>
                     <if condition="contactOut.postalAddress.countryGeoId == null &amp;&amp; requireTaxAddress"><then>
                         <message error="true">Receiver ${receiverPartyId} has no country defined for tax postal address</message>
-                    </then><else-if condition="rutReceptor == null || rutReceptor == '66666666-6'">
+                    </then><else-if condition="rutReceptor == null || rutReceptor in ['66666666-6', '55555555-5']">
                         <!-- Extranjero sin Rut -->
-                        <set field="rutReceptor" value="55555555-5"/>
+                        <if condition="rutReceptor == null"><set field="rutReceptor" value="55555555-5"/></if>
+                        <if condition="!receptorExtranjero"><set field="receptorExtranjero" from="[:]"/></if>
+                        <set field="receptorExtranjero.nacionalidad" from="contactOut.postalAddress.countryGeoId"/>
                     </else-if></if>
                     <if condition="contactOut.postalAddress.stateProvinceGeoId"><then>
                         <service-call name="mchile.GeoServices.get#ComunaFromGeoId" in-map="[stateProvinceGeoId:contactOut.postalAddress.stateProvinceGeoId]" out-map="comunaOut"/>
