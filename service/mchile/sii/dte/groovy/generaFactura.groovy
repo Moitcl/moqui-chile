@@ -929,7 +929,7 @@ if (rutReceptor == '61603000-0') {
 if (tipoDte in [33, 34, 46, 52, 56, 61]) {
     descripcionTipo = "${tipoDte}"
     signingTag = "Documento"
-    notAllowedFieldList = ['codigoAdicionalSucursal', 'tipoMoneda']
+    notAllowedFieldList = ['codigoAdicionalSucursal', 'tipoMoneda', 'receptorExtranjero.idAdicional']
     requiredFieldList = []
     if (tipoDte == 52) {
         descripcionTipo = "Guía de Despacho"
@@ -943,14 +943,14 @@ if (tipoDte in [33, 34, 46, 52, 56, 61]) {
                            'rutSolicitante', 'totalNeto', 'montoBase', 'montoMargenComercializacion', 'tasaIva', 'totalIva', 'ivaPropio', 'ivaTerceros', 'impuestoRetenido',
                            'ivaNoRetenido', 'creditoEmpresasConstructoras', 'garantiaEnvases', 'comisionesList', 'montoNoFacturable', 'montoPeriodo', 'saldoAnterior', 'valorPagar',
                            'totalesOtraMonedaMap.montoNeto', 'totalesOtraMonedaMap.montoFaenamientoCarne', 'totalesOtraMonedaMap.margenComercializacion', 'totalesOtraMonedaMap.iva', 'totalesOtraMonedaMap.impuestosRentenciones',
-                           'totalesOtraMonedaMap.ivaNoRetenido']
+                           'totalesOtraMonedaMap.ivaNoRetenido', 'receptorExtranjero.tipoDocumento']
     notAllowedFieldListDetalle = ['retenedor', 'codigoImpuestoAdicional', 'tipoDocumentoLiquidacion']
     requiredFieldList = ['tipoMoneda']
     signingTag = "Exportaciones"
 } else if (tipoDte in [43]) {
     notAllowedFieldList = ['indicacionNoRebajat', 'tipoDespacho', 'tipoImpresion', 'condicionesComercialesExportacionMap', 'tipoFacturaEspecial', 'guiaExportacionMap', 'codigoAdicionalSucursal',
                            'identificadorAdicionalEmisor', 'rutMandante', 'rutSolicitante', 'transporteMap', 'aduanaMap', 'tipoMoneda', 'montoBase', 'montoMargenComercializacion',
-                           'ivaNoRetenido', 'creditoEmpresasConstructoras', 'garantiaEnvases', 'montoNoFacturable', 'totalesOtraMonedaMap']
+                           'ivaNoRetenido', 'creditoEmpresasConstructoras', 'garantiaEnvases', 'montoNoFacturable', 'totalesOtraMonedaMap', 'receptorExtranjero.idAdicional']
     notAllowedFieldListDetalle = ['retenedor', 'otraMoneda', 'porcentajeDescuento', 'montoDescuento', 'subDescuento', 'recargoPorcentaje', 'recargoMonto', 'subRecargo']
     notAllowedFieldListReferencia = ['rutOtro']
     notAllowedFieldListDetalleSubcantidad = ['tipoCodigo']
