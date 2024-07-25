@@ -104,7 +104,7 @@ else if (invoice != null && invoice.unpaidTotal == 0) {
 currencyUomId = 'CLP'
 ec.logger.info("Creando DTE tipo ${tipoDte} (${dteTypeDescription})")
 tasaIva = ec.l10n.format(vatTaxRate*100, "##")
-if (tipoDte == 33) {
+if (tipoDte in [33, 46]) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
@@ -948,9 +948,9 @@ if (tipoDte in [33, 34, 46, 52, 56, 61]) {
     requiredFieldList = ['tipoMoneda']
     signingTag = "Exportaciones"
 } else if (tipoDte in [43]) {
-    notAllowedFieldList = ['indicacionNoRebajat', 'tipoDespacho', 'tipoImpresion', 'condicionesComercialesExportacionMap', 'tipoFacturaEspecial', 'guiaExportacionMap', 'codigoAdicionalSucursal',
+    notAllowedFieldList = ['indicacionNoRebaja', 'tipoDespacho', 'tipoImpresion', 'condicionesComercialesExportacionMap', 'tipoFacturaEspecial', 'guiaExportacionMap', 'codigoAdicionalSucursal',
                            'identificadorAdicionalEmisor', 'rutMandante', 'rutSolicitante', 'transporteMap', 'aduanaMap', 'tipoMoneda', 'montoBase', 'montoMargenComercializacion',
-                           'ivaNoRetenido', 'creditoEmpresasConstructoras', 'garantiaEnvases', 'montoNoFacturable', 'totalesOtraMonedaMap', 'receptorExtranjero.idAdicional']
+                           'ivaNoRetenido', 'creditoEmpresasConstructoras', 'garantiaEnvases', 'montoNoFacturable', 'totalesOtraMonedaMap', 'receptorExtranjero.tipoDocumento']
     notAllowedFieldListDetalle = ['retenedor', 'otraMoneda', 'porcentajeDescuento', 'montoDescuento', 'subDescuento', 'recargoPorcentaje', 'recargoMonto', 'subRecargo']
     notAllowedFieldListReferencia = ['rutOtro']
     notAllowedFieldListDetalleSubcantidad = ['tipoCodigo']

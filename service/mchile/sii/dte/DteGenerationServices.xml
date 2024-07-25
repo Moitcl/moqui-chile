@@ -551,7 +551,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="issuerPartyId" from="invoice.fromPartyId"/>
             <set field="receiverPartyId" from="invoice.toPartyId"/>
 
-            <if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-61', 'Ftdt-112']">
+            <if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-61', 'Ftdt-112', 'Ftdt-46']">
                 <set field="issuerPartyId" from="invoice.toPartyId"/>
                 <set field="receiverPartyId" from="invoice.fromPartyId"/>
             </if>
@@ -610,7 +610,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="detailList" from="invoiceItemList"/>
                 <set field="invoiceMessage" from="invoice.invoiceMessage"/>
                 <service-call name="mchile.sii.dte.DteGenerationServices.generate#Boleta" in-map="context" out-map="context"/>
-            </then><else-if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-33', 'Ftdt-34', 'Ftdt-110']">
+            </then><else-if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-33', 'Ftdt-34', 'Ftdt-46', 'Ftdt-110']">
                 <!-- Create Factura -->
                 <!-- Set data from Invoice Terms -->
                 <entity-find entity-name="mantle.account.invoice.InvoiceTerm" list="termList">
@@ -762,17 +762,26 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="dte" from="dteList.first"/>
             <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument in create#EmptyCreditMemo"/></if>
             <if condition="dte.invoiceId == null"><return error="true" message="FiscalTaxDocument has no invoice associated"/></if>
-            <set field="invoiceTypeMapping" from="['Ftdt-33':'InvoiceCreditMemo', 'Ftdt-34':'InvoiceCreditMemo', 'Ftdt-56':'InvoiceCreditMemo', 'Ftdt-110':'InvoiceCreditMemoExport', 'Ftdt-111':'InvoiceCreditMemoExport']"/>
+            <set field="invoiceTypeMapping" from="['Ftdt-30':'InvoiceCreditMemo', 'Ftdt-32':'InvoiceCreditMemo', 'Ftdt-33':'InvoiceCreditMemo', 'Ftdt-34':'InvoiceCreditMemo',
+                        'Ftdt-45:':'InvoiceCreditMemo', 'Ftdt-46':'InvoiceCreditMemo', 'Ftdt-55':'InvoiceCreditMemo', 'Ftdt-56':'InvoiceCreditMemo',
+                        'Ftdt-101':'InvoiceCreditMemoExport', 'Ftdt-104':'InvoiceCreditMemoExport', 'Ftdt-110':'InvoiceCreditMemoExport', 'Ftdt-111':'InvoiceCreditMemoExport']"/>
             <set field="invoiceTypeEnumId" from="invoiceTypeMapping[dte.fiscalTaxDocumentTypeEnumId]"/>
             <if condition="!invoiceTypeEnumId"><return error="true" message="Invalid DTE type to reference for Credit Note: ${dte.fiscalTaxDocumentTypeEnumId}"/></if>
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="originalInvoice">
                 <field-map field-name="invoiceId" from="dte.invoiceId"/></entity-find-one>
             <if condition="!originalInvoice"><return error="true" message="Could not find invoice ${dte.invoiceId}"/></if>
             <set field="originalInvoiceId" from="originalInvoice.invoiceId"/>
+            <if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-45', 'Ftdt-46']"><then>
+                <set field="fromPartyId" from="originalInvoice.fromPartyId"/>
+                <set field="toPartyId" from="originalInvoice.toPartyId"/>
+            </then><else>
+                <set field="fromPartyId" from="originalInvoice.toPartyId"/>
+                <set field="toPartyId" from="originalInvoice.fromPartyId"/>
+            </else></if>
             <service-call name="mantle.account.InvoiceServices.create#Invoice" out-map="context"
-                          in-map="[originalInvoiceId:originalInvoice.invoiceId, invoiceTypeEnumId:invoiceTypeEnumId, fromPartyId:originalInvoice.toPartyId,
-                           toPartyId:originalInvoice.fromPartyId, invoiceDate:fechaEmision, currencyUomId:originalInvoice.currencyUomId, otherPartyOrderId:originalInvoice.otherPartyOrderId,
-                        productStoreId:originalInvoice.productStoreId, systemMessageRemoteId:originalInvoice.systemMessageRemoteId, referenceNumber:originalInvoiceId]"/>
+                          in-map="[originalInvoiceId:originalInvoice.invoiceId, invoiceTypeEnumId:invoiceTypeEnumId, fromPartyId:fromPartyId, toPartyId:toPartyId,
+                                   invoiceDate:fechaEmision, currencyUomId:originalInvoice.currencyUomId, otherPartyOrderId:originalInvoice.otherPartyOrderId,
+                                   productStoreId:originalInvoice.productStoreId, systemMessageRemoteId:originalInvoice.systemMessageRemoteId, referenceNumber:originalInvoiceId]"/>
             <set field="fecha" from="ec.l10n.format(dte.date, 'yyyy-MM-dd')"/>
             <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:dte.receiverPartyId]" out-map="receiverRut"/>
             <set field="referenceMap" from="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId, folio:dte.fiscalTaxDocumentNumber, fecha:fecha,
