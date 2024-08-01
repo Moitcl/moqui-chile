@@ -102,7 +102,7 @@ if (tipoDte == 39) {
         totalExento = detMap.totalExento
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
-    totalIva = Math.round(detMap.totalIva)
+    totalIva = detMap.totalIva
 
     if (numberAfectos == 0 && numberExentos > 0) {
         ec.message.addMessage("Boleta Electrónica solamente tiene ítemes exentos, cambiando tipo a Boleta Electrónica Exenta")
@@ -167,7 +167,7 @@ if (totalNeto != null) {
     if (totalIva != calculatedIva)
         ec.message.addError("IVA mismatch, received from details ${totalIva}, calculated from Neto: ${calculatedIva}")
     montoIVARecuperable = totalIva
-    totalInvoice = (totalNeto?:0) + totalIva + (totalExento?:0)
+    totalInvoice = (totalNeto?:0) + (totalIva?:0) + (totalExento?:0)
 } else
     totalInvoice = (totalExento?:0) - (descuentoGlobalExento?:0)
 
@@ -365,7 +365,7 @@ byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Docum
 
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
 if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
-    ec.logger.warn("Boleta folio ${folio} generada OK")
+    ec.logger.warn("Boleta folio ${folio} firma OK")
 } else {
     ec.message.addError("Error al generar Boleta folio ${folio}: firma inválida")
 }
