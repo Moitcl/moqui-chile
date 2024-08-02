@@ -195,6 +195,10 @@ detalleDteList.each { detalleDte ->
     price = detalleDte.PrcItem ? (detalleDte.PrcItem.text() as BigDecimal) : null
     referencePrice = detalleDte.PrcRef ? (detalleDte.PrcRef.text() as BigDecimal) : null
     montoItem = detalleDte.MontoItem ? (detalleDte.MontoItem.text() as BigDecimal) : null
+    if (montoItem == null) {
+        errorMessages.add("MontoItem no puede ser nulo para línea ${nroDetalles} (indicado como ${detalleDte.NroLinDet.text()})")
+        montoItem = 0 as BigDecimal
+    }
     montoItemBruto = null
     dteQuantity = null
     dteAmount = null
@@ -214,11 +218,11 @@ detalleDteList.each { detalleDte ->
         totalBruto += montoItemBruto
         ec.logger.info("Recalculando montoItem, montoItemBruto ${montoItemBruto}, montoItem ${montoItem}, totalBruto ${totalBruto}")
     }
-    if (((price?:0) * (quantity?:0)) == 0 && montoItem != null) {
-        if (quantity == null)
+    if (((price?:0) * (quantity?:0)) == 0 && montoItem) {
+        if (quantity == null || quantity == 0)
             quantity = 1 as BigDecimal
         price = (montoItem+descuentoMonto) / quantity
-    } else if (((price * quantity) - descuentoMonto).setScale(0, RoundingMode.HALF_UP) != montoItem) {
+    } else if ((((price?:0) * (quantity?:0)) - (descuentoMonto?:0)).setScale(0, RoundingMode.HALF_UP) != montoItem) {
         if (montosBrutos) {
             if (montoItemBruto && priceBruto && ((priceBruto * quantity) - descuentoMontoBruto).setScale(0, RoundingMode.HALF_UP) != montoItemBruto)
                 discrepancyMessages.add("En detalle ${nroDetalles} (${itemName?:''}), montoItem (${montoItemBruto}) no calza con el valor unitario (${priceBruto}) multiplicado por cantidad (${quantity}) menos descuento (${descuentoMontoBruto}), redondeado")
@@ -277,13 +281,13 @@ detalleDteList.each { detalleDte ->
         totalNoFacturable += montoItem
 
     roundingAdjustmentItemAmount = 0 as BigDecimal
-    if (quantity * price != montoItem) {
-        roundingAdjustmentItemAmount = montoItem - descuentoMonto - (quantity * price).setScale(6, RoundingMode.HALF_UP) as BigDecimal
-        if (((quantity * price) + roundingAdjustmentItemAmount) != montoItem) {
+    if ((quantity?:0) * (price?:0) != montoItem) {
+        roundingAdjustmentItemAmount = montoItem - descuentoMonto - ((quantity?:0) * (price?:0)).setScale(6, RoundingMode.HALF_UP) as BigDecimal
+        if ((((quantity?:0) * (price?:0)) + roundingAdjustmentItemAmount) != montoItem) {
             roundingAdjustmentItemAmount = 0
             dteQuantity = quantity
             dteAmount = price
-            price = (price * quantity).setScale(0, RoundingMode.HALF_UP)
+            price = ((price?:0) * (quantity?:0)).setScale(0, RoundingMode.HALF_UP)
             quantity = 1
         }
     }
