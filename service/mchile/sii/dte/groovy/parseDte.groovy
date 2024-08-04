@@ -222,7 +222,7 @@ detalleDteList.each { detalleDte ->
         if (quantity == null || quantity == 0)
             quantity = 1 as BigDecimal
         price = (montoItem+descuentoMonto) / quantity
-    } else if ((((price?:0) * (quantity?:0)) - (descuentoMonto?:0)).setScale(0, RoundingMode.HALF_UP) != montoItem) {
+    } else if ((((price?:0.0) * (quantity?:0.0)) - (descuentoMonto?:0.0)).setScale(0, RoundingMode.HALF_UP) != montoItem) {
         if (montosBrutos) {
             if (montoItemBruto && priceBruto && ((priceBruto * quantity) - descuentoMontoBruto).setScale(0, RoundingMode.HALF_UP) != montoItemBruto)
                 discrepancyMessages.add("En detalle ${nroDetalles} (${itemName?:''}), montoItem (${montoItemBruto}) no calza con el valor unitario (${priceBruto}) multiplicado por cantidad (${quantity}) menos descuento (${descuentoMontoBruto}), redondeado")
@@ -230,7 +230,7 @@ detalleDteList.each { detalleDte ->
             discrepancyMessages.add("En detalle ${nroDetalles} (${itemName?:''}), montoItem (${montoItem}) no calza con el valor unitario (${price}) multiplicado por cantidad (${quantity}) menos descuento (${descuentoMonto}), redondeado")
         }
         dteAmount = price
-        price = (montoItem+descuentoMonto)/quantity
+        price = ((montoItem?:0.0)+(descuentoMonto?:0.0))/(quantity?:1.0)
     }
     try {
         indExe = detalleDte.IndExe?.text() as Integer
