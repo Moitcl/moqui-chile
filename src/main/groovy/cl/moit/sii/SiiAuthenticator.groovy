@@ -268,7 +268,7 @@ class SiiAuthenticator {
                         logger.info("responseText: ${responseText}")
                 } else {
                     failureEnumId = "SiiartPortalMpLoginFailure"
-                    throw new BaseException("Empresa ${rutOrganizacion} no aparece entre las opciones de selección en el SII")
+                    throw new BaseException("Rut ${rutOrganizacion} no aparece entre las opciones de selección en el SII")
                 }
             }
 
