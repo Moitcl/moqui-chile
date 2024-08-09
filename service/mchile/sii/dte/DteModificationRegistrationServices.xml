@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+
+    <service verb="process" noun="ModificationReferencesForDte">
+        <description>Revisa las referencias a un DTE por parte de DTEs que lo referencian para actualizar el campo modificationStatusId</description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="visitedList" type="List"/>
+        </in-parameters>
+        <actions>
+            <if condition="fiscalTaxDocumentId in visitedList"><return/></if>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte"/>
+            <if condition="!dte"><return/></if>
+            <set field="multiplier" from="-1"/>
+            <if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-30', 'Ftdt-32', 'Ftdt-33', 'Ftdt-34', 'Ftdt-35', 'Ftdt-38', 'Ftdt-39', 'Ftdt-41', 'Ftdt-45', 'Ftdt-46',
+                            'Ftdt-101', 'Ftdt-102', 'Ftdt-103', 'Ftdt-105', 'Ftdt-109', 'Ftdt-110']"><then>
+                <set field="modifyingTypes" from="['Ftdt-55', 'Ftdt-56', 'Ftdt-60', 'Ftdt-61']"/>
+            </then><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-101', 'Ftdt-110']">
+                <!-- Facturas de Exportación -->
+                <set field="modifyingTypes" from="['Ftdt-104', 'Ftdt-106', 'Ftdt-111', 'Ftdt-112']"/>
+            </else-if><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-60', 'Ftdt-61']">
+                <!-- Nota de Crédito -->
+                <set field="modifyingTypes" from="['Ftdt-55', 'Ftdt-56']"/>
+            </else-if><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-106', 'Ftdt-112']">
+                <!-- Nota de Crédito Exportación -->
+                <set field="modifyingTypes" from="['Ftdt-104', 'Ftdt-111']"/>
+            </else-if><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-55', 'Ftdt-56']">
+                <!-- Nota de Débito -->
+                <set field="modifyingTypes" from="['Ftdt-60', 'Ftdt-61']"/>
+            </else-if><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-104', 'Ftdt-111']">
+                <!-- Nota de Débito Exportación -->
+                <set field="modifyingTypes" from="['Ftdt-106', 'Ftdt-112']"/>
+            </else-if><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-40', 'Ftdt-43']">
+                <!-- Factura Liquidación -->
+                <set field="modifyingTypes" from="['Ftdt-40', 'Ftdt-43']"/>
+                <set field="multiplier" from="1"/>
+            </else-if><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-105', 'Ftdt-906']">
+                <return error="true" message="Unhandled type ${dte.fiscalTaxDocumentTypeEnumId}"/>
+            </else-if><else>
+                <return/>
+            </else></if>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAttributes" value-field="attributes"/>
+            <if condition="!attributes"><return/></if>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocumentAndReferencia" list="referenceList" distinct="true">
+                <econdition field-name="folio" from="dte.fiscalTaxDocumentNumber"/>
+                <econdition field-name="referenciaTypeEnumId" value="RefDteTypeFiscalTaxDocument"/>
+                <econdition field-name="issuerPartyIdValue" from="dte.issuerPartyIdValue"/>
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" from="modifyingTypes"/>
+                <select-field field-name="folio,referenciaTypeEnumId,fiscalTaxDocumentTypeEnumId,fiscalTaxDocumentId"/>
+            </entity-find>
+            <set field="totalModificationAmount" from="0 as BigDecimal"/>
+            <iterate list="referenceList" entry="reference">
+                <log message="Processing reference: ${reference.fiscalTaxDocumentId}"/>
+                <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAttributes" value-field="referenceAttributes" auto-field-map="reference"/>
+                <if condition="!reference"><continue/></if>
+                <if condition="referenceAttributes.modificationStatusId == null || referenceAttributes.modificationStatusId == 'FtdmsUnmodified'"><then>
+                    <set field="totalModificationAmount" from="totalModificationAmount + referenceAttributes.amount"/>
+                    <!-- ToDo: modify associated invoice, or add a Return as needed -->
+                </then><else-if condition="referenceAttributes.modificationStatusId == 'FtdmsModified'">
+                    <set field="totalModificationAmount" from="totalModificationAmount + referenceAttributes.amount - referenceAttributes.modificationAmount"/>
+                </else-if><else-if condition="referenceAttributes.modificationStatusId == 'FtdmsRevoked'">
+                    <!-- Nothing to do -->
+                </else-if><else>
+                    <return error="true" message="Unknown modificationStatusId ${referenceAttributes.modificationStatusId}"/>
+                </else></if>
+            </iterate>
+            <set field="aggregatedAmount" from="attributes.amount + (totalModificationAmount * multiplier)"/>
+            <if condition="referenceList.size() == 0"><then>
+                <set field="newModificationStatusId" value="FtdmsUnmodified"/>
+                <set field="newModificationAmount" from="null"/>
+                <log level="warn" message="${dte.documentType.description} ${dte.fiscalTaxDocumentNumber} was Unmodified"/>
+            </then><else-if condition="aggregatedAmount &lt;= 0">
+                <if condition="aggregatedAmount &lt; 0">
+                    <log level="error" message="Monto modificado es inferior a 0 al aplicar modificaciones de DTEs de terceros"/>
+                </if>
+                <set field="newModificationStatusId" value="FtdmsRevoked"/>
+                <set field="newModificationAmount" from="totalModificationAmount * multiplier"/>
+                <log level="warn" message="${dte.documentType.description} ${dte.fiscalTaxDocumentNumber} was revoked, amount: ${newModificationAmount}"/>
+            </else-if><else>
+                <set field="newModificationStatusId" value="FtdmsModified"/>
+                <set field="newModificationAmount" from="totalModificationAmount * multiplier"/>
+                <log level="warn" message="${dte.documentType.description} ${dte.fiscalTaxDocumentNumber} was modified, amount: ${newModificationAmount}"/>
+            </else></if>
+            <if condition="newModificationStatusId != attributes.modificationStatusId || newModificationAmount != attributes.modificationAmount">
+                <set field="attributes.modificationStatusId" from="newModificationStatusId"/>
+                <set field="attributes.modificationAmount" from="newModificationAmount"/>
+                <entity-update value-field="attributes"/>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="check" noun="DteModificationReferences">
+        <description>Revisa las referencias de un documento nuevo que modifica o anula otros DTEs que referencie</description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="visitedList" type="List"/>
+        </in-parameters>
+        <actions>
+            <if condition="!visitedList"><then>
+                <set field="visitedList" from="[]"/>
+            </then></if>
+            <script>visitedList.add(fiscalTaxDocumentId)</script>
+            <set field="canModifyDteTypes" from="['Ftdt-40', 'Ftdt-55', 'Ftdt-56', 'Ftdt-60', 'Ftdt-61', 'Ftdt-104', 'Ftdt-106', 'Ftdt-111', 'Ftdt-112', 'Ftdt-103']"/>
+            <entity-find entity-name="moqui.basic.Enumeration" list="dteTypeList">
+                <econdition field-name="enumTypeId" value="FiscalTaxDocumentType"/>
+                <econdition field-name="parentEnumId" operator="in" value="Ftdt-DT,Ftdt-DTE"/>
+            </entity-find>
+            <set field="dteEnumIdList" from="dteTypeList.enumId"/>
+            <!-- Check whether this DTE has been modified by others -->
+            <service-call name="mchile.sii.dte.DteModificationRegistrationServices.process#ModificationReferencesForDte" in-map="context"/>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte"/>
+            <if condition="dte.fiscalTaxDocumentTypeEnumId in canModifyDteTypes"><then>
+                <!-- This document may modify other DTEs -->
+                <entity-find entity-name="mchile.dte.ReferenciaDte" list="referenceList">
+                    <econdition field-name="fiscalTaxDocumentId"/>
+                    <econdition field-name="referenciaTypeEnumId" value="RefDteTypeFiscalTaxDocument"/>
+                    <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" from="dteEnumIdList"/>
+                </entity-find>
+                <iterate list="referenceList" entry="reference">
+                    <set field="folio" from="ec.l10n.parseNumber(reference.folio, '#')"/>
+                    <if condition="folio == null"><log level="warn" message="Unexpected folio: ${reference.folio}"/></if>
+                    <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="referencedDte">
+                        <field-map field-name="fiscalTaxDocumentNumber" from="folio as Integer"/>
+                        <field-map field-name="issuerPartyIdValue" from="dte.issuerPartyIdValue"/>
+                        <field-map field-name="fiscalTaxDocumentTypeEnumId" from="reference.fiscalTaxDocumentTypeEnumId"/>
+                    </entity-find-one>
+                    <if condition="referencedDte">
+                        <service-call name="mchile.sii.dte.DteModificationRegistrationServices.process#ModificationReferencesForDte" in-map="[visitedList:visitedList,
+                                        fiscalTaxDocumentId:referencedDte.fiscalTaxDocumentId]"/>
+                    </if>
+                </iterate>
+            </then></if>
+        </actions>
+    </service>
+
+</services>

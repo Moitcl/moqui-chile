@@ -1138,4 +1138,6 @@ if (draft) {
     }
 }
 
+ec.service.sync().name("mchile.sii.dte.DteModificationRegistrationServices.check#DteModificationReferences").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).call()
+
 return

@@ -325,6 +325,8 @@ dteMap.referenciaList.each { referencia ->
                              rutEmisorFolio:rutEmisorFolio, tipoDocumento:referencia.tipoDocumento, nroLinea:referencia.nroLinRef]).call()
 }
 
+ec.service.sync().name("mchile.sii.dte.DteModificationRegistrationServices.check#DteModificationReferences").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).call()
+
 if (envioId) {
     ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
     envio = ec.entity.find("mchile.dte.DteEnvio").condition("envioId", envioId).forUpdate(true).one()
