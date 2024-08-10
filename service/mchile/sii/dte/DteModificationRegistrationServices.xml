@@ -11,29 +11,27 @@
             <if condition="fiscalTaxDocumentId in visitedList"><return/></if>
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte"/>
             <if condition="!dte"><return/></if>
-            <set field="multiplier" from="-1"/>
             <if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-30', 'Ftdt-32', 'Ftdt-33', 'Ftdt-34', 'Ftdt-35', 'Ftdt-38', 'Ftdt-39', 'Ftdt-41', 'Ftdt-45', 'Ftdt-46',
                             'Ftdt-101', 'Ftdt-102', 'Ftdt-103', 'Ftdt-105', 'Ftdt-109', 'Ftdt-110']"><then>
-                <set field="modifyingTypes" from="['Ftdt-55', 'Ftdt-56', 'Ftdt-60', 'Ftdt-61']"/>
+                <set field="modifyingTypes" from="['Ftdt-55':1, 'Ftdt-56':1, 'Ftdt-60':-1, 'Ftdt-61':-1]"/>
             </then><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-101', 'Ftdt-110']">
                 <!-- Facturas de Exportación -->
                 <set field="modifyingTypes" from="['Ftdt-104', 'Ftdt-106', 'Ftdt-111', 'Ftdt-112']"/>
-            </else-if><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-60', 'Ftdt-61']">
+            </else-if><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-60':-1, 'Ftdt-61':-1]">
                 <!-- Nota de Crédito -->
-                <set field="modifyingTypes" from="['Ftdt-55', 'Ftdt-56']"/>
+                <set field="modifyingTypes" from="['Ftdt-55':-1, 'Ftdt-56':-1]"/>
             </else-if><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-106', 'Ftdt-112']">
                 <!-- Nota de Crédito Exportación -->
-                <set field="modifyingTypes" from="['Ftdt-104', 'Ftdt-111']"/>
+                <set field="modifyingTypes" from="['Ftdt-104':-1, 'Ftdt-111':-1]"/>
             </else-if><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-55', 'Ftdt-56']">
                 <!-- Nota de Débito -->
-                <set field="modifyingTypes" from="['Ftdt-60', 'Ftdt-61']"/>
+                <set field="modifyingTypes" from="['Ftdt-60':-1, 'Ftdt-61':-1]"/>
             </else-if><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-104', 'Ftdt-111']">
                 <!-- Nota de Débito Exportación -->
-                <set field="modifyingTypes" from="['Ftdt-106', 'Ftdt-112']"/>
+                <set field="modifyingTypes" from="['Ftdt-106':-1, 'Ftdt-112':-1]"/>
             </else-if><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-40', 'Ftdt-43']">
                 <!-- Factura Liquidación -->
-                <set field="modifyingTypes" from="['Ftdt-40', 'Ftdt-43']"/>
-                <set field="multiplier" from="1"/>
+                <set field="modifyingTypes" from="['Ftdt-40':1, 'Ftdt-43':1]"/>
             </else-if><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-105', 'Ftdt-906']">
                 <return error="true" message="Unhandled type ${dte.fiscalTaxDocumentTypeEnumId}"/>
             </else-if><else>
@@ -45,26 +43,26 @@
                 <econdition field-name="folio" from="dte.fiscalTaxDocumentNumber"/>
                 <econdition field-name="referenciaTypeEnumId" value="RefDteTypeFiscalTaxDocument"/>
                 <econdition field-name="issuerPartyIdValue" from="dte.issuerPartyIdValue"/>
-                <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" from="modifyingTypes"/>
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" from="modifyingTypes.keySet()"/>
                 <select-field field-name="folio,referenciaTypeEnumId,fiscalTaxDocumentTypeEnumId,fiscalTaxDocumentId"/>
             </entity-find>
             <set field="totalModificationAmount" from="0 as BigDecimal"/>
             <iterate list="referenceList" entry="reference">
-                <log message="Processing reference: ${reference.fiscalTaxDocumentId}"/>
                 <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAttributes" value-field="referenceAttributes" auto-field-map="reference"/>
                 <if condition="!reference"><continue/></if>
+                <set field="multiplier" from="modifyingTypes[reference.fiscalTaxDocumentTypeEnumId]"/>
                 <if condition="referenceAttributes.modificationStatusId == null || referenceAttributes.modificationStatusId == 'FtdmsUnmodified'"><then>
-                    <set field="totalModificationAmount" from="totalModificationAmount + referenceAttributes.amount"/>
+                    <set field="totalModificationAmount" from="totalModificationAmount + (referenceAttributes.amount*multiplier)"/>
                     <!-- ToDo: modify associated invoice, or add a Return as needed -->
                 </then><else-if condition="referenceAttributes.modificationStatusId == 'FtdmsModified'">
-                    <set field="totalModificationAmount" from="totalModificationAmount + referenceAttributes.amount - referenceAttributes.modificationAmount"/>
+                    <set field="totalModificationAmount" from="totalModificationAmount + ((referenceAttributes.amount + referenceAttributes.modificationAmount)*multiplier)"/>
                 </else-if><else-if condition="referenceAttributes.modificationStatusId == 'FtdmsRevoked'">
                     <!-- Nothing to do -->
                 </else-if><else>
                     <return error="true" message="Unknown modificationStatusId ${referenceAttributes.modificationStatusId}"/>
                 </else></if>
             </iterate>
-            <set field="aggregatedAmount" from="attributes.amount + (totalModificationAmount * multiplier)"/>
+            <set field="aggregatedAmount" from="attributes.amount + totalModificationAmount"/>
             <if condition="referenceList.size() == 0"><then>
                 <set field="newModificationStatusId" value="FtdmsUnmodified"/>
                 <set field="newModificationAmount" from="null"/>
@@ -74,11 +72,11 @@
                     <log level="error" message="Monto modificado es inferior a 0 al aplicar modificaciones de DTEs de terceros"/>
                 </if>
                 <set field="newModificationStatusId" value="FtdmsRevoked"/>
-                <set field="newModificationAmount" from="totalModificationAmount * multiplier"/>
+                <set field="newModificationAmount" from="totalModificationAmount"/>
                 <log level="warn" message="${dte.documentType.description} ${dte.fiscalTaxDocumentNumber} was revoked, amount: ${newModificationAmount}"/>
             </else-if><else>
                 <set field="newModificationStatusId" value="FtdmsModified"/>
-                <set field="newModificationAmount" from="totalModificationAmount * multiplier"/>
+                <set field="newModificationAmount" from="totalModificationAmount"/>
                 <log level="warn" message="${dte.documentType.description} ${dte.fiscalTaxDocumentNumber} was modified, amount: ${newModificationAmount}"/>
             </else></if>
             <if condition="newModificationStatusId != attributes.modificationStatusId || newModificationAmount != attributes.modificationAmount">
