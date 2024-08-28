@@ -108,18 +108,20 @@ class MoquiDTEUtils {
                 totalIva = (totalIva?:0) + detailEntry.amount * (detailEntry.quantity?:1)
                 return
             }
-            if (!nombreItem) {
+            if (nombreItem == null || nombreItem.trim() == '') {
                 EntityValue productEv = ec.entity.find("mantle.product.Product").condition("productId", detailEntry.productId).one()
                 nombreItem = productEv ? productEv.productName : ''
             }
-            if (!nombreItem) {
+            if (nombreItem == null || nombreItem.trim() == '') {
                 // Put detailed description as name
                 nombreItem = detailEntry.detailedDescription
                 // Do not duplicate detailedDescription if it fits completely within name
                 if (detailEntry.detailedDescription != null && detailEntry.detailedDescription.length() <= 80)
                     detailEntry.detailedDescription = ""
             }
-            if (!nombreItem) {
+            if (nombreItem == null || nombreItem.trim() == '') {
+                if (fiscalTaxDocumentTypeEnumId in ['Ftdt-33', 'Ftdt-34', 'Ftdt-56', 'Ftdt-61', 'Ftdt-111', 'Ftdt-112'])
+                    throw new BaseArtifactException("Item ${i} no tiene nombre")
                 nombreItem = " "
             }
             if (nombreItem.length() > 80) {
