@@ -457,9 +457,11 @@ xmlBuilder.Encabezado() {
         RznSoc(razonSocialOrganizacion)
         GiroEmis(giroEmisor)
         telefonosEmisor.each { telefono ->
-            Telefono(telefono)
+            if (telefono)
+                Telefono(telefono)
         }
-        CorreoEmisor(mailContacto)
+        if (mailContacto)
+            CorreoEmisor(mailContacto)
         codigosActividadEconomica.split(',').each { codigoActividad ->
             Acteco(codigoActividad)
         }
@@ -517,7 +519,7 @@ xmlBuilder.Encabezado() {
             DirRecep(direccionReceptor)
         if (comunaReceptor)
             CmnaRecep(comunaReceptor)
-        if (ciudadRecepotr)
+        if (ciudadReceptor)
             CiudadRecep(ciudadReceptor)
         if (direccionPostalReceptor)
             DirPostal(direccionPostalReceptor)
