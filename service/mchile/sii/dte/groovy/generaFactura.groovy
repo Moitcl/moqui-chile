@@ -1138,8 +1138,7 @@ if (draft) {
                              folio:referencia.folio, fecha: referencia.fecha, codigoReferenciaEnumId:referencia.codigoReferenciaEnumId, razonReferencia:referencia.razonReferencia,
                              rutEmisorFolio:rutEmisorFolio, nroLinea:nroLinea, tipoDocumento:tipoEnumEv.enumCode]).call()
     }
+    ec.service.sync().name("mchile.sii.dte.DteModificationRegistrationServices.check#DteModificationReferences").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).call()
 }
-
-ec.service.sync().name("mchile.sii.dte.DteModificationRegistrationServices.check#DteModificationReferences").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).call()
 
 return
