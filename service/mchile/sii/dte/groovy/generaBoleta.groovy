@@ -2,10 +2,9 @@ import org.w3c.dom.Document
 
 import org.moqui.entity.EntityValue
 import org.moqui.context.ExecutionContext
-
 import cl.moit.dte.MoquiDTEUtils
-
 import groovy.xml.MarkupBuilder
+import java.math.RoundingMode
 
 ExecutionContext ec = context.ec
 
@@ -116,7 +115,7 @@ if (tipoDte == 39) {
     detalleList = detMap.detalleList
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
-    totalIva = Math.round(detMap.totalIva)
+    totalIva = detMap.totalIva
     if (numberAfectos > 0) {
         ec.message.addMessage("Boleta Electrónica Exenta tiene ítemes afectos, cambiando tipo a Boleta Electrónica")
         tipoDte = 39
@@ -193,9 +192,17 @@ if (tipoDespachoEnumId)
 // Timbre
 String detalleIt1 = detalleList.get(0).nombreItem
 
+totalInvoice = ec.l10n.roundCurrency(totalInvoice, currencyUomId) as Integer
+if (totalExento != null)
+    totalExento = ec.l10n.roundCurrency(totalExento, currencyUomId) as Integer
+if (totalNeto != null)
+    totalNeto = ec.l10n.roundCurrency(totalNeto, currencyUomId) as Integer
+if (totalIva != null)
+    totalIva = ec.l10n.roundCurrency(totalIva, currencyUomId) as Integer
+
 if (detalleIt1.length() > 40)
     detalleIt1 = detalleIt1.substring(0, 40)
-datosTed = "<DD><RE>${rutOrganizacion}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptorTimbre}</RSR><MNT>${Math.round(totalInvoice)}</MNT><IT1>${detalleIt1}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
+datosTed = "<DD><RE>${rutOrganizacion}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptorTimbre}</RSR><MNT>${totalInvoice}</MNT><IT1>${detalleIt1}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
 
 String schemaLocation = ''
 xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
@@ -251,12 +258,12 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
             //Transporte{}
             Totales {
                 if (totalNeto)
-                    MntNeto(Math.round(totalNeto))
+                    MntNeto(totalNeto)
                 if (totalExento != null && totalExento > 0)
-                    MntExe(Math.round(totalExento))
+                    MntExe(totalExento)
                 //TasaIVA(ec.l10n.format(vatTaxRate*100, "##"))
                 if (totalIva)
-                    IVA(Math.round(totalIva))
+                    IVA(totalIva)
                 //IVAProp()
                 //IVATerc()
                 //ImptoReten{}
@@ -264,7 +271,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 //CredEC()
                 //GrntDep()
                 //Comisiones{}
-                MntTotal(Math.round(totalInvoice))
+                MntTotal(totalInvoice)
                 //if (montoNoFacturable)
                 //    MontoNF(montoNoFacturable)
                 //MontoPeriodo()
@@ -294,11 +301,10 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 //FchVencim()
                 if (detalle.uom)
                     UnmdItem(detalle.uom)
-                //PrcItem(detalle.priceItem)
-                if(detalle.indicadorExento && detalle.priceItem != null && detalle.priceItem != 0 && detalle.priceItem != "0")
-                    PrcItem(Math.round(detalle.priceItem))
+                if (detalle.indicadorExento && detalle.priceItem != null && detalle.priceItem != 0 && detalle.priceItem != "0")
+                    PrcItem((detalle.priceItem as BigDecimal).setScale(6, RoundingMode.HALF_UP))
                 if(!detalle.indicadorExento && detalle.priceItem != null && detalle.priceItem != 0 && detalle.priceItem != "0")
-                    PrcItem(Math.round(detalle.priceItem + Math.round(detalle.priceItem * vatTaxRate)))
+                    PrcItem((detalle.priceItem + ((detalle.priceItem * vatTaxRate) as BigDecimal).setScale(0, RoundingMode.HALF_UP) as BigDecimal).setScale(6, RoundingMode.HALF_UP))
                 //OtrMnda{}
                 //if (detalle.porcentajeDescuento)
                    // DescuentoPct(detalle.porcentajeDescuento)
@@ -306,9 +312,9 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 //    DescuentoMonto(detalle.montoDescuento)
 
                 if(detalle.indicadorExento)
-                    MontoItem(Math.round(detalle.montoItem))
+                    MontoItem((detalle.montoItem as BigDecimal).setScale(0, RoundingMode.HALF_UP))
                 if(!detalle.indicadorExento)
-                    MontoItem(Math.round(detalle.montoItem + Math.round(detalle.montoItem * vatTaxRate)))
+                    MontoItem(((detalle.montoItem + (detalle.montoItem + (detalle.montoItem * vatTaxRate as BigDecimal).setScale(0, RoundingMode.HALF_UP))) as BigDecimal).setScale(0, RoundingMode.HALF_UP))
             }
         }
         //SubTotInfo{}

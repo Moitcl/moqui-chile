@@ -323,21 +323,18 @@ if (totalNeto != null || descuentoGlobalAfecto != null || recargoGlobalAfecto !=
     if (totalNetoClp != null) {
         totalNetoClp = totalNetoClp - (descuentoGlobalAfectoClp?:0.0) + (recargoGlobalExentoClp?:0.0)
         montoIVARecuperable = totalIVAClp
-        totalInvoice = (totalNetoClp?:0) + totalIVAClp + (totalExentoClp?:0) - (descuentoGlobalExentoClp?:0.0) + (recargoGlobalExentoClp?:0.0)
+        totalInvoice = (totalNetoClp?:0.0) + totalIVAClp + (totalExentoClp?:0.0) - (descuentoGlobalExentoClp?:0.0) + (recargoGlobalExentoClp?:0.0)
     } else {
         totalNeto = totalNeto - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
         montoIVARecuperable = totalIva
-        totalInvoice = (totalNeto?:0) + (totalIva?:0) + (totalExento?:0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
+        totalInvoice = (totalNeto?:0.0) + (totalIva?:0.0) + (totalExento?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
     }
 } else {
     if (totalExentoClp != null)
-        totalInvoice = (totalExentoClp?:0) - (descuentoGlobalExentoClp?:0.0) + (recargoGlobalExentoClp?:0.0)
+        totalInvoice = (totalExentoClp?:0.0) - (descuentoGlobalExentoClp?:0.0) + (recargoGlobalExentoClp?:0.0)
     else
-        totalInvoice = (totalExento?:0) - (descuentoGlobalExento?:0) + (recargoGlobalExento?:0)
+        totalInvoice = (totalExento?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
 }
-
-if (Math.round(totalIva?:0) != Math.round((totalNeto?:0) * (vatTaxRate?:0)))
-    ec.message.addError("Error en Iva, recibido de detalles: ${totalIva}, calculado: ${(totalNeto?:0) * (vatTaxRate?:0)}")
 
 // Chequeo de valores entre Invoice y calculados
 if (invoice) {
@@ -349,6 +346,13 @@ if (invoice) {
 totalInvoice = ec.l10n.roundCurrency(totalInvoice, currencyUomId) as Integer
 if (totalExento != null)
     totalExento = ec.l10n.roundCurrency(totalExento, currencyUomId) as Integer
+if (totalNeto != null)
+    totalNeto = ec.l10n.roundCurrency(totalNeto, currencyUomId) as Integer
+if (totalIva != null)
+    totalIva = ec.l10n.roundCurrency(totalIva, currencyUomId) as Integer
+
+if (Math.round(totalIva?:0.0) != Math.round((totalNeto?:0.0) * (vatTaxRate?:0.0)))
+    ec.message.addError("Error en Iva, recibido de detalles: ${totalIva}, calculado: ${(totalNeto?:0.0) * (vatTaxRate?:0.0)}")
 
 idDocumento = "Dte-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
 String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
@@ -375,7 +379,7 @@ xmlBuilder.DD() {
     FE(ec.l10n.format(fechaEmision, "yyyy-MM-dd"))
     RR(rutReceptor)
     RSR(razonSocialReceptorTimbre)
-    MNT(Math.round(totalInvoice))
+    MNT(totalInvoice)
     IT1(detalleIt1)
     xmlBuilder.getMkp().yieldUnescaped(folioResult.cafFragment.replaceAll('>\\s*<', '><').trim())
     TSTED(ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss"))
@@ -625,7 +629,7 @@ xmlBuilder.Encabezado() {
         if (tipoMoneda)
             TpoMoneda(tipoMoneda)
         if (totalNeto != null)
-            MntNeto(Math.round(totalNeto?:0))
+            MntNeto(totalNeto)
         if (totalExento != null)
             MntExe(totalExento)
         if (montoBase)
@@ -663,7 +667,7 @@ xmlBuilder.Encabezado() {
                 if (totalesComisiones.valorIva)
                     ValComIVA(totalesComisiones.valorIva)
             }
-        MntTotal(Math.round(totalInvoice))
+        MntTotal(totalInvoice)
         if (montoNoFacturable)
             MontoNF(montoNoFacturable)
         if (montoPeriodo)
@@ -795,7 +799,7 @@ if (detalleList) {
                 detalle.codigoImpuestoAdicional.each { codigoImpuestoAdicional ->
                     CodImpAdic(codigoImpuestoAdicional)
                 }
-                MontoItem(detalle.montoItem as Integer)
+                MontoItem((detalle.montoItem as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP))
             }
         }
     }
