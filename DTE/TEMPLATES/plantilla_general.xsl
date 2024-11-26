@@ -29,6 +29,7 @@
     <xsl:param name="vendorNameColor" select="'black'"/>
     <xsl:param name="rutEnviador" select="''"/>
     <xsl:param name="draft" select="'N'"/>
+    <xsl:param name="unnamedCustomer" select="'N'"/>
 
     <xsl:output method="xml" version="1.0" omit-xml-declaration="no" indent="yes" encoding="UTF-8"/>
 
@@ -445,7 +446,7 @@
                             <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=39) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=39) or (/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=41) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=41)">
                                 <!-- Boleta -->
                                 <xsl:choose>
-                                    <xsl:when test="(contains($rutReceptor, '66666666-6'))">
+                                    <xsl:when test="$unnamedCustomer = 'Y'">
                                         <!-- Sin identificación de Receptor -->
                                         <fo:table-row>
                                             <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Fecha</fo:inline></fo:block></fo:table-cell>
