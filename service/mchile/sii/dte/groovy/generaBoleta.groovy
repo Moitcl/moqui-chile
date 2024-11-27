@@ -415,7 +415,7 @@ if (!draft) {
 
 ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
 ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteContentServices.generate#Pdf").parameters(
-        [xmlLocation:xmlContentLocation, templatePartyId:issuerPartyId, invoiceMessage:invoiceMessage, type:'boleta', draft:draft]).call())
+        [xmlLocation:xmlContentLocation, templatePartyId:issuerPartyId, invoiceMessage:invoiceMessage, type:'boleta', draft:draft, unnamedCustomer:(receiverPartyId == 'ANONCUST')]).call())
 
 if (draft) {
     previewPdf = pdfBytes
