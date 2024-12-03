@@ -2,6 +2,7 @@ import org.w3c.dom.Document
 
 import org.moqui.entity.EntityValue
 import org.moqui.context.ExecutionContext
+import org.moqui.entity.EntityCondition
 
 import cl.moit.dte.MoquiDTEUtils
 
@@ -47,11 +48,6 @@ tipoDteMap = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiC
 tipoDte = tipoDteMap.siiCode
 dteTypeDescription = tipoDteMap.dteTypeDescription
 
-formaPagoEv = ec.entity.find("moqui.basic.Enumeration").condition([enumTypeId:"FiscalTaxDocumentFormaPago"]).condition([enumCode:(formaPago as String)]).one()
-formaPagoEnumId = formaPagoEv?.enumId
-if (formaPagoEnumId == null)
-    formaPagoEnumId = 'Ftdfp-Credito'
-
 EntityValue invoice = null
 if (invoiceId) {
     referenciaTypeEnumId = "RefDteTypeFactura"
@@ -92,14 +88,24 @@ if (invoiceId) {
 }
 
 // Formas de pago
-if (invoice != null && invoice.invoiceTotal == 0)
+if (invoice != null && invoice.invoiceTotal == 0) {
     formaPago = 3 // Sin costo
-else if (invoice != null && invoice.unpaidTotal == 0) {
+    formaPagoEnumId = 'Ftdfp-Gratuita'
+} else if (invoice != null && invoice.unpaidTotal == 0) {
     formaPago = 1 // Contado (ya pagado)
-    ec.message.addError("fechaCancelacion needs to be determined (unimplemented)")
-    //fechaCancelacion
-} else
+    formaPagoEnumId = 'Ftdfp-Contado'
+    EntityCondition invoiceCondition = ec.entity.conditionFactory.makeCondition([ec.entity.conditionFactory.makeCondition("invoiceId", EntityCondition.EQUALS, invoiceId),
+                        ec.entity.conditionFactory.makeCondition("toInvoiceId", EntityCondition.EQUALS, invoiceId)], EntityCondition.OR)
+    EntityValue lastPaymentApplication = ec.entity.find("mantle.account.payment.PaymentApplication").condition(invoiceCondition).orderBy("-appliedDate").list().first
+    fechaCancelacion = lastPaymentApplication?.appliedDate
+    if (lastPaymentApplication?.appliedDate == null) {
+        ec.message.addError("Invoice pagada, no se encuentra fecha de cancelación")
+        return
+    }
+} else {
     formaPago = 2 // Crédito (usar GlosaPagos)
+    formaPagoEnumId = 'Ftdfp-Credito'
+}
 
 currencyUomId = 'CLP'
 ec.logger.info("Creando DTE tipo ${tipoDte} (${dteTypeDescription})")
