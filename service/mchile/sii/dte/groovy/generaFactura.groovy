@@ -110,7 +110,7 @@ if (invoice != null && invoice.invoiceTotal == 0) {
 currencyUomId = 'CLP'
 ec.logger.info("Creando DTE tipo ${tipoDte} (${dteTypeDescription})")
 tasaIva = ec.l10n.format(vatTaxRate*100, "##")
-if (tipoDte in [33, 46]) {
+if (tipoDte in ['33', '46']) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
@@ -123,7 +123,7 @@ if (tipoDte in [33, 46]) {
     numberExentos = detMap.numberExentos
     if (numberAfectos == 0 && numberExentos > 0) {
         ec.message.addMessage("Factura Electrónica solamente tiene ítemes exentos, cambiando tipo a Factura Electrónica Exenta")
-        tipoDte = 34
+        tipoDte = '34'
         fiscalTaxDocumentTypeEnumId = 'Ftdt-34'
         tasaIva = null
     }
@@ -131,7 +131,7 @@ if (tipoDte in [33, 46]) {
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
     totalDescuentos = detMap.totalDescuentos
-} else if (tipoDte in [110, 111, 112]) {
+} else if (tipoDte in ['110', '111', '112']) {
     // DTE Exportación: Factura de Exportación Electrónica, Nota de Débito de Exportación Electrónica, Nota de Crédito de Exportación Electrónica
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
@@ -162,7 +162,7 @@ if (tipoDte in [33, 46]) {
     }
     else
         tipoMoneda = uomToSiiCurrencyMap['CLP']
-} else if (tipoDte == 34) {
+} else if (tipoDte == '34') {
     // Factura Exenta Electrónica
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
@@ -173,7 +173,7 @@ if (tipoDte in [33, 46]) {
     numberExentos = detMap.numberExentos
     if (numberAfectos > 0) {
         ec.message.addMessage("Factura Electrónica Exenta tiene ítemes afectos, cambiando tipo a Factura Electrónica")
-        tipoDte = 33
+        tipoDte = '33'
         fiscalTaxDocumentTypeEnumId = 'Ftdt-33'
     }
     originalReferenciaList = referenciaList
@@ -181,7 +181,7 @@ if (tipoDte in [33, 46]) {
     referenciaList = refMap.referenciaList
     totalDescuentos = detMap.totalDescuentos
     tasaIva = null
-} else if (tipoDte == 61) {
+} else if (tipoDte == '61') {
     // Nota de Crédito Electrónica
     originalReferenciaList = referenciaList
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
@@ -212,7 +212,7 @@ if (tipoDte in [33, 46]) {
         totalExento = 0
     }
     totalDescuentos = detMap.totalDescuentos
-} else if (tipoDte == 56) {
+} else if (tipoDte == '56') {
     // Nota de Débito Electrónica
     originalReferenciaList = referenciaList
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
@@ -238,7 +238,7 @@ if (tipoDte in [33, 46]) {
         totalExento = 0
     }
     totalDescuentos = detMap.totalDescuentos
-} else if (tipoDte == 52) {
+} else if (tipoDte == '52') {
     // Guía de Despacho Electrónica
     if (indTrasladoEnumId == null)
         ec.message.addError("No indTrasladoEnumId for tipoDte 52 (Guía de Despacho)")
@@ -409,7 +409,7 @@ xmlBuilder.Encabezado() {
             IndNoRebaja(indicacionNoRebaja)
         if (tipoDespacho)
             TipoDespacho(tipoDespacho)
-        if (tipoDte == 52)
+        if (tipoDte == '52')
             IndTraslado(indicadorTraslado)
         if (tipoImpresion)
             TpoImpresion(tipoImpresion)
@@ -938,18 +938,18 @@ if (rutReceptor == '61603000-0') {
 } else
     dteAttributesMap = [xmlns: 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation]
 
-if (tipoDte in [33, 34, 46, 52, 56, 61]) {
+if (tipoDte in ['33', '34', '46', '52', '56', '61']) {
     descripcionTipo = "${tipoDte}"
     signingTag = "Documento"
     notAllowedFieldList = ['codigoAdicionalSucursal', 'tipoMoneda', 'receptorExtranjero.idAdicional']
     requiredFieldList = []
-    if (tipoDte == 52) {
+    if (tipoDte == '52') {
         descripcionTipo = "Guía de Despacho"
         requiredFieldList = ['indicadorTraslado']
     }
     notAllowedFieldListDetalle = ['tipoDocumentoLiquidacion']
     notAllowedFieldListDetalleSubcantidad = ['tipoCodigo']
-} else if (tipoDte in [110, 111, 112]) {
+} else if (tipoDte in ['110', '111', '112']) {
     descripcionTipo = "Facturas de Exportación"
     notAllowedFieldList = ['tipoDespacho', 'tipoImpresion', 'indicadorMontosBrutos', 'tipoTransaccionComprador', 'tipoTransaccionVendedor', 'tipoFacturaEspecial', 'rutMandante',
                            'rutSolicitante', 'totalNeto', 'montoBase', 'montoMargenComercializacion', 'tasaIva', 'totalIva', 'ivaPropio', 'ivaTerceros', 'impuestoRetenido',
@@ -959,7 +959,7 @@ if (tipoDte in [33, 34, 46, 52, 56, 61]) {
     notAllowedFieldListDetalle = ['retenedor', 'codigoImpuestoAdicional', 'tipoDocumentoLiquidacion']
     requiredFieldList = ['tipoMoneda']
     signingTag = "Exportaciones"
-} else if (tipoDte in [43]) {
+} else if (tipoDte in ['43']) {
     notAllowedFieldList = ['indicacionNoRebaja', 'tipoDespacho', 'tipoImpresion', 'condicionesComercialesExportacionMap', 'tipoFacturaEspecial', 'guiaExportacionMap', 'codigoAdicionalSucursal',
                            'identificadorAdicionalEmisor', 'rutMandante', 'rutSolicitante', 'transporteMap', 'aduanaMap', 'tipoMoneda', 'montoBase', 'montoMargenComercializacion',
                            'ivaNoRetenido', 'creditoEmpresasConstructoras', 'garantiaEnvases', 'montoNoFacturable', 'totalesOtraMonedaMap', 'receptorExtranjero.tipoDocumento']
@@ -1001,7 +1001,7 @@ if (ec.message.hasError())
     return
 
 xmlBuilder.DTE(dteAttributesMap) {
-    if (tipoDte in [33, 34, 46, 52, 56, 61])
+    if (tipoDte in ['33', '34', '46', '52', '56', '61'])
         Documento(ID: idDocumento) {
             xmlBuilder.getMkp().yieldUnescaped(xmlEncabezado)
             xmlBuilder.getMkp().yieldUnescaped(xmlDetalles)
@@ -1015,7 +1015,7 @@ xmlBuilder.DTE(dteAttributesMap) {
             }
             TmstFirma(ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss"))
         }
-    else if (tipoDte in [110, 111, 112])
+    else if (tipoDte in ['110', '111', '112'])
         Exportaciones(ID: idDocumento) {
             xmlBuilder.getMkp().yieldUnescaped(xmlEncabezado)
             xmlBuilder.getMkp().yieldUnescaped(xmlDetalles)
@@ -1028,7 +1028,7 @@ xmlBuilder.DTE(dteAttributesMap) {
             }
             TmstFirma(ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss"))
         }
-    else if (tipoDte == 43)
+    else if (tipoDte == '43')
         Liquidacion(ID: idDocumento) {
             xmlBuilder.getMkp().yieldUnescaped(xmlEncabezado)
             xmlBuilder.getMkp().yieldUnescaped(xmlDetalles)
@@ -1089,7 +1089,7 @@ if (!draft) {
     dteEv.formaPagoEnumId = formaPagoEnumId
     dteEv.update()
 
-    if (tipoDte == 52) {
+    if (tipoDte == '52') {
         ec.service.sync().name("store#mchile.dte.GuiaDespacho").parameters([fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, indTrasladoEnumId:indTrasladoEnumId]).call()
     }
 

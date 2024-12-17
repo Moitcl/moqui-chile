@@ -93,7 +93,7 @@ else if (invoice != null && invoice.unpaidTotal == 0) {
 } else
     formaPago = 2 // Crédito (usar GlosaPagos)
 
-if (tipoDte == 39) {
+if (tipoDte == '39') {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     //throw new BaseArtifactException("Lista:"+detMap.totalExento)
@@ -106,12 +106,12 @@ if (tipoDte == 39) {
 
     if (numberAfectos == 0 && numberExentos > 0) {
         ec.message.addMessage("Boleta Electrónica solamente tiene ítemes exentos, cambiando tipo a Boleta Electrónica Exenta")
-        tipoDte = 41
+        tipoDte = '41'
         fiscalTaxDocumentTypeEnumId = 'Ftdt-41'
     }
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
-} else if (tipoDte == 41) {
+} else if (tipoDte == '41') {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     numberAfectos = detMap.numberAfectos
@@ -119,7 +119,7 @@ if (tipoDte == 39) {
     totalIva = detMap.totalIva
     if (numberAfectos > 0) {
         ec.message.addMessage("Boleta Electrónica Exenta tiene ítemes afectos, cambiando tipo a Boleta Electrónica")
-        tipoDte = 39
+        tipoDte = '39'
         fiscalTaxDocumentTypeEnumId = 'Ftdt-39'
     }
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
@@ -217,7 +217,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 //IndNoRebaja()
                 if (tipoDespacho)
                     TipoDespacho(tipoDespacho)
-                if (tipoDte == 52)
+                if (tipoDte == '52')
                     IndTraslado(indTraslado)
                 if (indServicio)
                     IndServicio(indServicio)
