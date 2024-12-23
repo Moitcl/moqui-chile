@@ -3,6 +3,8 @@ import org.w3c.dom.Document
 import org.moqui.entity.EntityValue
 import org.moqui.context.ExecutionContext
 import org.moqui.entity.EntityCondition
+import java.security.cert.CertificateExpiredException
+import java.security.cert.CertificateNotYetValidException
 
 import cl.moit.dte.MoquiDTEUtils
 
@@ -1050,6 +1052,22 @@ facturaXmlString = facturaXmlString.replaceAll("[^\\x00-\\xFF]", "")
 xmlWriter.close()
 
 Document doc2 = MoquiDTEUtils.parseDocument(facturaXmlString.getBytes())
+try {
+    certificate.checkValidity()
+} catch (CertificateExpiredException e) {
+    ec.message.addError("Certificado expirado, no se puede emitir DTE")
+} catch (CertificateNotYetValidException e) {
+    ec.message.addError("Certificado aún no válido, no se puede emitir DTE")
+}
+if (ec.message.hasError()) return
+try {
+    certificate.checkValidity(fechaEmision)
+} catch (CertificateExpiredException e) {
+    ec.message.addError("Certificado expirado en fecha de emisión, no se puede emitir DTE")
+} catch (CertificateNotYetValidException e) {
+    ec.message.addError("Certificado aún no válido en fecha de emisión, no se puede emitir DTE")
+}
+if (ec.message.hasError()) return
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, signingTag)
 
 try {
