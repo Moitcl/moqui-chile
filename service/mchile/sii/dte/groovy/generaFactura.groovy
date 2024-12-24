@@ -1077,7 +1077,7 @@ try {
 }
 
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
-if (!MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:${signingTag}", "/sii:DTE/sii:${signingTag}/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
+if (!MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:${signingTag}", "/sii:DTE/sii:${signingTag}/sii:TmstFirma/text()")) {
     ec.message.addError("Error al generar DTE tipo ${tipoDte} (${dteTypeDescription}) folio ${folio}: firma inválida")
 }
 
