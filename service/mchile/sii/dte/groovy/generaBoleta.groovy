@@ -12,6 +12,10 @@ ExecutionContext ec = context.ec
 
 currencyUomId = 'CLP'
 dteConstituyeVentaTypeList = ['Ftdt-101', 'Ftdt-102', 'Ftdt-109', 'Ftdt-110', 'Ftdt-30', 'Ftdt-32', 'Ftdt-33', 'Ftdt-34', 'Ftdt-35', 'Ftdt-38', 'Ftdt-39', 'Ftd-41']
+EntityValue invoice = null
+if (invoiceId) {
+    invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", invoiceId).forUpdate(true).one()
+}
 if (invoiceId != null && fiscalTaxDocumentTypeEnumId in dteConstituyeVentaTypeList) {
     existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("invoiceId", invoiceId).condition("fiscalTaxDocumentTypeEnumId", "in", dteConstituyeVentaTypeList).list()
     if (existingDteList) {
@@ -65,9 +69,7 @@ amount = 0 as Long
 uom = null
 
 // Reference to buying order
-EntityValue invoice = null
 if (invoiceId) {
-    invoice = ec.entity.find("mantle.account.invoice.Invoice").condition([invoiceId:invoiceId]).one()
     if (invoice.otherPartyOrderId) {
         itemBillingList = ec.entity.find("mantle.order.OrderItemBilling").condition([invoiceId:invoiceId]).selectField("orderId,orderItemSeqId").list()
         if (itemBillingList) {

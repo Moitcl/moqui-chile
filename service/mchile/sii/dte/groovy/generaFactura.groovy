@@ -13,6 +13,10 @@ import groovy.xml.MarkupBuilder
 ExecutionContext ec = context.ec
 
 dteConstituyeVentaTypeList = ['Ftdt-101', 'Ftdt-102', 'Ftdt-109', 'Ftdt-110', 'Ftdt-30', 'Ftdt-32', 'Ftdt-33', 'Ftdt-34', 'Ftdt-35', 'Ftdt-38', 'Ftdt-39', 'Ftdt-41']
+EntityValue invoice = null
+if (invoiceId) {
+    invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", invoiceId).forUpdate(true).one()
+}
 if (invoiceId != null && fiscalTaxDocumentTypeEnumId in dteConstituyeVentaTypeList) {
     existingDteList = ec.entity.find("mchile.dte.FiscalTaxDocument").condition("invoiceId", invoiceId).condition("fiscalTaxDocumentTypeEnumId", "in", dteConstituyeVentaTypeList).list()
     if (existingDteList) {
@@ -50,10 +54,8 @@ tipoDteMap = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiC
 tipoDte = tipoDteMap.siiCode
 dteTypeDescription = tipoDteMap.dteTypeDescription
 
-EntityValue invoice = null
 if (invoiceId) {
     referenciaTypeEnumId = "RefDteTypeFactura"
-    invoice = ec.entity.find("mantle.account.invoice.Invoice").condition([invoiceId:invoiceId]).one()
     if (invoice.otherPartyOrderId) {
         itemBillingList = ec.entity.find("mantle.order.OrderItemBilling").condition([invoiceId:invoiceId]).selectField("orderId,orderItemSeqId").list()
         if (itemBillingList) {
