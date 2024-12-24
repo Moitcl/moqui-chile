@@ -24,25 +24,26 @@ namespace = MoquiDTEUtils.getNamespace(doc2)
 groovy.util.Node documento = MoquiDTEUtils.dom2GroovyNode(doc2)
 validSignature = null as Boolean
 
+documentPathWithNamespace = "/sii:DTE/sii:Documento|/sii:DTE/sii:Liquidacion|sii:DTE/sii:Exportaciones"
+documentPathNoNamespace = "/DTE/Documento|/DTE/Liquidacion|DTE/Exportaciones"
+signatureTimestampPathWithNamespace = "/sii:DTE/sii:Documento/sii:TmstFirma|/sii:DTE/sii:Liquidacion/sii:TmstFirma|sii:DTE/sii:Exportaciones/sii:TmstFirma"
+signatureTimestampPathNoNamespace = "/DTE/Documento/TmstFirma|/DTE/Liquidacion/TmstFirma|DTE/Exportaciones/TmstFirma"
 if (namespace == "http://www.sii.cl/SiiDte") {
     ec.logger.info("Namespace is SII")
-    documentPath = "/sii:DTE/sii:Documento|/sii:DTE/sii:Liquidacion|sii:DTE/sii:Exportaciones"
-    try {validSignature = MoquiDTEUtils.verifySignature(doc2, documentPath, null)} catch (Exception e) {
+    try {validSignature = MoquiDTEUtils.verifySignature(doc2, documentPathWithNamespace, signatureTimestampPathWithNamespace)} catch (Exception e) {
         ec.logger.error("Verifying signature: ${e.toString()}")
     }
     if (!validSignature) {
         ec.logger.info("Verifying without namespace")
         dteBytes = new String(MoquiDTEUtils.getRawXML(doc2, true), "ISO-8859-1").replaceAll(" xmlns=\"http://www.sii.cl/SiiDte\"", "").getBytes("ISO-8859-1")
         doc2 = MoquiDTEUtils.parseDocument(dteBytes)
-        documentPath = "/DTE/Documento|/DTE/Liquidacion|DTE/Exportaciones"
-        try {validSignature = MoquiDTEUtils.verifySignature(doc2, documentPath, null)} catch (Exception e) {
+        try {validSignature = MoquiDTEUtils.verifySignature(doc2, documentPathNoNamespace, signatureTimestampPathNoNamespace)} catch (Exception e) {
             ec.logger.error("Verifying signature: ${e.toString()}")
         }
     }
 } else {
     ec.logger.info("No namespace")
-    documentPath = "/DTE/Documento|/DTE/Liquidacion|DTE/Exportaciones"
-    try {validSignature = MoquiDTEUtils.verifySignature(doc2, documentPath, null)} catch (Exception e) {
+    try {validSignature = MoquiDTEUtils.verifySignature(doc2, documentPathNoNamespace, signatureTimestampPathNoNamespace)} catch (Exception e) {
         ec.logger.error("Verifying signature: ${e.toString()}")
     }
     if (!validSignature) {
@@ -51,8 +52,7 @@ if (namespace == "http://www.sii.cl/SiiDte") {
         dteBytes = MoquiDTEUtils.getRawXML(doc2, true)
         doc2 = MoquiDTEUtils.parseDocument(dteBytes)
         domNode = doc2.getDocumentElement()
-        documentPath = "/sii:DTE/sii:Documento|/sii:DTE/sii:Liquidacion|sii:DTE/sii:Exportaciones"
-        try {validSignature = MoquiDTEUtils.verifySignature(doc2, documentPath, null)} catch (Exception e) {
+        try {validSignature = MoquiDTEUtils.verifySignature(doc2, documentPathWithNamespace, signatureTimestampPathWithNamespace)} catch (Exception e) {
             ec.logger.error("Verifying signature: ${e.toString()}")
         }
     }
