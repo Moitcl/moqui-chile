@@ -118,11 +118,13 @@ if (tipoDte == '39') {
     detalleList = detMap.detalleList
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
+    totalExento = detMap.totalExento
     totalIva = detMap.totalIva
     if (numberAfectos > 0) {
         ec.message.addMessage("Boleta Electrónica Exenta tiene ítemes afectos, cambiando tipo a Boleta Electrónica")
         tipoDte = '39'
         fiscalTaxDocumentTypeEnumId = 'Ftdt-39'
+        totalNeto = detMap.totalNeto
     }
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
@@ -166,7 +168,7 @@ descuentoORecargoGlobalList.each {
 if (totalNeto != null) {
     totalNeto = totalNeto - (descuentoGlobalAfecto?:0)
     long calculatedIva = Math.round(totalNeto * vatTaxRate)
-    if (totalIva != calculatedIva)
+    if ((totalIva?:0) != calculatedIva)
         ec.message.addError("IVA mismatch, received from details ${totalIva}, calculated from Neto: ${calculatedIva}")
     montoIVARecuperable = totalIva
     totalInvoice = (totalNeto?:0) + (totalIva?:0) + (totalExento?:0)
@@ -389,7 +391,7 @@ byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, "Docum
 }*/
 
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
-if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:Encabezado/sii:IdDoc/sii:FchEmis/text()")) {
+if (MoquiDTEUtils.verifySignature(doc2, "/sii:DTE/sii:Documento", "/sii:DTE/sii:Documento/sii:TmstFirma/text()")) {
     ec.logger.warn("Boleta folio ${folio} firma OK")
 } else {
     ec.message.addError("Error al generar Boleta folio ${folio}: firma inválida")
