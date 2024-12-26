@@ -420,7 +420,9 @@ along with this software (see the LICENSE.md file). If not, see
                     <if condition="checkMap.hasError != false"><then>
                         <script>reattemptList.add(envio)</script>
                     </then><else>
-                        <service-call name="update#mchile.dte.DteEnvio" in-map="[envioId:envio.envioId, statusId:checkMap.newStatusId, lastAttempt:ec.user.nowTimestamp, attemptCount:((envio.attemptCount?:0)+1)]" transaction="force-new" ignore-error="true"/>
+                        <set field="updateMap" from="[envioId:envio.envioId, lastAttempt:ec.user.nowTimestamp, attemptCount:((envio.attemptCount?:0)+1)]"/>
+                        <if condition="checkMap.newStatusId"><set field="updateMap.statusId" from="checkMap.newStatusId"/></if>
+                        <service-call name="update#mchile.dte.DteEnvio" in-map="updateMap" transaction="force-new" ignore-error="true"/>
                     </else></if>
                     <if condition="checkMap.newStatusId">
                         <set field="newStatusByEnvioId[envio.envioId]" from="checkMap.newStatusId"/>
@@ -502,7 +504,7 @@ along with this software (see the LICENSE.md file). If not, see
                 </else></if>
                 <script><![CDATA[
                     salida = getEstDteResponse.getEstDteReturn
-                    ec.logger.info("salida: ${salida}")
+                    ec.logger.info("DteCommServices.verifica#DocumentoEnSii respuesta: ${salida}")
                     xmlDoc = new groovy.xml.XmlParser(false, false).parseText(salida)
                     header = xmlDoc.'SII:RESP_HDR'
                     status = header.ESTADO.text()
@@ -682,7 +684,7 @@ along with this software (see the LICENSE.md file). If not, see
                 glosasSqlCode = ['0': 'Schema Validado']
                 glosasErrorCode = ['0': 'Se retorna el estado', '1': 'El envío no es de la Empresa, faltan parámetros de entrada', '2': 'Error de Proceso']
                 salida = getEstUpResponse.getEstUpReturn
-                ec.logger.info("salida: ${salida}")
+                ec.logger.info("DteCommServices.verifica#EnvioEnSii respuesta: ${salida}")
                 xmlDoc = new groovy.xml.XmlParser(false, true).parseText(salida)
                 header = xmlDoc.'SII:RESP_HDR'
                 ec.logger.info("header: ${header}")
@@ -774,7 +776,7 @@ along with this software (see the LICENSE.md file). If not, see
                     ec.logger.info("Error con token: ${glosaEstado}")
                     hasError = true
                 } else if (estado == '106') {
-                    ec.logger.info("Error con autorización: ${glosaEstado}")
+                    ec.message.addError("Error autorización en SII: ${glosaEstado}")
                 } else if (errorCodeGlosa != null) {
                     ec.logger.info("Consulta con error: ${errorCodeGlosa}")
                     hasError = true
