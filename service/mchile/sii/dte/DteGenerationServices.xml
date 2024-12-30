@@ -1199,18 +1199,28 @@ along with this software (see the LICENSE.md file). If not, see
             </entity-find>
             <entity-find-one entity-name="mantle.order.OrderHeader" value-field="orderHeader"/>
             <set field="currencyUomId" from="orderHeader.currencyUomId"/>
+            <if condition="currencyUomId == 'CLP'"><then>
+                <set field="exchangeRate" from="1.0" type="BigDecimal"/>
+            </then><else>
+                <service-call name="mchile.CurrencyServices.get#ExchangeRate" in-map="[fromCurrencyUomId:currencyUomId, toCurrencyUomId:'CLP',
+                                            date:ec.user.nowTimestamp]" out-map="exchMap"/>
+                <set field="exchangeRate" from="exchMap.value"/>
+            </else></if>
             <set field="orderItemList" from="[]"/>
             <set field="descuentoORecargoGlobalList" from="[]"/>
             <set field="numeroLineaDescuentoORecargoGlobal" from="0"/>
+            <service-call name="mantle.party.PartyServices.get#PartySettingValue" in-map="[partyId:organizationPartyId, partySettingTypeId:'moit.dte.ProductDefaultIsExento']"
+                          out-map="exentoDefaultSettingMap"/>
+            <set field="defaultItemAfecto" from="exentoDefaultSettingMap.settingValue != 'true'"/>
             <iterate list="orderItemEVList" entry="orderItemEV">
                 <if condition="orderItemEV.itemTypeEnumId in ['ItemDiscount', 'ItemPromoDiscount']"><then>
                     <set field="numeroLineaDescuentoORecargoGlobal" from="numeroLineaDescuentoORecargoGlobal+1"/>
-                    <set field="itemAmount" from="((orderItemEV.quantity?:0) * (orderItemEV.unitAmount?:0)).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                    <set field="itemAmount" from="((orderItemEV.quantity?:0) * (orderItemEV.unitAmount?:0)*exchangeRate).setScale(0, java.math.RoundingMode.HALF_UP)"/>
                     <if condition="orderItemEV.sourcePercentage != null"><then>
                         <set field="valor" from="orderItemEV.sourcePercentage"/>
                         <set field="tipoValor" value="%"/>
                     </then><else>
-                        <set field="valor" from="(-orderItemEV.unitAmount*orderItemEV.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                        <set field="valor" from="(-orderItemEV.unitAmount*orderItemEV.quantity*exchangeRate).setScale(0, java.math.RoundingMode.HALF_UP)"/>
                         <set field="tipoValor" from="'$'"/>
                     </else></if>
                     <!-- ToDo: determine whether discount is afecto or exento -->
@@ -1223,7 +1233,28 @@ along with this software (see the LICENSE.md file). If not, see
                     <script>descuentoORecargoGlobalList.add([numeroLinea:numeroLineaDescuentoORecargoGlobal, tipo:'D', afecto:true, glosa:glosa, valor:valor, tipoValor:tipoValor, monto:itemAmount])</script>
                 </then><else>
                     <set field="orderItem" from="orderItemEV.getMap()"/>
+                    <if condition="orderItem.unitAmount">
+                        <set field="orderItem.unitAmount" from="(orderItem.unitAmount*exchangeRate).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                    </if>
+                    <if condition="orderItemEV.itemTypeEnumId == 'ItemVatTax'">
+                        <set field="vatTaxItem" from="orderItem"/>
+                    </if>
                     <script>orderItemList.add(orderItem)</script>
+                    <if condition="orderItem.productId"><then>
+                        <entity-find entity-name="mantle.product.category.ProductCategoryMember" list="catMemberList">
+                            <econdition field-name="productId" from="orderItem.productId"/>
+                            <econdition field-name="productCategoryId" operator="in" value="ClVatTaxExento,ClVatTaxAfecto"/>
+                            <date-filter/>
+                            <order-by field-name="fromDate"/>
+                        </entity-find>
+                        <if condition="catMemberList"><then>
+                            <set field="esAfecto" from="catMemberList.first.productCategoryId != 'ClVatTaxExento'"/>
+                        </then><else>
+                            <set field="esAfecto" from="defaultItemAfecto"/>
+                        </else></if>
+                    </then><else>
+                        <set field="esAfecto" from="defaultItemAfecto"/>
+                    </else></if>
                     <entity-find entity-name="mantle.order.OrderItem" list="subitemList">
                         <econdition field-name="orderId"/>
                         <econdition field-name="orderPartSeqId"/>
@@ -1248,7 +1279,7 @@ along with this software (see the LICENSE.md file). If not, see
                                     <set field="orderItem.porcentajeDescuento" from="null"/>
                                 </else></if>
                             </if>
-                            <set field="totalDiscount" from="totalDiscount + (subitem.unitAmount*subitem.quantity as BigDecimal).setScale(0,java.math.RoundingMode.HALF_UP)"/>
+                            <set field="totalDiscount" from="totalDiscount + (subitem.unitAmount*subitem.quantity*exchangeRate as BigDecimal).setScale(0,java.math.RoundingMode.HALF_UP)"/>
                         </else-if><else-if condition="subitem.itemTypeEnumId == 'ItemSurcharge'">
                             <if condition="subitem.sourcePercentage">
                                 <if condition="hide || orderItem.porcentajeRecargo == subitem.sourcePercentage"><then>
@@ -1257,18 +1288,21 @@ along with this software (see the LICENSE.md file). If not, see
                                     <set field="orderItem.porcentajeRecargo" from="null"/>
                                 </else></if>
                             </if>
-                            <set field="totalSurcharge" from="totalSurcharge + (subitem.unitAmount*subitem.quantity as BigDecimal).setScale(0,java.math.RoundingMode.HALF_UP)"/>
+                            <set field="totalSurcharge" from="totalSurcharge + (subitem.unitAmount*subitem.quantity*exchangeRate as BigDecimal).setScale(0,java.math.RoundingMode.HALF_UP)"/>
                         </else-if><else-if condition="subitem.itemTypeEnumId == 'ItemDteRoundingAdjust'">
-                            <set field="orderItem.ajusteDecimal" from="orderItem.ajusteDecimal?:0 + subitem.unitAmount*subitem.quantity"/>
+                            <set field="orderItem.ajusteDecimal" from="orderItem.ajusteDecimal?:0 + subitem.unitAmount*subitem.quantity*exchangeRate"/>
                         </else-if><else>
                             <return error="true" message="Unknown itemTypeEnumId for subitem ${orderId-orderPartSeqId}:${subitem.orderItemSeqId}: ${subitem.itemTypeEnumId}"/>
                         </else></if>
                         <set field="first" from="false"/>
                     </iterate>
-                    <set field="orderItem.amount" from="orderItem.unitAmount + (totalDiscount/orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP) + (totalSurcharge/orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                    <set field="orderItem.amount" from="(orderItem.unitAmount?:0.0) + (totalDiscount/orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP) + (totalSurcharge/orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                    <if condition="esAfecto &amp;&amp; orderItem.itemTypeEnumId != 'ItemVatTax'">
+                        <set field="totalNeto" from="(totalNeto ?: 0.0) + ((orderItem.amount ?: 0.0) * (orderItem.quantity ?: 1.0)).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                    </if>
                     <if condition="hide"><then>
                         <if condition="ec.user.getPreference('mchile.dte.AddDiscountSubitemDescription') == 'true'">
-                            <set field="orderItem.detailedDescription" value="${orderItem.detailedDescription ? (orderItem.detailedDescription + '; '): ''}Incluye ${subitem.itemDescription ?: 'descuento'} por ${ec.l10n.formatCurrency((-1*subitem.unitAmount*subitem.quantity/subitem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), currencyUomId)}${subitem.quantity > 1? ' (unitario)': ''}"/>
+                            <set field="orderItem.detailedDescription" value="${orderItem.detailedDescription ? (orderItem.detailedDescription + '; '): ''}Incluye ${subitem.itemDescription ?: 'descuento'} por ${ec.l10n.formatCurrency((-1*(subitem.unitAmount*subitem.quantity*exchangeRate)/subitem.quantity as BigDecimal).setScale(0, java.math.RoundingMode.HALF_UP), currencyUomId)}${subitem.quantity > 1? ' (unitario)': ''}"/>
                         </if>
                     </then><else>
                         <set field="orderItem.montoDescuento" from="-totalDiscount"/>
@@ -1276,6 +1310,11 @@ along with this software (see the LICENSE.md file). If not, see
                     </else></if>
                 </else></if>
             </iterate>
+            <if condition="vatTaxItem">
+                <service-call name="mchile.TaxServices.get#VatTaxRate" out-map="vatTaxMap"/>
+                <set field="vatTaxItem.unitAmount" from="((totalNeto?:0.0)*(vatTaxMap.taxRate?:0.0)).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                <set field="vatTaxItem.amount" from="((totalNeto?:0.0)*(vatTaxMap.taxRate?:0.0)).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+            </if>
         </actions>
     </service>
 

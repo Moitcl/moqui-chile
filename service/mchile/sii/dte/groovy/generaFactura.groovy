@@ -362,7 +362,7 @@ if (totalIva != null)
     totalIva = ec.l10n.roundCurrency(totalIva, currencyUomId) as Integer
 
 if (Math.round(totalIva?:0.0) != Math.round((totalNeto?:0.0) * (vatTaxRate?:0.0)))
-    ec.message.addError("Error en Iva, recibido de detalles: ${totalIva}, calculado: ${(totalNeto?:0.0) * (vatTaxRate?:0.0)}")
+    ec.message.addError("Error en Iva, recibido de detalles: ${totalIva}, calculado: ${Math.round((totalNeto?:0.0) * (vatTaxRate?:0.0))}")
 
 idDocumento = "Dte-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
 String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
