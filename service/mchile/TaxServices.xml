@@ -23,7 +23,25 @@ along with this software (see the LICENSE.md file). If not, see
                 orderPartSeqId = referenceParts[1]
             </script>
             <entity-find-one entity-name="mantle.order.OrderHeader" value-field="orderHeader"/>
-            <set field="taxResults" from="[]"/>
+            <set field="currencyUomId" from="orderHeader.currencyUomId"/>
+            <service-call name="mchile.TaxServices.calculate#SalesTaxChileInternal" in-map="context" out-map="context"/>
+            <service-call name="create#mantle.order.OrderItem" out-map="context"
+                          in-map="[orderId:orderId, orderPartSeqId:orderPartSeqId, itemTypeEnumId:'ItemVatTax', quantity:1,
+                                unitAmount:vatAmount, sourcePercentage:(vatTaxRate*100.0),
+                                taxAuthorityId:'CL_SII', itemDescription:'IVA']"/>
+        </actions>
+    </service>
+
+    <service verb="calculate" noun="SalesTaxChileInternal">
+        <implements service="mantle.other.TaxServices.calculate#SalesTax"/>
+        <in-parameters>
+            <parameter name="currencyUomId" default-value="CLP"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="vatAmount" type="BigDecimal"/>
+            <parameter name="vatTaxRate" type="BigDecimal"/>
+        </out-parameters>
+        <actions>
             <service-call name="mchile.TaxServices.get#VatTaxRate" out-map="vatTaxMap"/>
             <set field="vatTaxRate" from="vatTaxMap.taxRate"/>
             <service-call name="mantle.party.PartyServices.get#PartySettingValue" in-map="[partyId:organizationPartyId, partySettingTypeId:'moit.dte.ProductDefaultIsExento']"
@@ -48,11 +66,7 @@ along with this software (see the LICENSE.md file). If not, see
                 </else></if>
                 <set field="totalNeto" from="totalNeto+item.itemTotal"/>
             </iterate>
-            <set field="vatAmount" from="ec.l10n.roundCurrency(totalNeto*vatTaxRate, orderHeader.currencyUomId)"/>
-            <service-call name="create#mantle.order.OrderItem" out-map="context"
-                          in-map="[orderId:orderId, orderPartSeqId:orderPartSeqId, itemTypeEnumId:'ItemVatTax', quantity:1,
-                                unitAmount:vatAmount, sourcePercentage:(vatTaxRate*100.0),
-                                taxAuthorityId:'CL_SII', itemDescription:'IVA']"/>
+            <set field="vatAmount" from="ec.l10n.roundCurrency(totalNeto*vatTaxRate, currencyUomId)"/>
         </actions>
     </service>
 
