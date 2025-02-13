@@ -65,9 +65,9 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="valid" type="Boolean"/>
         </out-parameters>
         <actions>
-            <set field="valid" from="false"/>
             <if condition="partyIdTypeEnumId in ['PtidNationalTaxId', 'PtidUniqueNationalId']">
                 <service-call name="mchile.GeneralServices.verify#Rut" in-map="[ignoreErrors:ignoreErrors, showIgnoredErrors:showIgnoredErrors, rut:idValue]" out-map="verifyMap"/>
+                <set field="valid" from="verifyMap.valid"/>
                 <set field="idValue" from="new String(verifyMap.rut) + '-' + verifyMap.dv"/>
             </if>
             <entity-find entity-name="mantle.party.PartyIdentification" list="existingPartyIdentificationList">
@@ -76,7 +76,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="partyId" operator="not-equals"/>
             </entity-find>
             <set field="existingPartyIdentification" from="existingPartyIdentificationList.first"/>
-            <set field="valid" from="true"/>
         </actions>
     </service>
 
@@ -110,14 +109,36 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="rut"/>
             <parameter name="dv"/>
             <parameter name="errorMessage"/>
+            <parameter name="valid" type="Boolean"/>
         </out-parameters>
         <actions>
+            <set field="valid" from="false"/>
             <set field="idValue" from="rut?.replaceAll('\\s', '').replaceAll('\\.', '').replaceAll(',', '').replaceAll(' ', '').toUpperCase()"/>
 
             <set field="length" from="idValue.length()"/>
 
-            <if condition="length &lt; 2">
+            <if condition="length &lt; 2"><then>
                 <set field="errorMessage" from="ec.resource.expand('Error validating RUT \'${rut}\': length &lt; 2', null)"/>
+            </then></if>
+            <if condition="!errorMessage">
+                <script>
+                    (rut, givenDv) = idValue.tokenize('-')
+                    if (givenDv == null) {
+                        rut = idValue.substring(0, length-1)
+                        givenDv = idValue.substring(length-1)
+                    }
+                    rut = rut.replaceAll("[^0-9]", "")
+                </script>
+                <if condition="rut =~ /^[0-9]+$/"><then>
+                    <service-call name="mchile.GeneralServices.calculate#DigitoVerificador" in-map="[rut:rut]" out-map="context"/>
+                    <if condition="givenDv != dv">
+                        <set field="errorMessage" from="ec.resource.expand('Invalid RUT (dv): ${idValue}', null)"/>
+                    </if>
+                </then><else>
+                    <set field="errorMessage" value="Invalid RUT: ${idValue}"/>
+                </else></if>
+            </if>
+            <if condition="errorMessage"><then>
                 <if condition="ignoreErrors"><then>
                     <if condition="showIgnoredErrors"><then>
                         <return error="false" type="danger" message="${errorMessage}"/>
@@ -127,26 +148,9 @@ along with this software (see the LICENSE.md file). If not, see
                 </then><else>
                     <return error="true" type="danger" message="${errorMessage}"/>
                 </else></if>
-            </if>
-            <script>
-                (rut, givenDv) = idValue.tokenize('-')
-                if (givenDv == null) {
-                    rut = idValue.substring(0, length-1)
-                    givenDv = idValue.substring(length-1)
-                }
-                rut = rut.replaceAll("[^0-9]", "")
-            </script>
-            <if condition="rut">
-                <service-call name="mchile.GeneralServices.calculate#DigitoVerificador" in-map="[rut:rut]" out-map="context"/>
-            </if>
-            <if condition="!rut || givenDv != dv">
-                <set field="errorMessage" from="ec.resource.expand('Invalid RUT: ${idValue}', null)"/>
-                <if condition="ignoreErrors"><then>
-                    <return error="false" type="danger" message="${errorMessage}"/>
-                </then><else>
-                    <return error="true" type="danger" message="${errorMessage}"/>
-                </else></if>
-            </if>
+            </then><else>
+                <set field="valid" from="true"/>
+            </else></if>
         </actions>
     </service>
 
