@@ -277,6 +277,10 @@ class MoquiDTEUtils {
             detailMap.nombreItem = nombreItem
             if (detailEntry.detailedDescription)
                 detailMap.descripcionItem = detailEntry.detailedDescription
+            if (detailEntry.cantidadDocumentosLiquidados)
+                detailMap.cantidadDocumentosLiquidados = detailEntry.cantidadDocumentosLiquidados
+            if (detailEntry.tipoDocumentoLiquidacion)
+                detailMap.tipoDocumentoLiquidacion = detailEntry.tipoDocumentoLiquidacion
             if (quantity != null)
                 detailMap.quantity = quantity
             if (uom != null)

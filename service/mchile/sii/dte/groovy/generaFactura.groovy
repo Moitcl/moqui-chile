@@ -114,7 +114,7 @@ if (invoice != null && invoice.invoiceTotal == 0) {
 currencyUomId = 'CLP'
 ec.logger.info("Creando DTE tipo ${tipoDte} (${dteTypeDescription})")
 tasaIva = ec.l10n.format(vatTaxRate*100, "##")
-if (tipoDte in ['33', '46']) {
+if (tipoDte in ['33', '46', '43']) {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
@@ -125,7 +125,7 @@ if (tipoDte in ['33', '46']) {
         totalExentoClp = detMap.totalExentoClp
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
-    if (numberAfectos == 0 && numberExentos > 0) {
+    if (numberAfectos == 0 && numberExentos > 0 && tipoDte != '43') {
         ec.message.addMessage("Factura Electrónica solamente tiene ítemes exentos, cambiando tipo a Factura Electrónica Exenta")
         tipoDte = '34'
         fiscalTaxDocumentTypeEnumId = 'Ftdt-34'
@@ -757,7 +757,10 @@ if (detalleList) {
                 if (detalle.precioUnidadReferencia)
                     PrcRef(detalle.precioUnidadReferencia)
                 if (detalle.quantity != null)
-                    QtyItem(detalle.quantity)
+                    if (tipoDte == '43')
+                        QtyItem(detalle.cantidadDocumentosLiquidados)
+                    else
+                        QtyItem(detalle.quantity)
                 detalle.subcantidad.each { subcant ->
                     SubCantidad {
                         SubQty(subcant.quantity)
