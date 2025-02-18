@@ -350,7 +350,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="No existe receptor asociado a Nota de Crédito invoiceId ${invoiceId}"/>
             </if>
 
-            <service-call name="mchile.sii.dte.DteGenerationServices.get#InvoiceItemsForDte" in-map="[invoiceId:invoiceId]" out-map="context"/>
+            <service-call name="mchile.sii.dte.DteGenerationServices.get#InvoiceItemsForDte" in-map="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" out-map="context"/>
 
             <if condition="!invoiceItemList">
                 <return error="true" message="Deben existir items a corregir en Nota de Crédito"/>
@@ -479,7 +479,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="No existe receptor asociado a Memo de Débito invoiceId ${invoiceId}"/>
             </if>
 
-            <service-call name="mchile.sii.dte.DteGenerationServices.get#InvoiceItemsForDte" in-map="[invoiceId:invoiceId]" out-map="context"/>
+            <service-call name="mchile.sii.dte.DteGenerationServices.get#InvoiceItemsForDte" in-map="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" out-map="context"/>
 
             <if condition="!invoiceItemList">
                 <return error="true" message="Deben existir items a corregir en Nota de Crédito"/>
@@ -582,7 +582,7 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
 
             <!-- Return invoiceItemList, Applying discounts to parent when necessary -->
-            <service-call name="mchile.sii.dte.DteGenerationServices.get#InvoiceItemsForDte" in-map="[invoiceId:invoiceId]" out-map="context"/>
+            <service-call name="mchile.sii.dte.DteGenerationServices.get#InvoiceItemsForDte" in-map="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" out-map="context"/>
 
             <!-- Calculate Sales Tax for Credit and Debit Notes -->
             <if condition="fiscalTaxDocumentTypeEnumId in ['Ftdt-56', 'Ftdt-61']">
@@ -1017,6 +1017,7 @@ along with this software (see the LICENSE.md file). If not, see
         </description>
         <in-parameters>
             <parameter name="invoiceId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="invoiceItemList" type="List"/>
@@ -1036,7 +1037,14 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="descuentoORecargoGlobalList" from="[]"/>
             <set field="numeroLineaDescuentoORecargoGlobal" from="0"/>
             <iterate list="invoiceItemEVList" entry="invoiceItemEV">
-                <if condition="invoiceItemEV.itemTypeEnumId in ['ItemDiscount', 'ItemPromoDiscount']"><then>
+                <if condition="invoiceItemEV.itemTypeEnumId in ['ItemDiscount', 'ItemPromoDiscount', 'ItemSurcharge']"><then>
+                    <if condition="invoiceItemEV.itemTypeEnumId in ['ItemDiscount', 'ItemPromoDiscount']"><then>
+                        <set field="tipoDescuentoORecargo" value="D"/>
+                        <set field="multiplier" from="-1"/>
+                    </then><else>
+                        <set field="tipoDescuentoORecargo" value="R"/>
+                        <set field="multiplier" from="1"/>
+                    </else></if>
                     <set field="numeroLineaDescuentoORecargoGlobal" from="numeroLineaDescuentoORecargoGlobal+1"/>
                     <set field="itemAmount" from="((invoiceItemEV.quantity?:0) * (invoiceItemEV.amount?:0)).setScale(0, java.math.RoundingMode.HALF_UP)"/>
                     <if condition="invoiceItemEV.originAmount">
@@ -1052,21 +1060,21 @@ along with this software (see the LICENSE.md file). If not, see
                             <set field="valor" from="orderItem.sourcePercentage"/>
                             <set field="tipoValor" value="%"/>
                         </then><else>
-                            <set field="valor" from="(-orderItem.unitAmount*orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                            <set field="valor" from="(multiplier*orderItem.unitAmount*orderItem.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
                             <set field="tipoValor" from="'$'"/>
                         </else></if>
                     </then><else>
-                        <set field="valor" from="(-invoiceItemEV.amount*invoiceItemEV.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
+                        <set field="valor" from="(multiplier*invoiceItemEV.amount*invoiceItemEV.quantity).setScale(0, java.math.RoundingMode.HALF_UP)"/>
                         <set field="tipoValor" from="'$'"/>
                     </else></if>
-                    <!-- ToDo: determine whether discount is afecto or exento -->
+                    <set field="afecto" from="!(fiscalTaxDocumentTypeEnumId in ['Ftdt-110', 'Ftdt-111', 'Ftdt-112', 'Ftdt-34', 'Ftdt-41'])"/>
                     <if condition="invoiceItemEV.description?.length() > 45"><then>
                         <set field="glosa" from="invoiceItemEV.description.substring(0,45)"/>
                         <log level="warn" message="Glosa para descuento global excede los 45 caracteres, truncando."/>
                     </then><else>
                         <set field="glosa" from="invoiceItemEV.description"/>
                     </else></if>
-                    <script>descuentoORecargoGlobalList.add([numeroLinea:numeroLineaDescuentoORecargoGlobal, tipo:'D', afecto:true, glosa:glosa, valor:valor, tipoValor:tipoValor, monto:itemAmount, montoOrigin:itemOriginAmount])</script>
+                    <script>descuentoORecargoGlobalList.add([numeroLinea:numeroLineaDescuentoORecargoGlobal, tipo:tipoDescuentoORecargo, afecto:afecto, glosa:glosa, valor:valor, tipoValor:tipoValor, monto:itemAmount, montoOrigin:itemOriginAmount])</script>
                 </then><else><!-- ceItemEV.description, -->
                     <set field="invoiceItem" from="invoiceItemEV.getMap()"/>
                     <script>invoiceItemList.add(invoiceItem)</script>

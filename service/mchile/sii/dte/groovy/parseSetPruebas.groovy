@@ -50,7 +50,7 @@ while (line != null) {
         def inicioCaso = line =~ /^CASO $numeroAtencion-([0-9]+)/
         def detalleInternacional = line =~ /^([A-Z ]+?)(?: \(\*\*\))?+:\s+([0-9.A-Za-z(),\/ ]+)$/
         def recargoComisionesInternacional = line =~ /^%([0-9]+) RECARGO EN LA LINEA DE ITEM POR COMISIONES EN EL EXTERIOR$/
-        def comisionesExtranjero = line =~ /^COMISIONES EN EL EXTRANJERO \(RECARGOS GLOBALES\):\s+([0-9]+)% DEL TOTAL DE LA CLAUSULA$/
+        def comisionesExtranjeroPorcentaje = line =~ /^COMISIONES EN EL EXTRANJERO \(RECARGOS GLOBALES\):\s+([0-9]+)% DEL TOTAL DE LA CLAUSULA$/
         def descuentoLinea = line =~ /^DESCUENTO LINEA # ([0-9]):\s+([0-9]%)$/
         def referencia = line =~ /^REFERENCIA\s+([A-Z ]+) CORRESPONDIENTE A CASO ([0-9]+)-([0-9]+)$/
         def instrucciones = line =~ /^INSTRUCCIONES AL CONTRIBUYENTE:$/
@@ -141,8 +141,8 @@ while (line != null) {
                 ec.message.addError("Especificación de descuento a item fuera de rango: ${itemNumber}, cantidad de ítemes: ${currentDocument.items.size()}")
             item = currentDocument.items[itemNumber-1]
             item.'DESCUENTO ITEM' = descuentoLinea[0][2]
-        } else if (comisionesExtranjero.matches()) {
-            currentDocument.terms.recargoPorComisionesExterior = comisionesExtranjero[0][1]
+        } else if (comisionesExtranjeroPorcentaje.matches()) {
+            currentDocument.terms.recargoComisionesExteriorPorcentaje = comisionesExtranjeroPorcentaje[0][1]
         } else if (recargoComisionesInternacional.matches()) {
             if (currentDocument.items?.size() != 1) {
                 ec.message.addError("Más de 1 item para agregar recargo comisiones")
@@ -187,7 +187,7 @@ while (line != null) {
         }
         def inicioCaso = line =~ /^CASO $numeroAtencion-([0-9]+)/
         def referencia = line =~ /^REFERENCIA\s+([A-Z ]+) CORRESPONDIENTE A CASO ([0-9]+)-([0-9]+)$/
-        def descuentoGlobalAfectosMatch = line =~ /^DESCUENTO GLOBAL ITEMES AFECTOS\s+([0-9]+%)/
+        def descuentoGlobalAfectosPorcentajeMatch = line =~ /^DESCUENTO GLOBAL ITEMES AFECTOS\s+([0-9]+%)/
         def motivoMatch = line =~ /^MOTIVO:\s*([A-Z ]+)$/
         def trasladoMatch = line =~ /^TRASLADO POR:\s*([A-Z ]+)$/
         def indicacionMatch = line =~ /^(INDICACIÓN|IMPORTANTE):\s*(.*)\s*$/
@@ -236,10 +236,10 @@ while (line != null) {
                 razonReferencia = null
             }
             currentDocument.referencias.add([seqNumReferencia:seqNumReferencia, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, razonReferencia:razonReferencia])
-        } else if (descuentoGlobalAfectosMatch.matches()) {
-            if (currentDocument.descuentoGlobalAfecto != null)
-                ec.message.addError("Duplicated descuento global afecto, had ${currentDocument.descuentoGlobalAfecto}, received ${descuentoGlobalAfectosMatch[0][1]}")
-            currentDocument.descuentoGlobalAfecto = descuentoGlobalAfectosMatch[0][1]
+        } else if (descuentoGlobalAfectosPorcentajeMatch.matches()) {
+            if (currentDocument.descuentoGlobalAfectoPorcentaje != null)
+                ec.message.addError("Duplicated descuento global afecto, had ${currentDocument.descuentoGlobalAfectoPorcentaje}, received ${descuentoGlobalAfectosPorcentajeMatch[0][1]}")
+            currentDocument.descuentoGlobalAfectoPorcentaje = descuentoGlobalAfectosPorcentajeMatch[0][1]
         } else if (line?.startsWith("ITEM\t")) {
             itemFields = line.split("\t+")
             currentDocument.items = []
