@@ -1,5 +1,6 @@
 import org.w3c.dom.Document
 
+import org.moqui.BaseException
 import org.moqui.entity.EntityValue
 import org.moqui.context.ExecutionContext
 import org.moqui.entity.EntityCondition
@@ -973,6 +974,7 @@ if (tipoDte in ['33', '34', '46', '52', '56', '61']) {
     notAllowedFieldListDetalle = ['retenedor', 'otraMoneda', 'porcentajeDescuento', 'montoDescuento', 'subDescuento', 'recargoPorcentaje', 'recargoMonto', 'subRecargo']
     notAllowedFieldListReferencia = ['rutOtro']
     notAllowedFieldListDetalleSubcantidad = ['tipoCodigo']
+    signingTag = "Liquidacion"
 } else {
     ec.message.addError("Unable to generate DTE of type ${tipoDte}")
 }
@@ -1078,7 +1080,7 @@ byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, signin
 try {
     MoquiDTEUtils.validateDocumentSii(ec, facturaXml, schemaLocation)
 } catch (Exception e) {
-    ec.message.addError("Failed validation: " + e.getMessage())
+    throw new BaseException("Failed generated DTE validation", e)
 }
 
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
