@@ -915,8 +915,8 @@ if (comisionesList) {
     xmlBuilder.printer.incrementIndent()
     xmlBuilder.printer.incrementIndent()
     xmlBuilder.ComisionesContainer {
-        comisionesList.each {
-            Comisiones { comision ->
+        comisionesList.each { comision ->
+            Comisiones {
                 NroLinCom(comision.seqNum)
                 TipoMovim(comision.tipoMovimiento)
                 Glosa(comision.glosa)

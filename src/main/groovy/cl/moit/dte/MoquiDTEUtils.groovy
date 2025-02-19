@@ -286,7 +286,10 @@ class MoquiDTEUtils {
             if (uom != null)
                 detailMap.uom = uom
             if (priceItem != null && (detailType != "ShipmentItem" || Math.round(priceItem) > 0)) {
-                detailMap.priceItem = priceItem
+                if (priceItem < 0)
+                    detailMap.priceItem = priceItem*-1
+                else
+                    detailMap.priceItem = priceItem
             }
             detailMap.montoItem = totalItem
             if (itemAfecto) {
