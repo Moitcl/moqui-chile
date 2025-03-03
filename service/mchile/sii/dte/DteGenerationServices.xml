@@ -161,7 +161,62 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="detailList" from="invoiceItemList"/>
                 <set field="invoiceMessage" from="invoice.invoiceMessage"/>
                 <service-call name="mchile.sii.dte.DteGenerationServices.generate#Boleta" in-map="context" out-map="context"/>
-            </then><else>
+            </then><else-if condition="fiscalTaxDocumentTypeEnumId == 'Ftdt-61'">
+                <if condition="referenciaList.size() == 0">
+                    <return error="true" message="No hay referencia para Nota de Crédito invoiceId ${invoiceId}"/>
+                </if>
+                <if condition="referenciaList.size() > 1">
+                    <return error="true" message="Más de una referencia para Nota de Crédito invoiceId ${invoiceId}"/>
+                </if>
+                <set field="referencia" from="referenciaList.first"/>
+                <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteReferenciaList" for-update="true">
+                    <econdition field-name="issuerPartyId" from="invoice.toPartyId"/>
+                    <econdition field-name="fiscalTaxDocumentTypeEnumId" from="referencia.fiscalTaxDocumentTypeEnumId"/>
+                    <econdition field-name="fiscalTaxDocumentNumber" from="referencia.folio as Integer"/>
+                </entity-find>
+                <if condition="!dteReferenciaList">
+                    <return error="true" message="Could not find reference FiscalTaxDocumentId for credit note with invoiceId ${invoiceId}"/>
+                </if>
+                <if condition="!dteReferenciaList.first.invoiceId">
+                    <return error="true" message="Reference has no invoiceId associated (reference ${dteReferenciaList.first.referenciaId})"/>
+                </if>
+                <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoiceReferencia" auto-field-map="[invoiceId:dteReferenciaList.first.invoiceId]"/>
+                <if condition="invoice.invoiceTotal != null &amp;&amp; invoice.invoiceTotal != 0 &amp;&amp; invoice.invoiceTotal == invoiceReferencia.invoiceTotal">
+                    <then>
+                        <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeAnula"/>
+                    </then>
+                    <else-if condition="invoice.invoiceTotal == 0">
+                        <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeCorrigeTexto"/>
+                    </else-if>
+                    <else>
+                        <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeCorrigeMonto"/>
+                    </else>
+                </if>
+                <entity-find-one entity-name="moqui.basic.Enumeration" value-field="codRefEnum" auto-field-map="[enumId:referencia.codigoReferenciaEnumId]"/>
+                <set field="referencia.razonReferencia" from="codRefEnum.description"/>
+                <service-call name="update#mchile.dte.ReferenciaDte" in-map="[referenciaId:referencia.referenciaId, codigoReferenciaEnumId:referencia.codigoReferenciaEnumId,
+                                razonReferencia:referencia.razonReferencia]"/>
+            </else-if><else-if condition="fiscalTaxDocumentTypeEnumId == 'Ftdt-56'">
+                <if condition="referenciaList.size() == 0">
+                     <return error="true" message="No existen referencias para Nota de Débito invoiceId ${invoiceId}"/>
+                </if>
+                <if condition="referenciaList.size() > 1">
+                    <return error="true" message="Existe más de una referencia para Nota de Débito invoiceId ${invoiceId}"/>
+                </if>
+                <set field="referencia" from="referenciaList.first"/>
+
+                <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteReferenciaList" for-update="true">
+                    <!--<econdition field-name="issuerPartyId" from="invoice.fromPartyId"/>-->
+                    <econdition field-name="fiscalTaxDocumentTypeEnumId" from="referencia.fiscalTaxDocumentTypeEnumId"/>
+                    <econdition field-name="fiscalTaxDocumentNumber" from="referencia.folio as Integer"/>
+                </entity-find>
+                <if condition="!dteReferenciaList">
+                    <return error="true" message="Could not find reference FiscalTaxDocumentId for debit note with invoiceId ${invoiceId}"/>
+                </if>
+                <if condition="!dteReferenciaList.first.invoiceId">
+                    <return error="true" message="Reference has no invoiceId associated (reference ${dteReferenciaList.first.referenciaId})"/>
+                </if>
+            </else-if><else>
                 <!-- Create Factura -->
                 <!-- Set data from Invoice Terms -->
                 <entity-find entity-name="mantle.account.invoice.InvoiceTerm" list="termList">
@@ -197,13 +252,15 @@ along with this software (see the LICENSE.md file). If not, see
                         </if>
                     </iterate>
                 </if>
-                <set field="detailList" from="invoiceItemList"/>
-                <set field="invoiceMessage" from="invoice.invoiceMessage"/>
-                <service-call name="mchile.sii.dte.DteGenerationServices.generate#Factura" in-map="context" out-map="context"/>
-                <iterate list="dteTermList" entry="term">
-                    <service-call name="create#mchile.dte.FiscalTaxDocumentTerm" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, settlementTermId:term.settlementTermId]"/>
-                </iterate>
             </else></if>
+
+            <set field="detailList" from="invoiceItemList"/>
+            <set field="invoiceMessage" from="invoice.invoiceMessage"/>
+            <service-call name="mchile.sii.dte.DteGenerationServices.generate#Factura" in-map="context" out-map="context"/>
+            <log message="after generate#Factura, fiscalTaxDocumentId: ${fiscalTaxDocumentId}"/>
+            <iterate list="dteTermList" entry="term">
+                <service-call name="create#mchile.dte.FiscalTaxDocumentTerm" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, settlementTermId:term.settlementTermId]"/>
+            </iterate>
 
             <if condition="sendToSii">
                 <service-call name="mchile.sii.dte.DteEnvioServices.genera#Envio" in-map="[organizationPartyId:issuerPartyId, documentIdList:[fiscalTaxDocumentId]]" out-map="context"/>
@@ -379,30 +436,31 @@ along with this software (see the LICENSE.md file). If not, see
             </else-if><else-if condition="fiscalTaxDocumentTypeEnumId == 'Ftdt-46'">
                 <!-- Factura de Compra Electrónica -->
                 <set field="validInvoiceTypeList" from="['InvoiceSales']"/>
-                <set field="validStatusIdList" from="['InvoiceIncoming','InvoiceApproved','InvoicePmtSent','InvoiceBilledThrough']"/>
+                <set field="validStatusIdList" from="['InvoiceIncoming','InvoiceReceived','InvoiceApproved','InvoicePmtSent','InvoiceBilledThrough']"/>
                 <set field="issuerPartyId" from="invoice.toPartyId"/>
                 <set field="receiverPartyId" from="invoice.fromPartyId"/>
-                <if condition="invoice.statusId == 'InvoiceIncoming'"><set field="invoiceToStatusId" value="InvoiceApproved"/></if>
+                <if condition="invoice.statusId in ['InvoiceIncoming', 'InvoiceReceived']"><set field="invoiceToStatusId" value="InvoiceApproved"/></if>
             </else-if><else-if condition="fiscalTaxDocumentTypeEnumId == 'Ftdt-61'">
                 <!-- Nota de Crédito Electrónica -->
                 <set field="validInvoiceTypeList" from="['InvoiceReturn', 'InvoiceCreditMemo']"/>
-                <set field="validStatusIdList" from="['InvoiceIncoming','InvoiceApproved','InvoicePmtSent','InvoiceBilledThrough']"/>
+                <set field="validStatusIdList" from="['InvoiceIncoming','InvoiceReceived','InvoiceApproved','InvoicePmtSent','InvoiceBilledThrough']"/>
                 <set field="issuerPartyId" from="invoice.toPartyId"/>
                 <set field="receiverPartyId" from="invoice.fromPartyId"/>
-                <if condition="invoice.statusId == 'InvoiceIncoming'"><set field="invoiceToStatusId" value="InvoiceApproved"/></if>
+                <if condition="invoice.statusId in ['InvoiceIncoming', 'InvoiceReceived']"><set field="invoiceToStatusId" value="InvoiceApproved"/></if>
             </else-if><else-if condition="fiscalTaxDocumentTypeEnumId == 'Ftdt-112'">
                 <!-- Nota de Crédito Exportación Electrónica -->
                 <set field="validInvoiceTypeList" from="['InvoiceReturn', 'InvoiceCreditMemoExport']"/>
-                <set field="validStatusIdList" from="['InvoiceIncoming','InvoiceApproved','InvoicePmtSent','InvoiceBilledThrough']"/>
+                <set field="validStatusIdList" from="['InvoiceIncoming','InvoiceReceived','InvoiceApproved','InvoicePmtSent','InvoiceBilledThrough']"/>
                 <set field="issuerPartyId" from="invoice.toPartyId"/>
                 <set field="receiverPartyId" from="invoice.fromPartyId"/>
-                <if condition="invoice.statusId == 'InvoiceIncoming'"><set field="invoiceToStatusId" value="InvoiceApproved"/></if>
+                <if condition="invoice.statusId in ['InvoiceIncoming', 'InvoiceReceived']"><set field="invoiceToStatusId" value="InvoiceApproved"/></if>
             </else-if><else-if condition="fiscalTaxDocumentTypeEnumId == 'Ftdt-43'">
                 <!-- Liquidación Factura Electrónica -->
                 <set field="validInvoiceTypeList" from="['InvoiceSales']"/>
-                <set field="validStatusIdList" from="['InvoiceIncoming','InvoiceApproved','InvoicePmtSent','InvoiceBilledThrough']"/>
+                <set field="validStatusIdList" from="['InvoiceIncoming','InvoiceReceived','InvoiceApproved','InvoicePmtSent','InvoiceBilledThrough']"/>
                 <set field="issuerPartyId" from="invoice.toPartyId"/>
                 <set field="receiverPartyId" from="invoice.fromPartyId"/>
+                <if condition="invoice.statusId in ['InvoiceIncoming', 'InvoiceReceived']"><set field="invoiceToStatusId" value="InvoiceApproved"/></if>
             </else-if><else-if condition="fiscalTaxDocumentTypeEnumId == 'Ftdt-52'">
                 <!-- Guía de Despacho -->
                 <return error="true" message="Guía de despacho cannot be generated from Invoice"/>
@@ -410,7 +468,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <return error="true" message="Unsupported DTE type ${fiscalTaxDocumentTypeEnumId}"/>
             </else></if>
             <if condition="!(invoice.statusId in validStatusIdList)">
-                <return error="true" message="Invalid statusId for ${invoice.status.description} invoice ${invoiceId}: ${invoice.statusId}"/>
+                <return error="true" message="Invalid statusId for invoice ${invoiceId}: ${invoice.statusId}"/>
             </if>
             <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="existingFtdList">
                 <econdition field-name="invoiceId"/>
@@ -771,8 +829,12 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="issuerInternalOrgRole"><then>
                 <if condition="dteEv.invoiceId">
                     <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoice" auto-field-map="[invoiceId:dteEv.invoiceId]" for-update="true"/>
-                    <set field="invoice.statusId" value="InvoiceInProcess"/>
-                    <entity-update value-field="invoice"/>
+                    <if condition="invoice.statusId in ['InvoiceInProcess', 'InvoiceFinalized', 'InvoiceSent', 'InvoiceAcked', 'InvoicePmtRecvd', 'InvoiceWriteOff']"><then>
+                        <set field="statusId" value="InvoiceInProcess"/>
+                    </then><else>
+                        <set field="statusId" value="InvoiceReceived"/>
+                    </else></if>
+                    <service-call name="update#mantle.account.invoice.Invoice" in-map="[invoiceId:dteEv.invoiceId, statusId:statusId]"/>
                 </if>
                 <set field="invoiceId" from="dteEv.invoiceId"/>
                 <set field="dteEv.statusId" value="Ftd-NotIssued"/>

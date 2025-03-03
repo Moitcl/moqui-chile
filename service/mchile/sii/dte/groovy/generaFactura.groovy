@@ -210,6 +210,11 @@ if (tipoDte in ['33', '46', '43']) {
         return
     }
 
+    if (!codRef) {
+        ec.message.addError("No se define Código de Referencia para Nota de Crédito")
+        return
+    }
+
     // Si la razon es modifica texto (2) no van los montos
     //ec.logger.warn("Codref: " + codRef + ", dteExenta: " + dteExenta)
     if (codRef == 2) {
@@ -1153,6 +1158,8 @@ if (draft) {
                  montoExento:totalExento, montoIVARecuperable:montoIVARecuperable, razonSocialEmisor:razonSocialOrganizacion, razonSocialReceptor:razonSocialReceptor]
     ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call())
     fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId
+
+    ec.logger.info("In generaFactura.groovy, fiscalTaxDocumentId: ${dteEv.fiscalTaxDocumentId}")
 
     // Creación de referencias en BD
     Integer nroLinea = 0
