@@ -161,106 +161,110 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="detailList" from="invoiceItemList"/>
                 <set field="invoiceMessage" from="invoice.invoiceMessage"/>
                 <service-call name="mchile.sii.dte.DteGenerationServices.generate#Boleta" in-map="context" out-map="context"/>
-            </then><else-if condition="fiscalTaxDocumentTypeEnumId == 'Ftdt-61'">
-                <if condition="referenciaList.size() == 0">
-                    <return error="true" message="No hay referencia para Nota de Crédito invoiceId ${invoiceId}"/>
-                </if>
-                <if condition="referenciaList.size() > 1">
-                    <return error="true" message="Más de una referencia para Nota de Crédito invoiceId ${invoiceId}"/>
-                </if>
-                <set field="referencia" from="referenciaList.first"/>
-                <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteReferenciaList" for-update="true">
-                    <econdition field-name="issuerPartyId" from="invoice.toPartyId"/>
-                    <econdition field-name="fiscalTaxDocumentTypeEnumId" from="referencia.fiscalTaxDocumentTypeEnumId"/>
-                    <econdition field-name="fiscalTaxDocumentNumber" from="referencia.folio as Integer"/>
-                </entity-find>
-                <if condition="!dteReferenciaList">
-                    <return error="true" message="Could not find reference FiscalTaxDocumentId for credit note with invoiceId ${invoiceId}"/>
-                </if>
-                <if condition="!dteReferenciaList.first.invoiceId">
-                    <return error="true" message="Reference has no invoiceId associated (reference ${dteReferenciaList.first.referenciaId})"/>
-                </if>
-                <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoiceReferencia" auto-field-map="[invoiceId:dteReferenciaList.first.invoiceId]"/>
-                <if condition="invoice.invoiceTotal != null &amp;&amp; invoice.invoiceTotal != 0 &amp;&amp; invoice.invoiceTotal == invoiceReferencia.invoiceTotal">
-                    <then>
-                        <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeAnula"/>
-                    </then>
-                    <else-if condition="invoice.invoiceTotal == 0">
-                        <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeCorrigeTexto"/>
-                    </else-if>
-                    <else>
-                        <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeCorrigeMonto"/>
-                    </else>
-                </if>
-                <entity-find-one entity-name="moqui.basic.Enumeration" value-field="codRefEnum" auto-field-map="[enumId:referencia.codigoReferenciaEnumId]"/>
-                <set field="referencia.razonReferencia" from="codRefEnum.description"/>
-                <service-call name="update#mchile.dte.ReferenciaDte" in-map="[referenciaId:referencia.referenciaId, codigoReferenciaEnumId:referencia.codigoReferenciaEnumId,
-                                razonReferencia:referencia.razonReferencia]"/>
-            </else-if><else-if condition="fiscalTaxDocumentTypeEnumId == 'Ftdt-56'">
-                <if condition="referenciaList.size() == 0">
-                     <return error="true" message="No existen referencias para Nota de Débito invoiceId ${invoiceId}"/>
-                </if>
-                <if condition="referenciaList.size() > 1">
-                    <return error="true" message="Existe más de una referencia para Nota de Débito invoiceId ${invoiceId}"/>
-                </if>
-                <set field="referencia" from="referenciaList.first"/>
-
-                <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteReferenciaList" for-update="true">
-                    <!--<econdition field-name="issuerPartyId" from="invoice.fromPartyId"/>-->
-                    <econdition field-name="fiscalTaxDocumentTypeEnumId" from="referencia.fiscalTaxDocumentTypeEnumId"/>
-                    <econdition field-name="fiscalTaxDocumentNumber" from="referencia.folio as Integer"/>
-                </entity-find>
-                <if condition="!dteReferenciaList">
-                    <return error="true" message="Could not find reference FiscalTaxDocumentId for debit note with invoiceId ${invoiceId}"/>
-                </if>
-                <if condition="!dteReferenciaList.first.invoiceId">
-                    <return error="true" message="Reference has no invoiceId associated (reference ${dteReferenciaList.first.referenciaId})"/>
-                </if>
-            </else-if><else>
-                <!-- Create Factura -->
-                <!-- Set data from Invoice Terms -->
-                <entity-find entity-name="mantle.account.invoice.InvoiceTerm" list="termList">
-                    <econdition field-name="invoiceId"/>
-                </entity-find>
-                <set field="dteTermList" from="[]"/>
-                <if condition="termList">
-                    <entity-find entity-name="moqui.basic.Enumeration" list="termGroupList">
-                        <econdition field-name="enumTypeId" value="FiscalTaxDocumentTermTypeGroup"/>
+            </then><else>
+                <!-- Create DTE -->
+                <if condition="fiscalTaxDocumentTypeEnumId == 'Ftdt-61'"><then>
+                    <if condition="referenciaList.size() == 0">
+                        <return error="true" message="No hay referencia para Nota de Crédito invoiceId ${invoiceId}"/>
+                    </if>
+                    <if condition="referenciaList.size() > 1">
+                        <return error="true" message="Más de una referencia para Nota de Crédito invoiceId ${invoiceId}"/>
+                    </if>
+                    <set field="referencia" from="referenciaList.first"/>
+                    <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteReferenciaList" for-update="true">
+                        <econdition field-name="issuerPartyId" from="invoice.toPartyId"/>
+                        <econdition field-name="fiscalTaxDocumentTypeEnumId" from="referencia.fiscalTaxDocumentTypeEnumId"/>
+                        <econdition field-name="fiscalTaxDocumentNumber" from="referencia.folio as Integer"/>
                     </entity-find>
-                    <iterate list="termGroupList" entry="termGroup">
-                        <entity-find entity-name="moqui.basic.Enumeration" list="enumFieldList">
-                            <econdition field-name="parentEnumId" from="termGroup.enumId"/>
-                        </entity-find>
-                        <entity-find entity-name="mantle.account.invoice.SettlementTerm" list="settlementTermList">
-                            <econdition field-name="settlementTermId" operator="in" from="termList.settlementTermId"/>
-                            <econdition field-name="termTypeEnumId" operator="in" from="enumFieldList.enumId"/>
-                        </entity-find>
-                        <if condition="settlementTermList">
-                            <set field="settlementGroupMap" from="[:]"/>
-                            <if condition="termGroup.enumCode">
-                                <set field="ec.context[termGroup.enumCode]" from="settlementGroupMap"/>
-                            </if>
-                            <iterate list="settlementTermList" entry="settlementTerm">
-                                <script>dteTermList.add(settlementTerm)</script>
-                                <set field="settlementTermValue" from="settlementTerm.termValue != null ? settlementTerm.termValue : settlementTerm.description"/>
-                                <entity-find-one entity-name="moqui.basic.Enumeration" value-field="termType" auto-field-map="[enumId:settlementTerm.termTypeEnumId]"/>
-                                <if condition="termType.enumCode">
-                                    <set field="settlementGroupMap[termType.enumCode]" from="settlementTermValue"/>
-                                </if>
-                            </iterate>
-                            <log message="Added terms to group ${termGroup.description} as ${termGroup.enumCode}: ${settlementGroupMap}"/>
-                        </if>
-                    </iterate>
-                </if>
-            </else></if>
+                    <if condition="!dteReferenciaList">
+                        <return error="true" message="Could not find reference FiscalTaxDocumentId for credit note with invoiceId ${invoiceId}"/>
+                    </if>
+                    <if condition="!dteReferenciaList.first.invoiceId">
+                        <return error="true" message="Reference has no invoiceId associated (reference ${dteReferenciaList.first.referenciaId})"/>
+                    </if>
+                    <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="invoiceReferencia" auto-field-map="[invoiceId:dteReferenciaList.first.invoiceId]"/>
+                    <if condition="invoice.invoiceTotal != null &amp;&amp; invoice.invoiceTotal != 0 &amp;&amp; invoice.invoiceTotal == invoiceReferencia.invoiceTotal">
+                        <then>
+                            <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeAnula"/>
+                        </then>
+                        <else-if condition="invoice.invoiceTotal == 0">
+                            <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeCorrigeTexto"/>
+                        </else-if>
+                        <else>
+                            <set field="referencia.codigoReferenciaEnumId" value="MCHRefDteCodeCorrigeMonto"/>
+                        </else>
+                    </if>
+                    <entity-find-one entity-name="moqui.basic.Enumeration" value-field="codRefEnum" auto-field-map="[enumId:referencia.codigoReferenciaEnumId]"/>
+                    <set field="referencia.razonReferencia" from="codRefEnum.description"/>
+                    <service-call name="update#mchile.dte.ReferenciaDte" in-map="[referenciaId:referencia.referenciaId, codigoReferenciaEnumId:referencia.codigoReferenciaEnumId,
+                                razonReferencia:referencia.razonReferencia]"/>
+                </then><else-if condition="fiscalTaxDocumentTypeEnumId == 'Ftdt-56'">
+                    <if condition="referenciaList.size() == 0">
+                        <return error="true" message="No existen referencias para Nota de Débito invoiceId ${invoiceId}"/>
+                    </if>
+                    <if condition="referenciaList.size() > 1">
+                        <return error="true" message="Existe más de una referencia para Nota de Débito invoiceId ${invoiceId}"/>
+                    </if>
+                    <set field="referencia" from="referenciaList.first"/>
 
-            <set field="detailList" from="invoiceItemList"/>
-            <set field="invoiceMessage" from="invoice.invoiceMessage"/>
-            <service-call name="mchile.sii.dte.DteGenerationServices.generate#Factura" in-map="context" out-map="context"/>
-            <log message="after generate#Factura, fiscalTaxDocumentId: ${fiscalTaxDocumentId}"/>
-            <iterate list="dteTermList" entry="term">
-                <service-call name="create#mchile.dte.FiscalTaxDocumentTerm" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, settlementTermId:term.settlementTermId]"/>
-            </iterate>
+                    <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteReferenciaList" for-update="true">
+                        <!--<econdition field-name="issuerPartyId" from="invoice.fromPartyId"/>-->
+                        <econdition field-name="fiscalTaxDocumentTypeEnumId" from="referencia.fiscalTaxDocumentTypeEnumId"/>
+                        <econdition field-name="fiscalTaxDocumentNumber" from="referencia.folio as Integer"/>
+                    </entity-find>
+                    <if condition="!dteReferenciaList">
+                        <return error="true" message="Could not find reference FiscalTaxDocumentId for debit note with invoiceId ${invoiceId}"/>
+                    </if>
+                    <if condition="!dteReferenciaList.first.invoiceId">
+                        <return error="true" message="Reference has no invoiceId associated (reference ${dteReferenciaList.first.referenciaId})"/>
+                    </if>
+                </else-if><else>
+                    <!-- Create Factura -->
+                    <!-- Set data from Invoice Terms -->
+                    <entity-find entity-name="mantle.account.invoice.InvoiceTerm" list="termList">
+                        <econdition field-name="invoiceId"/>
+                    </entity-find>
+                    <set field="dteTermList" from="[]"/>
+                    <if condition="termList">
+                        <entity-find entity-name="moqui.basic.Enumeration" list="termGroupList">
+                            <econdition field-name="enumTypeId" value="FiscalTaxDocumentTermTypeGroup"/>
+                        </entity-find>
+                        <iterate list="termGroupList" entry="termGroup">
+                            <entity-find entity-name="moqui.basic.Enumeration" list="enumFieldList">
+                                <econdition field-name="parentEnumId" from="termGroup.enumId"/>
+                            </entity-find>
+                            <entity-find entity-name="mantle.account.invoice.SettlementTerm" list="settlementTermList">
+                                <econdition field-name="settlementTermId" operator="in" from="termList.settlementTermId"/>
+                                <econdition field-name="termTypeEnumId" operator="in" from="enumFieldList.enumId"/>
+                            </entity-find>
+                            <if condition="settlementTermList">
+                                <set field="settlementGroupMap" from="[:]"/>
+                                <if condition="termGroup.enumCode">
+                                    <set field="ec.context[termGroup.enumCode]" from="settlementGroupMap"/>
+                                </if>
+                                <iterate list="settlementTermList" entry="settlementTerm">
+                                    <script>dteTermList.add(settlementTerm)</script>
+                                    <set field="settlementTermValue" from="settlementTerm.termValue != null ? settlementTerm.termValue : settlementTerm.description"/>
+                                    <entity-find-one entity-name="moqui.basic.Enumeration" value-field="termType" auto-field-map="[enumId:settlementTerm.termTypeEnumId]"/>
+                                    <if condition="termType.enumCode">
+                                        <set field="settlementGroupMap[termType.enumCode]" from="settlementTermValue"/>
+                                    </if>
+                                </iterate>
+                                <log message="Added terms to group ${termGroup.description} as ${termGroup.enumCode}: ${settlementGroupMap}"/>
+                            </if>
+                        </iterate>
+                    </if>
+                </else></if>
+
+                <set field="detailList" from="invoiceItemList"/>
+                <set field="invoiceMessage" from="invoice.invoiceMessage"/>
+                <service-call name="mchile.sii.dte.DteGenerationServices.generate#Factura" in-map="context" out-map="context"/>
+                <log message="after generate#Factura, fiscalTaxDocumentId: ${fiscalTaxDocumentId}"/>
+                <iterate list="dteTermList" entry="term">
+                    <service-call name="create#mchile.dte.FiscalTaxDocumentTerm" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, settlementTermId:term.settlementTermId]"/>
+                </iterate>
+
+            </else></if>
 
             <if condition="sendToSii">
                 <service-call name="mchile.sii.dte.DteEnvioServices.genera#Envio" in-map="[organizationPartyId:issuerPartyId, documentIdList:[fiscalTaxDocumentId]]" out-map="context"/>
