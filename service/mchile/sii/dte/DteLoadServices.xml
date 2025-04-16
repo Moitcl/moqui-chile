@@ -53,6 +53,68 @@ along with this software (see the LICENSE.md file). If not, see
     </service>
 
     <service verb="load" noun="DteFromFile">
+        <description>Load DTE from XML file (XML, EnvioDTE or ZIP file including several of them)</description>
+        <in-parameters>
+            <parameter name="createUnknownIssuer" default="true" type="Boolean"/>
+            <parameter name="requireIssuerInternalOrg" default="false" type="Boolean"/>
+            <parameter name="createUnknownReceiver" default="false" type="Boolean"/>
+            <parameter name="requireReceiverInternalOrg" default="false" type="Boolean"/>
+            <parameter name="xml" type="Object" required="true"/>
+            <parameter name="pdf" type="Object"/>
+            <parameter name="attemptProductMatch" default-value="false" type="Boolean"/>
+            <parameter name="ignoreSignatureErrors" default-value="false" type="Boolean"/>
+            <parameter name="invoiceStatusId" default-value="InvoiceReceived"/>
+            <parameter name="sendResponse" type="Boolean" default="false"/>
+            <parameter name="organizationPartyIdAsOwnerWhenCreating"/>
+            <parameter name="sentAuthStatusId" default-value="Ftd-SentAuthAccepted"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="amountImportedOk" type="Integer"/>
+            <parameter name="amountImportedWithDiscrepancies" type="Integer"/>
+            <parameter name="amountRejected" type="Integer"/>
+            <parameter name="filesSkipped" type="Integer"/>
+            <parameter name="importedEnvios" type="Integer"/>
+        </out-parameters>
+        <actions>
+            <script>
+                import java.util.zip.ZipInputStream
+                import java.util.zip.ZipEntry
+            </script>
+            <if condition="xml instanceof org.apache.commons.fileupload.FileItem">
+                <set field="fileName" from="xml.name"/>
+            </if>
+            <if condition="!(fileName ==~ /^.*\.[Zz][Ii][Pp]$/)">
+                <service-call name="mchile.sii.dte.DteLoadServices.load#DteFromXmlFile" in-map="context" out-map="context"/>
+                <return/>
+            </if>
+            <set field="amountImportedOk" from="0" type="Integer"/>
+            <set field="amountImportedWithDiscrepancies" from="0" type="Integer"/>
+            <set field="amountRejected" from="0" type="Integer"/>
+            <set field="filesSkipped" from="0" type="Integer"/>
+            <set field="importedEnvios" from="0" type="Integer"/>
+            <if condition="pdf != null"><return error="true" message="No se soporta PDF cuando XML es un archivo ZIP"/></if>
+            <set field="is" from="new BufferedInputStream(xml.inputStream)" type="BufferedInputStream"/>
+            <set field="zipInputStream" from="new ZipInputStream(is)" type="ZipInputStream"/>
+            <while condition="(xmlFileEntry = zipInputStream.nextEntry) != null">
+                <if condition="xmlFileEntry?.name ==~ /^.*\.[Xx][Mm][Ll]$/"><then>
+                    <set field="xml" from="zipInputStream.readAllBytes()"/>
+                    <service-call name="mchile.sii.dte.DteLoadServices.load#DteFromXmlFile" in-map="context" out-map="fileResult" out-map-add-to-existing="false"/>
+                    <set field="amountImportedOk" from="amountImportedOk + (fileResult.amountImportedOk ?: 0)"/>
+                    <set field="amountImportedWithDiscrepancies" from="amountImportedWithDiscrepancies + (fileResult.amountImportedWithDiscrepancies ?: 0)"/>
+                    <set field="amountRejected" from="amountRejected + (fileResult.amountRejected ?: 0)"/>
+                    <set field="importedEnvios" from="importedEnvios + (fileResult.amountRejected ?: 0)"/>
+                </then><else>
+                    <log message="Skipping non-xml file: ${xmlFileEntry?.name}"/>
+                    <set field="filesSkipped" from="filesSkipped+1"/>
+                </else></if>
+            </while>
+            <script>
+            ec.message.addMessage("Importados: ${amountImportedOk}, Importados con Discrepancias: ${amountImportedWithDiscrepancies}, Rechazados: ${amountRejected}, Envios: ${importedEnvios}")
+            </script>
+        </actions>
+    </service>
+
+    <service verb="load" noun="DteFromXmlFile">
         <description>
             Carga DTE recibida al sistema y llama a servicio que crea orden de compra + invoice correspondiente
         </description>
@@ -165,7 +227,6 @@ along with this software (see the LICENSE.md file). If not, see
                 } else {
                     ec.message.addError("No xmlBytes found while importing file")
                 }
-                ec.message.addMessage("Importados: ${amountImportedOk}, Importados con Discrepancias: ${amountImportedWithDiscrepancies}, Rechazados: ${amountRejected}, Envios: ${importedEnvios}")
             ]]></script>
         </actions>
     </service>
