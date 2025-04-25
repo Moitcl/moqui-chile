@@ -98,10 +98,6 @@ if (setReceiverOwnerPartyId) {
 } else if (setIssuerOwnerPartyId)
     organizationPartyIdAsOwnerWhenCreating = issuerPartyId
 
-ec.logger.info("issuerPartyId: ${issuerPartyId}")
-ec.logger.info("receiverPartyId: ${receiverPartyId}")
-ec.logger.info("organizationPartyIdAsOwnerWhenCreating: ${organizationPartyIdAsOwnerWhenCreating}")
-
 EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()
 issuerTaxName = issuer?.taxOrganizationName
 if (issuerTaxName == null || issuerTaxName.size() == 0)
@@ -132,7 +128,7 @@ dteNodeList.each { org.w3c.dom.Node domNode ->
     if (issuerPartyId == null)
         issuerPartyId = recepcion.issuerPartyId
     else if (issuerPartyId != recepcion.issuerPartyId)
-        ec.message.addError("No se soporta EnvíoDTE con varios emisores")
+        ec.message.addError("No se soporta EnvíoDTE con varios emisores: ${issuerPartyId}, ${recepcion.issuerPartyId}")
     if (receiverPartyId == null)
         receiverPartyId = recepcion.receiverPartyId
     else if (receiverPartyId != recepcion.receiverPartyId)

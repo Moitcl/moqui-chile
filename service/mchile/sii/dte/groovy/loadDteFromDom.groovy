@@ -299,34 +299,36 @@ if (receiverIsInternalOrg)
     updateDteMap.sentRecStatusId=sentRecStatusId
 ec.service.sync().name("update#mchile.dte.FiscalTaxDocument").parameters(updateDteMap).call()
 
-// Se agregan las referencias
-dteMap.referenciaList.each { referencia ->
-    tipoEnumEv = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referencia.referenciaTipoDteEnumId).one()
-    esTipoTributario = (tipoEnumEv?.parentEnumId in ['Ftdt-DT','Ftdt-DTE'])
-    if (referencia.rutOtro) {
-        rutEmisorFolio = referencia.rutOtro
-    } else if (esTipoTributario) {
-        // Mismo rut del emisor del presente documento
-        rutEmisorFolio = rutEmisor
-    } else {
-        rutEmisorFolio = null
-    }
-    if (invoiceId) {
-        if (referencia.referenciaTipoDteEnumId == "Ftdt-801") {
-            // Orden de Compra, va en el Invoice además de mchile.dte.ReferenciaDte
-            ec.service.sync().name("update#mantle.account.invoice.Invoice").parameters([invoiceId:invoiceId, otherPartyOrderId:referencia.folio, otherPartyOrderDate:referencia.refDate]).call()
-        } else if (referencia.referenciaTipoDteEnumId && refDate) {
-            ec.service.sync().name("create#mchile.dte.ReferenciaDte")
-                    .parameters([invoiceId:invoiceId, referenciaTypeEnumId:'RefDteTypeInvoice', fiscalTaxDocumentTypeEnumId:referencia.referenciaTipoDteEnumId,
-                                 folio:referencia.folio, fecha: referencia.refDate, codigoReferenciaEnumId:referencia.codRefEnumId, razonReferencia:referencia.razonReferencia,
-                                 rutEmisorFolio:rutEmisorFolio, tipoDocumento:referencia.tipoDocumento, nroLinea:referencia.nroLinRef]).call()
+if (!isDuplicated) {
+    // Se agregan las referencias
+    dteMap.referenciaList.each { referencia ->
+        tipoEnumEv = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referencia.referenciaTipoDteEnumId).one()
+        esTipoTributario = (tipoEnumEv?.parentEnumId in ['Ftdt-DT', 'Ftdt-DTE'])
+        if (referencia.rutOtro) {
+            rutEmisorFolio = referencia.rutOtro
+        } else if (esTipoTributario) {
+            // Mismo rut del emisor del presente documento
+            rutEmisorFolio = rutEmisor
+        } else {
+            rutEmisorFolio = null
         }
+        if (invoiceId) {
+            if (referencia.referenciaTipoDteEnumId == "Ftdt-801") {
+                // Orden de Compra, va en el Invoice además de mchile.dte.ReferenciaDte
+                ec.service.sync().name("update#mantle.account.invoice.Invoice").parameters([invoiceId: invoiceId, otherPartyOrderId: referencia.folio, otherPartyOrderDate: referencia.refDate]).call()
+            } else if (referencia.referenciaTipoDteEnumId && refDate) {
+                ec.service.sync().name("create#mchile.dte.ReferenciaDte")
+                        .parameters([invoiceId     : invoiceId, referenciaTypeEnumId: 'RefDteTypeInvoice', fiscalTaxDocumentTypeEnumId: referencia.referenciaTipoDteEnumId,
+                                     folio         : referencia.folio, fecha: referencia.refDate, codigoReferenciaEnumId: referencia.codRefEnumId, razonReferencia: referencia.razonReferencia,
+                                     rutEmisorFolio: rutEmisorFolio, tipoDocumento: referencia.tipoDocumento, nroLinea: referencia.nroLinRef]).call()
+            }
+        }
+        if (referencia.referenciaTipoDteEnumId)
+            ec.service.sync().name("create#mchile.dte.ReferenciaDte")
+                    .parameters([fiscalTaxDocumentId: fiscalTaxDocumentId, referenciaTypeEnumId: 'RefDteTypeFiscalTaxDocument', fiscalTaxDocumentTypeEnumId: referencia.referenciaTipoDteEnumId,
+                                 folio              : referencia.folio, fecha: referencia.refDate, codigoReferenciaEnumId: referencia.codRefEnumId, razonReferencia: referencia.razonReferencia,
+                                 rutEmisorFolio     : rutEmisorFolio, tipoDocumento: referencia.tipoDocumento, nroLinea: referencia.nroLinRef]).call()
     }
-    if (referencia.referenciaTipoDteEnumId)
-        ec.service.sync().name("create#mchile.dte.ReferenciaDte")
-                .parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, referenciaTypeEnumId:'RefDteTypeFiscalTaxDocument', fiscalTaxDocumentTypeEnumId:referencia.referenciaTipoDteEnumId,
-                             folio:referencia.folio, fecha:referencia.refDate, codigoReferenciaEnumId:referencia.codRefEnumId, razonReferencia:referencia.razonReferencia,
-                             rutEmisorFolio:rutEmisorFolio, tipoDocumento:referencia.tipoDocumento, nroLinea:referencia.nroLinRef]).call()
 }
 
 ec.service.sync().name("mchile.sii.dte.DteModificationRegistrationServices.check#DteModificationReferences").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).call()
@@ -352,7 +354,7 @@ if (dteMap.correoEmisor) {
                         contactMechPurposeId:'DteIssuerEmail']).call().contactMechId
     }
     if (contactMechId && invoiceId) {
-        ec.service.sync().name("create#mantle.account.invoice.InvoiceContactMech").parameters([invoiceId:invoiceId, contactMechPurposeId:'DteIssuerEmail',
+        ec.service.sync().name("store#mantle.account.invoice.InvoiceContactMech").parameters([invoiceId:invoiceId, contactMechPurposeId:'DteIssuerEmail',
                                                                                                contactMechId:contactMechId]).call()
     }
 }
