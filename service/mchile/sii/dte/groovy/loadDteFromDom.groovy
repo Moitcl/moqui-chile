@@ -44,8 +44,12 @@ issuerPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut"
       razonSocial:dteMap.razonSocialEmisor, roleTypeId:'Supplier', giro:dteMap.giroEmisor, direccion:dteMap.direccionOrigen, comuna:dteMap.comunaOrigen,
       ciudad:dteMap.ciudadOrigen, failOnDuplicate:false]).call().partyId
 issuerTaxName = null
+if (!issuerPartyId) {
+    ec.message.addError("No se encuentra emisor, createUnknown: ${createUnknownIssuer}, organizationPartyIdAsOwnerWhenCreating: ${organizationPartyIdAsOwnerWhenCreating}")
+    return
+}
 EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()
-issuerTaxName = issuer.taxOrganizationName
+issuerTaxName = issuer?.taxOrganizationName
 if (issuerTaxName == null || issuerTaxName.size() == 0)
     issuerTaxName = ec.resource.expand("PartyNameOnlyTemplate", null, issuer)
 
@@ -143,7 +147,7 @@ if (existingDteList) {
                 if (!(dte.receiverPartyId in childPartyIdList))
                     ec.message.addError("Mismatch for receiverPartyId, XML value: ${dteMap.receiverPartyId}, DB value: ${dte.receiverPartyId} (is not child${allowReceiverChildWithDifferentRut? '' : ' sharing same RUT'})")
             }
-            dteFieldListOverwrite = ['statusId', 'sentAuthStatusId', 'formaPagoEnumId']
+            dteFieldListOverwrite = ['statusId', 'formaPagoEnumId']
             dteFieldListOverwrite.each { entityFieldName ->
                 if (dteMap[entityFieldName] != dte[entityFieldName]) {
                     ec.logger.warn("Changing ${entityFieldName} from ${dte[entityFieldName]} to ${dteMap[entityFieldName]}")
@@ -213,7 +217,7 @@ if (receiverPartyId == null)
 if (ec.message.hasError()) {
     estadoRecepDte = 2
     recepDteGlosa = 'A Reclamar, Errores: ' + ec.message.getErrors().join(', ') + ((errorMessages.size() > 0) ? (', ' + errorMessages.join(', ')) : '')
-    + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+                    + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
     sentRecStatusId = 'Ftd-ReceiverToReject'
     return
 }
@@ -222,7 +226,7 @@ if (!dte) {
 
     ftdCreateMap = [issuerPartyId:issuerPartyId, issuerPartyIdTypeEnumId:'PtidNationalTaxId', issuerPartyIdValue:rutEmisor, fiscalTaxDocumentTypeEnumId:dteMap.tipoDteEnumId, fiscalTaxDocumentNumber:dteMap.fiscalTaxDocumentNumber,
                 receiverPartyId:receiverPartyId, receiverPartyIdTypeEnumId:'PtidNationalTaxId', receiverPartyIdValue:rutReceptor, date:fechaEmision, statusId:'Ftd-Issued',
-                sentAuthStatusId:'Ftd-SentAuthAccepted', sentRecStatusId:sentRecStatusId, formaPagoEnumId:formaPagoEnumId]
+                sentAuthStatusId:sentAuthStatusId, sentRecStatusId:sentRecStatusId, formaPagoEnumId:formaPagoEnumId]
 
     // Se guarda DTE recibido en la base de datos
     mapOut = ec.service.sync().name("create#mchile.dte.FiscalTaxDocument").parameters(ftdCreateMap).call()

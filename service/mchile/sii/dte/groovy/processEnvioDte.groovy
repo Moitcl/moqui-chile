@@ -24,6 +24,8 @@ Boolean createUnknownIssuer = processingParameters.createUnknownIssuer ?: true
 Boolean requireIssuerInternalOrg = processingParameters.requireIssuerInternalOrg ?: false
 Boolean createUnknownReceiver = processingParameters.createUnknownReceiver ?: true
 Boolean requireReceiverInternalOrg = processingParameters.requireReceiverInternalOrg ?: true
+String sentAuthStatusId = processingParameters.sentAuthStatusId ?: 'Ftd-NotSentAuth'
+organizationPartyIdAsOwnerWhenCreating = processingParameters.organizationPartyIdAsOwnerWhenCreating
 withResponse = false
 
 Document doc
@@ -65,30 +67,43 @@ if (rutEmisorCaratula != emisor.RUTEmisor.text()) {
     ec.logger.error("Rut emisor de carátula (${rutEmisorCaratula} y DTE (${emisor.RUTEmisor.text()}) no coinciden")
     estadoRecepEnv = 2
 }
-issuerPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutEmisorCaratula, createUnknown:createUnknownIssuer, razonSocial:emisor.RznSoc.text(), roleTypeId:'Supplier',
+issuerPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutEmisorCaratula, createUnknown:false, razonSocial:emisor.RznSoc.text(), roleTypeId:'Supplier',
         giro:emisor.GiroEmis.text(), direccion:emisor.DirOrigen.text(), comuna:emisor.CmnaOrigen.text(), ciudad:emisor.CiudadOrigen.text(), failOnDuplicate:false]).call().partyId
 receptor = setDte.DTE[0].Documento.Encabezado.Receptor
 if (rutReceptorCaratula != receptor.RUTRecep.text()) {
     ec.logger.error("Rut receptor de carátula (${rutReceptorCaratula} y DTE (${receptor.RUTRecep.text()}) no coinciden")
     estadoRecepEnv = 2
 }
-receiverPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutReceptorCaratula, createUnknown:createUnknownReceiver, razonSocial:receptor.RznSocRecep.text(), roleTypeId:'Customer',
+receiverPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutReceptorCaratula, createUnknown:false, razonSocial:receptor.RznSocRecep.text(), roleTypeId:'Customer',
         giro:emisor.GiroRecep.text(), direccion:emisor.DirRecep.text(), comuna:emisor.CmnaRecep.text(), ciudad:emisor.CiudadRecep.text(), failOnDuplicate:false]).call()?.partyId
 if (!receiverPartyId) {
     return
 }
 
-if (receiverPartyId == issuerPartyId) {
+if (receiverPartyId == issuerPartyId && receiverPartyId != null) {
     processed = true
     return
 }
 
-envioRespuestaId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-RespuestaDte', statusId:'Ftde-Created', rutEmisor:rutReceptorCaratula, rutReceptor:rutEmisorCaratula,
-                                                                                    issuerPartyId:receiverPartyId, receiverPartyId:issuerPartyId, fechaEnvio:ec.user.nowTimestamp, internalId:idRecepcionDte]).call().envioId
-withResponse = envioRespuestaId != null
+receiverIsInternalOrg = (ec.entity.find("mantle.party.PartyRole").condition([partyId:receiverPartyId, roleTypeId:'OrgInternal']).one() != null)
+issuerIsInternalOrg = (ec.entity.find("mantle.party.PartyRole").condition([partyId:issuerPartyId, roleTypeId:'OrgInternal']).one() != null)
+if (receiverIsInternalOrg)
+    setReceiverOwnerPartyId = ec.service.sync().name("mantle.party.PartyServices.get#PartySettingValue").parameters([partySettingTypeId:'DteLoadUseReceiverAsOwner', partyId:receiverPartyId]).call().settingValue == 'Y'
+if (issuerIsInternalOrg)
+    setIssuerOwnerPartyId = ec.service.sync().name("mantle.party.PartyServices.get#PartySettingValue").parameters([partySettingTypeId:'DteLoadUseIssuerAsOwner', partyId:issuerPartyId]).call().settingValue == 'Y'
+if (setReceiverOwnerPartyId) {
+    if (setIssuerOwnerPartyId)
+        ec.message.addError("No se puede dejar como owner tanto a receptor como emisor!")
+    organizationPartyIdAsOwnerWhenCreating = receiverPartyId
+} else if (setIssuerOwnerPartyId)
+    organizationPartyIdAsOwnerWhenCreating = issuerPartyId
+
+ec.logger.info("issuerPartyId: ${issuerPartyId}")
+ec.logger.info("receiverPartyId: ${receiverPartyId}")
+ec.logger.info("organizationPartyIdAsOwnerWhenCreating: ${organizationPartyIdAsOwnerWhenCreating}")
 
 EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()
-issuerTaxName = issuer.taxOrganizationName
+issuerTaxName = issuer?.taxOrganizationName
 if (issuerTaxName == null || issuerTaxName.size() == 0)
     issuerTaxName = ec.resource.expand("PartyNameOnlyTemplate", null, issuer)
 
@@ -114,6 +129,15 @@ discrepancyCount = 0
 allDuplicated = (dteNodeList.length > 0)
 dteNodeList.each { org.w3c.dom.Node domNode ->
     recepcion = ec.service.sync().name("mchile.sii.dte.DteLoadServices.load#DteFromDom").parameters(context+[domNode:domNode]).call()
+    if (issuerPartyId == null)
+        issuerPartyId = recepcion.issuerPartyId
+    else if (issuerPartyId != recepcion.issuerPartyId)
+        ec.message.addError("No se soporta EnvíoDTE con varios emisores")
+    if (receiverPartyId == null)
+        receiverPartyId = recepcion.receiverPartyId
+    else if (receiverPartyId != recepcion.receiverPartyId)
+        ec.message.addError("No se soporta EnvíoDTE con varios receptores")
+
     if (!recepcion.isDuplicated)
         allDuplicated = false
     recepcionList.add(recepcion)
@@ -127,6 +151,10 @@ dteNodeList.each { org.w3c.dom.Node domNode ->
 if (allDuplicated) {
     newEnvioStatusId = 'Ftde-DuplicateNotProcessed'
 }
+
+envioRespuestaId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-RespuestaDte', statusId:'Ftde-Created', rutEmisor:rutReceptorCaratula, rutReceptor:rutEmisorCaratula,
+                                                                                    issuerPartyId:receiverPartyId, receiverPartyId:issuerPartyId, fechaEnvio:ec.user.nowTimestamp, internalId:idRecepcionDte]).call().envioId
+withResponse = envioRespuestaId != null
 
 estadoGlosaMap = [0:'Envio Recibido Conforme', 1:'Envio Rechazado - Error de Schema', 2:'Envio Rechazado - Error de Firma', 3:'Envio Rechazado - RUT Receptor No Corresponde', 90:'Envio Rechazado - Archivo Repetido',
                   91:'Envio Rechazado - Archivo Ilegible', 99:'Envio Rechazado - Otros']
