@@ -341,7 +341,7 @@ if (totalNeto != null || descuentoGlobalAfecto != null || recargoGlobalAfecto !=
         montoIVARecuperable = totalIVAClp
         totalInvoice = (totalNetoClp?:0.0) + totalIVAClp + (totalExentoClp?:0.0) - (descuentoGlobalExentoClp?:0.0) + (recargoGlobalExentoClp?:0.0)
     } else {
-        totalNeto = totalNeto - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
+        totalNeto = (totalNeto?:0.0) - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
         montoIVARecuperable = totalIva
         totalInvoice = (totalNeto?:0.0) + (totalIva?:0.0) + (totalExento?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
     }
