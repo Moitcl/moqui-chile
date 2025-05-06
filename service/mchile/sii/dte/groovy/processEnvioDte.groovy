@@ -67,15 +67,24 @@ if (rutEmisorCaratula != emisor.RUTEmisor.text()) {
     ec.logger.error("Rut emisor de carátula (${rutEmisorCaratula} y DTE (${emisor.RUTEmisor.text()}) no coinciden")
     estadoRecepEnv = 2
 }
-issuerPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutEmisorCaratula, createUnknown:false, razonSocial:emisor.RznSoc.text(), roleTypeId:'Supplier',
-        giro:emisor.GiroEmis.text(), direccion:emisor.DirOrigen.text(), comuna:emisor.CmnaOrigen.text(), ciudad:emisor.CiudadOrigen.text(), failOnDuplicate:false]).call().partyId
+if (rutEmisorCaratula != dteEnvioEv.rutEmisor)
+    ec.message.addError("Mismatch rutEmisor, en BD DteEnvio: ${dteEnvioEv.rutEmisor}, en Carátula de Envío: ${rutEmisorCaratula}")
+if (rutReceptorCaratula != dteEnvioEv.rutReceptor)
+    ec.message.addError("Mismatch rutReceptor, en BD DteEnvio: ${dteEnvioEv.rutReceptor}, en Carátula de Envío: ${rutReceptorCaratula}")
+
+if (ec.message.hasError())
+    return
+
+partyIdProcessingDetailMap = ec.service.sync().name("mchile.sii.dte.DteEnvioProcessingServices.get#PartyIdProcessingDetailForEnvio").parameters([envioId:envioId]).call()
+issuerPartyId = partyIdProcessingDetailMap.issuerPartyId
+receiverPartyId = partyIdProcessingDetailMap.receiverPartyId
+organizationPartyIdAsOwnerWhenCreating = partyIdProcessingDetailMap.organizationPartyIdAsOwnerWhenCreating
+
 receptor = setDte.DTE[0].Documento.Encabezado.Receptor
 if (rutReceptorCaratula != receptor.RUTRecep.text()) {
     ec.logger.error("Rut receptor de carátula (${rutReceptorCaratula} y DTE (${receptor.RUTRecep.text()}) no coinciden")
     estadoRecepEnv = 2
 }
-receiverPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutReceptorCaratula, createUnknown:false, razonSocial:receptor.RznSocRecep.text(), roleTypeId:'Customer',
-        giro:emisor.GiroRecep.text(), direccion:emisor.DirRecep.text(), comuna:emisor.CmnaRecep.text(), ciudad:emisor.CiudadRecep.text(), failOnDuplicate:false]).call()?.partyId
 if (!receiverPartyId) {
     return
 }
@@ -84,19 +93,6 @@ if (receiverPartyId == issuerPartyId && receiverPartyId != null) {
     processed = true
     return
 }
-
-receiverIsInternalOrg = (ec.entity.find("mantle.party.PartyRole").condition([partyId:receiverPartyId, roleTypeId:'OrgInternal']).one() != null)
-issuerIsInternalOrg = (ec.entity.find("mantle.party.PartyRole").condition([partyId:issuerPartyId, roleTypeId:'OrgInternal']).one() != null)
-if (receiverIsInternalOrg)
-    setReceiverOwnerPartyId = ec.service.sync().name("mantle.party.PartyServices.get#PartySettingValue").parameters([partySettingTypeId:'DteLoadUseReceiverAsOwner', partyId:receiverPartyId]).call().settingValue == 'Y'
-if (issuerIsInternalOrg)
-    setIssuerOwnerPartyId = ec.service.sync().name("mantle.party.PartyServices.get#PartySettingValue").parameters([partySettingTypeId:'DteLoadUseIssuerAsOwner', partyId:issuerPartyId]).call().settingValue == 'Y'
-if (setReceiverOwnerPartyId) {
-    if (setIssuerOwnerPartyId)
-        ec.message.addError("No se puede dejar como owner tanto a receptor como emisor!")
-    organizationPartyIdAsOwnerWhenCreating = receiverPartyId
-} else if (setIssuerOwnerPartyId)
-    organizationPartyIdAsOwnerWhenCreating = issuerPartyId
 
 EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()
 issuerTaxName = issuer?.taxOrganizationName

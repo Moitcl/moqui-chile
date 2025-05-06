@@ -536,5 +536,67 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="process" noun="DteSinEnvio">
+        <implements service="mchile.sii.dte.DteEnvioProcessingServices.process#EnvioInterface"/>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio" for-update="true"/>
+            <if condition="envio.documentLocation"><then>
+                <service-call name="mchile.sii.dte.DteEnvioProcessingServices.get#PartyIdProcessingDetailForEnvio" in-map="context" out-map="context"/>
+                <set field="xml" from="ec.resource.getLocationReference(envio.documentLocation)"/>
+                <set field="sendResponse" from="false"/>
+                <set field="requireReceiverInternalOrg" from="true"/>
+                <service-call name="mchile.sii.dte.DteLoadServices.load#DteFromXmlFile" in-map="context" out-map="context"/>
+                <set field="totalItems" from="1"/>
+                <set field="processedItems" from="1"/>
+                <set field="processed" from="true"/>
+                <set field="withError" from="false"/>
+                <set field="withResponse" from="false"/>
+            </then><else>
+                <set field="totalItems" from="0"/>
+                <set field="processedItems" from="0"/>
+                <set field="processed" from="false"/>
+                <set field="withError" from="true"/>
+                <set field="withResponse" from="false"/>
+            </else></if>
+        </actions>
+    </service>
+
+    <service verb="get" noun="PartyIdProcessingDetailForEnvio">
+        <in-parameters>
+            <parameter name="envioId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="receiverPartyId"/>
+            <parameter name="issuerPartyId"/>
+            <parameter name="organizationPartyIdAsOwnerWhenCreating"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio"/>
+            <if condition="!envio"><return error="true" message="No se encuentra envío ${envioId}"/></if>
+            <service-call name="mchile.GeneralServices.get#PartyIdByRut" in-map="[idValue:envio.rutEmisor, createUnknown:false, failOnDuplicate:false]" out-map="issuerRutResult"/>
+            <set field="issuerPartyId" from="issuerRutResult.partyId"/>
+            <service-call name="mchile.GeneralServices.get#PartyIdByRut" in-map="[idValue:envio.rutReceptor, createUnknown:false, failOnDuplicate:false]" out-map="receiverRutResult"/>
+            <set field="receiverPartyId" from="receiverRutResult.partyId"/>
+            <entity-find-one entity-name="mantle.party.PartyRole" value-field="issuerInternalRole" auto-field-map="[partyId:issuerPartyId, roleTypeId:'OrgInternal']"/>
+            <entity-find-one entity-name="mantle.party.PartyRole" value-field="receiverInternalRole" auto-field-map="[partyId:receiverPartyId, roleTypeId:'OrgInternal']"/>
+            <if condition="issuerInternalRole">
+                <service-call name="mantle.party.PartyServices.get#PartySettingValue" in-map="[partySettingTypeId:'DteLoadUseReceiverAsOwner', partyId:issuerPartyId]" out-map="setIssuerSetting"/>
+                <set field="setIssuerOwnerPartyId" from="setIssuerSetting.settingValue == 'Y'"/>
+            </if>
+            <if condition="receiverInternalRole">
+                <service-call name="mantle.party.PartyServices.get#PartySettingValue" in-map="[partySettingTypeId:'DteLoadUseReceiverAsOwner', partyId:receiverPartyId]" out-map="setReceiverSetting"/>
+                <set field="setReceiverOwnerPartyId" from="setReceiverSetting.settingValue == 'Y'"/>
+            </if>
+            <if condition="setReceiverOwnerPartyId"><then>
+                <if condition="issuerInternalRole">
+                    <return error="true" message="No se puede dejar como owner tanto a receptor como emisor!"/>
+                </if>
+                <set field="organizationPartyIdAsOwnerWhenCreating" from="receiverPartyId"/>
+            </then><else-if condition="issuerInternalRole">
+                <set field="organizationPartyIdAsOwnerWhenCreating" from="issuerPartyId"/>
+            </else-if></if>
+            <!-- Obs: receiver or issuer might be a sub-organization of tenant, and in that case no necessarily the owner (might be the tenant) -->
+        </actions>
+    </service>
 
 </services>
