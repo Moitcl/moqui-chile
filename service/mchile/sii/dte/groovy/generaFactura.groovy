@@ -383,6 +383,11 @@ razonSocialReceptorTimbre = razonSocialReceptor.length() > 39? razonSocialRecept
 StringWriter xmlWriter = new StringWriter()
 MarkupBuilder xmlBuilder = new MarkupBuilder(new IndentPrinter(new PrintWriter(xmlWriter), "", false))
 
+if (detalleList.size() == 0) {
+    ec.message.addError("DTE debe tener al menos 1 ítem")
+    return
+}
+
 // Timbre
 String detalleIt1 = detalleList.get(0).nombreItem
 if (detalleIt1.length() > 40)

@@ -6,6 +6,7 @@ import org.apache.xmlgraphics.io.ResourceResolver
 import org.moqui.BaseArtifactException
 import org.moqui.context.ExecutionContext
 import org.moqui.entity.EntityValue
+import org.moqui.entity.EntityCondition
 import org.moqui.resource.ResourceReference
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -376,7 +377,7 @@ class MoquiDTEUtils {
             // rutEmisorFolio se refiere al emisor del documento referenciado, rutEmisor es el rut del documento que va a referenciar al otro
             if (referenciaEntry.rutEmisorFolio != null && referenciaEntry.rutEmisorFolio != rutEmisor) {
                 // Sólo si el documento de referencia es de tipo tributario y fue emitido por otro contribuyente
-                documentosTributariosEnumIdList = ec.entity.find("moqui.basic.Enumeration").condition("parentEnumId", EntityCondition.IN, ['Ftdt-DT', 'Ftdt-DTE']).list().enumId
+                List documentosTributariosEnumIdList = ec.entity.find("moqui.basic.Enumeration").condition("parentEnumId", EntityCondition.IN, ['Ftdt-DT', 'Ftdt-DTE']).list().enumId
                 if (referenciaEntry.fiscalTaxDocumentTypeEnumId in documentosTributariosEnumIdList)
                     referenciaMap.rutOtro = referenciaEntry.rutEmisorFolio
             }
