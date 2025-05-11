@@ -1532,4 +1532,30 @@ TrackId Token']" type="Map"/>
         </actions>
     </service>
 
+    <service verb="check" noun="DteEnvioPermissions">
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+            <parameter name="envioTypeEnumId" default-value="Ftde-EnvioDte"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="hasPermission" type="Boolean"/>
+            <parameter name="checkPerformed" type="Boolean"/>
+        </out-parameters>
+        <actions>
+            <set field="checkPerformed" from="false"/>
+            <if condition="!(envioTypeEnumId in ['Ftde-EnvioDte', 'Ftde-EnvioBoleta'])">
+                <return error="true" message="Tipo de envío inválido: ${envioTypeEnumId}"/>
+            </if>
+            <set field="documentLocation" value="dbresource://moit/er/dte/EnvioDte/test/test-${envioTypeEnumId}.xml"/>
+            <set field="locationReference" from="ec.resource.getLocationReference(documentLocation)"/>
+            <script>locationReference.putText(" ")</script>
+            <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="context" out-map="dteConfig"/>
+            <service-call name="create#mchile.dte.DteEnvio" in-map="[envioId:'TEST_ENVIO_PERMISSION', envioTypeEnumId:envioTypeEnumId, issuerPartyId:partyId,
+                            receiverPartyId:'CL_SII', rutReceptor:'60803000-K', rutEmisor:dteConfig.rutOrganizacion, statusId:'Ftde-Created', documentLocation:documentLocation]" out-map="context"/>
+            <service-call name="mchile.sii.dte.DteCommServices.enviaSII#Envio" in-map="[envioIdList:[envioId], maxFail:1]" out-map="context"/>
+            <set field="checkPerformed" from="true"/>
+            <return error="true" message="Finished check#DteEnvioPermissions"/>
+        </actions>
+    </service>
+
 </services>
