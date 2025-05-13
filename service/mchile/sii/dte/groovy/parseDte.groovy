@@ -400,6 +400,10 @@ dteRefList.each { groovy.util.Node referencia ->
     if (nroLinRef != nroRef)
         errorMessages.add("Valor inesperado en referencia, campo NroLinRef, esperado ${nroRef}, recibido ${referencia.NroLinRef.text()}")
     tipoDocumento = referencia.TpoDocRef.text()
+    if (tipoDocumento == null) {
+        errorMessages.add("Referencia ${nroLinRef} no especifica campo TpoDocRef")
+        return
+    }
     referenciaTipoDteEnumId = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#MoquiCode").parameter("siiCode", tipoDocumento).call().enumId
     Date refDate = null
     if (referencia.FchRef.text() != null) {
