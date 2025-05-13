@@ -172,7 +172,7 @@ if (transporte) {
 detalleDteList = documentoInterno.Detalle
 
 BigDecimal montoItem = 0 as BigDecimal
-ec.logger.warn("Recorriendo detalles: ${detalleDteList.size()}")
+//ec.logger.warn("Recorriendo detalles: ${detalleDteList.size()}")
 int nroDetalles = 0
 BigDecimal totalCalculado = 0
 BigDecimal totalExento = 0
@@ -180,14 +180,14 @@ detalleList = []
 detalleDteList.each { detalleDte ->
     nroDetalles++
     // Adición de items a orden
-    ec.logger.warn("-----------------------------------")
-    ec.logger.warn("Leyendo línea detalle " + nroDetalles + ",")
-    ec.logger.warn("Indicador exento: ${detalleDte.IndExe.text()}")
-    ec.logger.warn("Nombre item: ${detalleDte.NmbItem.text()}")
-    ec.logger.warn("Cantidad: ${detalleDte.QtyItem.text()}")
-    ec.logger.warn("Precio: ${detalleDte.PrcItem.text()}")
-    ec.logger.warn("Descuento: ${detalleDte.DescuentoMonto?.text()}")
-    ec.logger.warn("Monto: ${detalleDte.MontoItem.text()}")
+    //ec.logger.warn("-----------------------------------")
+    //ec.logger.warn("Leyendo línea detalle " + nroDetalles + ",")
+    //ec.logger.warn("Indicador exento: ${detalleDte.IndExe.text()}")
+    //ec.logger.warn("Nombre item: ${detalleDte.NmbItem.text()}")
+    //ec.logger.warn("Cantidad: ${detalleDte.QtyItem.text()}")
+    //ec.logger.warn("Precio: ${detalleDte.PrcItem.text()}")
+    //ec.logger.warn("Descuento: ${detalleDte.DescuentoMonto?.text()}")
+    //ec.logger.warn("Monto: ${detalleDte.MontoItem.text()}")
     itemName = detalleDte.NmbItem?.text()
     itemDescription = detalleDte.DscItem?.text()
     BigDecimal quantity = detalleDte.QtyItem ? (detalleDte.QtyItem.text() as BigDecimal) : null

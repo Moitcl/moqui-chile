@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-3.xsd"
-        menu-image="fa fa-file-import" menu-image-type="icon" default-menu-title="Carga de Documentos" default-menu-index="30">
+        menu-image="fa fa-file-import" menu-image-type="icon" default-menu-title="Carga de Documentos" default-menu-index="30" transaction-timeout="120">
 
     <transition-include name="searchPartyList" location="component://SimpleScreens/template/party/PartyForms.xml"/>
     <transition-include name="getGlAccountListPaginated" location="component://SimpleScreens/template/account/AccountTransitions.xml"/>
     <transition-include name="getFacilityList" location="component://SimpleScreens/template/facility/FacilityTransitions.xml"/>
 
     <transition name="loadDte">
-        <service-call name="mchile.sii.dte.DteLoadServices.load#DteFromFile" in-map="context"/>
+        <actions>
+            <service-call name="mchile.sii.dte.DteLoadServices.load#DteFromFile" in-map="context" out-map="context"/>
+            <if condition="filesSkipped &gt; 0"><message error="true">Files skipped: ${filesSkipped}</message></if>
+            <message type="success">DTEs imported: ${amountImportedOk} + ${amountImportedWithDiscrepancies} with discrepancies</message>
+            <message type="info">Envios imported: ${importedEnvios}</message>
+        </actions>
         <default-response url="."/>
     </transition>
 
@@ -42,6 +47,13 @@
             <form-single name="LoadDteForm" transition="loadDte">
                 <field name="xml"><default-field title="XML (Factura, EnvioDte o ZIP con archivos XML)"><file size="30"/></default-field></field>
                 <field name="pdf"><default-field><file size="30"/></default-field></field>
+                <field name="organizationPartyIdAsOwnerWhenCreating"><default-field title="Owner for new Parties">
+                    <drop-down allow-empty="true" no-current-selected-key="${currentTenantId ?: '_NA_'}">
+                        <entity-options text="PartyNameTemplate" key="${partyId}">
+                            <entity-find entity-name="mantle.party.PartyDetail"><econdition field-name="partyId" operator="in" from="filterOrgIds+['_NA_']"/></entity-find>
+                        </entity-options>
+                    </drop-down>
+                </default-field></field>
                 <field name="createUnknownIssuer"><default-field title=""><check no-current-selected-key="true"><option key="true" text="Crear Inexistente"/></check></default-field></field>
                 <field name="requireIssuerInternalOrg"><default-field title=""><check no-current-selected-key=" "><option key="true" text="Debe ser Org Interna"/></check></default-field></field>
                 <field name="createUnknownReceiver"><default-field title=""><check no-current-selected-key=" "><option key="true" text="Crear Inexistente"/></check></default-field></field>
@@ -57,7 +69,7 @@
                         <field-ref name="xml"/>
                         <field-ref name="pdf"/>
                     </field-row>
-                    <field-row-big><field-ref name="productMatch"/></field-row-big>
+                    <field-row-big><field-ref name="productMatch"/><field-ref name="organizationPartyIdAsOwnerWhenCreating"/></field-row-big>
                     <field-group title="Issuer"><field-row><field-ref name="createUnknownIssuer"/><field-ref name="requireIssuerInternalOrg"/></field-row></field-group>
                     <field-group title="Receiver"><field-row><field-ref name="createUnknownReceiver"/><field-ref name="requireReceiverInternalOrg"/></field-row></field-group>
                     <field-ref name="ignoreSignatureErrors"/>

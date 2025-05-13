@@ -39,13 +39,14 @@ if (rutEmisor in reserved.rutList) {
     return
 }
 
-issuerPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:rutEmisor, createUnknown:createUnknownIssuer,
-      organizationPartyIdAsOwnerWhenCreating:organizationPartyIdAsOwnerWhenCreating, additionalAllowedOwnerPartyIdList:additionalAllowedOwnerPartyIdList,
-      razonSocial:dteMap.razonSocialEmisor, roleTypeId:'Supplier', giro:dteMap.giroEmisor, direccion:dteMap.direccionOrigen, comuna:dteMap.comunaOrigen,
-      ciudad:dteMap.ciudadOrigen, failOnDuplicate:false]).call().partyId
+partyIdByRutMap = [idValue:rutEmisor, createUnknown:createUnknownIssuer,
+                   organizationPartyIdAsOwnerWhenCreating:organizationPartyIdAsOwnerWhenCreating, additionalAllowedOwnerPartyIdList:additionalAllowedOwnerPartyIdList,
+                   razonSocial:dteMap.razonSocialEmisor, roleTypeId:'Supplier', giro:dteMap.giroEmisor, direccion:dteMap.direccionOrigen, comuna:dteMap.comunaOrigen,
+                   ciudad:dteMap.ciudadOrigen, failOnDuplicate:false]
+issuerPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters(partyIdByRutMap).call().partyId
 issuerTaxName = null
 if (!issuerPartyId) {
-    ec.message.addError("No se encuentra emisor, createUnknown: ${createUnknownIssuer}, organizationPartyIdAsOwnerWhenCreating: ${organizationPartyIdAsOwnerWhenCreating}")
+    ec.message.addError("No se encuentra emisor, partyIdByRutMap: ${partyIdByRutMap}")
     return
 }
 EntityValue issuer = ec.entity.find("mantle.party.PartyDetail").condition("partyId", issuerPartyId).one()

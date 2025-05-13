@@ -82,10 +82,22 @@ along with this software (see the LICENSE.md file). If not, see
                 import java.util.zip.ZipInputStream
                 import java.util.zip.ZipEntry
             </script>
-            <if condition="xml instanceof org.apache.commons.fileupload.FileItem">
+            <if condition="xml instanceof org.apache.commons.fileupload.FileItem"><then>
                 <set field="fileName" from="xml.name"/>
-            </if>
+                <set field="is" from="new BufferedInputStream(xml.inputStream)" type="BufferedInputStream"/>
+            </then><else-if condition="xml instanceof org.moqui.resource.ResourceReference">
+                <set field="fileName" from="xml.fileName"/>
+                <set field="is" from="new BufferedInputStream(xml.openStream())" type="BufferedInputStream"/>
+            </else-if><else-if condition="xml instanceof String">
+                <set field="rr" from="ec.resource.getLocationReference(xml)"/>
+                <set field="fileName" from="rr.fileName"/>
+                <set field="is" from="new BufferedInputStream(rr.openStream())" type="BufferedInputStream"/>
+            </else-if><else>
+                <return error="true" message="Unsupported class for xml: ${xml.class}"/>
+            </else></if>
             <if condition="(fileName ==~ /^.*\.[Zz][Ii][Pp]$/)"><then>
+                <log message="Processing as a ZIP file"/>
+                <set field="filesProcessed" from="0"/>
                 <set field="amountImportedOk" from="0" type="Integer"/>
                 <set field="amountImportedWithDiscrepancies" from="0" type="Integer"/>
                 <set field="amountRejected" from="0" type="Integer"/>
@@ -93,10 +105,15 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="importedEnvios" from="0" type="Integer"/>
                 <set field="envioIdList" from="[]"/>
                 <if condition="pdf != null"><return error="true" message="No se soporta PDF cuando XML es un archivo ZIP"/></if>
-                <set field="is" from="new BufferedInputStream(xml.inputStream)" type="BufferedInputStream"/>
                 <set field="zipInputStream" from="new ZipInputStream(is)" type="ZipInputStream"/>
                 <while condition="(xmlFileEntry = zipInputStream.nextEntry) != null">
-                    <if condition="xmlFileEntry?.name ==~ /^.*\.[Xx][Mm][Ll]$/"><then>
+                    <if condition="xmlFileEntry?.isDirectory()"><then>
+                        <continue/>
+                    </then><else-if condition="xmlFileEntry?.name =~ /^__MACOSX\//">
+                        <continue/>
+                    </else-if><else-if condition="xmlFileEntry?.name ==~ /^.*\.[Xx][Mm][Ll]$/ &amp;&amp; !(xmlFileEntry.name.startsWith('.'))">
+                        <set field="filesProcessed" from="filesProcessed+1"/>
+                        <log message="Processing file ${filesProcessed}: ${xmlFileEntry.name}"/>
                         <set field="xml" from="zipInputStream.readAllBytes()"/>
                         <service-call name="mchile.sii.dte.DteLoadServices.load#DteFromXmlFile" in-map="context" out-map="fileResult" out-map-add-to-existing="false"/>
                         <set field="amountImportedOk" from="amountImportedOk + (fileResult.amountImportedOk ?: 0)"/>
@@ -106,7 +123,7 @@ along with this software (see the LICENSE.md file). If not, see
                         <if condition="fileResult.envioIdList">
                             <script>envioIdList.addAll(fileResult.envioIdList)</script>
                         </if>
-                    </then><else>
+                    </else-if><else>
                         <log message="Skipping non-xml file: ${xmlFileEntry?.name}"/>
                         <set field="filesSkipped" from="filesSkipped+1"/>
                     </else></if>
@@ -160,10 +177,10 @@ along with this software (see the LICENSE.md file). If not, see
                 import javax.xml.xpath.XPathExpression
                 import org.moqui.context.ExecutionContext
 
-                Integer amountImportedOk = 0
-                Integer amountImportedWithDiscrepancies = 0
-                Integer amountRejected = 0
-                Integer importedEnvios = 0
+                amountImportedOk = 0
+                amountImportedWithDiscrepancies = 0
+                amountRejected = 0
+                importedEnvios = 0
                 envioIdList = []
                 processingParameters = [createUnknownIssuer:createUnknownIssuer, requireIssuerInternalOrg:requireIssuerInternalOrg, createUnknownReceiver:createUnknownReceiver,
                                         requireReceiverInternalOrg:requireReceiverInternalOrg, sentAuthStatusId:sentAuthStatusId]
@@ -197,10 +214,16 @@ along with this software (see the LICENSE.md file). If not, see
                 }
 
                 if (xmlBytes) {
-                    org.w3c.dom.Document doc = MoquiDTEUtils.parseDocument(xmlBytes)
+                    org.w3c.dom.Document doc = null
+                    try {
+                        doc = MoquiDTEUtils.parseDocument(xmlBytes)
+                    } catch (Exception e) {
+                        ec.logger.error("Error Parsing document: ${e.message}")
+                        throw new org.moqui.BaseException(e)
+                    }
                     org.w3c.dom.Element docElem = doc.getDocumentElement()
                     if (docElem.getNodeName() == "DTE") {
-                        outMap = ec.service.sync().name("mchile.sii.dte.DteLoadServices.load#DteFromDom").parameters(context + [domNode: docElem]).call()
+                            outMap = ec.service.sync().name("mchile.sii.dte.DteLoadServices.load#DteFromDom").parameters(context + [domNode: docElem]).call()
                         if (outMap.estadoRecepDte == 0)
                             amountImportedOk++
                         else if (outMap.estadoRecepDte == 2)
