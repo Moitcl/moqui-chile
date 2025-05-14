@@ -400,7 +400,6 @@ dteRefList.each { groovy.util.Node referencia ->
     if (nroLinRef != nroRef)
         errorMessages.add("Valor inesperado en referencia, campo NroLinRef, esperado ${nroRef}, recibido ${referencia.NroLinRef.text()}")
     tipoDocumento = referencia.TpoDocRef.text()
-    ec.logger.info("tipoDocumento: ${tipoDocumento}, class ${tipoDocumento?.class}")
     if (tipoDocumento == null || tipoDocumento == '') {
         errorMessages.add("Referencia ${nroLinRef} no especifica campo TpoDocRef")
         return
