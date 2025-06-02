@@ -1164,8 +1164,6 @@ if (draft) {
     ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call())
     fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId
 
-    ec.logger.info("In generaFactura.groovy, fiscalTaxDocumentId: ${dteEv.fiscalTaxDocumentId}")
-
     // Creación de referencias en BD
     Integer nroLinea = 0
     originalReferenciaList.each { referencia ->
