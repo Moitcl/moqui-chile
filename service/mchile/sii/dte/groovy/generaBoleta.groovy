@@ -11,6 +11,7 @@ import java.security.cert.CertificateNotYetValidException
 ExecutionContext ec = context.ec
 
 currencyUomId = 'CLP'
+fiscalTaxDocumentTypeEnumId = 'Ftdt-39'
 dteConstituyeVentaTypeList = ['Ftdt-101', 'Ftdt-102', 'Ftdt-109', 'Ftdt-110', 'Ftdt-30', 'Ftdt-32', 'Ftdt-33', 'Ftdt-34', 'Ftdt-35', 'Ftdt-38', 'Ftdt-39', 'Ftd-41']
 EntityValue invoice = null
 if (invoiceId) {
@@ -86,16 +87,6 @@ if (invoiceId) {
         referenciaList.add(reference)
     }
 }
-
-// Formas de pago
-if (invoice != null && invoice.invoiceTotal == 0)
-    formaPago = 3 // Sin costo
-else if (invoice != null && invoice.unpaidTotal == 0) {
-    formaPago = 1 // Contado (ya pagado)
-    ec.message.addError("fechaCancelacion needs to be determined (unimplemented)")
-    //fechaCancelacion
-} else
-    formaPago = 2 // Crédito (usar GlosaPagos)
 
 if (tipoDte == '39') {
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId)
@@ -193,9 +184,6 @@ if (giroReceptor && giroReceptor.length() > 39)
     giroReceptor = giroReceptor.substring(0,39)
 razonSocialReceptorTimbre = razonSocialReceptor.length() > 39? razonSocialReceptor.substring(0,39): razonSocialReceptor
 
-if (tipoDespachoEnumId)
-    tipoDespacho = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId:tipoDespachoEnumId, enumTypeId:'TipoDespacho']).call().siiCode
-
 // Timbre
 String detalleIt1 = detalleList.get(0).nombreItem
 
@@ -221,10 +209,6 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 FchEmis(ec.l10n.format(fechaEmision, "yyyy-MM-dd"))
                 IndServicio("3")
                 //IndNoRebaja()
-                if (tipoDespacho)
-                    TipoDespacho(tipoDespacho)
-                if (tipoDte == '52')
-                    IndTraslado(indTraslado)
                 if (indServicio)
                     IndServicio(indServicio)
                 //FmaPago(formaPago)
@@ -313,15 +297,17 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 if(!detalle.indicadorExento && detalle.priceItem != null && detalle.priceItem != 0 && detalle.priceItem != "0")
                     PrcItem((detalle.priceItem + ((detalle.priceItem * vatTaxRate) as BigDecimal).setScale(0, RoundingMode.HALF_UP) as BigDecimal).setScale(6, RoundingMode.HALF_UP))
                 //OtrMnda{}
-                //if (detalle.porcentajeDescuento)
-                   // DescuentoPct(detalle.porcentajeDescuento)
-                //if (detalle.montoDescuento)
-                //    DescuentoMonto(detalle.montoDescuento)
-
+                if (detalle.porcentajeDescuento)
+                    DescuentoPct(detalle.porcentajeDescuento)
+                if (detalle.montoDescuento)
+                    if (detalle.indicadorExento)
+                        DescuentoMonto(detalle.montoDescuento)
+                    else
+                        DescuentoMonto((detalle.montoDescuento + ((detalle.montoDescuento * vatTaxRate) as BigDecimal).setScale(0, RoundingMode.HALF_UP) as BigDecimal).setScale(6, RoundingMode.HALF_UP))
                 if(detalle.indicadorExento)
                     MontoItem((detalle.montoItem as BigDecimal).setScale(0, RoundingMode.HALF_UP))
                 if(!detalle.indicadorExento)
-                    MontoItem(((detalle.montoItem + (detalle.montoItem + (detalle.montoItem * vatTaxRate as BigDecimal).setScale(0, RoundingMode.HALF_UP))) as BigDecimal).setScale(0, RoundingMode.HALF_UP))
+                    MontoItem(((detalle.montoItem + (detalle.montoItem * vatTaxRate as BigDecimal).setScale(0, RoundingMode.HALF_UP)) as BigDecimal).setScale(0, RoundingMode.HALF_UP))
             }
         }
         //SubTotInfo{}
@@ -333,14 +319,15 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 TpoValor(discountOrChargeMap.tipoValor)
                 ValorDR(discountOrChargeMap.valor)
                 //ValorDROtrMnda()
-                //IndExeDR()
+                if (discountOrChargeMap.indicadorExento)
+                    IndExeDR(discountOrChargeMap.indicadorExento)
             }
         }
         referenciaList.each { referencia ->
             Referencia {
                 NroLinRef(referencia.numeroLinea)
-                //TpoDocRef(referencia.tipoDocumento)
-                //FolioRef(referencia.folio)
+                TpoDocRef(referencia.tipoDocumento)
+                FolioRef(referencia.folio)
                 //if (referencia.rutOtro)
                     //RUTOtr(referencia.rutOtro)
                 //if (referencia.fecha)
@@ -349,6 +336,10 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                     CodRef(referencia.codigo)
                 if (referencia.razon)
                     RazonRef(referencia.razon)
+                if (referencia.codigoVendedor)
+                    CodVndor(referencia.codigoVendedor)
+                if (referencia.codigoCaja)
+                    CodCaja(referencia.codigoCaja)
             }
         }
         //Comisiones{}

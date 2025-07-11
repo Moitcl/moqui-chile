@@ -121,7 +121,7 @@ class MoquiDTEUtils {
                     detailEntry.detailedDescription = ""
             }
             if (nombreItem == null || nombreItem.trim() == '') {
-                if (fiscalTaxDocumentTypeEnumId in ['Ftdt-33', 'Ftdt-34', 'Ftdt-56', 'Ftdt-61', 'Ftdt-111', 'Ftdt-112'])
+                if (fiscalTaxDocumentTypeEnumId in ['Ftdt-33', 'Ftdt-34', 'Ftdt-39', 'Ftdt-41', 'Ftdt-56', 'Ftdt-61', 'Ftdt-111', 'Ftdt-112'])
                     throw new BaseArtifactException("Item ${i} no tiene nombre")
                 nombreItem = " "
             }
@@ -140,7 +140,9 @@ class MoquiDTEUtils {
             BigDecimal porcentajeRecargo = detailEntry.porcentajeRecargo
             BigDecimal ajusteDecimal = detailEntry.ajusteDecimal
             String uom = null
-            if (!detailType.equals("ShipmentItem")) {
+            if (detailEntry.unidad) {
+                uom = detailEntry.unidad
+            } else if (!detailType.equals("ShipmentItem")) {
                 if (detailEntry.quantityUomId.equals('TF_hr'))
                     uom = "Hora"
                 else if (detailEntry.quantityUomId.equals('TF_mon'))
@@ -157,9 +159,11 @@ class MoquiDTEUtils {
             Boolean itemAfecto = null
             if (fiscalTaxDocumentTypeEnumId in ['Ftdt-110', 'Ftdt-111', 'Ftdt-112'])
                 itemAfecto = false
-            else if (detailEntry.productId) {
-                Map<String, Object> afectoOutMap = ec.service.sync().name("mchile.sii.dte.DteInternalServices.check#Afecto").parameters([issuerPartyId: issuerPartyId, productId: detailEntry.productId]).call()
-                itemAfecto = afectoOutMap.afecto
+            else if (detailEntry.afecto != null) {
+                itemAfecto = detailEntry.afecto as Boolean
+            } else if (detailEntry.productId) {
+                    Map<String, Object> afectoOutMap = ec.service.sync().name("mchile.sii.dte.DteInternalServices.check#Afecto").parameters([issuerPartyId: issuerPartyId, productId: detailEntry.productId]).call()
+                    itemAfecto = afectoOutMap.afecto
             } else {
                 String productDefaultExento = ec.service.sync().name("mantle.party.PartyServices.get#PartySettingValue").parameters([partyId: issuerPartyId, partySettingTypeId: 'moit.dte.ProductDefaultIsExento']).call().settingValue
                 itemAfecto = productDefaultExento != 'true'
@@ -273,7 +277,9 @@ class MoquiDTEUtils {
             Map detailMap = [:]
             detalleList.add(detailMap)
             detailMap.numeroLinea = i + 1
-            if (detailEntry.productId)
+            if (detailEntry.codigos) {
+                detailMap.codigoItem = detailEntry.codigos
+            } else if (detailEntry.productId)
                 detailMap.codigoItem = [[tipoCodigo: 'INT1', valorCodigo: detailEntry.productId]]
             detailMap.nombreItem = nombreItem
             if (detailEntry.detailedDescription)
@@ -284,9 +290,12 @@ class MoquiDTEUtils {
                 detailMap.tipoDocumentoLiquidacion = detailEntry.tipoDocumentoLiquidacion
             if (quantity != null)
                 detailMap.quantity = quantity
-            if (uom != null)
+            if (uom != null) {
+                if (uom.length() > 4)
+                    uom = uom.substring(0,4)
                 detailMap.uom = uom
-            if (priceItem != null && (detailType != "ShipmentItem" || Math.round(priceItem) > 0)) {
+            }
+            if (priceItem != null && (detailType != "ShipmentItem" || Math.round(priceItem) != 0)) {
                 if (priceItem < 0)
                     detailMap.priceItem = priceItem*-1
                 else
@@ -349,7 +358,9 @@ class MoquiDTEUtils {
         referenciaList.each { referenciaEntry ->
             String folioRef = referenciaEntry.folio
             String codRef = null
-            if (referenciaEntry.codigoReferenciaEnumId != null)
+            if (referenciaEntry.codigo)
+                codRef = referenciaEntry.codigo
+            else if (referenciaEntry.codigoReferenciaEnumId != null)
                 codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as String
             //codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as Integer
             Timestamp fechaRef = referenciaEntry.fecha instanceof java.sql.Date ? new Timestamp(referenciaEntry.fecha.time) : referenciaEntry.fecha
@@ -359,10 +370,18 @@ class MoquiDTEUtils {
             referenciaListOut.add(referenciaMap)
             referenciaMap.numeroLinea = i + 1
             referenciaMap.fecha = fechaRef
+            if (referenciaEntry.indicadorGlobal)
+                referenciaMap.indicadorGlobal = referenciaEntry.indicadorGlobal
+            if (referenciaEntry.codigoVendedor)
+                referenciaMap.codigoVendedor = referenciaEntry.codigoVendedor
+            if (referenciaEntry.codigoCaja)
+                referenciaMap.codigoCaja = referenciaEntry.codigoCaja
             if (referenciaEntry.razonReferencia != null)
                 referenciaMap.razon = referenciaEntry.razonReferencia
             referenciaMap.folio = folioRef
-            if (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('Ftdt-0')) { // Used for Set de Pruebas SII
+            if (referenciaEntry.tipoDocumento) {
+                referenciaMap.tipoDocumento = referenciaEntry.tipoDocumento
+            } else if (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('Ftdt-0')) { // Used for Set de Pruebas SII
                 referenciaMap.tipoDocumento = 'SET'
             } else {
                 Map<String, Object> codeOut = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId: referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
@@ -375,7 +394,9 @@ class MoquiDTEUtils {
                 }
             }
             // rutEmisorFolio se refiere al emisor del documento referenciado, rutEmisor es el rut del documento que va a referenciar al otro
-            if (referenciaEntry.rutEmisorFolio != null && referenciaEntry.rutEmisorFolio != rutEmisor) {
+            if (referenciaEntry.rutOtro)
+                referenciaMap.rutOtro = referenciaEntry.rutOtro
+            else if (referenciaEntry.rutEmisorFolio != null && referenciaEntry.rutEmisorFolio != rutEmisor) {
                 // Sólo si el documento de referencia es de tipo tributario y fue emitido por otro contribuyente
                 List documentosTributariosEnumIdList = ec.entity.find("moqui.basic.Enumeration").condition("parentEnumId", EntityCondition.IN, ['Ftdt-DT', 'Ftdt-DTE']).list().enumId
                 if (referenciaEntry.fiscalTaxDocumentTypeEnumId in documentosTributariosEnumIdList)
