@@ -293,7 +293,7 @@
                                             </xsl:choose></fo:block></fo:table-cell>
                                         </fo:table-row>
                                         <fo:table-row>
-                                            <fo:table-cell><fo:block font-weight="bold" margin="2pt">IVA <xsl:choose><xsl:when test="siidte:Encabezado/siidte:Totales/siidte:TasaIVA | Encabezado/Totales/TasaIVA"><xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:TasaIVA | Encabezado/Totales/TasaIVA, '###.###,##', 'european')"/></xsl:when></xsl:choose>%</fo:block></fo:table-cell>
+                                            <fo:table-cell><fo:block font-weight="bold" margin="2pt">IVA <xsl:choose><xsl:when test="siidte:Encabezado/siidte:Totales/siidte:TasaIVA | Encabezado/Totales/TasaIVA"><xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:TasaIVA | Encabezado/Totales/TasaIVA, '###.###,##', 'european')"/>%</xsl:when></xsl:choose></fo:block></fo:table-cell>
                                             <fo:table-cell><fo:block text-align="right" margin="2pt"><xsl:choose>
                                                 <xsl:when test="siidte:Encabezado/siidte:Totales/siidte:IVA | Encabezado/Totales/IVA">$ <xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:IVA | Encabezado/Totales/IVA, '###.###','european')"/></xsl:when>
                                                 <xsl:otherwise>$ 0</xsl:otherwise>
