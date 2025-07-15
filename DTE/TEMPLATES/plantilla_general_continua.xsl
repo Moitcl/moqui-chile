@@ -30,7 +30,9 @@
     <xsl:param name="rutEnviador" select="''"/>
     <xsl:param name="draft" select="'N'"/>
     <xsl:param name="unnamedCustomer" select="'N'"/>
-    <xsl:param name="paperWidth" select="'80mm'"/>
+    <xsl:param name="marginLeftMm" select="5"/>
+    <xsl:param name="marginRightMm" select="5"/>
+    <xsl:param name="pageWidthMm" select="80"/>
 
     <xsl:output method="xml" version="1.0" omit-xml-declaration="no" indent="yes" encoding="UTF-8"/>
 
@@ -40,8 +42,17 @@
     <xsl:param name="versionParam" select="'1.0'"/>
     <xsl:template match="/siidte:DTE/siidte:Documento | /DTE/Documento | /siidte:DTE/siidte:Liquidacion | /DTE/Liquidacion | /siidte:DTE/siidte:Exportaciones | /DTE/Exportaciones">
         <fo:root xmlns:fo="http://www.w3.org/1999/XSL/Format">
+            <xsl:variable name="itemCount" select="count(siidte:Detalle | Detalle)"/>
+            <xsl:variable name="itemAdditionalLinesCount" select="count(siidte:DscItem | DscItem | siidte:DescuentoPct | DescuentoPct | siidte:DescuentoMonto | DescuentoMonto)"/>
+            <xsl:variable name="referencesCount" select="count(siidte:Referencia | Referencia)"/>
+            <xsl:variable name="referencesAdditionalLinesCount" select="count(siidte:RazonRef | RazonRef | siidte:CodRef | CodRef)"/>
+            <xsl:variable name="estimatedHeightMm" select="160 + (($itemCount + $itemAdditionalLinesCount) * 8) + ((($referencesCount * 2) + $referencesAdditionalLinesCount) * 8)"/>
             <fo:layout-master-set>
-                <fo:simple-page-master master-name="simple" page-height="auto" page-width="$paperWidth" margin-top="4mm" margin-bottom="4mm" margin-left="4mm" margin-right="4mm">
+                <fo:simple-page-master master-name="simple" page-width="$paperWidth" margin-top="5mm" margin-bottom="5mm">
+                    <xsl:attribute name="page-height"><xsl:value-of select="$estimatedHeightMm"/>mm</xsl:attribute>
+                    <xsl:attribute name="page-width"><xsl:value-of select="$pageWidthMm"/>mm</xsl:attribute>
+                    <xsl:attribute name="margin-left"><xsl:value-of select="$marginLeftMm"/>mm</xsl:attribute>
+                    <xsl:attribute name="margin-right"><xsl:value-of select="$marginRightMm"/>mm</xsl:attribute>
                     <fo:region-body margin-top="0mm" margin-bottom="6mm" background-repeat="no-repeat" fox:background-image-width="6cm"
                                     background-position-horizontal="0.49cm" background-position-vertical="0.27cm">
                     </fo:region-body>
@@ -49,6 +60,8 @@
                     <fo:region-after extent="4mm"/>
                 </fo:simple-page-master>
             </fo:layout-master-set>
+
+            <xsl:variable name="maxWidthMm" select="$pageWidthMm - $marginLeftMm - $marginRightMm"/>
 
             <xsl:variable name="tipo" select="siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE | Encabezado/IdDoc/TipoDTE"/>
             <xsl:variable name="folio" select="siidte:Encabezado/siidte:IdDoc/siidte:Folio | Encabezado/IdDoc/Folio"/>
@@ -114,12 +127,34 @@
                     <xsl:with-param name="rutReceptor"><xsl:value-of select="siidte:Encabezado/siidte:Receptor/siidte:RUTRecep | Encabezado/Receptor/RUTRecep"/></xsl:with-param>
                 </xsl:apply-templates>
 
-                <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left">
+                <xsl:if test="siidte:Referencia | Referencia">
+                    <fo:block font-size="8pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
+                              fox:border-radius="4pt" border-width="0.8pt" border-style="solid" margin-right="2pt" margin-top="3mm">
+                        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
+                        <fo:table table-layout="fixed" margin="2pt">
+                            <xsl:call-template name="ReferencesColumnsAndHeader"/>
+
+                            <fo:table-body>
+                                <xsl:apply-templates select="siidte:Referencia[position() &lt;= $maxRefs] | Referencia[position() &lt;= $maxRefs]"/>
+                                <xsl:if test="count(siidte:Referencia | Referencia) > $maxRefs">
+                                    <fo:table-row>
+                                        <fo:table-cell number-columns-spanned="5"><fo:block font-weight="bold">Más <xsl:value-of select="count(siidte:Referencia | Referencia)-$maxRefs"/> referencias <xsl:choose>
+                                            <xsl:when test="$showExcessRefsInOtherPage = 'Y'"><xsl:value-of select="'en adjunto'"/></xsl:when>
+                                            <xsl:otherwise><xsl:value-of select="'no mostradas'"/></xsl:otherwise>
+                                        </xsl:choose></fo:block></fo:table-cell>
+                                    </fo:table-row>
+                                </xsl:if>
+                            </fo:table-body>
+                        </fo:table>
+                    </fo:block>
+                </xsl:if>
+
+                <fo:block font-size="8pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left">
                     <fo:block-container>
-                        <fo:table table-layout="fixed" width="100%" border-collapse="collapse">
+                        <fo:table table-layout="fixed" width="100%" border-collapse="collapse" margin-top="3mm">
                             <xsl:call-template name="ItemColumnsAndHeader"/>
-                                <fo:table-body>
-                                    <xsl:apply-templates select="siidte:Detalle | Detalle"/>
+                            <fo:table-body>
+                                <xsl:apply-templates select="siidte:Detalle | Detalle"/>
                             </fo:table-body>
                         </fo:table>
                     </fo:block-container>
@@ -140,142 +175,119 @@
                     <xsl:call-template name="DscRcgGlobalTable"/>
                 </xsl:if>
 
-                <fo:table table-layout="fixed">
-                    <fo:table-column column-width="14.2cm"/>
-                    <fo:table-column column-width="5.6cm"/>
-                    <fo:table-body><fo:table-row>
-                        <fo:table-cell><xsl:choose>
-                            <xsl:when test="siidte:Referencia | Referencia">
-                                <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                                          fox:border-radius="4pt" border-width="0.8pt" border-style="solid" margin-right="2pt">
-                                    <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
-                                    <fo:table table-layout="fixed" margin="2pt">
-                                        <xsl:call-template name="ReferencesColumnsAndHeader"/>
+                <xsl:if test="$cedible = 'true'">
+                    <fo:block font-size="9.01pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
+                              fox:border-radius="4pt" border-width="0.8pt"  border-style="solid" margin-right="2pt">
+                        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
+                        <fo:table table-layout="fixed" width="100%">
+                            <fo:table-column column-width="50%"/>
+                            <fo:table-column column-width="50%"/>
+                            <fo:table-header background-color="#eaeaea"><fo:table-row>
+                                <fo:table-cell number-columns-spanned="2"><fo:block font-weight="bold" text-align="center" margin="2pt">ACUSE DE RECIBO</fo:block></fo:table-cell>
+                            </fo:table-row></fo:table-header>
+                            <fo:table-body>
+                                <fo:table-row border-bottom-width="1pt" border-bottom-style="solid" border-bottom-color="#eaeaea">
+                                    <fo:table-cell><fo:block font-weight="bold" margin="4pt">Nombre:</fo:block></fo:table-cell><fo:table-cell><fo:block font-weight="bold" margin="4pt">RUT:</fo:block></fo:table-cell></fo:table-row>
+                                <fo:table-row>
+                                    <fo:table-cell border-bottom-width="1pt" border-bottom-style="solid" border-bottom-color="#eaeaea"><fo:block font-weight="bold" margin="4pt">Fecha:</fo:block></fo:table-cell><fo:table-cell><fo:block font-weight="bold" margin="4pt">Firma:</fo:block></fo:table-cell></fo:table-row>
+                                <fo:table-row border-bottom-width="1pt" border-bottom-style="solid" border-bottom-color="#eaeaea">
+                                    <fo:table-cell><fo:block font-weight="bold" margin="4pt" margin-bottom="2pt">Recinto:</fo:block></fo:table-cell></fo:table-row>
+                                <fo:table-row>
+                                    <fo:table-cell number-columns-spanned="2"><fo:block font-size="7pt" margin="4pt">El acuse de recibo que se declara en este acto, de acuerdo a lo dispuesto en la letra b) del Art. 4° y la letra c) del Art. 5° de la Ley 19.983, acredita que la entrega de mercadería(s) o servicio(s) prestado(s) ha(n) sido recibido(s).</fo:block></fo:table-cell></fo:table-row>
+                            </fo:table-body>
+                        </fo:table>
+                    </fo:block>
+                    <fo:block text-align="right" font-size="9.01pt"><xsl:choose><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=52) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=52)">CEDIBLE CON SU FACTURA&#160;&#160;</xsl:when><xsl:otherwise>CEDIBLE&#160;&#160;</xsl:otherwise></xsl:choose></fo:block>
+                </xsl:if>
 
+                <xsl:if test="$cuentaBancariaText">
+                    <fo:block margin-top="1cm" font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
+                              fox:border-radius="4pt" border-width="0.8pt"  border-style="solid" margin-right="2pt">
+                        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
+                        <fo:table table-layout="fixed">
+                            <fo:table-column column-width="100%"/>
+                            <fo:table-header background-color="#eaeaea"><fo:table-row>
+                                <fo:table-cell><fo:block font-size="9.01pt" text-align="center" margin="4pt">Formas de pago:</fo:block></fo:table-cell>
+                            </fo:table-row></fo:table-header>
+                            <fo:table-body>
+                                <fo:table-row>
+                                    <fo:table-cell>
+                                        <fo:block font-weight="bold" margin-left="4pt" margin-top="4pt">Transferencia bancaria</fo:block>
+                                        <fo:block margin-left="4pt" hyphenate="false"><xsl:value-of select="$cuentaBancariaText"/>
+                                            <xsl:if test="$cuentaBancariaMail">
+                                                <xsl:value-of select="' '"/>
+                                                <fo:basic-link><xsl:attribute name="external-destination">mailto:<xsl:value-of select="$cuentaBancariaMail"/></xsl:attribute><xsl:value-of select="$cuentaBancariaMail"/></fo:basic-link>
+                                            </xsl:if>
+                                        </fo:block>
+                                    </fo:table-cell>
+                                </fo:table-row>
+                            </fo:table-body>
+                        </fo:table>
+                    </fo:block>
+                </xsl:if>
+
+                <fo:table table-layout="fixed">
+                    <fo:table-column/>
+                    <fo:table-column column-width="5.6cm"/>
+                    <fo:table-body>
+                        <fo:table-row>
+                            <fo:table-cell><fo:block/></fo:table-cell>
+                            <fo:table-cell>
+                                <fo:block font-size="8pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
+                                          fox:border-radius="4pt" border-width="0.8pt"  border-style="solid">
+                                    <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
+                                    <fo:table table-layout="fixed" margin-right="1mm" margin-left="1mm">
+                                        <fo:table-column column-width="3cm"/>
+                                        <fo:table-column column-width="2.4cm"/>
                                         <fo:table-body>
-                                            <xsl:apply-templates select="siidte:Referencia[position() &lt;= $maxRefs] | Referencia[position() &lt;= $maxRefs]"/>
-                                            <xsl:if test="count(siidte:Referencia | Referencia) > $maxRefs">
+                                            <fo:table-row>
+                                                <fo:table-cell><fo:block font-weight="bold" margin="2pt">Monto Neto</fo:block></fo:table-cell>
+                                                <fo:table-cell><fo:block text-align="right" margin="2pt"><xsl:choose>
+                                                    <xsl:when test="siidte:Encabezado/siidte:Totales/siidte:MntNeto | Encabezado/Totales/MntNeto">$ <xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:MntNeto | Encabezado/Totales/MntNeto, '###.###','european')"/></xsl:when>
+                                                    <xsl:otherwise>$ 0</xsl:otherwise>
+                                                </xsl:choose></fo:block></fo:table-cell>
+                                            </fo:table-row>
+                                            <xsl:if test="siidte:Encabezado/siidte:Totales/siidte:MntExe | Encabezado/Totales/MntExe">
                                                 <fo:table-row>
-                                                    <fo:table-cell number-columns-spanned="5"><fo:block font-weight="bold">Más <xsl:value-of select="count(siidte:Referencia | Referencia)-$maxRefs"/> referencias <xsl:choose>
-                                                        <xsl:when test="$showExcessRefsInOtherPage = 'Y'"><xsl:value-of select="'en adjunto'"/></xsl:when>
-                                                        <xsl:otherwise><xsl:value-of select="'no mostradas'"/></xsl:otherwise>
+                                                    <fo:table-cell><fo:block font-weight="bold" margin="2pt">Monto Exento</fo:block></fo:table-cell>
+                                                    <fo:table-cell><fo:block text-align="right" margin="2pt"><xsl:choose>
+                                                        <xsl:when test="siidte:Encabezado/siidte:Totales/siidte:MntExe | Encabezado/Totales/MntExe">$ <xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:MntExe | Encabezado/Totales/MntExe, '###.###','european')"/></xsl:when>
+                                                        <xsl:otherwise>$ 0</xsl:otherwise>
                                                     </xsl:choose></fo:block></fo:table-cell>
                                                 </fo:table-row>
                                             </xsl:if>
-                                        </fo:table-body>
-                                    </fo:table>
-                                </fo:block>
-                            </xsl:when>
-                            <xsl:otherwise>
-                                <fo:block/>
-                            </xsl:otherwise></xsl:choose>
-                            <xsl:choose>
-                                <xsl:when test="$cedible = 'true'">
-                                    <fo:block font-size="9.01pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                                              fox:border-radius="4pt" border-width="0.8pt"  border-style="solid" margin-right="2pt">
-                                        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
-                                        <fo:table table-layout="fixed" width="100%">
-                                            <fo:table-column column-width="50%"/>
-                                            <fo:table-column column-width="50%"/>
-                                            <fo:table-header background-color="#eaeaea"><fo:table-row>
-                                                <fo:table-cell number-columns-spanned="2"><fo:block font-weight="bold" text-align="center" margin="2pt">ACUSE DE RECIBO</fo:block></fo:table-cell>
-                                            </fo:table-row></fo:table-header>
-                                            <fo:table-body>
-                                                <fo:table-row border-bottom-width="1pt" border-bottom-style="solid" border-bottom-color="#eaeaea">
-                                                    <fo:table-cell><fo:block font-weight="bold" margin="4pt">Nombre:</fo:block></fo:table-cell><fo:table-cell><fo:block font-weight="bold" margin="4pt">RUT:</fo:block></fo:table-cell></fo:table-row>
-                                                <fo:table-row>
-                                                    <fo:table-cell border-bottom-width="1pt" border-bottom-style="solid" border-bottom-color="#eaeaea"><fo:block font-weight="bold" margin="4pt">Fecha:</fo:block></fo:table-cell><fo:table-cell><fo:block font-weight="bold" margin="4pt">Firma:</fo:block></fo:table-cell></fo:table-row>
-                                                <fo:table-row border-bottom-width="1pt" border-bottom-style="solid" border-bottom-color="#eaeaea">
-                                                    <fo:table-cell><fo:block font-weight="bold" margin="4pt" margin-bottom="2pt">Recinto:</fo:block></fo:table-cell></fo:table-row>
-                                                <fo:table-row>
-                                                    <fo:table-cell number-columns-spanned="2"><fo:block font-size="7pt" margin="4pt">El acuse de recibo que se declara en este acto, de acuerdo a lo dispuesto en la letra b) del Art. 4° y la letra c) del Art. 5° de la Ley 19.983, acredita que la entrega de mercadería(s) o servicio(s) prestado(s) ha(n) sido recibido(s).</fo:block></fo:table-cell></fo:table-row>
-                                            </fo:table-body>
-                                        </fo:table>
-                                    </fo:block>
-                                    <fo:block text-align="right" font-size="9.01pt"><xsl:choose><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=52) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=52)">CEDIBLE CON SU FACTURA&#160;&#160;</xsl:when><xsl:otherwise>CEDIBLE&#160;&#160;</xsl:otherwise></xsl:choose></fo:block>
-                                </xsl:when>
-                                <xsl:otherwise>
-                                    <fo:block/>
-                                </xsl:otherwise></xsl:choose>
-
-                            <xsl:if test="$cuentaBancariaText">
-                                <fo:block margin-top="1cm" font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                                          fox:border-radius="4pt" border-width="0.8pt"  border-style="solid" margin-right="2pt">
-                                    <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
-                                    <fo:table table-layout="fixed">
-                                        <fo:table-column column-width="100%"/>
-                                        <fo:table-header background-color="#eaeaea"><fo:table-row>
-                                            <fo:table-cell><fo:block font-size="9.01pt" text-align="center" margin="4pt">Formas de pago:</fo:block></fo:table-cell>
-                                        </fo:table-row></fo:table-header>
-                                        <fo:table-body>
                                             <fo:table-row>
-                                                <fo:table-cell>
-                                                    <fo:block font-weight="bold" margin-left="4pt" margin-top="4pt">Transferencia bancaria</fo:block>
-                                                    <fo:block margin-left="4pt" hyphenate="false"><xsl:value-of select="$cuentaBancariaText"/>
-                                                        <xsl:if test="$cuentaBancariaMail">
-                                                            <xsl:value-of select="' '"/>
-                                                            <fo:basic-link><xsl:attribute name="external-destination">mailto:<xsl:value-of select="$cuentaBancariaMail"/></xsl:attribute><xsl:value-of select="$cuentaBancariaMail"/></fo:basic-link>
-                                                        </xsl:if>
-                                                    </fo:block>
-                                                </fo:table-cell>
+                                                <fo:table-cell><fo:block font-weight="bold" margin="2pt">IVA <xsl:choose><xsl:when test="siidte:Encabezado/siidte:Totales/siidte:TasaIVA | Encabezado/Totales/TasaIVA"><xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:TasaIVA | Encabezado/Totales/TasaIVA, '###.###,##', 'european')"/>%</xsl:when></xsl:choose></fo:block></fo:table-cell>
+                                                <fo:table-cell><fo:block text-align="right" margin="2pt"><xsl:choose>
+                                                    <xsl:when test="siidte:Encabezado/siidte:Totales/siidte:IVA | Encabezado/Totales/IVA">$ <xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:IVA | Encabezado/Totales/IVA, '###.###','european')"/></xsl:when>
+                                                    <xsl:otherwise>$ 0</xsl:otherwise>
+                                                </xsl:choose></fo:block></fo:table-cell>
+                                            </fo:table-row>
+                                            <fo:table-row>
+                                                <fo:table-cell><fo:block font-weight="bold" margin="2pt" font-size="9.01pt">Total</fo:block></fo:table-cell>
+                                                <fo:table-cell><fo:block text-align="right" margin="2pt" font-size="9.01pt"><xsl:choose>
+                                                    <xsl:when test="siidte:Encabezado/siidte:Totales/siidte:MntTotal | Encabezado/Totales/MntTotal">$ <xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:MntTotal | Encabezado/Totales/MntTotal, '###.###','european')"/></xsl:when>
+                                                    <xsl:otherwise>$ 0</xsl:otherwise>
+                                                </xsl:choose></fo:block></fo:table-cell>
                                             </fo:table-row>
                                         </fo:table-body>
                                     </fo:table>
                                 </fo:block>
-                            </xsl:if>
-
-                        </fo:table-cell>
-                        <fo:table-cell>
-                            <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                                      fox:border-radius="4pt" border-width="0.8pt"  border-style="solid" margin-left="2pt">
-                                <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
-                                <fo:table table-layout="fixed">
-                                    <fo:table-column column-width="3cm"/>
-                                    <fo:table-column column-width="2.4cm"/>
-                                    <fo:table-body>
-                                        <fo:table-row>
-                                            <fo:table-cell><fo:block font-weight="bold" margin="2pt">Monto Neto</fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block text-align="right" margin="2pt"><xsl:choose>
-                                                <xsl:when test="siidte:Encabezado/siidte:Totales/siidte:MntNeto | Encabezado/Totales/MntNeto">$ <xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:MntNeto | Encabezado/Totales/MntNeto, '###.###','european')"/></xsl:when>
-                                                <xsl:otherwise>$ 0</xsl:otherwise>
-                                            </xsl:choose></fo:block></fo:table-cell>
-                                        </fo:table-row>
-                                        <fo:table-row>
-                                            <fo:table-cell><fo:block font-weight="bold" margin="2pt">Monto Exento</fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block text-align="right" margin="2pt"><xsl:choose>
-                                                <xsl:when test="siidte:Encabezado/siidte:Totales/siidte:MntExe | Encabezado/Totales/MntExe">$ <xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:MntExe | Encabezado/Totales/MntExe, '###.###','european')"/></xsl:when>
-                                                <xsl:otherwise>$ 0</xsl:otherwise>
-                                            </xsl:choose></fo:block></fo:table-cell>
-                                        </fo:table-row>
-                                        <fo:table-row>
-                                            <fo:table-cell><fo:block font-weight="bold" margin="2pt">IVA <xsl:choose><xsl:when test="siidte:Encabezado/siidte:Totales/siidte:TasaIVA | Encabezado/Totales/TasaIVA"><xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:TasaIVA | Encabezado/Totales/TasaIVA, '###.###,##', 'european')"/>%</xsl:when></xsl:choose></fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block text-align="right" margin="2pt"><xsl:choose>
-                                                <xsl:when test="siidte:Encabezado/siidte:Totales/siidte:IVA | Encabezado/Totales/IVA">$ <xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:IVA | Encabezado/Totales/IVA, '###.###','european')"/></xsl:when>
-                                                <xsl:otherwise>$ 0</xsl:otherwise>
-                                            </xsl:choose></fo:block></fo:table-cell>
-                                        </fo:table-row>
-                                        <fo:table-row>
-                                            <fo:table-cell><fo:block font-weight="bold" margin="2pt" font-size="9.01pt">Total</fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block text-align="right" margin="2pt" font-size="9.01pt"><xsl:choose>
-                                                <xsl:when test="siidte:Encabezado/siidte:Totales/siidte:MntTotal | Encabezado/Totales/MntTotal">$ <xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:MntTotal | Encabezado/Totales/MntTotal, '###.###','european')"/></xsl:when>
-                                                <xsl:otherwise>$ 0</xsl:otherwise>
-                                            </xsl:choose></fo:block></fo:table-cell>
-                                        </fo:table-row>
-                                    </fo:table-body>
-                                </fo:table>
-                            </fo:block>
-                            <xsl:apply-templates select="siidte:TED | TED"/>
-                        </fo:table-cell>
-                    </fo:table-row></fo:table-body>
+                            </fo:table-cell>
+                        </fo:table-row>
+                    </fo:table-body>
                 </fo:table>
 
+                <xsl:apply-templates select="siidte:TED | TED"/>
 
             </fo:block-container>
 
         </fo:block>
+        <!--
         <fo:block-container absolute-position="absolute" left="19.85cm" top="-7.8cm" reference-orientation="90">
             <fo:block writing-mode="tb-rl" font-size="6pt" color="#c0c0c0"><fo:basic-link external-destination="https://moit.cl/">Moit ERP www.moit.cl</fo:basic-link></fo:block>
         </fo:block-container>
+        -->
     </xsl:template>
 
     <!-- Datos del emisor -->
@@ -283,100 +295,72 @@
         <xsl:param name="folio"/>
         <xsl:param name="tipo"/>
 
-        <fo:table table-layout="fixed">
-            <fo:table-column column-width="3.2cm"/>
-            <fo:table-column column-width="9.8cm"/>
-            <fo:table-column column-width="6.8cm"/>
-            <fo:table-body>
-                <fo:table-cell>
-                    <!--  El logo -->
-                    <fo:block-container absolute-position="auto">
+        <!-- Recuadro Tipo de Documento -->
+        <fo:block-container absolute-position="auto" text-align="center" top="0cm" border-color="red" border-style="solid" border-width="0.8mm">
+            <fo:table table-layout="fixed"><fo:table-body>
+                <fo:table-row><fo:table-cell display-align="center">
+                    <fo:block font-size="10pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" color="red" text-align="center" hyphenate="false">R.U.T.: <xsl:call-template name="RutFormat">
+                        <xsl:with-param name="rut"><xsl:value-of select="siidte:RUTEmisor | RUTEmisor"/></xsl:with-param></xsl:call-template>
+                    </fo:block>
+                    <fo:block font-size="10pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" color="red" text-align="center">
                         <xsl:choose>
-                            <xsl:when test="$logo">
-                                <fo:block><fo:external-graphic src="$logo" width="3cm" content-height="2.2cm" content-width="scale-to-fit" scaling="uniform">
-                                    <xsl:attribute name="src">url(<xsl:value-of select="$logo"/>)</xsl:attribute></fo:external-graphic>
-                                </fo:block>
-                            </xsl:when>
-                            <xsl:otherwise>
-                                <fo:block/>
-                            </xsl:otherwise>
+                            <xsl:when test="$tipo=33">FACTURA ELECTRÓNICA</xsl:when>
+                            <xsl:when test="$tipo=34">FACTURA ELECTRÓNICA EXENTA</xsl:when>
+                            <xsl:when test="$tipo=39">BOLETA ELECTRÓNICA</xsl:when>
+                            <xsl:when test="$tipo=41">BOLETA ELECTRÓNICA EXENTA</xsl:when>
+                            <xsl:when test="$tipo=43">LIQUIDACIÓN FACTURA ELECTRÓNICA</xsl:when>
+                            <xsl:when test="$tipo=46">FACTURA DE COMPRA ELECTRÓNICA</xsl:when>
+                            <xsl:when test="$tipo=52">GUIA DE DESPACHO ELECTRÓNICA</xsl:when>
+                            <xsl:when test="$tipo=56">NOTA DE DÉBITO ELECTRÓNICA</xsl:when>
+                            <xsl:when test="$tipo=61">NOTA DE CRÉDITO ELECTRÓNICA</xsl:when>
+                            <xsl:when test="$tipo=110">FACTURA DE EXPORTACIÓN ELECTRÓNICA</xsl:when>
+                            <xsl:when test="$tipo=112">NOTA DE CRÉDITO EXPORTACIÓN ELECTRÓNICA</xsl:when>
+                            <xsl:otherwise>TIPO DTE NO SOPORTADO EN TEMPLATE XSL</xsl:otherwise>
                         </xsl:choose>
-                    </fo:block-container>
-                </fo:table-cell>
+                    </fo:block>
+                    <fo:block font-size="10pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" color="red" text-align="center">N&#176;<xsl:value-of select="$folio"/></fo:block>
+                </fo:table-cell></fo:table-row></fo:table-body>
+            </fo:table>
+        </fo:block-container>
 
-                <fo:table-cell>
-                    <fo:block-container absolute-position="auto" left="3.1cm" top="0cm" width="9.75cm">
+        <!-- Sucursal SII -->
+        <fo:block-container absolute-position="auto" margin-top="1mm" margin-bottom="2mm">
+            <fo:block font-size="10pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" color="red" text-align="center">S.I.I. - <xsl:value-of select="$oficinaSII"/></fo:block>
+        </fo:block-container>
 
-                        <fo:block font-size="10.81pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" text-align="left">
-                            <xsl:attribute name="color"><xsl:value-of select="$vendorNameColor"/></xsl:attribute>
-                            <xsl:value-of select="siidte:RznSoc | RznSoc | siidte:RznSocEmisor | RznSocEmisor"/>
-                        </fo:block>
+        <!--  El logo -->
+        <xsl:choose>
+            <xsl:when test="$logo">
+                <fo:block-container absolute-position="auto">
+                    <fo:block><fo:external-graphic src="$logo" width="3cm" content-height="2.2cm" content-width="scale-to-fit" scaling="uniform">
+                        <xsl:attribute name="src">url(<xsl:value-of select="$logo"/>)</xsl:attribute></fo:external-graphic>
+                    </fo:block>
+                </fo:block-container>
+            </xsl:when>
+            <xsl:otherwise>
+            </xsl:otherwise>
+        </xsl:choose>
 
-                        <xsl:if test="siidte:Sucursal | Sucursal">
-                            <fo:block font-weight="bold" font-size="9.01pt" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left">
-                                Sucursal: <xsl:value-of select="siidte:Sucursal | Sucursal"/> (Codigo SII: <xsl:value-of select="siidte:CdgSIISucur | CdgSIISucur"/>)
-                            </fo:block>
-                        </xsl:if>
-
-                        <fo:block font-size="9.01pt" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left">
-                            <xsl:value-of select="siidte:GiroEmis | GiroEmis | siidte:GiroEmisor | GiroEmisor"/>
-                        </fo:block>
-
-                        <fo:block font-size="8.4pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left">
-                            Casa Matriz: <xsl:value-of select="siidte:DirOrigen | DirOrigen"/>, <xsl:value-of select="siidte:CmnaOrigen | CmnaOrigen"/>
-                        </fo:block>
-
-                        <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left">
-                            <xsl:if test="$fonoContacto">
-                                Fono: <fo:basic-link><xsl:attribute name="external-destination">tel:<xsl:value-of select="$fonoContacto"/></xsl:attribute><xsl:value-of select="$fonoContacto"/></fo:basic-link>
-                            </xsl:if>
-                            <xsl:if test="$fonoContacto and $mailContacto"> -- </xsl:if>
-                            <xsl:if test="$mailContacto">
-                                Email: <fo:basic-link><xsl:attribute name="external-destination">mailto:<xsl:value-of select="$mailContacto"/></xsl:attribute><xsl:value-of select="$mailContacto"/></fo:basic-link>
-                            </xsl:if>
-                            <xsl:if test="not($fonoContacto) and not($mailContacto)">
-                                <fo:block/>
-                            </xsl:if>
-                        </fo:block>
-
-                    </fo:block-container>
-                </fo:table-cell>
-
-                <fo:table-cell>
-
-                    <!-- Recuadro con folio -->
-                    <fo:block-container absolute-position="auto" text-align="center" top="0cm" border-color="red" border-style="solid" border-width="0.8mm">
-                        <fo:table table-layout="fixed"><fo:table-body>
-                            <fo:table-row><fo:table-cell display-align="center">
-                                <fo:block font-size="10.21pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" color="red" text-align="center" hyphenate="false">R.U.T.ss: <xsl:call-template name="RutFormat">
-                                    <xsl:with-param name="rut"><xsl:value-of select="siidte:RUTEmisor | RUTEmisor"/></xsl:with-param></xsl:call-template>
-                                </fo:block>
-                                <fo:block font-size="10.21pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" color="red" text-align="center">
-                                    <xsl:choose>
-                                        <xsl:when test="$tipo=33">FACTURA ELECTRÓNICA</xsl:when>
-                                        <xsl:when test="$tipo=34">FACTURA ELECTRÓNICA EXENTA</xsl:when>
-                                        <xsl:when test="$tipo=39">BOLETA ELECTRÓNICA</xsl:when>
-                                        <xsl:when test="$tipo=41">BOLETA ELECTRÓNICA EXENTA</xsl:when>
-                                        <xsl:when test="$tipo=43">LIQUIDACIÓN FACTURA ELECTRÓNICA</xsl:when>
-                                        <xsl:when test="$tipo=46">FACTURA DE COMPRA ELECTRÓNICA</xsl:when>
-                                        <xsl:when test="$tipo=52">GUIA DE DESPACHO ELECTRÓNICA</xsl:when>
-                                        <xsl:when test="$tipo=56">NOTA DE DÉBITO ELECTRÓNICA</xsl:when>
-                                        <xsl:when test="$tipo=61">NOTA DE CRÉDITO ELECTRÓNICA</xsl:when>
-                                        <xsl:when test="$tipo=110">FACTURA DE EXPORTACIÓN ELECTRÓNICA</xsl:when>
-                                        <xsl:when test="$tipo=112">NOTA DE CRÉDITO EXPORTACIÓN ELECTRÓNICA</xsl:when>
-                                        <xsl:otherwise>TIPO DTE NO SOPORTADO EN TEMPLATE XSL</xsl:otherwise>
-                                    </xsl:choose>
-                                </fo:block>
-                                <fo:block font-size="10.21pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" color="red" text-align="center">N&#176;<xsl:value-of select="$folio"/></fo:block>
-                            </fo:table-cell></fo:table-row></fo:table-body>
-                        </fo:table>
-                    </fo:block-container>
-                    <fo:block-container absolute-position="auto" margin-top="0.1cm">
-                        <fo:block font-size="10.21pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" color="red" text-align="center">S.I.I. - <xsl:value-of select="$oficinaSII"/></fo:block>
-                    </fo:block-container>
-                </fo:table-cell>
-            </fo:table-body>
-        </fo:table>
+        <!-- Datos del emisor -->
+            <!-- Razón Social -->
+        <fo:block font-size="10pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" text-align="left" max-width="100%">
+            <xsl:attribute name="color"><xsl:value-of select="$vendorNameColor"/></xsl:attribute>
+            <xsl:value-of select="siidte:RznSoc | RznSoc | siidte:RznSocEmisor | RznSocEmisor"/>
+        </fo:block>
+            <!-- Giro -->
+        <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+            <fo:inline font-weight="bold">Giro</fo:inline>: <xsl:value-of select="siidte:GiroEmis | GiroEmis | siidte:GiroEmisor | GiroEmisor"/>
+        </fo:block>
+            <!-- Dirección Casa Matriz -->
+        <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+            <fo:inline font-weight="bold">Casa Matriz</fo:inline>: <xsl:value-of select="siidte:DirOrigen | DirOrigen"/>, <xsl:value-of select="siidte:CmnaOrigen | CmnaOrigen"/>
+        </fo:block>
+            <!-- Dirección Sucursal -->
+        <xsl:if test="siidte:Sucursal | Sucursal">
+            <fo:block font-weight="bold" margin-top="1mm" font-size="8pt" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                <fo:inline font-weight="bold">Sucursal</fo:inline>: <xsl:value-of select="siidte:Sucursal | Sucursal"/> (Codigo SII: <xsl:value-of select="siidte:CdgSIISucur | CdgSIISucur"/>)
+            </fo:block>
+        </xsl:if>
 
     </xsl:template>
 
@@ -387,367 +371,271 @@
         <xsl:param name="formaPago"/>
         <xsl:param name="rutReceptor"/>
 
-        <fo:block-container absolute-position="auto">
-            <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                      fox:border-radius="4pt" border-width="0.8pt"  border-style="solid">
-                <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
-                <fo:table table-layout="fixed" margin="2pt">
-                    <fo:table-column column-width="2.2cm"/>
-                    <fo:table-column column-width="9cm"/>
-                    <fo:table-column column-width="2cm"/>
-                    <fo:table-column column-width="6.6cm"/>
+        <xsl:choose>
+            <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=39) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=39) or (/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=41) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=41)">
+                <!-- Boleta -->
+                <xsl:choose>
+                    <xsl:when test="not ($unnamedCustomer = 'Y')">
+                        <!-- Nominativa, con Receptor -->
+                        <fo:block margin-top="3mm" font-size="10pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" text-align="left" max-width="100%">
+                            <xsl:attribute name="color"><xsl:value-of select="$vendorNameColor"/></xsl:attribute>
+                            <xsl:value-of select="siidte:RznSocRecep | RznSocRecep"/>
+                        </fo:block>
+                        <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                            <fo:inline font-weight="bold">RUT</fo:inline>: <xsl:call-template name="RutFormat"><xsl:with-param name="rut"><xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param></xsl:call-template>
+                        </fo:block>
+                        <xsl:if test="siidte:CdgIntRecep | CdgIntRecep">
+                            <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                                <fo:inline font-weight="bold">Código Interno</fo:inline>: <xsl:value-of select="siidte:CdgIntRecep | CdgIntRecep"/>
+                            </fo:block>
+                        </xsl:if>
+                        <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                            <fo:inline font-weight="bold">Dirección</fo:inline>: <xsl:value-of select="siidte:DirRecep | DirRecep"/>
+                        </fo:block>
+                        <fo:table>
+                            <fo:table-column column-width="50%"/>
+                            <fo:table-column column-width="50%"/>
+                            <fo:table-body>
+                                <fo:table-row>
+                                    <fo:table-cell>
+                                        <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                                            <fo:inline font-weight="bold">Comuna</fo:inline>: <xsl:value-of select="siidte:CmnaRecep | CmnaRecep"/>
+                                        </fo:block>
+                                    </fo:table-cell>
+                                    <fo:table-cell>
+                                        <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                                            <fo:inline font-weight="bold">Ciudad</fo:inline>: <xsl:value-of select="siidte:CiudadRecep | CiudadRecep"/>
+                                        </fo:block>
+                                    </fo:table-cell>
+                                </fo:table-row>
+                            </fo:table-body>
+                        </fo:table>
+                    </xsl:when>
+                </xsl:choose>
+                <fo:block font-size="9pt" margin-top="3mm" max-width="100%"><fo:inline font-weight="bold">Fecha de Emisión</fo:inline>: <xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:block>
+            </xsl:when>
+            <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=110) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=110)">
+                <!-- Factura de Exportación -->
+                <fo:block margin-top="3mm" font-size="10pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" text-align="left" max-width="100%">
+                    <xsl:attribute name="color"><xsl:value-of select="$vendorNameColor"/></xsl:attribute>
+                    <xsl:value-of select="siidte:RznSocRecep | RznSocRecep"/>
+                </fo:block>
+                <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                    <fo:inline font-weight="bold">RUT</fo:inline>: <xsl:call-template name="RutFormat"><xsl:with-param name="rut"><xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param></xsl:call-template>
+                </fo:block>
+                <xsl:if test="siidte:CdgIntRecep | CdgIntRecep">
+                    <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                        <fo:inline font-weight="bold">Código Interno</fo:inline>: <xsl:value-of select="siidte:CdgIntRecep | CdgIntRecep"/>
+                    </fo:block>
+                </xsl:if>
+                <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                    <fo:inline font-weight="bold">Dirección</fo:inline>: <xsl:value-of select="siidte:DirRecep | DirRecep"/>
+                </fo:block>
+                <fo:table>
+                    <fo:table-column column-width="50%"/>
+                    <fo:table-column column-width="50%"/>
                     <fo:table-body>
-                        <xsl:choose>
-                            <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=39) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=39) or (/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=41) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=41)">
-                                <!-- Boleta -->
-                                <xsl:choose>
-                                    <xsl:when test="$unnamedCustomer = 'Y'">
-                                        <!-- Sin identificación de Receptor -->
-                                        <fo:table-row>
-                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Fecha</fo:inline></fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
-                                        </fo:table-row>
-                                    </xsl:when>
-                                    <xsl:otherwise>
-                                        <!-- Con Receptor -->
-                                        <fo:table-row>
-                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Fecha</fo:inline></fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Dirección</fo:inline></fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:DirRecep | DirRecep"/></fo:block></fo:table-cell>
-                                        </fo:table-row>
-                                        <fo:table-row>
-                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Señor(es)</fo:inline></fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:value-of select="siidte:RznSocRecep | RznSocRecep"/></fo:inline></fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Comuna</fo:inline></fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:CmnaRecep | CmnaRecep"/></fo:block></fo:table-cell>
-                                        </fo:table-row>
-                                        <fo:table-row>
-                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">RUT</fo:inline></fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block margin-top="4pt">
-                                                <xsl:choose>
-                                                    <xsl:when test="siidte:CdgIntRecep | CdgIntRecep">
-                                                        <fo:table>
-                                                            <fo:table-column column-width="30%"/>
-                                                            <fo:table-column column-width="26%"/>
-                                                            <fo:table-column column-width="45%"/>
-                                                            <fo:table-body>
-                                                                <fo:table-row>
-                                                                    <fo:table-cell>
-                                                                        <fo:block margin-left="0pt">
-                                                                            <xsl:call-template name="RutFormat">
-                                                                                <xsl:with-param name="rut"><xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param>
-                                                                            </xsl:call-template>
-                                                                        </fo:block>
-                                                                    </fo:table-cell>
-                                                                    <fo:table-cell><fo:block font-weight="bold">Código Interno</fo:block></fo:table-cell>
-                                                                    <fo:table-cell><fo:block><xsl:value-of select="siidte:CdgIntRecep | CdgIntRecep"/></fo:block></fo:table-cell>
-                                                                </fo:table-row>
-                                                            </fo:table-body>
-                                                        </fo:table>
-                                                    </xsl:when>
-                                                    <xsl:otherwise>
-                                                        <xsl:call-template name="RutFormat">
-                                                            <xsl:with-param name="rut"><xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param>
-                                                        </xsl:call-template>
-                                                    </xsl:otherwise>
-                                                </xsl:choose>
-                                            </fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Ciudad</fo:inline></fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:CiudadRecep | CiudadRecep"/></fo:block></fo:table-cell>
-                                        </fo:table-row>
-                                    </xsl:otherwise>
-                                </xsl:choose>
-                            </xsl:when>
-                            <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=110) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=110)">
-                                <!-- Factura de Exportación -->
-                                <fo:table-row>
-                                    <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Señor(es)</fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:value-of select="siidte:RznSocRecep | RznSocRecep"/></fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Fecha</fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
-                                </fo:table-row>
-                                <fo:table-row>
-                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">RUT</fo:inline></fo:block></fo:table-cell>
-                                    <xsl:call-template name="RutFormat">
-                                        <xsl:with-param name="rut"><xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param>
-                                    </xsl:call-template>
-                                    <fo:table-cell><fo:block font-weight="bold">Código Interno</fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block><xsl:value-of select="siidte:CdgIntRecep | CdgIntRecep"/></fo:block></fo:table-cell>
-                                </fo:table-row>
-                                <fo:table-row>
-                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Dirección</fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:DirRecep | DirRecep"/></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Ciudad</fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:CiudadRecep | CiudadRecep"/></fo:block></fo:table-cell>
-                                </fo:table-row>
-                                <xsl:if test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:OtraMoneda | /DTE/Documento/Encabezado/OtraMoneda)">
-                                    <fo:table-row>
-                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Tipo Moneda</fo:inline></fo:block></fo:table-cell>
-                                        <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:OtraMoneda/siidte:TpoMoneda | /DTE/Documento/Encabezado/OtraMoneda/TpoMoneda"/></fo:block></fo:table-cell>
-                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Tipo Cambio</fo:inline></fo:block></fo:table-cell>
-                                        <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:OtraMoneda/siidte:TpoCambio | /DTE/Documento/Encabezado/OtraMoneda/TpoCambio"/></fo:block></fo:table-cell>
-                                    </fo:table-row>
-                                </xsl:if>
-                                <xsl:if test="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:CodPtoEmbarque | /DTE/Documento/Aduana/CodPtoEmbarque | /siidte:DTE/siidte:Documento/siidte:Aduana/siidte:CodPtoDesemb | /DTE/Documento/Aduana/CodPtoDesemb)">
-                                    <fo:table-row>
-                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Puerto Embarque</fo:inline></fo:block></fo:table-cell>
-                                        <fo:table-cell><fo:block margin-top="4pt">
-                                            <xsl:call-template name="CodigoPuertoDetail"><xsl:with-param name="codigoPuerto"><xsl:value-of select="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:CodPtoEmbarque | /DTE/Documento/Aduana/CodPtoEmbarque)"/></xsl:with-param></xsl:call-template>
-                                            <xsl:if test="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:IdAdicPtoEmb | /DTE/Documento/Aduana/IdAdicPtoEmb)">
-                                                (<xsl:value-of select="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:IdAdicPtoEmb | /DTE/Documento/Aduana/IdAdicPtoEmb)"/>)
-                                            </xsl:if>
-                                        </fo:block></fo:table-cell>
-                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Puerto Desembarque</fo:inline></fo:block></fo:table-cell>
-                                        <fo:table-cell><fo:block margin-top="4pt">
-                                            <xsl:call-template name="CodigoPuertoDetail"><xsl:with-param name="codigoPuerto"><xsl:value-of select="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:CodPtoDesemb | /DTE/Documento/Aduana/CodPtoDesemb)"/></xsl:with-param></xsl:call-template>
-                                            <xsl:if test="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:IdAdicPtoDesemb | /DTE/Documento/Aduana/IdAdicPtoDesemb)">
-                                                (<xsl:value-of select="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:IdAdicPtoDesemb | /DTE/Documento/Aduana/IdAdicPtoDesemb)"/>)
-                                            </xsl:if>
-                                        </fo:block></fo:table-cell>
-                                    </fo:table-row>
-                                </xsl:if>
-                                <fo:table-row>
-                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Booking</fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:Booking | /DTE/Documento/Aduana/Booking"/></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Operador</fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:Operador | /DTE/Documento/Aduana/Operador"/></fo:block></fo:table-cell>
-                                </fo:table-row>
-                                <fo:table-row>
-                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Total Bultos</fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:TotBultos | /DTE/Documento/Aduana/TotBultos"/></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Modalidad Venta</fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="4pt">
-                                        <xsl:call-template name="CodigoModalidadVenta"><xsl:with-param name="codigoModalidadVenta"><xsl:value-of select="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:CodModVenta | /DTE/Documento/Aduana/CodModVenta)"/></xsl:with-param></xsl:call-template>
-                                    </fo:block></fo:table-cell>
-                                </fo:table-row>
-                            </xsl:when>
-                            <xsl:otherwise>
-                                <!-- Otros DTE -->
-                                <fo:table-row>
-                                    <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Señor(es)</fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:value-of select="siidte:RznSocRecep | RznSocRecep"/></fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="2pt"><fo:inline font-weight="bold">Fecha</fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="2pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
-                                </fo:table-row>
-                                <fo:table-row>
-                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">RUT</fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="4pt">
-                                        <xsl:choose>
-                                            <xsl:when test="siidte:CdgIntRecep | CdgIntRecep">
-                                                <fo:table>
-                                                    <fo:table-column column-width="30%"/>
-                                                    <fo:table-column column-width="26%"/>
-                                                    <fo:table-column column-width="45%"/>
-                                                    <fo:table-body>
-                                                        <fo:table-row>
-                                                            <fo:table-cell>
-                                                                <fo:block margin-left="0pt">
-                                                                <xsl:call-template name="RutFormat">
-                                                                    <xsl:with-param name="rut"><xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param>
-                                                                </xsl:call-template>
-                                                                </fo:block>
-                                                            </fo:table-cell>
-                                                            <fo:table-cell><fo:block font-weight="bold">Código Interno</fo:block></fo:table-cell>
-                                                            <fo:table-cell><fo:block><xsl:value-of select="siidte:CdgIntRecep | CdgIntRecep"/></fo:block></fo:table-cell>
-                                                        </fo:table-row>
-                                                    </fo:table-body>
-                                                </fo:table>
-                                            </xsl:when>
-                                            <xsl:otherwise>
-                                                <xsl:call-template name="RutFormat">
-                                                    <xsl:with-param name="rut"><xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param>
-                                                </xsl:call-template>
-                                            </xsl:otherwise>
-                                        </xsl:choose>
-                                    </fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Dirección</fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:DirRecep | DirRecep"/></fo:block></fo:table-cell>
-                                </fo:table-row>
-                                <fo:table-row>
-                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Giro</fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:GiroRecep | GiroRecep"/></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Comuna</fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:CmnaRecep | CmnaRecep"/></fo:block></fo:table-cell>
-                                </fo:table-row>
-                                <fo:table-row>
-                                    <xsl:choose><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=52) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=52)">
-                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Tipo de Traslado</fo:inline></fo:block></fo:table-cell>
-                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline>
-                                            <xsl:choose>
-                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=1) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=1)">Operación constituye venta</xsl:when>
-                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=2) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=2)">Ventas por efectuar</xsl:when>
-                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=3) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=3)">Consignaciones</xsl:when>
-                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=4) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=4)">Entrega gratuita</xsl:when>
-                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=5) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=5)">Traslados internos</xsl:when>
-                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=6) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=6)">Otros traslados no venta</xsl:when>
-                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=7) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=7)">Guía de devolución</xsl:when>
-                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=8) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=8)">Traslado para exportación (no venta)</xsl:when>
-                                                <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=9) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=9)">Venta para exportación</xsl:when>
-                                                <xsl:otherwise>Desconocido</xsl:otherwise>
-                                            </xsl:choose>
-                                        </fo:inline></fo:block></fo:table-cell>
-                                    </xsl:when><xsl:otherwise>
-                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Contacto</fo:inline></fo:block></fo:table-cell>
-                                        <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Receptor/siidte:Contacto | /DTE/Documento/Encabezado/Receptor/Contacto"/></fo:inline></fo:block></fo:table-cell>
-                                    </xsl:otherwise></xsl:choose>
-                                    <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Ciudad</fo:inline></fo:block></fo:table-cell>
-                                    <fo:table-cell><fo:block margin-top="4pt"><xsl:value-of select="siidte:CiudadRecep | CiudadRecep"/></fo:block></fo:table-cell>
-                                </fo:table-row>
-                                <fo:table-row>
-                                    <xsl:choose><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=61) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=61) or (/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=56) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=56)">
-                                        <fo:table-cell><fo:block margin-top="4pt"/></fo:table-cell>
-                                        <fo:table-cell><fo:block margin-top="4pt"/></fo:table-cell>
-                                    </xsl:when><xsl:otherwise>
-                                        <fo:table-cell>
-                                            <fo:block margin-top="4pt"><fo:inline font-weight="bold">Cond. pago</fo:inline></fo:block>
-                                        </fo:table-cell>
-                                        <fo:table-cell><fo:block margin-top="4pt"><xsl:call-template name="PagoFormat">
-                                            <xsl:with-param name="medioPago"><xsl:value-of select="$medioPago"/></xsl:with-param>
-                                            <xsl:with-param name="formaPago"><xsl:value-of select="$formaPago"/></xsl:with-param>
-                                        </xsl:call-template></fo:block></fo:table-cell>
-                                    </xsl:otherwise></xsl:choose>
-                                    <xsl:choose>
-                                        <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=52) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=52)">
-                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Contacto</fo:inline></fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Receptor/siidte:Contacto | /DTE/Documento/Encabezado/Receptor/Contacto"/></fo:inline></fo:block></fo:table-cell>
-                                        </xsl:when>
-                                        <xsl:when test="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:FchVenc | /DTE/Documento/Encabezado/IdDoc/FchVenc">
-                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold">Vencimiento</fo:inline></fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline><xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:FchVenc | /DTE/Documento/Encabezado/IdDoc/FchVenc"/></xsl:with-param></xsl:call-template></fo:inline></fo:block></fo:table-cell>
-                                        </xsl:when>
-                                        <xsl:otherwise>
-                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline font-weight="bold"></fo:inline></fo:block></fo:table-cell>
-                                            <fo:table-cell><fo:block margin-top="4pt"><fo:inline></fo:inline></fo:block></fo:table-cell>
-                                        </xsl:otherwise>
-                                    </xsl:choose>
-                                </fo:table-row>
-                            </xsl:otherwise>
-                        </xsl:choose>
+                        <fo:table-row>
+                            <fo:table-cell>
+                                <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                                    <fo:inline font-weight="bold">Comuna</fo:inline>: <xsl:value-of select="siidte:CmnaRecep | CmnaRecep"/>
+                                </fo:block>
+                            </fo:table-cell>
+                            <fo:table-cell>
+                                <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                                    <fo:inline font-weight="bold">Ciudad</fo:inline>: <xsl:value-of select="siidte:CiudadRecep | CiudadRecep"/>
+                                </fo:block>
+                            </fo:table-cell>
+                        </fo:table-row>
                     </fo:table-body>
                 </fo:table>
-            </fo:block>
+                <fo:block font-size="9pt" margin-top="3mm" max-width="100%"><fo:inline font-weight="bold">Fecha de Emisión</fo:inline>: <xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:block>
+                <xsl:if test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:OtraMoneda | /DTE/Documento/Encabezado/OtraMoneda)">
+                    <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                        <fo:inline font-weight="bold">Tipo Moneda</fo:inline>: <xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:OtraMoneda/siidte:TpoMoneda | /DTE/Documento/Encabezado/OtraMoneda/TpoMoneda"/>
+                    </fo:block>
+                    <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                        <fo:inline font-weight="bold">Tipo Cambio</fo:inline>: <xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:OtraMoneda/siidte:TpoCambio | /DTE/Documento/Encabezado/OtraMoneda/TpoCambio"/>
+                    </fo:block>
+                </xsl:if>
+                <xsl:if test="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:CodPtoEmbarque | /DTE/Documento/Aduana/CodPtoEmbarque | /siidte:DTE/siidte:Documento/siidte:Aduana/siidte:CodPtoDesemb | /DTE/Documento/Aduana/CodPtoDesemb)">
+                    <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                        <fo:inline font-weight="bold">Puerto Embarque</fo:inline>:
+                        <xsl:call-template name="CodigoPuertoDetail"><xsl:with-param name="codigoPuerto"><xsl:value-of select="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:CodPtoEmbarque | /DTE/Documento/Aduana/CodPtoEmbarque)"/></xsl:with-param></xsl:call-template>
+                        <xsl:if test="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:IdAdicPtoEmb | /DTE/Documento/Aduana/IdAdicPtoEmb)">
+                            (<xsl:value-of select="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:IdAdicPtoEmb | /DTE/Documento/Aduana/IdAdicPtoEmb)"/>)
+                        </xsl:if>
+                    </fo:block>
+                    <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                        <fo:inline font-weight="bold">Puerto Desembarque</fo:inline>:
+                        <xsl:call-template name="CodigoPuertoDetail"><xsl:with-param name="codigoPuerto"><xsl:value-of select="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:CodPtoDesemb | /DTE/Documento/Aduana/CodPtoDesemb)"/></xsl:with-param></xsl:call-template>
+                        <xsl:if test="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:IdAdicPtoDesemb | /DTE/Documento/Aduana/IdAdicPtoDesemb)">
+                            (<xsl:value-of select="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:IdAdicPtoDesemb | /DTE/Documento/Aduana/IdAdicPtoDesemb)"/>)
+                        </xsl:if>
+                    </fo:block>
+                </xsl:if>
+                <xsl:if test="/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:Booking | /DTE/Documento/Aduana/Booking">
+                    <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                        <fo:inline font-weight="bold">Booking</fo:inline>: <xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:Booking | /DTE/Documento/Aduana/Booking"/>
+                    </fo:block>
+                </xsl:if>
+                <xsl:if test="/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:Operador | /DTE/Documento/Aduana/Operador">
+                    <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                        <fo:inline font-weight="bold">Operador</fo:inline>: <xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:Operador | /DTE/Documento/Aduana/Operador"/>
+                    </fo:block>
+                </xsl:if>
+                <xsl:if test="/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:TotBultos | /DTE/Documento/Aduana/TotBultos">
+                    <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                        <fo:inline font-weight="bold">Total Bultos</fo:inline>: <xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:TotBultos | /DTE/Documento/Aduana/TotBultos"/>
+                    </fo:block>
+                </xsl:if>
+                <xsl:if test="/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:CodModVenta | /DTE/Documento/Aduana/CodModVenta">
+                    <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                        <fo:inline font-weight="bold">Modalidad Venta</fo:inline>:
+                        <xsl:call-template name="CodigoModalidadVenta"><xsl:with-param name="codigoModalidadVenta"><xsl:value-of select="(/siidte:DTE/siidte:Documento/siidte:Aduana/siidte:CodModVenta | /DTE/Documento/Aduana/CodModVenta)"/></xsl:with-param></xsl:call-template>
+                    </fo:block>
+                </xsl:if>
+            </xsl:when>
+            <xsl:otherwise>
+                <!-- Otros DTE -->
+                <fo:block margin-top="3mm" font-size="10pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" text-align="left" max-width="100%">
+                    <xsl:attribute name="color"><xsl:value-of select="$vendorNameColor"/></xsl:attribute>
+                    <xsl:value-of select="siidte:RznSocRecep | RznSocRecep"/>
+                </fo:block>
+                <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                    <fo:inline font-weight="bold">RUT</fo:inline>: <xsl:call-template name="RutFormat"><xsl:with-param name="rut"><xsl:value-of select="siidte:RUTRecep | RUTRecep"/></xsl:with-param></xsl:call-template>
+                </fo:block>
+                <xsl:if test="siidte:CdgIntRecep | CdgIntRecep">
+                    <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                        <fo:inline font-weight="bold">Código Interno</fo:inline>: <xsl:value-of select="siidte:CdgIntRecep | CdgIntRecep"/>
+                    </fo:block>
+                </xsl:if>
+                <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                    <fo:inline font-weight="bold">Dirección</fo:inline>: <xsl:value-of select="siidte:DirRecep | DirRecep"/>
+                </fo:block>
+                <fo:table>
+                    <fo:table-column column-width="50%"/>
+                    <fo:table-column column-width="50%"/>
+                    <fo:table-body>
+                        <fo:table-row>
+                            <fo:table-cell>
+                                <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                                    <fo:inline font-weight="bold">Comuna</fo:inline>: <xsl:value-of select="siidte:CmnaRecep | CmnaRecep"/>
+                                </fo:block>
+                            </fo:table-cell>
+                            <fo:table-cell>
+                                <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                                    <fo:inline font-weight="bold">Ciudad</fo:inline>: <xsl:value-of select="siidte:CiudadRecep | CiudadRecep"/>
+                                </fo:block>
+                            </fo:table-cell>
+                        </fo:table-row>
+                    </fo:table-body>
+                </fo:table>
+                <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                    <fo:inline font-weight="bold">Giro</fo:inline>: <xsl:value-of select="siidte:GiroRecep | GiroRecep"/>
+                </fo:block>
 
-        </fo:block-container>
+                <fo:block font-size="9pt" margin-top="3mm" max-width="100%"><fo:inline font-weight="bold">Fecha de Emisión</fo:inline>: <xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:block>
+
+                <xsl:if test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=52) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=52)">
+                    <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                        <fo:inline font-weight="bold">Tipo de Traslado</fo:inline>:
+                        <xsl:choose>
+                            <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=1) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=1)">Operación constituye venta</xsl:when>
+                            <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=2) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=2)">Ventas por efectuar</xsl:when>
+                            <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=3) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=3)">Consignaciones</xsl:when>
+                            <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=4) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=4)">Entrega gratuita</xsl:when>
+                            <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=5) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=5)">Traslados internos</xsl:when>
+                            <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=6) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=6)">Otros traslados no venta</xsl:when>
+                            <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=7) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=7)">Guía de devolución</xsl:when>
+                            <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=8) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=8)">Traslado para exportación (no venta)</xsl:when>
+                            <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:IndTraslado=9) or (/DTE/Documento/Encabezado/IdDoc/IndTraslado=9)">Venta para exportación</xsl:when>
+                            <xsl:otherwise>Desconocido</xsl:otherwise>
+                        </xsl:choose>
+                    </fo:block>
+                </xsl:if>
+                <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                    <fo:inline font-weight="bold">Contacto</fo:inline>: <xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Receptor/siidte:Contacto | /DTE/Documento/Encabezado/Receptor/Contacto"/>
+                </fo:block>
+
+                <xsl:choose><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=61) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=61) or (/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=56) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=56)">
+                </xsl:when><xsl:otherwise>
+                    <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                        <fo:inline font-weight="bold">Cond. pago</fo:inline>:
+                        <xsl:call-template name="PagoFormat">
+                            <xsl:with-param name="medioPago"><xsl:value-of select="$medioPago"/></xsl:with-param>
+                            <xsl:with-param name="formaPago"><xsl:value-of select="$formaPago"/></xsl:with-param>
+                        </xsl:call-template>
+                    </fo:block>
+                </xsl:otherwise></xsl:choose>
+
+                <xsl:if test="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:FchVenc | /DTE/Documento/Encabezado/IdDoc/FchVenc">
+                    <fo:block font-size="8pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" max-width="100%">
+                        <fo:inline font-weight="bold">Vencimiento</fo:inline>: <xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:FchVenc | /DTE/Documento/Encabezado/IdDoc/FchVenc"/></xsl:with-param></xsl:call-template>
+                    </fo:block>
+                </xsl:if>
+            </xsl:otherwise>
+        </xsl:choose>
     </xsl:template>
 
     <!-- Detalle -->
-
     <xsl:template name="ItemColumnsAndHeader">
-        <xsl:choose><xsl:when test="$showItemNumber = 'Y'">
-            <fo:table-column column-width="0.5cm"/>
-            <fo:table-column column-width="10.17cm"/>
-        </xsl:when><xsl:otherwise>
-            <fo:table-column column-width="10.67cm"/>
-        </xsl:otherwise></xsl:choose>
-        <fo:table-column column-width="1.5cm"/>
-        <fo:table-column column-width="1.85cm"/>
-        <fo:table-column column-width="1.6cm"/>
-        <fo:table-column column-width="1.68cm"/>
-        <!--
-        <fo:table-column column-width="1.5cm"/>
-        -->
-        <fo:table-column column-width="2.5cm"/>
+        <fo:table-column column-width="67%"/>
+        <fo:table-column column-width="33%"/>
         <fo:table-header font-weight="bold">
             <xsl:attribute name="background-color"><xsl:value-of select="$detailHeaderBgColor"/></xsl:attribute>
             <xsl:attribute name="color"><xsl:value-of select="$detailHeaderFgColor"/></xsl:attribute>
-            <xsl:if test="$showItemNumber = 'Y'">
-                <fo:table-cell border-right-width=".8pt" border-right-style="solid" text-align="center">
-                    <xsl:attribute name="border-right-color"><xsl:value-of select="$detailHeaderSepColor"/></xsl:attribute>
-                    <fo:block margin="2pt">#</fo:block></fo:table-cell>
-            </xsl:if>
-            <fo:table-cell border-right-width=".8pt" border-right-style="solid" text-align="center">
-                <xsl:attribute name="border-right-color"><xsl:value-of select="$detailHeaderSepColor"/></xsl:attribute>
-                <fo:block margin="2pt">Glosa</fo:block></fo:table-cell>
-            <fo:table-cell border-right-width=".8pt" border-right-style="solid" text-align="center">
-                <xsl:attribute name="border-right-color"><xsl:value-of select="$detailHeaderSepColor"/></xsl:attribute>
-                <fo:block margin="2pt">Cantidad</fo:block></fo:table-cell>
-            <fo:table-cell border-right-width=".8pt" border-right-style="solid" text-align="center">
-                <xsl:attribute name="border-right-color"><xsl:value-of select="$detailHeaderSepColor"/></xsl:attribute>
-                <fo:block margin="2pt">Precio Unit.</fo:block></fo:table-cell>
-            <fo:table-cell border-right-width=".8pt" border-right-style="solid" text-align="center">
-                <xsl:attribute name="border-right-color"><xsl:value-of select="$detailHeaderSepColor"/></xsl:attribute>
-                <fo:block margin="2pt">Dcto/Rcrg</fo:block></fo:table-cell>
-            <fo:table-cell border-right-width=".8pt" border-right-style="solid" text-align="center">
-                <xsl:attribute name="border-right-color"><xsl:value-of select="$detailHeaderSepColor"/></xsl:attribute>
-                <fo:block margin="2pt">Afecto IVA</fo:block></fo:table-cell>
-            <!--
-            <fo:table-cell border-right-width=".8pt" border-right-style="solid" text-align="center">
-                <xsl:attribute name="border-right-color"><xsl:value-of select="$detailHeaderSepColor"/></xsl:attribute>
-                <fo:block margin="2pt">Imp. Esp.</fo:block></fo:table-cell>
-            -->
-            <fo:table-cell text-align="center"><fo:block margin="2pt">Monto</fo:block></fo:table-cell>
+            <fo:table-cell text-align="center" border-bottom-width=".5mm" border-bottom-style="solid" border-bottom-color="#eaeaea" height="5mm" vertical-align="middle"><fo:block font-size="9pt" margin-top="1mm">Descripción</fo:block></fo:table-cell>
+            <fo:table-cell text-align="right" border-bottom-width=".5mm" border-bottom-style="solid" border-bottom-color="#eaeaea"><fo:block font-size="9pt" margin-top="1mm" margin-right="2mm">Monto</fo:block></fo:table-cell>
         </fo:table-header>
     </xsl:template>
 
     <xsl:template match="siidte:Detalle | Detalle">
-        <fo:table-row border-bottom-width="1pt" border-bottom-style="solid" border-bottom-color="#eaeaea">
-            <xsl:if test="$showItemNumber = 'Y'">
-                <fo:table-cell text-align="right">
-                    <fo:block margin="2pt"><xsl:value-of select="siidte:NroLinDet | NroLinDet"/></fo:block>
-                </fo:table-cell>
-            </xsl:if>
+        <fo:table-row>
             <fo:table-cell text-align="left">
-                <fo:block margin="2pt">
+                <fo:block margin-top="2mm">
+                    <xsl:if test="$showItemNumber = 'Y'">
+                        <fo:inline><xsl:value-of select="siidte:NroLinDet | NroLinDet"/></fo:inline>
+                    </xsl:if>
                     <xsl:if test="siidte:VlrCodigo | VlrCodigo"><xsl:value-of select="siidte:VlrCodigo | VlrCodigo"/> -- </xsl:if>
-                    <xsl:value-of select="siidte:NmbItem | NmbItem"/></fo:block>
-                <xsl:if test="siidte:DscItem | DscItem"><fo:block margin="2pt"><xsl:value-of select="siidte:DscItem | DscItem"/></fo:block></xsl:if>
-            </fo:table-cell>
-            <fo:table-cell text-align="right">
-                <xsl:choose>
-                    <xsl:when test="number(siidte:QtyItem | QtyItem)">
-                        <fo:block margin="2pt"><xsl:value-of select="format-number(siidte:QtyItem | QtyItem, '###.##0,###', 'european')"/>&#160;<xsl:value-of select="siidte:UnmdItem | UnmdItem"/></fo:block>
-                    </xsl:when>
-                    <xsl:otherwise>
-                        <fo:block margin="2pt">-</fo:block>
-                    </xsl:otherwise>
-                </xsl:choose>
-            </fo:table-cell>
-            <fo:table-cell text-align="right"><fo:block margin="2pt">
-                <xsl:choose>
-                    <xsl:when test="siidte:PrcItem | PrcItem | siidte:DescuentoPct | DescuentoPct">$&#160;<xsl:value-of select="format-number(siidte:PrcItem | PrcItem, '###.###', 'european')"/></xsl:when>
-                    <xsl:otherwise>0</xsl:otherwise>
-                </xsl:choose>
-            </fo:block></fo:table-cell>
-            <fo:table-cell text-align="right"><fo:block margin="2pt">
-                <xsl:choose>
-                    <xsl:when test="siidte:DescuentoPct | DescuentoPct"><xsl:value-of select="format-number(siidte:DescuentoPct | DescuentoPct, '#0,###', 'european')"/>%</xsl:when>
-                    <xsl:when test="siidte:DescuentoMonto | DescuentoMonto">$&#160;<xsl:value-of select="format-number(siidte:DescuentoMonto | DescuentoMonto, '###.###', 'european')"/></xsl:when>
-                    <xsl:otherwise> </xsl:otherwise>
-                </xsl:choose>
-            </fo:block></fo:table-cell>
-            <fo:table-cell>
-                <fo:block margin="2pt">
-                    <xsl:choose>
-                        <xsl:when test="siidte:IndExe | IndExe">NO</xsl:when>
-                        <xsl:otherwise>SI</xsl:otherwise>
-                    </xsl:choose>
+                    <xsl:value-of select="siidte:NmbItem | NmbItem"/>
                 </fo:block>
+                <xsl:if test="siidte:DscItem | DscItem">
+                    <fo:block margin="2pt"><xsl:value-of select="siidte:DscItem | DscItem"/></fo:block>
+                </xsl:if>
+                <fo:block>
+                    <xsl:value-of select="format-number(siidte:QtyItem | QtyItem, '###.##0,###', 'european')"/>&#160;<xsl:value-of select="siidte:UnmdItem | UnmdItem"/>
+                    @ $&#160;<xsl:value-of select="format-number(siidte:PrcItem | PrcItem, '###.###', 'european')"/>
+                </fo:block>
+                <xsl:if test="siidte:DescuentoPct | DescuentoPct">
+                    <fo:block>Descuento <xsl:value-of select="format-number(siidte:DescuentoPct | DescuentoPct, '#0,###', 'european')"/>%</fo:block>
+                </xsl:if>
+                <xsl:if test="siidte:DescuentoMonto | DescuentoMonto">
+                    <fo:block>Descuento $&#160;<xsl:value-of select="format-number(siidte:DescuentoMonto | DescuentoMonto, '###.###', 'european')"/></fo:block>
+                </xsl:if>
             </fo:table-cell>
-            <fo:table-cell text-align="right"><fo:block margin="2pt">
-                $&#160;<xsl:value-of select="format-number(siidte:MontoItem | MontoItem, '###.###', 'european')"/></fo:block></fo:table-cell>
+            <fo:table-cell text-align="right" vertical-align="bottom">
+                <fo:block margin-top="2mm">&#160;</fo:block>
+                <xsl:if test="siidte:DscItem | DscItem"><fo:block>&#160;</fo:block></xsl:if>
+                <xsl:if test="siidte:DescuentoPct | DescuentoPct"><fo:block>&#160;</fo:block></xsl:if>
+                <xsl:if test="siidte:DescuentoMonto | DescuentoMonto"><fo:block>&#160;</fo:block></xsl:if>
+                <fo:block>$&#160;<xsl:value-of select="format-number(siidte:MontoItem | MontoItem, '###.###', 'european')"/></fo:block>
+            </fo:table-cell>
         </fo:table-row>
     </xsl:template>
 
     <!-- Referencias -->
     <xsl:template name="ReferencesColumnsAndHeader">
-        <fo:table-column column-width="2.84cm"/>
-        <fo:table-column column-width="2.54cm"/>
-        <fo:table-column column-width="1.94cm"/>
-        <fo:table-column column-width="4.04cm"/>
-        <fo:table-column column-width="2.84cm"/>
+        <fo:table-column column-width="34%"/>
+        <fo:table-column column-width="66%"/>
         <fo:table-header><fo:table-row>
-            <fo:table-cell><fo:block font-weight="bold">Documento ref.</fo:block></fo:table-cell>
-            <fo:table-cell><fo:block font-weight="bold">Folio</fo:block></fo:table-cell>
-            <fo:table-cell><fo:block font-weight="bold">Fecha</fo:block></fo:table-cell>
-            <fo:table-cell><fo:block font-weight="bold">Razón ref.</fo:block></fo:table-cell>
-            <fo:table-cell><fo:block font-weight="bold">Tipo de oper.</fo:block></fo:table-cell>
+            <fo:table-cell number-columns-spanned="2"><fo:block font-weight="bold">Documentos de Referencia</fo:block></fo:table-cell>
         </fo:table-row></fo:table-header>
     </xsl:template>
 
     <xsl:template match="siidte:Referencia | Referencia">
         <fo:table-row>
-            <fo:table-cell text-align="left"><fo:block>
+            <fo:table-cell number-columns-spanned="2" text-align="left"><fo:block margin-top="3mm">
                 <xsl:choose>
                     <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=30">Factura</xsl:when>
                     <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=32">Factura de Venta Bienes y Servicios</xsl:when>
@@ -779,17 +667,27 @@
                     <xsl:otherwise>Tipo <xsl:value-of select="siidte:TpoDocRef | TpoDocRef"/></xsl:otherwise>
                 </xsl:choose>
             </fo:block></fo:table-cell>
-            <fo:table-cell><fo:block><xsl:value-of select="siidte:FolioRef | FolioRef"/></fo:block></fo:table-cell>
-            <fo:table-cell><fo:block><xsl:value-of select="siidte:FchRef | FchRef"/></fo:block></fo:table-cell>
-            <fo:table-cell><fo:block><xsl:value-of select="siidte:RazonRef | RazonRef"/></fo:block></fo:table-cell>
-            <fo:table-cell><fo:block>
-                <xsl:choose>
-                    <xsl:when test="(siidte:CodRef | CodRef)=1">Anula Doc. Ref.</xsl:when>
-                    <xsl:when test="(siidte:CodRef | CodRef)=2">Corrige Texto</xsl:when>
-                    <xsl:when test="(siidte:CodRef | CodRef)=3">Corrige Montos</xsl:when>
-                </xsl:choose>
-            </fo:block></fo:table-cell>
         </fo:table-row>
+        <fo:table-row>
+            <fo:table-cell><fo:block>Folio: <xsl:value-of select="siidte:FolioRef | FolioRef"/></fo:block></fo:table-cell>
+            <fo:table-cell><fo:block><xsl:if test="siidte:FchRef | FchRef">Fecha: <xsl:value-of select="siidte:FchRef | FchRef"/></xsl:if></fo:block></fo:table-cell>
+        </fo:table-row>
+        <xsl:if test="siidte:RazonRef | RazonRef">
+            <fo:table-row>
+                <fo:table-cell><fo:block>Razón: <xsl:value-of select="siidte:RazonRef | RazonRef"/></fo:block></fo:table-cell>
+            </fo:table-row>
+        </xsl:if>
+        <xsl:if test="siidte:CodRef | CodRef">
+            <fo:table-row>
+                <fo:table-cell number-columns-spanned="2"><fo:block>
+                    <xsl:choose>
+                        <xsl:when test="(siidte:CodRef | CodRef)=1">Anula Doc. Ref.</xsl:when>
+                        <xsl:when test="(siidte:CodRef | CodRef)=2">Corrige Texto</xsl:when>
+                        <xsl:when test="(siidte:CodRef | CodRef)=3">Corrige Montos</xsl:when>
+                    </xsl:choose>
+                </fo:block></fo:table-cell>
+            </fo:table-row>
+        </xsl:if>
     </xsl:template>
 
     <xsl:template name="DscRcgGlobalTable">
@@ -831,8 +729,8 @@
     <!-- Timbre electrónico -->
     <xsl:template match="siidte:TED | TED">
         <xsl:variable name="myted" select="."/>
-        <fo:block-container margin-top="4pt" margin-left="1pt">
-            <fo:block><fo:instream-foreign-object content-width="5.6cm"><xsl:copy-of select="tedbarcode:generate($myted)"/></fo:instream-foreign-object></fo:block>
+        <fo:block-container margin-top="4pt" margin-left="1pt" text-align="center">
+            <fo:block><fo:instream-foreign-object content-width="100%"><xsl:copy-of select="tedbarcode:generate($myted)"/></fo:instream-foreign-object></fo:block>
             <fo:block font-size="7pt" font-family="sans-serif" text-align="center">Timbre Electrónico SII</fo:block>
             <fo:block font-size="7pt" font-family="sans-serif" text-align="center">Resolución Ex. SII N° <xsl:value-of select="$numeroResolucionSii"/> de <xsl:value-of select="$fechaResolucionSii"/> - Verifique Documento: www.sii.cl</fo:block>
         </fo:block-container>
@@ -909,38 +807,6 @@
                     <xsl:otherwise>Tipo de Documento Desconocido</xsl:otherwise>
                 </xsl:choose> folio <xsl:value-of select="$folio"/> Rut <xsl:call-template name="RutFormat"><xsl:with-param name="rut"><xsl:value-of select="/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:Emisor/siidte:RUTEmisor | /DTE/Documento/Encabezado/Emisor/RUTEmisor"/></xsl:with-param></xsl:call-template>
                 </fo:block>
-                <xsl:if test="count(/siidte:DTE/siidte:Documento/siidte:Detalle | /DTE/Documento/Detalle) > $maxItems and $showExcessItemsInOtherPage = 'Y'">
-                    <fo:block font-size="9.01pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left" margin-right="2pt">
-                        Ítemes <xsl:value-of select="$maxItems + 1"/> a <xsl:value-of select="count(/siidte:DTE/siidte:Documento/siidte:Detalle | /DTE/Documento/Detalle)"/>
-                    </fo:block>
-                    <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="8pt" language="es" hyphenate="true" color="black" text-align="left"
-                              fox:border-radius="4pt" border-width="0.8pt"  border-style="solid">
-                        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
-                        <fo:block-container>
-                            <fo:table table-layout="fixed" width="100%" border-collapse="collapse">
-                                <xsl:call-template name="ItemColumnsAndHeader"/>
-                                <fo:table-body>
-                                    <xsl:apply-templates select="/siidte:DTE/siidte:Documento/siidte:Detalle[position() > $maxItems] | /DTE/Documento/Detalle[position() > $maxItems]"/>
-                                </fo:table-body>
-                            </fo:table>
-                        </fo:block-container>
-                    </fo:block>
-                </xsl:if>
-                <xsl:if test="count(/siidte:DTE/siidte:Documento/siidte:Referencia | /DTE/Documento/Referencia) > $maxRefs and $showExcessRefsInOtherPage = 'Y'">
-                    <fo:block font-size="9.01pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left" margin-right="2pt">
-                        Referencias <xsl:value-of select="$maxRefs + 1"/> a <xsl:value-of select="count(/siidte:DTE/siidte:Documento/siidte:Referencia | /DTE/Documento/Referencia)"/>
-                    </fo:block>
-                    <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                              fox:border-radius="4pt" border-width="0.8pt" border-style="solid" margin-right="2pt">
-                        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
-                        <fo:table table-layout="fixed" margin="2pt">
-                            <xsl:call-template name="ReferencesColumnsAndHeader"/>
-                            <fo:table-body>
-                                <xsl:apply-templates select="/siidte:DTE/siidte:Documento/siidte:Referencia[position() > $maxRefs] | /DTE/Documento/Referencia[position() > $maxRefs]"/>
-                            </fo:table-body>
-                        </fo:table>
-                    </fo:block>
-                </xsl:if>
             </fo:block-container>
         </fo:block>
     </xsl:template>
