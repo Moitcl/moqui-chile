@@ -100,7 +100,7 @@ class MoquiDTEUtils {
 
         List singleDet = null
         detailList.each { detailEntryObj ->
-            HashMap detailEntry = (detailEntryObj instanceof EntityValue) ? detailEntryObj.getMap() : detailEntryObj
+            Map detailEntry = (detailEntryObj instanceof EntityValue) ? detailEntryObj.getMap() : detailEntryObj
             String nombreItem = detailEntry.description
             Map otraMoneda = null
             if (detailType.equals("OrderItem"))
@@ -131,16 +131,16 @@ class MoquiDTEUtils {
                 ec.logger.info("Truncando descripción a 80 caracteres")
                 nombreItem = nombreItem.substring(0, 80)
             }
-            BigDecimal quantity = detailEntry.quantity
-            BigDecimal montoDescuento = detailEntry.montoDescuento
-            BigDecimal montoRecargo = detailEntry.montoRecargo
+            BigDecimal quantity = (BigDecimal)detailEntry.quantity
+            BigDecimal montoDescuento = (BigDecimal)detailEntry.montoDescuento
+            BigDecimal montoRecargo = (BigDecimal)detailEntry.montoRecargo
             BigDecimal montoDescuentoClp = null
             BigDecimal montoRecargoClp = null
-            BigDecimal montoDescuentoOriginCurrency = detailEntry.montoDescuentoOriginCurrency
-            BigDecimal montoRecargoOriginCurrency = detailEntry.montoRecargoOriginCurrency
-            BigDecimal porcentajeDescuento = detailEntry.porcentajeDescuento
-            BigDecimal porcentajeRecargo = detailEntry.porcentajeRecargo
-            BigDecimal ajusteDecimal = detailEntry.ajusteDecimal
+            BigDecimal montoDescuentoOriginCurrency = (BigDecimal)detailEntry.montoDescuentoOriginCurrency
+            BigDecimal montoRecargoOriginCurrency = (BigDecimal)detailEntry.montoRecargoOriginCurrency
+            BigDecimal porcentajeDescuento = (BigDecimal)detailEntry.porcentajeDescuento
+            BigDecimal porcentajeRecargo = (BigDecimal)detailEntry.porcentajeRecargo
+            BigDecimal ajusteDecimal = (BigDecimal)detailEntry.ajusteDecimal
             String uom = null
             if (detailEntry.unidad) {
                 uom = detailEntry.unidad
@@ -357,7 +357,8 @@ class MoquiDTEUtils {
         boolean dteExenta = false
 
         int i = 0
-        referenciaList.each { referenciaEntry ->
+        referenciaList.each { referenciaEntryObj ->
+            Map referenciaEntry = (referenciaEntryObj instanceof EntityValue) ? referenciaEntryObj.getMap() : referenciaEntryObj
             String folioRef = referenciaEntry.folio
             String codRef = null
             if (referenciaEntry.codigo)
