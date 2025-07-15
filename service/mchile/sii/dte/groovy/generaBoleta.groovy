@@ -426,6 +426,7 @@ if (!draft) {
     xmlContentLocation = xmlContentFile.getAbsolutePath()
 }
 
+//ec.logger.info("generadoXml: ${new String(facturaXml)}")
 ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
 if (unnamedCustomer == null && receiverPartyId != null)
     unnamedCustomer = (receiverPartyId == 'ANONCUST')

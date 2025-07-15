@@ -4,13 +4,14 @@
                 xmlns:tedbarcode="cl.moit.dte.TedBarcodeExtension"
                 xmlns:fox="http://xmlgraphics.apache.org/fop/extensions" xmlns:str="http://exslt.org/strings"
                 xmlns:siidte="http://www.sii.cl/SiiDte"
+                xmlns:exsl="http://exslt.org/common"
                 version="1.1"
-                extension-element-prefixes="tedbarcode">
+                extension-element-prefixes="tedbarcode exsl">
 
     <xsl:param name="fonoContacto"/>
     <xsl:param name="mailContacto"/>
     <xsl:param name="oficinaSII" select="'Santiago Oriente'"/>
-    <xsl:param name="logo"/>
+    <xsl:param name="logo" select="''"/>
     <xsl:param name="cedible"/>
     <xsl:param name="numeroResolucionSii" select="'80'"/>
     <xsl:param name="fechaResolucionSii" select="'2014'"/>
@@ -42,11 +43,48 @@
     <xsl:param name="versionParam" select="'1.0'"/>
     <xsl:template match="/siidte:DTE/siidte:Documento | /DTE/Documento | /siidte:DTE/siidte:Liquidacion | /DTE/Liquidacion | /siidte:DTE/siidte:Exportaciones | /DTE/Exportaciones">
         <fo:root xmlns:fo="http://www.w3.org/1999/XSL/Format">
+            <xsl:variable name="charsPerLine" select="40"/>
             <xsl:variable name="itemCount" select="count(siidte:Detalle | Detalle)"/>
-            <xsl:variable name="itemAdditionalLinesCount" select="count(siidte:DscItem | DscItem | siidte:DescuentoPct | DescuentoPct | siidte:DescuentoMonto | DescuentoMonto)"/>
+            <!-- Altura del logo: 0 si hay logo, 20 si no -->
+            <xsl:variable name="logoHeight">
+                <xsl:choose>
+                    <xsl:when test="$logo = ''">0</xsl:when>
+                    <xsl:otherwise>20</xsl:otherwise>
+                </xsl:choose>
+            </xsl:variable>
+            <!-- Calcular número de líneas estimadas que pueden ser opcionales y que pueden ocupar más de 1 línea -->
+            <xsl:variable name="additionalLinesCountContainer">
+                <xsl:for-each select="siidte:Detalle/siidte:DscItem | Detalle/DscItem | siidte:Referencia/siidte:RazonRef | Referencia/RazonRef | siidte:Referencia/siidte:CodRef | Referencia/CodRef">
+                    <xsl:variable name="long" select="string-length(.)"/>
+                    <xsl:variable name="lineasParrafo" select="ceiling($long div $charsPerLine)"/>
+                    <linea><xsl:value-of select="$lineasParrafo"/></linea>
+                </xsl:for-each>
+            </xsl:variable>
+            <xsl:variable name="additionalLinesCount" select="sum(exsl:node-set($additionalLinesCountContainer)/linea)"/>
+            <xsl:variable name="baseDocumentosReferencia">
+                <xsl:choose>
+                    <xsl:when test="siidte:Referencia | Referencia">14</xsl:when>
+                    <xsl:otherwise>0</xsl:otherwise>
+                </xsl:choose>
+            </xsl:variable>
             <xsl:variable name="referencesCount" select="count(siidte:Referencia | Referencia)"/>
-            <xsl:variable name="referencesAdditionalLinesCount" select="count(siidte:RazonRef | RazonRef | siidte:CodRef | CodRef)"/>
-            <xsl:variable name="estimatedHeightMm" select="160 + (($itemCount + $itemAdditionalLinesCount) * 8) + ((($referencesCount * 2) + $referencesAdditionalLinesCount) * 8)"/>
+            <!-- Calcular número de líneas estimadas para el comentario externo -->
+            <xsl:variable name="commentAfterDetalleLineasContainer">
+                <xsl:for-each select="str:tokenize($commentAfterDetalle, '&#xA;')">
+                    <xsl:variable name="long" select="string-length(.)"/>
+                    <xsl:variable name="lineasParrafo" select="ceiling($long div $charsPerLine)"/>
+                    <linea><xsl:value-of select="$lineasParrafo"/></linea>
+                </xsl:for-each>
+            </xsl:variable>
+            <xsl:variable name="commentAfterDetalleLineCount" select="sum(exsl:node-set($commentAfterDetalleLineasContainer)/linea)" />
+            <xsl:variable name="cedibleSpace">
+                <xsl:choose>
+                    <xsl:when test="$cedible">40</xsl:when>
+                    <xsl:otherwise>0</xsl:otherwise>
+                </xsl:choose>
+            </xsl:variable>
+            <xsl:variable name="itemAdditionalLinesCount" select="count(siidte:Detalle/siidte:DescuentoPct | Detalle/DescuentoPct | siidte:Detalle/siidte:DescuentoMonto | Detalle/DescuentoMonto)"/>
+            <xsl:variable name="estimatedHeightMm" select="85 + $logoHeight + $cedibleSpace + $baseDocumentosReferencia + (($itemCount + $itemAdditionalLinesCount + $additionalLinesCount + $commentAfterDetalleLineCount) * 7) + (($referencesCount * 2) * 7)"/>
             <fo:layout-master-set>
                 <fo:simple-page-master master-name="simple" page-width="$paperWidth" margin-top="5mm" margin-bottom="5mm">
                     <xsl:attribute name="page-height"><xsl:value-of select="$estimatedHeightMm"/>mm</xsl:attribute>
@@ -99,6 +137,10 @@
 
             <fo:page-sequence master-reference="simple">
                 <fo:flow flow-name="xsl-region-body">
+                    <fo:block>Comment after detalle container: <xsl:value-of select="$commentAfterDetalleLineasContainer"/></fo:block>
+                    <fo:block>Comment after detalle line count: <xsl:value-of select="$commentAfterDetalleLineCount"/></fo:block>
+                    <fo:block>additionalLinesCount: <xsl:value-of select="$additionalLinesCount"/></fo:block>
+                    <fo:block>additionalLinesCountContainer: <xsl:value-of select="$additionalLinesCountContainer"/></fo:block>
                     <xsl:call-template name="Documento"/>
                 </fo:flow>
             </fo:page-sequence>
@@ -329,17 +371,13 @@
         </fo:block-container>
 
         <!--  El logo -->
-        <xsl:choose>
-            <xsl:when test="$logo">
-                <fo:block-container absolute-position="auto">
-                    <fo:block><fo:external-graphic src="$logo" width="3cm" content-height="2.2cm" content-width="scale-to-fit" scaling="uniform">
-                        <xsl:attribute name="src">url(<xsl:value-of select="$logo"/>)</xsl:attribute></fo:external-graphic>
-                    </fo:block>
-                </fo:block-container>
-            </xsl:when>
-            <xsl:otherwise>
-            </xsl:otherwise>
-        </xsl:choose>
+        <xsl:if test="$logo">
+            <fo:block-container absolute-position="auto" text-align="center">
+                <fo:block><fo:external-graphic src="$logo" width="30mm" content-height="25mm" content-width="scale-to-fit" scaling="uniform">
+                    <xsl:attribute name="src">url(<xsl:value-of select="$logo"/>)</xsl:attribute></fo:external-graphic>
+                </fo:block>
+            </fo:block-container>
+        </xsl:if>
 
         <!-- Datos del emisor -->
             <!-- Razón Social -->

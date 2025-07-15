@@ -113,6 +113,8 @@ class MoquiDTEUtils {
                 EntityValue productEv = ec.entity.find("mantle.product.Product").condition("productId", detailEntry.productId).one()
                 nombreItem = productEv ? productEv.productName : ''
             }
+            if ((!detailEntry.detailedDescription) && detailEntry.descripcionItem)
+                detailEntry.detailedDescription = detailEntry.descripcionItem
             if (nombreItem == null || nombreItem.trim() == '') {
                 // Put detailed description as name
                 nombreItem = detailEntry.detailedDescription
