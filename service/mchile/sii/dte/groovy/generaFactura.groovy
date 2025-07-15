@@ -1130,7 +1130,6 @@ if (!draft) {
 
     xmlContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/DTE-${tipoDte}-${folio}.xml"
     pdfContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/DTE-${tipoDte}-${folio}.pdf"
-    pdfCedibleContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/DTE-${tipoDte}-${folio}-cedible.pdf"
 
     // Creacion de registros en FiscalTaxDocumentContent
     createMapBase = [fiscalTaxDocumentId:dteEv.fiscalTaxDocumentId, contentDte:ts]
@@ -1143,18 +1142,21 @@ if (!draft) {
 if (ec.message.hasError()) return
 
 ec.resource.getLocationReference(xmlContentLocation).putBytes(facturaXml)
-ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteContentServices.generate#Pdf").parameters(
-        [xmlLocation:xmlContentLocation, templatePartyId:issuerPartyId, invoiceMessage:invoiceMessage, draft:draft]).call())
+pdfBytes = ec.service.sync().name("mchile.sii.dte.DteContentServices.generate#Pdf").parameters(
+        [xmlLocation:xmlContentLocation, templatePartyId:issuerPartyId, invoiceMessage:invoiceMessage, draft:draft, formatoPdf:formatoPdf]).call().pdfBytes
 
 if (draft) {
     previewPdf = pdfBytes
     xmlContentFile.delete()
 } else {
-    ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfContentLocation]).call())
+    ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:pdfContentLocation]).call()
     ec.resource.getLocationReference(pdfContentLocation).putBytes(pdfBytes)
 
     if ((fiscalTaxDocumentTypeEnumId as String) in dteConstituyeVentaTypeList) {
-        ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedibleContentLocation]).call())
+        pdfCedibleBytes = ec.service.sync().name("mchile.sii.dte.DteContentServices.generate#Pdf").parameters(
+                [xmlLocation:xmlContentLocation, templatePartyId:issuerPartyId, invoiceMessage:invoiceMessage, draft:draft, formatoPdf:formatoPdf, cedible:true]).call().pdfBytes
+        pdfCedibleContentLocation = "dbresource://moit/erp/dte/${rutOrganizacion}/DTE-${tipoDte}-${folio}-cedible.pdf"
+        ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentContent").parameters(createMapBase+[fiscalTaxDocumentContentTypeEnumId:'Ftdct-PdfCedible', contentLocation:pdfCedibleContentLocation]).call()
         ec.resource.getLocationReference(pdfCedibleContentLocation).putBytes(pdfCedibleBytes)
     }
 

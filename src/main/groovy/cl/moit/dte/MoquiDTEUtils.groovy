@@ -761,7 +761,7 @@ class MoquiDTEUtils {
 
     public static void validateDocumentSii(ExecutionContext ec, byte[] docBytes, String schemaUri) throws SAXException {
         String schemaPrefix = "http://www.sii.cl/SiiDte "
-        String schemaPrefixLocation = "component://MoquiChile/DTE/schemas/"
+        String schemaPrefixLocation = "component://MoquiChile/resource/dte/schemas/"
         ResourceReference rr = null
         if (schemaUri.startsWith(schemaPrefix)) {
             if (schemaUri.length() <= schemaPrefix.length())

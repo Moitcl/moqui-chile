@@ -43,7 +43,14 @@
     <xsl:param name="versionParam" select="'1.0'"/>
     <xsl:template match="/siidte:DTE/siidte:Documento | /DTE/Documento | /siidte:DTE/siidte:Liquidacion | /DTE/Liquidacion | /siidte:DTE/siidte:Exportaciones | /DTE/Exportaciones">
         <fo:root xmlns:fo="http://www.w3.org/1999/XSL/Format">
-            <xsl:variable name="charsPerLine" select="40"/>
+            <xsl:variable name="internalWidthMm"><xsl:value-of select="$pageWidthMm - $marginLeftMm - $marginRightMm"/></xsl:variable>
+            <xsl:variable name="charsPerLine">
+                <xsl:choose>
+                    <xsl:when test="$pageWidthMm = 57"><xsl:value-of select="27"/></xsl:when>
+                    <xsl:when test="$pageWidthMm = 80"><xsl:value-of select="30"/></xsl:when>
+                    <xsl:otherwise><xsl:value-of select="30"/></xsl:otherwise>
+                </xsl:choose>
+            </xsl:variable>
             <xsl:variable name="itemCount" select="count(siidte:Detalle | Detalle)"/>
             <!-- Altura del logo: 0 si hay logo, 20 si no -->
             <xsl:variable name="logoHeight">
@@ -52,15 +59,28 @@
                     <xsl:otherwise>20</xsl:otherwise>
                 </xsl:choose>
             </xsl:variable>
-            <!-- Calcular número de líneas estimadas que pueden ser opcionales y que pueden ocupar más de 1 línea -->
+            <!-- Calcular número de líneas estimadas que no son opcionales y que pueden ocupar más de 1 línea (Razón Social, Giro, Dirección, etc) -->
             <xsl:variable name="additionalLinesCountContainer">
-                <xsl:for-each select="siidte:Detalle/siidte:DscItem | Detalle/DscItem | siidte:Referencia/siidte:RazonRef | Referencia/RazonRef | siidte:Referencia/siidte:CodRef | Referencia/CodRef">
-                    <xsl:variable name="long" select="string-length(.)"/>
-                    <xsl:variable name="lineasParrafo" select="ceiling($long div $charsPerLine)"/>
+                <xsl:for-each select="siidte:Encabezado/siidte:Emisor/siidte:RznSoc | Encabezado/Emisor/RznSoc | siidte:Encabezado/siidte:Emisor/siidte:RznSocEmisor | Encabezado/Emisor/RznSocEmisor
+                            | siidte:Encabezado/siidte:Emisor/siidte:GiroEmis | Encabezado/Emisor/GiroEmis | siidte:Encabezado/siidte:Emisor/siidte:GiroEmisor | Encabezado/Emisor/GiroEmisor
+                            | siidte:Encabezado/siidte:Emisor/siidte:DirOrigen | Encabezado/Emisor/DirOrigen">
+                    <xsl:variable name="length" select="string-length(.)"/>
+                    <xsl:variable name="lineasParrafo" select="ceiling($length div $charsPerLine)"/>
                     <linea><xsl:value-of select="$lineasParrafo"/></linea>
                 </xsl:for-each>
             </xsl:variable>
             <xsl:variable name="additionalLinesCount" select="sum(exsl:node-set($additionalLinesCountContainer)/linea)"/>
+
+            <!-- Calcular número de líneas estimadas que pueden ser opcionales y que pueden ocupar más de 1 línea -->
+            <xsl:variable name="additionalOptionalLinesCountContainer">
+                <xsl:for-each select="siidte:Detalle/siidte:DscItem | Detalle/DscItem
+                              | siidte:Referencia/siidte:RazonRef | Referencia/RazonRef | siidte:Referencia/siidte:CodRef | Referencia/CodRef | siidte:Referencia/siidte:FchRef | Referencia/FchRef">
+                    <xsl:variable name="length" select="string-length(.)"/>
+                    <xsl:variable name="lineasParrafo" select="ceiling($length div $charsPerLine)"/>
+                    <linea><xsl:value-of select="$lineasParrafo"/></linea>
+                </xsl:for-each>
+            </xsl:variable>
+            <xsl:variable name="additionalOptionalLinesCount" select="sum(exsl:node-set($additionalOptionalLinesCountContainer)/linea)"/>
             <xsl:variable name="baseDocumentosReferencia">
                 <xsl:choose>
                     <xsl:when test="siidte:Referencia | Referencia">14</xsl:when>
@@ -71,8 +91,8 @@
             <!-- Calcular número de líneas estimadas para el comentario externo -->
             <xsl:variable name="commentAfterDetalleLineasContainer">
                 <xsl:for-each select="str:tokenize($commentAfterDetalle, '&#xA;')">
-                    <xsl:variable name="long" select="string-length(.)"/>
-                    <xsl:variable name="lineasParrafo" select="ceiling($long div $charsPerLine)"/>
+                    <xsl:variable name="length" select="string-length(.)"/>
+                    <xsl:variable name="lineasParrafo" select="ceiling($length div $charsPerLine)"/>
                     <linea><xsl:value-of select="$lineasParrafo"/></linea>
                 </xsl:for-each>
             </xsl:variable>
@@ -84,7 +104,7 @@
                 </xsl:choose>
             </xsl:variable>
             <xsl:variable name="itemAdditionalLinesCount" select="count(siidte:Detalle/siidte:DescuentoPct | Detalle/DescuentoPct | siidte:Detalle/siidte:DescuentoMonto | Detalle/DescuentoMonto)"/>
-            <xsl:variable name="estimatedHeightMm" select="85 + $logoHeight + $cedibleSpace + $baseDocumentosReferencia + (($itemCount + $itemAdditionalLinesCount + $additionalLinesCount + $commentAfterDetalleLineCount) * 7) + (($referencesCount * 2) * 7)"/>
+            <xsl:variable name="estimatedHeightMm" select="85 + $logoHeight + $cedibleSpace + $baseDocumentosReferencia + (($itemCount + $itemAdditionalLinesCount + $additionalOptionalLinesCount + $additionalLinesCount + $commentAfterDetalleLineCount) * 7) + (($referencesCount * 2) * 7)"/>
             <fo:layout-master-set>
                 <fo:simple-page-master master-name="simple" page-width="$paperWidth" margin-top="5mm" margin-bottom="5mm">
                     <xsl:attribute name="page-height"><xsl:value-of select="$estimatedHeightMm"/>mm</xsl:attribute>
@@ -137,17 +157,24 @@
 
             <fo:page-sequence master-reference="simple">
                 <fo:flow flow-name="xsl-region-body">
-                    <fo:block>Comment after detalle container: <xsl:value-of select="$commentAfterDetalleLineasContainer"/></fo:block>
-                    <fo:block>Comment after detalle line count: <xsl:value-of select="$commentAfterDetalleLineCount"/></fo:block>
-                    <fo:block>additionalLinesCount: <xsl:value-of select="$additionalLinesCount"/></fo:block>
-                    <fo:block>additionalLinesCountContainer: <xsl:value-of select="$additionalLinesCountContainer"/></fo:block>
-                    <xsl:call-template name="Documento"/>
+                    <!--
+                    <fo:block font-size="5pt">Comment after detalle container: <xsl:value-of select="$commentAfterDetalleLineasContainer"/></fo:block>
+                    <fo:block font-size="5pt">Comment after detalle line count: <xsl:value-of select="$commentAfterDetalleLineCount"/></fo:block>
+                    <fo:block font-size="5pt">additionalLinesCount: <xsl:value-of select="$additionalLinesCount"/></fo:block>
+                    <fo:block font-size="5pt">additionalLinesCountContainer: <xsl:value-of select="$additionalLinesCountContainer"/></fo:block>
+                    <fo:block font-size="5pt">additionalOptionalLinesCount: <xsl:value-of select="$additionalOptionalLinesCount"/></fo:block>
+                    <fo:block font-size="5pt">additionalOptionalLinesCountContainer: <xsl:value-of select="$additionalOptionalLinesCountContainer"/></fo:block>
+                    <fo:block font-size="5pt">pageWidthMm: <xsl:value-of select="$pageWidthMm"/></fo:block>
+                    <fo:block font-size="5pt">charsPerLine: <xsl:value-of select="$charsPerLine"/></fo:block>
+                    -->
+                    <xsl:call-template name="Documento"><xsl:with-param name="internalWidthMm" select="$internalWidthMm"/></xsl:call-template>
                 </fo:flow>
             </fo:page-sequence>
         </fo:root>
     </xsl:template>
 
     <xsl:template name="Documento">
+        <xsl:param name="internalWidthMm"/>
         <fo:block>
             <fo:block-container absolute-position="absolute" top="0cm" left="0cm">
                 <xsl:apply-templates select="siidte:Encabezado/siidte:Emisor | Encabezado/Emisor">
@@ -175,7 +202,6 @@
                         <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
                         <fo:table table-layout="fixed" margin="2pt">
                             <xsl:call-template name="ReferencesColumnsAndHeader"/>
-
                             <fo:table-body>
                                 <xsl:apply-templates select="siidte:Referencia[position() &lt;= $maxRefs] | Referencia[position() &lt;= $maxRefs]"/>
                                 <xsl:if test="count(siidte:Referencia | Referencia) > $maxRefs">
@@ -270,7 +296,7 @@
 
                 <fo:table table-layout="fixed">
                     <fo:table-column/>
-                    <fo:table-column column-width="5.6cm"/>
+                    <fo:table-column column-width="4.6cm"/>
                     <fo:table-body>
                         <fo:table-row>
                             <fo:table-cell><fo:block/></fo:table-cell>
@@ -279,7 +305,7 @@
                                           fox:border-radius="4pt" border-width="0.8pt"  border-style="solid">
                                     <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
                                     <fo:table table-layout="fixed" margin-right="1mm" margin-left="1mm">
-                                        <fo:table-column column-width="3cm"/>
+                                        <fo:table-column column-width="2.0cm"/>
                                         <fo:table-column column-width="2.4cm"/>
                                         <fo:table-body>
                                             <fo:table-row>
@@ -320,7 +346,7 @@
                     </fo:table-body>
                 </fo:table>
 
-                <xsl:apply-templates select="siidte:TED | TED"/>
+                <xsl:apply-templates select="siidte:TED | TED"><xsl:with-param name="width" select="$internalWidthMm"/></xsl:apply-templates>
 
             </fo:block-container>
 
@@ -450,7 +476,7 @@
                         </fo:table>
                     </xsl:when>
                 </xsl:choose>
-                <fo:block font-size="9pt" margin-top="3mm" max-width="100%"><fo:inline font-weight="bold">Fecha de Emisión</fo:inline>: <xsl:call-template name="FechaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:block>
+                <fo:block font-size="9pt" margin-top="3mm" max-width="100%"><fo:inline font-weight="bold">Fecha de Emisión</fo:inline>: <xsl:call-template name="FechaCortaFormat"><xsl:with-param name="fecha"><xsl:value-of select="$fecha"/></xsl:with-param></xsl:call-template></fo:block>
             </xsl:when>
             <xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=110) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=110)">
                 <!-- Factura de Exportación -->
@@ -664,8 +690,8 @@
 
     <!-- Referencias -->
     <xsl:template name="ReferencesColumnsAndHeader">
-        <fo:table-column column-width="34%"/>
-        <fo:table-column column-width="66%"/>
+        <fo:table-column column-width="50%"/>
+        <fo:table-column column-width="50%"/>
         <fo:table-header><fo:table-row>
             <fo:table-cell number-columns-spanned="2"><fo:block font-weight="bold">Documentos de Referencia</fo:block></fo:table-cell>
         </fo:table-row></fo:table-header>
@@ -697,7 +723,7 @@
                     <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=810">MIC/DTA</xsl:when>
                     <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=811">Carta de Porte</xsl:when>
                     <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=812">Resolución del SNA donde califica Servicios de Exportación</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=813">Pasporte</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=813">Pasaporte</xsl:when>
                     <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=814">Certificado de Depósito Bolsa Prod. Chile</xsl:when>
                     <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=815">Vale de Prenda Bolsa Prod. Chile</xsl:when>
                     <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=820">Código de Inscripción en el Registro de Acuerdos con Plazo de Pago Excepcional</xsl:when>
@@ -766,9 +792,13 @@
 
     <!-- Timbre electrónico -->
     <xsl:template match="siidte:TED | TED">
+        <xsl:param name="width"/>
         <xsl:variable name="myted" select="."/>
         <fo:block-container margin-top="4pt" margin-left="1pt" text-align="center">
-            <fo:block><fo:instream-foreign-object content-width="100%"><xsl:copy-of select="tedbarcode:generate($myted)"/></fo:instream-foreign-object></fo:block>
+            <fo:block><fo:instream-foreign-object>
+                <xsl:attribute name="content-width"><xsl:value-of select="$width"/>mm</xsl:attribute>
+                <xsl:copy-of select="tedbarcode:generate($myted)"/>
+            </fo:instream-foreign-object></fo:block>
             <fo:block font-size="7pt" font-family="sans-serif" text-align="center">Timbre Electrónico SII</fo:block>
             <fo:block font-size="7pt" font-family="sans-serif" text-align="center">Resolución Ex. SII N° <xsl:value-of select="$numeroResolucionSii"/> de <xsl:value-of select="$fechaResolucionSii"/> - Verifique Documento: www.sii.cl</fo:block>
         </fo:block-container>
@@ -816,6 +846,12 @@
         de
         <xsl:value-of select="substring($fecha,string-length($fecha)-9,4)"/>
     </xsl:template>
+
+    <xsl:template name="FechaCortaFormat">
+        <xsl:param name="fecha"/>
+        <xsl:value-of select="substring($fecha,string-length($fecha)-1,2)"/>/<xsl:value-of select="substring($fecha,string-length($fecha)-4,2)"/>/<xsl:value-of select="substring($fecha,string-length($fecha)-9,4)"/>
+    </xsl:template>
+
 
     <xsl:template name="RutFormat">
         <xsl:param name="rut"/>

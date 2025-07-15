@@ -85,8 +85,10 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
             <parameter name="templatePartyId"/>
-            <parameter name="templateLocation"/>
             <parameter name="unnamedCustomer" type="Boolean"/>
+            <parameter name="formatoPdf" default-value="carta">
+                <description>Tipo de formato para generar PDF (valores válidos: 'carta', 'rollo57mm', 'rollo80mm')</description>
+            </parameter>
         </in-parameters>
         <actions>
             <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
@@ -113,7 +115,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="contentLocation" value="dbresource://moit/erp/dte/${dte.issuerPartyIdValue}/DTE-${tipoDte}-${dte.fiscalTaxDocumentNumber}.pdf"/>
                 <service-call name="create#mchile.dte.FiscalTaxDocumentContent" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocation]"/>
             </else></if>
-            <if condition="!templatePartyId &amp;&amp; !templateLocation"><set field="templatePartyId" from="dte.issuerPartyId"/></if>
+            <if condition="!templatePartyId"><set field="templatePartyId" from="dte.issuerPartyId"/></if>
             <if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41']"><then>
                 <set field="type" value="boleta"/>
             </then><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-33', 'Ftdt-34', 'Ftdt-46', 'Ftdt-52']">
@@ -121,8 +123,8 @@ along with this software (see the LICENSE.md file). If not, see
             </else-if><else>
                 <set field="type" value="nocedible"/>
             </else></if>
-            <service-call name="mchile.sii.dte.DteContentServices.generate#Pdf" in-map="[xmlLocation:xmlLocation, templatePartyId:templatePartyId, templateLocation:templateLocation,
-                            unnamedCustomer:(unnamedCustomer == null ? dte.receiverPartyId == 'ANONCUST' : unnamedCustomer), type:type]" out-map="context"/>
+            <service-call name="mchile.sii.dte.DteContentServices.generate#Pdf" in-map="[xmlLocation:xmlLocation, templatePartyId:templatePartyId,
+                            unnamedCustomer:(unnamedCustomer == null ? dte.receiverPartyId == 'ANONCUST' : unnamedCustomer), type:type, formatoPdf:formatoPdf]" out-map="context"/>
             <script>ec.resource.getLocationReference(contentLocation).putBytes(pdfBytes)</script>
         </actions>
     </service>
@@ -134,36 +136,31 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="xmlLocation" required="true"/>
             <parameter name="templatePartyId"/>
-            <parameter name="templateLocation"/>
-            <parameter name="type" default-value="both"><description>nocedible, cedible, both or boleta</description></parameter>
-            <parameter name="continua" type="Boolean"/>
+            <parameter name="cedible" type="Boolean" default="false"/>
+            <parameter name="formatoPdf" default-value="carta">
+                <description>Tipo de formato para generar PDF (valores válidos: 'carta', 'rollo57mm', 'rollo80mm')</description>
+            </parameter>
             <parameter name="invoiceMessage"/>
             <parameter name="draft" type="Boolean" default="false"/>
             <parameter name="unnamedCustomer" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
             <parameter name="pdfBytes" type="byte[]"/>
-            <parameter name="pdfCedibleBytes" type="byte[]"/>
         </out-parameters>
         <actions>
-            <if condition="!templateLocation &amp;&amp; !templatePartyId"><return error="true" message="Need to specify either templateLocation or templatePartyId"/></if>
+            <!-- Recuperacion de parametros de la organizacion -->
+            <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="[partyId:templatePartyId]" out-map="context"/>
 
-            <if condition="templateLocation"><then>
-                <set field="template" from="ec.resource.getLocationReference(templateLocation).text"/>
-            </then><else>
-                <!-- Recuperacion de parametros de la organizacion -->
-                <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="[partyId:templatePartyId]" out-map="context"/>
-                <set field="templateLocation" from="pdfTemplateLocation"/>
-                <if condition="pdfTemplateBoletaLocation == null">
-                    <set field="pdfTemplateBoletaLocation" from="pdfTemplateLocation"/>
-                </if>
-
-                <if condition="type == 'boleta'">
-                    <set field="templateLocation" from="pdfTemplateBoletaLocation"/>
-                    <if condition="continua">
-                        <set field="templateLocation" from="pdfTemplateBoletaContinuaLocation"/>
-                    </if>
-                </if>
+            <if condition="formatoPdf == 'carta'"><then>
+                <set field="templateLocation" from="pdfTemplatePaginaLocation"/>
+            </then><else-if condition="formatoPdf == 'rollo57mm'">
+                <set field="templateLocation" from="pdfTemplateContinuoLocation"/>
+                <set field="transformParameters.pageWidthMm" value="57"/>
+            </else-if><else-if condition="formatoPdf == 'rollo80mm'">
+                <set field="templateLocation" from="pdfTemplateContinuoLocation"/>
+                <set field="transformParameters.pageWidthMm" value="80"/>
+            </else-if><else>
+                <return error="true" message="formatoPdf no soportado: ${formatoPdf}"/>
             </else></if>
 
             <set field="template" from="ec.resource.getLocationReference(templateLocation).text"/>
@@ -183,45 +180,21 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="transformParameters.draft" value="Y"/>
             </if>
             <set field="transformParameters.unnamedCustomer" from="unnamedCustomer ? 'Y' : 'N'"/>
-            <service-call name="mchile.sii.dte.DteContentServices.generate#PdfInternal" in-map="context" out-map="context"/>
-        </actions>
-    </service>
-
-    <service verb="generate" noun="PdfInternal">
-        <in-parameters>
-            <parameter name="xmlLocation" required="true"/>
-            <parameter name="commentAfterDetalle"/>
-            <parameter name="transformParameters" type="Map" default="[detailHeaderBgColor:'#eaeaea', detailHeaderFgColor:'black', detailHeaderSepColor:'white', tableBorderColor:'#eaeaea', vendorNameColor:'black']"/>
-            <parameter name="template" allow-html="any"/>
-            <parameter name="type" default-value="both"><description>nocedible, cedible, both or boleta</description></parameter>
-        </in-parameters>
-        <out-parameters>
-            <parameter name="pdfBytes" type="byte[]"/>
-            <parameter name="pdfCedibleBytes" type="byte[]"/>
-        </out-parameters>
-        <actions>
+            <set field="transformParameters.cedible" from="cedible"/>
             <script>
                 import javax.xml.transform.stream.StreamSource
-            </script>
-            <if condition="type in ['boleta', 'nocedible', 'both']">
-                <script>
-                    ByteArrayOutputStream pdf = new ByteArrayOutputStream()
+                ByteArrayOutputStream pdf = new ByteArrayOutputStream()
 
-                    pages = ec.resource.xslFoTransform(new StreamSource(ec.resource.getLocationReference(xmlLocation).openStream()), new StreamSource(new ByteArrayInputStream(template.getBytes("UTF-8"))), pdf, "application/pdf", transformParameters + [cedible:'false'])
+                try {
+                    pages = ec.resource.xslFoTransform(new StreamSource(ec.resource.getLocationReference(xmlLocation).openStream()),
+                                                       new StreamSource(new ByteArrayInputStream(template.getBytes("UTF-8"))),
+                                                       pdf, "application/pdf", transformParameters)
+                } finally {
                     pdf.close()
-                    if (pages == null || pages == 0) ec.message.addError("Error generando PDF: páginas generadas: ${pages}")
-                    pdfBytes = pdf.toByteArray()
-                </script>
-            </if>
-            <if condition="type in ['cedible', 'both']">
-                <script>
-                    pdf = new ByteArrayOutputStream()
-                    pages = ec.resource.xslFoTransform(new StreamSource(ec.resource.getLocationReference(xmlLocation).openStream()), new StreamSource(new ByteArrayInputStream(template.getBytes("UTF-8"))), pdf, "application/pdf", transformParameters + [cedible:'true'])
-                    pdf.close()
-                    if (pages == null || pages == 0) ec.message.addError("Error generando PDF: páginas generadas: ${pages}")
-                    pdfCedibleBytes = pdf.toByteArray()
-                </script>
-            </if>
+                }
+                if (pages == null || pages == 0) ec.message.addError("Error generando PDF: páginas generadas: ${pages}")
+                pdfBytes = pdf.toByteArray()
+            </script>
         </actions>
     </service>
 
@@ -245,27 +218,16 @@ along with this software (see the LICENSE.md file). If not, see
                 <return/>
             </then><else-if condition="fiscalTaxDocumentContentTypeEnumId in ['Ftdct-Pdf', 'Ftdct-PdfCedible'] &amp;&amp; (generatePdfIfUnavailable || forceGeneration)">
                 <set field="cedible" from="fiscalTaxDocumentContentTypeEnumId == 'Ftdct-PdfCedible'"/>
-                <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="documentList" cache="false">
-                    <econdition field-name="fiscalTaxDocumentId"/>
-                    <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
-                </entity-find>
-                <if condition="documentList?.first">
-                    <set field="template" from="ec.resource.getLocationReference('component://MoquiChile/DTE/TEMPLATES/plantilla_general.xsl').text"/>
-                    <service-call name="mchile.sii.dte.DteContentServices.generate#PdfInternal" out-map="context"
-                                  in-map="[xmlLocation:documentList.first.contentLocation, template:template, type:(cedible? 'cedible' : 'nocedible')]"/>
-                    <if condition="cedible">
-                        <set field="pdfBytes" from="pdfCedibleBytes"/>
-                    </if>
-                    <if condition="pdfBytes">
-                        <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte"/>
-                        <service-call name="mchile.sii.dte.DteInternalServices.get#SiiCode" in-map="[fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId]" out-map="siiCodeMap"/>
-                        <set field="tipoDte" from="siiCodeMap.siiCode"/>
-                        <set field="contentLocation" value="dbresource://moit/erp/dte/${dte.issuerPartyIdValue}/DTE-${tipoDte}-${dte.fiscalTaxDocumentNumber}.pdf"/>
-                        <service-call name="create#mchile.dte.FiscalTaxDocumentContent" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocation]"/>
-                        <script>ec.resource.getLocationReference(contentLocation).putBytes(pdfBytes)</script>
-                        <script>ec.web.sendResourceResponse(contentLocation)</script>
-                        <return/>
-                    </if>
+                <service-call name="mchile.sii.dte.DteContentServices.generate#Pdf" in-map="context" out-map="context"/>
+                <if condition="pdfBytes">
+                    <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte"/>
+                    <service-call name="mchile.sii.dte.DteInternalServices.get#SiiCode" in-map="[fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId]" out-map="siiCodeMap"/>
+                    <set field="tipoDte" from="siiCodeMap.siiCode"/>
+                    <set field="contentLocation" value="dbresource://moit/erp/dte/${dte.issuerPartyIdValue}/DTE-${tipoDte}-${dte.fiscalTaxDocumentNumber}.pdf"/>
+                    <service-call name="create#mchile.dte.FiscalTaxDocumentContent" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocation]"/>
+                    <script>ec.resource.getLocationReference(contentLocation).putBytes(pdfBytes)</script>
+                    <script>ec.web.sendResourceResponse(contentLocation)</script>
+                    <return/>
                 </if>
             </else-if></if>
             <message error="true">${ec.resource.expand('No se encontró archivo en [${fiscalTaxDocumentId}] para tipo de contenido ${fiscalTaxDocumentContentTypeEnumId}','')}</message>
@@ -284,20 +246,16 @@ along with this software (see the LICENSE.md file). If not, see
                 <field-map field-name="partyId" from="organizationPartyId"/>
             </entity-find-one>
 
-            <if condition="! (type in ['DTE', 'Boleta', 'BoletaContinua'])">
+            <if condition="! (type in ['Continuo', 'Pagina'])">
                 <return error="true" message="Unknown type: ${type}"/>
             </if>
             <set field="location" value="dbresource://mchile/erp/dte/templates/${organizationPartyId}/${type}/${templateFile.getName()}"/>
-            <if condition="type == 'DTE'">
-                <set field="dteParams.pdfTemplateLocation" from="location"/>
+            <if condition="type == 'Pagina'">
+                <set field="dteParams.pdfTemplatePaginaLocation" from="location"/>
             </if>
 
-            <if condition="type == 'Boleta'">
-                <set field="dteParams.pdfTemplateBoletaLocation" from="location"/>
-            </if>
-
-            <if condition="type == 'BoletaContinua'">
-                <set field="dteParams.pdfTemplateBoletaContinuaLocation" from="location"/>
+            <if condition="type == 'Continuo'">
+                <set field="dteParams.pdfTemplateContinuoLocation" from="location"/>
             </if>
 
             <script>ec.resource.getLocationReference(location).putStream(templateFile.inputStream)</script>

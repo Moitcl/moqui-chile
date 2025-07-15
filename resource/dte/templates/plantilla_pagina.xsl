@@ -46,7 +46,7 @@
                         <!--
                         <xsl:if test="$draft = 'Y'">
                         -->
-                            <xsl:attrbute name="background-image"><xsl:value-of select="'component://MoquiChile/DTE/TEMPLATES/borrador.svg'"/></xsl:attrbute>
+                            <xsl:attrbute name="background-image"><xsl:value-of select="'component://MoquiChile/resource/dte/templates/borrador.svg'"/></xsl:attrbute>
                         <!--
                         </xsl:if>
                         -->
@@ -816,7 +816,7 @@
                     <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=810">MIC/DTA</xsl:when>
                     <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=811">Carta de Porte</xsl:when>
                     <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=812">Resolución del SNA donde califica Servicios de Exportación</xsl:when>
-                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=813">Pasporte</xsl:when>
+                    <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=813">Pasaporte</xsl:when>
                     <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=814">Certificado de Depósito Bolsa Prod. Chile</xsl:when>
                     <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=815">Vale de Prenda Bolsa Prod. Chile</xsl:when>
                     <xsl:when test="(siidte:TpoDocRef | TpoDocRef)=820">Código de Inscripción en el Registro de Acuerdos con Plazo de Pago Excepcional</xsl:when>
@@ -924,6 +924,11 @@
     </xsl:choose>
         de
         <xsl:value-of select="substring($fecha,string-length($fecha)-9,4)"/>
+    </xsl:template>
+
+    <xsl:template name="FechaCortaFormat">
+        <xsl:param name="fecha"/>
+        <xsl:value-of select="substring($fecha,string-length($fecha)-1,2)"/>/<xsl:value-of select="substring($fecha,string-length($fecha)-4,2)"/>/<xsl:value-of select="substring($fecha,string-length($fecha)-9,4)"/>
     </xsl:template>
 
     <xsl:template name="RutFormat">
