@@ -206,6 +206,10 @@ if (existingDteList) {
                 ec.message.addError("No se puede procesar XML diferente al existente en BD si estado no es aceptado")
                 return
             }
+            if (dte.receiverPartyId == null && receiverPartyId != null) {
+                dte.receiverPartyId = receiverPartyId
+                dte.update()
+            }
         }
     }
 }

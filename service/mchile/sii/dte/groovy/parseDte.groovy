@@ -346,7 +346,6 @@ globalList.each { globalItem ->
     }
     if (itemTypeEnumId == 'ItemDiscount')
         amount = -1 * amount
-    ec.logger.warn("DescuentoORecargo, indExe: ${indExe}")
     if (indExe == null)
         totalCalculado += amount
     else if (indExe == 1) {

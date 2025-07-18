@@ -446,3 +446,9 @@ if (draft) {
     ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call())
     fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId
 }
+
+if (importInvoiceFromXml)
+    outMap = ec.service.sync().name("mchile.sii.dte.DteLoadServices.load#DteFromDom").parameters([domNode:doc2, organizationPartyIdAsOwnerWhenCreating:issuerPartyId, sendResponse: false,
+                                                                                                  createUnknownIssuer:false, requireIssuerInternalOrg:true, createUnknownReceiver:true, requireReceiverInternalOrg:false]).call()
+
+return
