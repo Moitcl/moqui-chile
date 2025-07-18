@@ -1188,8 +1188,12 @@ if (draft) {
     ec.service.sync().name("mchile.sii.dte.DteModificationRegistrationServices.check#DteModificationReferences").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).call()
 }
 
-if (importInvoiceFromXml)
+if (importInvoiceFromXml) {
     outMap = ec.service.sync().name("mchile.sii.dte.DteLoadServices.load#DteFromDom").parameters([domNode:doc2, organizationPartyIdAsOwnerWhenCreating:issuerPartyId, sendResponse: false,
                                                                                                   createUnknownIssuer:false, requireIssuerInternalOrg:true, createUnknownReceiver:true, requireReceiverInternalOrg:false]).call()
+    outMap.errorMessages.each { errorMessage ->
+        ec.message.addError(errorMessage)
+    }
+}
 
 return
