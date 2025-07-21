@@ -104,7 +104,7 @@
                 </xsl:choose>
             </xsl:variable>
             <xsl:variable name="itemAdditionalLinesCount" select="count(siidte:Detalle/siidte:DescuentoPct | Detalle/DescuentoPct | siidte:Detalle/siidte:DescuentoMonto | Detalle/DescuentoMonto)"/>
-            <xsl:variable name="estimatedHeightMm" select="85 + $logoHeight + $cedibleSpace + $baseDocumentosReferencia + (($itemCount + $itemAdditionalLinesCount + $additionalOptionalLinesCount + $additionalLinesCount + $commentAfterDetalleLineCount) * 7) + (($referencesCount * 2) * 7)"/>
+            <xsl:variable name="estimatedHeightMm" select="95 + $logoHeight + $cedibleSpace + $baseDocumentosReferencia + (($itemCount + $itemAdditionalLinesCount + $additionalOptionalLinesCount + $additionalLinesCount + $commentAfterDetalleLineCount) * 7) + (($referencesCount * 2) * 7)"/>
             <fo:layout-master-set>
                 <fo:simple-page-master master-name="simple" page-width="$paperWidth" margin-top="5mm" margin-bottom="5mm">
                     <xsl:attribute name="page-height"><xsl:value-of select="$estimatedHeightMm"/>mm</xsl:attribute>
@@ -348,14 +348,13 @@
 
                 <xsl:apply-templates select="siidte:TED | TED"><xsl:with-param name="width" select="$internalWidthMm"/></xsl:apply-templates>
 
+                <fo:block font-size="8pt" text-align="center" margin-top="3mm">
+                    <fo:basic-link external-destination="https://moit.cl/">Generado por Moit ERP www.moit.cl</fo:basic-link>
+                </fo:block>
+
             </fo:block-container>
 
         </fo:block>
-        <!--
-        <fo:block-container absolute-position="absolute" left="19.85cm" top="-7.8cm" reference-orientation="90">
-            <fo:block writing-mode="tb-rl" font-size="6pt" color="#c0c0c0"><fo:basic-link external-destination="https://moit.cl/">Moit ERP www.moit.cl</fo:basic-link></fo:block>
-        </fo:block-container>
-        -->
     </xsl:template>
 
     <!-- Datos del emisor -->
