@@ -96,6 +96,32 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="statusId" value="Ftd-Issued"/>
             </entity-find>
             <set field="dte" from="dteList.first"/>
+            <if condition="!dte"><return error="true" message="No se encuentra DTE ${fiscalTaxDocumentId}"/></if>
+            <set field="generateCedible" from="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-33', 'Ftdt-34', 'Ftdt-46', 'Ftdt-52']"/>
+            <service-call name="mchile.sii.dte.DteContentServices.regenerate#PdfInternal" in-map="context" out-map="context"/>
+            <if condition="generateCedible">
+                <set field="cedible" from="true"/>
+                <service-call name="mchile.sii.dte.DteContentServices.regenerate#PdfInternal" in-map="context" out-map="context"/>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="regenerate" noun="PdfInternal">
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="templatePartyId"/>
+            <parameter name="unnamedCustomer" type="Boolean"/>
+            <parameter name="cedible" type="Boolean" default="false"/>
+            <parameter name="formatoPdf" default-value="carta">
+                <description>Tipo de formato para generar PDF (valores válidos: 'carta', 'rollo57mm', 'rollo80mm')</description>
+            </parameter>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="dteList">
+                <econdition field-name="fiscalTaxDocumentId"/>
+                <econdition field-name="statusId" value="Ftd-Issued"/>
+            </entity-find>
+            <set field="dte" from="dteList.first"/>
             <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument ${fiscalTaxDocumentId}"/></if>
             <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="xmlList">
                 <econdition field-name="fiscalTaxDocumentId"/>
@@ -105,26 +131,21 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="!xmlLocation"><return error="true" message="No XML Found, cannot generate PDF"/></if>
             <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="xmlList">
                 <econdition field-name="fiscalTaxDocumentId"/>
-                <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Pdf"/>
+                <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Pdf" ignore="cedible"/>
+                <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-PdfCedible" ignore="!cedible"/>
             </entity-find>
             <if condition="xmlList"><then>
                 <set field="contentLocation" from="xmlList.first.contentLocation"/>
             </then><else>
                 <service-call name="mchile.sii.dte.DteInternalServices.get#SiiCode" in-map="[fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId]" out-map="siiCodeMap"/>
                 <set field="tipoDte" from="siiCodeMap.siiCode"/>
-                <set field="contentLocation" value="dbresource://moit/erp/dte/${dte.issuerPartyIdValue}/DTE-${tipoDte}-${dte.fiscalTaxDocumentNumber}.pdf"/>
+                <set field="contentLocation" value="dbresource://moit/erp/dte/${dte.issuerPartyIdValue}/DTE-${tipoDte}-${dte.fiscalTaxDocumentNumber}${cedible ? '-cedible' : ''}.pdf"/>
                 <service-call name="create#mchile.dte.FiscalTaxDocumentContent" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf', contentLocation:contentLocation]"/>
             </else></if>
             <if condition="!templatePartyId"><set field="templatePartyId" from="dte.issuerPartyId"/></if>
-            <if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41']"><then>
-                <set field="type" value="boleta"/>
-            </then><else-if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-33', 'Ftdt-34', 'Ftdt-46', 'Ftdt-52']">
-                <set field="type" value="both"/>
-            </else-if><else>
-                <set field="type" value="nocedible"/>
-            </else></if>
-            <service-call name="mchile.sii.dte.DteContentServices.generate#Pdf" in-map="[xmlLocation:xmlLocation, templatePartyId:templatePartyId,
+            <service-call name="mchile.sii.dte.DteContentServices.generate#Pdf" in-map="[xmlLocation:xmlLocation, templatePartyId:templatePartyId, cedible:cedible,
                             unnamedCustomer:(unnamedCustomer == null ? dte.receiverPartyId == 'ANONCUST' : unnamedCustomer), type:type, formatoPdf:formatoPdf]" out-map="context"/>
+            <log message="Storing at ${contentLocation}"/>
             <script>ec.resource.getLocationReference(contentLocation).putBytes(pdfBytes)</script>
         </actions>
     </service>
@@ -155,10 +176,10 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="templateLocation" from="pdfTemplatePaginaLocation"/>
             </then><else-if condition="formatoPdf == 'rollo57mm'">
                 <set field="templateLocation" from="pdfTemplateContinuoLocation"/>
-                <set field="transformParameters.pageWidthMm" value="57"/>
+                <set field="transformParameters.paperWidthMm" value="57"/>
             </else-if><else-if condition="formatoPdf == 'rollo80mm'">
                 <set field="templateLocation" from="pdfTemplateContinuoLocation"/>
-                <set field="transformParameters.pageWidthMm" value="80"/>
+                <set field="transformParameters.paperWidthMm" value="80"/>
             </else-if><else>
                 <return error="true" message="formatoPdf no soportado: ${formatoPdf}"/>
             </else></if>
