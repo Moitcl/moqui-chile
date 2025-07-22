@@ -194,13 +194,18 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
             <parameter name="sendToSii" type="Boolean" default="true"/>
             <parameter name="forceIva" type="BigDecimal"/>
+            <parameter name="formatoPdf" default-value="carta">
+                <description>Tipo de formato para generar PDF (valores válidos: 'carta', 'rollo57mm', 'rollo80mm')</description>
+            </parameter>
+            <parameter name="draft" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
+            <parameter name="previewPdf" type="byte[]"/>
         </out-parameters>
         <actions>
             <service-call name="mchile.sii.dte.DteGenerationServices.get#InvoiceIssuingInfo" in-map="context" out-map="context"/>
-            <if condition="invoiceToStatusId">
+            <if condition="invoiceToStatusId &amp;&amp; !draft">
                 <service-call name="update#mantle.account.invoice.Invoice" in-map="[invoiceId:invoiceId, statusId:invoiceToStatusId]"/>
             </if>
 
@@ -353,7 +358,7 @@ along with this software (see the LICENSE.md file). If not, see
 
             </else></if>
 
-            <if condition="sendToSii">
+            <if condition="sendToSii &amp;&amp; !draft">
                 <service-call name="mchile.sii.dte.DteEnvioServices.genera#Envio" in-map="[organizationPartyId:issuerPartyId, documentIdList:[fiscalTaxDocumentId]]" out-map="context"/>
                 <service-call name="mchile.sii.dte.DteInternalServices.check#ProductionEnvironment" out-map="systemProd"/>
                 <script>if (systemProd.systemIsProduction) ec.service.special().name("mchile.sii.dte.DteCommServices.start#EnviaEnvioDteToSiiJob").parameter("envioIdList", envioIdList).registerOnCommit()</script>
