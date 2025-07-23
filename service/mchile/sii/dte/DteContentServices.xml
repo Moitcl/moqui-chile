@@ -169,8 +169,8 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="pdfBytes" type="byte[]"/>
         </out-parameters>
         <actions>
-            <!-- Recuperacion de parametros de la organizacion -->
-            <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="[partyId:templatePartyId]" out-map="context"/>
+            <!-- Obtención de template -->
+            <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="[partyId:templatePartyId, failIfNotFound:false]" out-map="context"/>
 
             <if condition="formatoPdf == 'carta'"><then>
                 <set field="templateLocation" from="pdfTemplatePaginaLocation"/>
@@ -239,6 +239,13 @@ along with this software (see the LICENSE.md file). If not, see
                 <return/>
             </then><else-if condition="fiscalTaxDocumentContentTypeEnumId in ['Ftdct-Pdf', 'Ftdct-PdfCedible'] &amp;&amp; (generatePdfIfUnavailable || forceGeneration)">
                 <set field="cedible" from="fiscalTaxDocumentContentTypeEnumId == 'Ftdct-PdfCedible'"/>
+                <entity-find entity-name="mchile.dte.FiscalTaxDocumentContent" list="documentList" cache="false">
+                    <econdition field-name="fiscalTaxDocumentId"/>
+                    <econdition field-name="fiscalTaxDocumentContentTypeEnumId" value="Ftdct-Xml"/>
+                </entity-find>
+                <if condition="!documentList"><return error="true" message="No se encuentra XML de DTE en el sistema"/></if>
+                <set field="xmlLocation" from="documentList.first.contentLocation"/>
+                <set field="templatePartyId" value="N/A"/>
                 <service-call name="mchile.sii.dte.DteContentServices.generate#Pdf" in-map="context" out-map="context"/>
                 <if condition="pdfBytes">
                     <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte"/>
