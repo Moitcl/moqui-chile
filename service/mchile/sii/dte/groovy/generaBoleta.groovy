@@ -148,25 +148,48 @@ q4+htPABTvIWzZcF4LILEDnaZS791SWJYxbbE72D
     }
 }
 
-descuentoORecargoGlobalList.each {
-    if (it.tipo == 'D') {
-        if (it.afecto)
-            descuentoGlobalAfecto = (descuentoGlobalAfecto?:0) - it.monto
+descuentoORecargoGlobalList.each { dor ->
+    if (dor.indicadorExento == null)
+        descuentoORecargoAfecto = true
+    else if (dor.indicadorExento == 1)
+        descuentoORecargoAfecto = false
+    else if (dor.indicadorExento == 2)
+        return // No Facturable
+    else
+        ec.message.addError("indicadorExento en lista de descuento o recargo global debe tener valor nulo, 1 o 2")
+    valor = null
+    try {
+        ec.logger.info("procesando descuento o recargo global: ${dor}")
+        valor = dor.valor as BigDecimal
+    } catch (Exception e) {
+        ec.message.addError("Valor inválido para recargo o descuento: ${dor.valor}")
+    }
+    if (valor == null)
+        ec.message.addError("Valor no está presente para recargo o descuento")
+    if (dor.tipo == 'D') {
+        if (dor.afecto)
+            descuentoGlobalAfecto = (descuentoGlobalAfecto?:0.0) - valor
         else
-            descuentoGlobalExento = (descuentoGlobalExento?:0) - it.monto
+            descuentoGlobalExento = (descuentoGlobalExento?:0.0) - valor
+    } else if (dor.tipo == 'R') {
+        if (dor.afecto)
+            recargoGlobalAfecto = (recargoGlobalAfecto?:0.0) + valor
+        else
+            recargoGlobalExento = (recargoGlobalExento?:0.0) + valor
     }
 }
 
 // Totales
+totalExento = (totalExento?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
 if (totalNeto != null) {
-    totalNeto = totalNeto - (descuentoGlobalAfecto?:0)
+    totalNeto = totalNeto - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
     long calculatedIva = Math.round(totalNeto * vatTaxRate)
     if ((totalIva?:0) != calculatedIva)
         ec.message.addError("IVA mismatch, received from details ${totalIva}, calculated from Neto: ${calculatedIva}")
     montoIVARecuperable = totalIva
     totalInvoice = (totalNeto?:0) + (totalIva?:0) + (totalExento?:0)
 } else
-    totalInvoice = (totalExento?:0) - (descuentoGlobalExento?:0)
+    totalInvoice = (totalExento?:0)
 
 // Chequeo de valores entre Invoice y calculados
 if (invoice && invoice.invoiceTotal != totalInvoice) {
