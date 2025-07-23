@@ -69,14 +69,20 @@ if (!rsResult.equivalent) {
     discrepancyMessages.add("Razón Social mismatch, en BD '${issuerTaxName}', en documento '${dteMap.razonSocialEmisor}'")
 }
 
+skipReceiverRazonSocialCheck = false
 // Datos receptor
 if (rutReceptor in reserved.rutList) {
-    errorMessages.add("Rut de receptor es Rut reservado, no se puede importar automáticamente")
-    estadoRecepDte = 2
-    recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
-    if (recepDteGlosa.length()  > 256) recepDteGlosa = recepDteGlosa.substring(0, 256)
-    sentRecStatusId = 'Ftd-ReceiverToReject'
-    return
+    createUnknownReceiver = false
+    if (rutReceptor == '55555555-5' || (rutReceptor == '66666666-6' && dteMap.tipoDteEnumId in ['Ftdt-39', 'Ftdt-41'])) {
+        skipReceiverRazonSocialCheck = false
+    } else {
+        errorMessages.add("Rut de receptor es Rut reservado, no se puede importar automáticamente")
+        estadoRecepDte = 2
+        recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+        if (recepDteGlosa.length()  > 256) recepDteGlosa = recepDteGlosa.substring(0, 256)
+        sentRecStatusId = 'Ftd-ReceiverToReject'
+        return
+    }
 }
 
 if (rutReceptorCaratula != null && rutReceptorCaratula != rutReceptor) {
@@ -93,12 +99,14 @@ receiverPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRu
                      comuna:dteMap.comunaReceptor, ciudad:dteMap.ciudadReceptor, failOnDuplicate: false]).call().partyId
 receiver = ec.entity.find("mantle.party.PartyDetail").condition("partyId", receiverPartyId).one()
 // Verificación de Razón Social en XML vs lo guardado en Moqui
-String razonSocialDb = receiver?.taxOrganizationName
-if (razonSocialDb == null || razonSocialDb.size() == 0)
-    razonSocialDb = ec.resource.expand("PartyNameOnlyTemplate", null, receiver)
-rsResult = ec.service.sync().name("mchile.sii.dte.DteInternalServices.compare#RazonSocial").parameters([rs1:dteMap.razonSocialReceptor, rs2:razonSocialDb]).call()
-if ((!rsResult.equivalent)) {
-    ec.logger.warn("Razón social en XML no coincide con la registrada: $dteMap.razonSocialReceptor != $razonSocialDb")
+if (!skipReceiverRazonSocialCheck) {
+    String razonSocialDb = receiver?.taxOrganizationName
+    if (razonSocialDb == null || razonSocialDb.size() == 0)
+        razonSocialDb = ec.resource.expand("PartyNameOnlyTemplate", null, receiver)
+    rsResult = ec.service.sync().name("mchile.sii.dte.DteInternalServices.compare#RazonSocial").parameters([rs1:dteMap.razonSocialReceptor, rs2:razonSocialDb]).call()
+    if ((!rsResult.equivalent)) {
+        ec.logger.warn("Razón social en XML no coincide con la registrada: $dteMap.razonSocialReceptor != $razonSocialDb")
+    }
 }
 
 internalRole = ec.entity.find("mantle.party.PartyRole").condition([partyId:receiverPartyId, roleTypeId:'OrgInternal']).one()
