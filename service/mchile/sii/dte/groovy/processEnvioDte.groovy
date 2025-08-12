@@ -82,8 +82,14 @@ organizationPartyIdAsOwnerWhenCreating = partyIdProcessingDetailMap.organization
 
 receptor = setDte.DTE[0].Documento.Encabezado.Receptor
 if (rutReceptorCaratula != receptor.RUTRecep.text()) {
-    ec.logger.error("Rut receptor de carátula (${rutReceptorCaratula} y DTE (${receptor.RUTRecep.text()}) no coinciden")
-    estadoRecepEnv = 2
+    if (rutReceptorCaratula in ['60803000-K', '60803000-k']) {
+        ec.logger.warn("Rut receptor de carátula es del SII en lugar del receptor")
+        receiverRutResult = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:envio.rutReceptor, createUnknown:false, failOnDuplicate:false]).call()
+        receiverPartyId = receiverRutResult.partyId
+    } else {
+        ec.logger.error("Rut receptor de carátula (${rutReceptorCaratula} y DTE (${receptor.RUTRecep.text()}) no coinciden")
+        estadoRecepEnv = 2
+    }
 }
 if (!receiverPartyId) {
     return
