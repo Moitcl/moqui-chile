@@ -1105,7 +1105,9 @@ byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, signin
 try {
     MoquiDTEUtils.validateDocumentSii(ec, facturaXml, schemaLocation)
 } catch (Exception e) {
-    throw new BaseException("Failed generated DTE validation", e)
+    ec.logger.error("Failed generated DTE validation", e)
+    ec.logger.warn("XML:\n${facturaXmlString}")
+    ec.message.addError("Failed generated DTE validation")
 }
 
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)

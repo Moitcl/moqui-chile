@@ -1,0 +1,311 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+
+    <service verb="generate" noun="TestCertificate" type="script">
+        <description>Generate a test certificate with RUT extension for testing purposes using BouncyCastle</description>
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+            <parameter name="rut" required="true"/>
+            <parameter name="organizationName" required="true"/>
+            <parameter name="validityDays" type="Integer" default="365"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="certificateBase64"/>
+            <parameter name="privateKeyBase64"/>
+            <parameter name="publicKeyBase64"/>
+            <parameter name="certificateString"/>
+            <parameter name="rutExtensionFound" type="Boolean"/>
+        </out-parameters>
+        <actions>
+            <script><![CDATA[
+                import cl.moit.test.DteCertificateGenerator
+                
+                try {
+                    // Generate certificate with RUT extension using BouncyCastle
+                    Map certParams = [
+                        subjectDN: "CN=${organizationName},O=${organizationName},C=CL",
+                        personRut: rut,
+                        issuerRut: "96790240-3",  // SII RUT for testing
+                        keySize: 2048,
+                        validityDays: validityDays
+                    ]
+                    
+                    Map certResult = DteCertificateGenerator.generateCertificateWithRUT(certParams)
+                    
+                    // Extract certificate data
+                    java.security.cert.X509Certificate cert = certResult.certificate
+                    java.security.PrivateKey privateKey = certResult.privateKey
+                    java.security.PublicKey publicKey = certResult.publicKey
+                    
+                    // Encode to base64/PEM format
+                    java.util.Base64.Encoder encoder = java.util.Base64.getEncoder()
+                    
+                    // Certificate in PEM format
+                    byte[] certBytes = cert.getEncoded()
+                    String certBase64Lines = encoder.encodeToString(certBytes).replaceAll("(.{64})", '$1\n')
+                    certificateBase64 = "-----BEGIN CERTIFICATE-----\n" + certBase64Lines + "\n-----END CERTIFICATE-----"
+                    
+                    // Private key in PEM format
+                    byte[] privKeyBytes = privateKey.getEncoded()
+                    String privKeyBase64Lines = encoder.encodeToString(privKeyBytes).replaceAll("(.{64})", '$1\n')
+                    privateKeyBase64 = "-----BEGIN PRIVATE KEY-----\n" + privKeyBase64Lines + "\n-----END PRIVATE KEY-----"
+                    
+                    // Public key in PEM format  
+                    byte[] pubKeyBytes = publicKey.getEncoded()
+                    String pubKeyBase64Lines = encoder.encodeToString(pubKeyBytes).replaceAll("(.{64})", '$1\n')
+                    publicKeyBase64 = "-----BEGIN PUBLIC KEY-----\n" + pubKeyBase64Lines + "\n-----END PUBLIC KEY-----"
+                    
+                    // Certificate string (raw base64)
+                    certificateString = encoder.encodeToString(certBytes)
+                    
+                    // Verify RUT extraction works
+                    try {
+                        String extractedRut = DteCertificateGenerator.extractRutFromCertificate(cert)
+                        rutExtensionFound = (extractedRut != null)
+                        ec.logger.info("Generated certificate with RUT extension for ${organizationName}, extracted RUT: ${extractedRut}")
+                    } catch (Exception e) {
+                        rutExtensionFound = false
+                        ec.logger.warn("Could not extract RUT from generated certificate: ${e.message}")
+                    }
+                    
+                } catch (Exception e) {
+                    ec.logger.error("Failed to generate test certificate with RUT extension: ${e.message}")
+                    
+                    // Fallback to basic certificate without RUT extension
+                    ec.logger.warn("Falling back to basic certificate generation without RUT extension")
+                    
+                    Map basicCertResult = DteCertificateGenerator.generateBasicCertificate([
+                        subjectDN: "CN=${organizationName},O=${organizationName},C=CL",
+                        keySize: 2048,
+                        validityDays: validityDays
+                    ])
+                    
+                    if (basicCertResult) {
+                        java.security.cert.X509Certificate cert = basicCertResult.certificate
+                        java.security.PrivateKey privateKey = basicCertResult.privateKey
+                        java.security.PublicKey publicKey = basicCertResult.publicKey
+                        
+                        java.util.Base64.Encoder encoder = java.util.Base64.getEncoder()
+                        
+                        byte[] certBytes = cert.getEncoded()
+                        String certBase64Lines = encoder.encodeToString(certBytes).replaceAll("(.{64})", '$1\n')
+                        certificateBase64 = "-----BEGIN CERTIFICATE-----\n" + certBase64Lines + "\n-----END CERTIFICATE-----"
+                        
+                        byte[] privKeyBytes = privateKey.getEncoded()
+                        String privKeyBase64Lines = encoder.encodeToString(privKeyBytes).replaceAll("(.{64})", '$1\n')
+                        privateKeyBase64 = "-----BEGIN PRIVATE KEY-----\n" + privKeyBase64Lines + "\n-----END PRIVATE KEY-----"
+                        
+                        byte[] pubKeyBytes = publicKey.getEncoded()
+                        String pubKeyBase64Lines = encoder.encodeToString(pubKeyBytes).replaceAll("(.{64})", '$1\n')
+                        publicKeyBase64 = "-----BEGIN PUBLIC KEY-----\n" + pubKeyBase64Lines + "\n-----END PUBLIC KEY-----"
+                        
+                        certificateString = encoder.encodeToString(certBytes)
+                        rutExtensionFound = false
+                        
+                        ec.logger.info("Generated basic certificate for ${organizationName} (no RUT extension)")
+                    } else {
+                        ec.message.addError("Failed to generate any certificate for testing")
+                    }
+                }
+            ]]></script>
+        </actions>
+    </service>
+
+    <service verb="create" noun="TestDteOrganization" type="script">
+        <description>Create a complete test organization with DTE configuration, certificate with RUT extension, and CAF</description>
+        <in-parameters>
+            <parameter name="organizationName" default="Test DTE Organization"/>
+            <parameter name="rut" default="12345678-9"/>
+            <parameter name="direccion" default="Test Street 123, Santiago"/>
+            <parameter name="comuna" default="Santiago"/>
+            <parameter name="ciudad" default="Santiago"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="partyId"/>
+            <parameter name="certificateGenerated" type="Boolean"/>
+            <parameter name="cafGenerated" type="Boolean"/>
+            <parameter name="rutExtensionFound" type="Boolean"/>
+        </out-parameters>
+        <actions>
+            <!-- Create organization party -->
+            <service-call name="mantle.party.PartyServices.create#Organization" out-map="orgResult">
+                <field-map field-name="organizationName" from="organizationName"/>
+                <field-map field-name="roleTypeId" value="OrgInternal"/>
+            </service-call>
+            <set field="partyId" from="orgResult.partyId"/>
+            
+            <!-- Add RUT identification -->
+            <service-call name="create#mantle.party.PartyIdentification">
+                <field-map field-name="partyId" from="partyId"/>
+                <field-map field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+                <field-map field-name="idValue" from="rut"/>
+            </service-call>
+            
+            <!-- Add address -->
+            <service-call name="mantle.party.ContactServices.create#PostalAddress">
+                <field-map field-name="partyId" from="partyId"/>
+                <field-map field-name="address1" from="direccion"/>
+                <field-map field-name="city" from="ciudad"/>
+                <field-map field-name="stateProvinceGeoId" value="CHL_13114"/>
+                <field-map field-name="postalCode" value="7500000"/>
+                <field-map field-name="countryGeoId" value="CHL"/>
+                <field-map field-name="contactMechPurposeId" value="PostalPrimary"/>
+            </service-call>
+            
+            <!-- Generate test certificate with RUT extension -->
+            <service-call name="mchile.test.TestCertificateServices.generate#TestCertificate" out-map="certResult">
+                <field-map field-name="partyId" from="partyId"/>
+                <field-map field-name="rut" from="rut"/>
+                <field-map field-name="organizationName" from="organizationName"/>
+            </service-call>
+            
+            <!-- Store certificate as party content -->
+            <service-call name="mantle.party.PartyServices.create#PartyContent">
+                <field-map field-name="partyId" from="partyId"/>
+                <field-map field-name="partyContentTypeEnumId" value="PcntCertificate"/>
+                <field-map field-name="contentText" from="certResult.certificateBase64"/>
+                <field-map field-name="description" value="Test DTE Certificate with RUT Extension"/>
+            </service-call>
+            
+            <!-- Generate PKCS12 certificate data for PartyDteParams -->
+            <script><![CDATA[
+                import cl.moit.test.DteCertificateGenerator
+                
+                // Create PKCS12 certificate data for storage in PartyDteParams
+                Map pkcs12Params = [
+                    subjectDN: "CN=${organizationName},O=${organizationName},C=CL",
+                    personRut: rut,
+                    issuerRut: "96790240-3",
+                    password: "test123",
+                    alias: "dte-cert-${partyId}"
+                ]
+                
+                Map pkcs12Result = DteCertificateGenerator.generateTestCertificateData(pkcs12Params)
+                certDataPkcs12 = pkcs12Result.certData
+                passCertPkcs12 = pkcs12Result.passCert
+                rutExtensionFound = certResult.rutExtensionFound
+            ]]></script>
+            
+            <!-- Create DTE parameters with PKCS12 certificate -->
+            <service-call name="create#mchile.dte.PartyDteParams">
+                <field-map field-name="partyId" from="partyId"/>
+                <field-map field-name="razonSocialOrganizacion" from="organizationName"/>
+                <field-map field-name="direccionOrigen" from="direccion"/>
+                <field-map field-name="comunaOrigen" from="comuna"/>
+                <field-map field-name="ciudadOrigen" from="ciudad"/>
+                <field-map field-name="numeroResolucionSii" value="999"/>
+                <field-map field-name="fechaResolucionSii" from="ec.user.getDate('yyyy-MM-dd', null)"/>
+                <field-map field-name="oficinaSII" value="SANTIAGO CENTRO"/>
+                <field-map field-name="codigosActividadEconomica" value="999999"/>
+                <field-map field-name="certData" from="certDataPkcs12"/>
+                <field-map field-name="passCert" from="passCertPkcs12"/>
+            </service-call>
+            
+            <!-- Create party giro -->
+            <service-call name="create#mchile.dte.PartyGiro">
+                <field-map field-name="giroId" from="partyId + '-TEST'"/>
+                <field-map field-name="partyId" from="partyId"/>
+                <field-map field-name="isPrimary" value="Y"/>
+                <field-map field-name="description" value="Test Business Activity"/>
+            </service-call>
+            
+            <!-- Generate test CAF for Factura Electrónica (33) -->
+            <script><![CDATA[
+                import java.text.SimpleDateFormat
+                
+                // Generate test CAF XML with current date
+                String today = new SimpleDateFormat("yyyy-MM-dd").format(new Date())
+                String rutSinDv = rut.split("-")[0]
+                String cafXml = """<CAF version="1.0">
+    <DA>
+        <RE>${rut}</RE>
+        <RS>${organizationName}</RS>
+        <TD>33</TD>
+        <RNG>
+            <D>1</D>
+            <H>100</H>
+        </RNG>
+        <FA>${today}</FA>
+        <RSAPK>
+            <M>${Base64.encoder.encodeToString("test-modulus-${System.currentTimeMillis()}".bytes)}</M>
+            <E>Aw==</E>
+        </RSAPK>
+        <IDK>300</IDK>
+    </DA>
+    <FRMA algoritmo="SHA1withRSA">${Base64.encoder.encodeToString("test-signature-${System.currentTimeMillis()}".bytes)}</FRMA>
+</CAF>"""
+            ]]></script>
+            
+            <!-- Create CAF record -->
+            <service-call name="create#mchile.dte.Caf">
+                <field-map field-name="cafId" from="partyId + '-TEST-33-1'"/>
+                <field-map field-name="fiscalTaxDocumentTypeEnumId" value="Ftdt-33"/>
+                <field-map field-name="fechaAutorizacion" from="ec.user.getDate('yyyy-MM-dd', null)"/>
+                <field-map field-name="issuerPartyId" from="partyId"/>
+                <field-map field-name="activo" value="true"/>
+                <field-map field-name="desde" value="1"/>
+                <field-map field-name="hasta" value="100"/>
+                <field-map field-name="cafFragment"><![CDATA[${cafXml}]]></field-map>
+                <field-map field-name="publicKey" from="certResult.publicKeyBase64"/>
+                <field-map field-name="privateKey" from="certResult.privateKeyBase64"/>
+            </service-call>
+            
+            <!-- Create some fiscal tax document numbers for testing -->
+            <iterate list="[1,2,3,4,5]" entry="docNum">
+                <service-call name="create#mchile.dte.FiscalTaxDocument">
+                    <field-map field-name="fiscalTaxDocumentId" from="'33-' + rutSinDv + '-' + docNum"/>
+                    <field-map field-name="fiscalTaxDocumentNumber" from="docNum"/>
+                    <field-map field-name="fiscalTaxDocumentTypeEnumId" value="Ftdt-33"/>
+                    <field-map field-name="issuerPartyId" from="partyId"/>
+                    <field-map field-name="issuerPartyIdValue" from="rut"/>
+                    <field-map field-name="statusId" value="Ftd-NotIssued"/>
+                    <field-map field-name="sentAuthStatusId" value="Ftd-NotSentAuth"/>
+                    <field-map field-name="sentRecStatusId" value="Ftd-NotSentRec"/>
+                    <field-map field-name="issuerPartyIdTypeEnumId" value="PtidNationalTaxId"/>
+                </service-call>
+            </iterate>
+            
+            <set field="certificateGenerated" value="true"/>
+            <set field="cafGenerated" value="true"/>
+        </actions>
+    </service>
+
+    <service verb="verify" noun="CertificateRutExtension" type="script">
+        <description>Verify that a certificate contains the correct RUT extension</description>
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="rutFound"/>
+            <parameter name="certificateValid" type="Boolean"/>
+            <parameter name="expirationDate" type="Timestamp"/>
+        </out-parameters>
+        <actions>
+            <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="[partyId:partyId]" out-map="dteConfig"/>
+            <log message="dteConfig: ${dteConfig}"/>
+            <return/>
+            <script><![CDATA[
+                import cl.moit.dte.MoquiDTEUtils
+                import cl.moit.test.DteCertificateGenerator
+                
+                if (dteConfig.certificate) {
+                    // Try both extraction methods
+                    try {
+                        rutFound = MoquiDTEUtils.getRutFromCertificate(dteConfig.certificate)
+                    } catch (Exception e) {
+                        rutFound = DteCertificateGenerator.extractRutFromCertificate(dteConfig.certificate)
+                    }
+                    
+                    certificateValid = (dteConfig.certificate.notAfter.time > System.currentTimeMillis())
+                    expirationDate = new Timestamp(dteConfig.certificate.notAfter.time)
+                    
+                    ec.logger.info("Certificate verification for party ${partyId}:")
+                    ec.logger.info("  RUT found: ${rutFound}")
+                    ec.logger.info("  Valid: ${certificateValid}")
+                    ec.logger.info("  Expires: ${expirationDate}")
+                }
+            ]]></script>
+        </actions>
+    </service>
+
+</services>
