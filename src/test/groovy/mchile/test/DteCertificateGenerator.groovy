@@ -1,4 +1,4 @@
-package cl.moit.test
+package mchile.test
 
 import org.bouncycastle.asn1.*
 import org.bouncycastle.asn1.x500.X500Name
@@ -11,10 +11,8 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.bouncycastle.operator.ContentSigner
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 
-import java.math.BigInteger
 import java.security.*
 import java.security.cert.X509Certificate
-import java.util.Date
 
 /**
  * Certificate generator for DTE testing that creates X.509 certificates

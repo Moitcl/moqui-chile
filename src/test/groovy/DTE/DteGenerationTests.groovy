@@ -8,7 +8,7 @@ import org.slf4j.LoggerFactory
 import spock.lang.Shared
 import spock.lang.Specification
 import spock.lang.Unroll
-import cl.moit.test.DteCertificateGenerator
+import mchile.test.DteCertificateGenerator
 
 import java.sql.Timestamp
 import java.security.KeyStore
