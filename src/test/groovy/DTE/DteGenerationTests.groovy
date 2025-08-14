@@ -225,35 +225,31 @@ class DteGenerationTests extends Specification {
             // Update PartyDteParams with PKCS12 certificate for proper DTE integration
             updatePartyDteParamsWithPKCS12Certificate(certResult)
             
-            // Create a test CAF for Factura Electrónica (33) using the generated keys
-            createTestCaf(certResult)
+            // Create test CAF records for all DTE types used in tests
+            createAllTestCafs(certResult)
             
         } catch (Exception e) {
             logger.warn("Could not generate dynamic certificate: ${e.message}")
             // Create basic CAF with static keys if certificate generation fails
-            createTestCaf(null)
+            createAllTestCafs(null)
         }
         
         // Update CAF dates to ensure they're not older than 6 months
         refreshCafDates()
     }
     
-    private void createTestCaf(Map certResult) {
-        // Check if CAF already exists for this organization
-        EntityValue existingCaf = ec.entity.find("mchile.dte.Caf")
-            .condition("issuerPartyId", testIssuerPartyId)
-            .condition("fiscalTaxDocumentTypeEnumId", "Ftdt-33")
-            .one()
-            
-        if (existingCaf) {
-            logger.info("CAF already exists for ${testIssuerPartyId}: ${existingCaf.cafId}")
-            return
-        }
+    private void createAllTestCafs(Map certResult) {
+        // DTE types used in tests
+        List<Map> dteTypes = [
+            [code: "33", enumId: "Ftdt-33", name: "Factura Electrónica"],
+            [code: "34", enumId: "Ftdt-34", name: "Factura Exenta"],
+            [code: "56", enumId: "Ftdt-56", name: "Nota de Débito"],
+            [code: "61", enumId: "Ftdt-61", name: "Nota de Crédito"],
+            [code: "39", enumId: "Ftdt-39", name: "Boleta Electrónica"],
+            [code: "41", enumId: "Ftdt-41", name: "Boleta Exenta"]
+        ]
         
-        // Create new CAF with current date
-        Timestamp currentTimestamp = ec.user.nowTimestamp
-        String xmlDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format(currentTimestamp)
-        
+        // Get keys from certificate result or use default test keys
         String publicKey = certResult?.publicKeyBase64 ?: '''-----BEGIN PUBLIC KEY-----
 MFowDQYJKoZIhvcNAQEBBQADSQAwRgJBALl9NouJqpifIcFj8K0QSUwZbOct7cpW
 knV3PVkJ5JlG55R8hQ9ih/88Em+SGLzsLJQoR7c9GikiE4jzoh0xX5sCAQM=
@@ -269,11 +265,28 @@ OIYGj1c9A0MCIQCDR4E7d4QNmnaHfBfIocJBP9AXWdt924VvCqEdSb0G/wIhAJ+3
 q4+htPABTvIWzZcF4LILEDnaZS791SWJYxbbE72D
 -----END RSA PRIVATE KEY-----'''
         
-        String cafXml = """<CAF version="1.0">
+        Timestamp currentTimestamp = ec.user.nowTimestamp
+        String xmlDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format(currentTimestamp)
+        
+        // Create CAF for each DTE type
+        dteTypes.each { dteType ->
+            String cafId = "${testIssuerPartyId}-${dteType.code}-1"
+            
+            // Check if CAF already exists to avoid duplicates
+            EntityValue existingCaf = ec.entity.find("mchile.dte.Caf")
+                .condition("cafId", cafId)
+                .one()
+                
+            if (existingCaf) {
+                logger.info("CAF already exists: ${cafId}")
+                return // Skip this DTE type
+            }
+            
+            String cafXml = """<CAF version="1.0">
     <DA>
         <RE>12345678-5</RE>
         <RS>Test DTE Organization</RS>
-        <TD>33</TD>
+        <TD>${dteType.code}</TD>
         <RNG>
             <D>1</D>
             <H>100</H>
@@ -287,25 +300,31 @@ q4+htPABTvIWzZcF4LILEDnaZS791SWJYxbbE72D
     </DA>
     <FRMA algoritmo="SHA1withRSA">Fsh0/AFUH8dCcSgvXjiIT2wfO9QLYp94KNvGbeKc46jEMj2XgLxq7tBv83rVJ2bIgwytLoJCHaUOi4OnpkVjyg==</FRMA>
 </CAF>"""
-        
-        ec.service.sync().name("create#mchile.dte.Caf")
-            .parameters([
-                cafId: testIssuerPartyId + "-33-1",
-                fiscalTaxDocumentTypeEnumId: "Ftdt-33", 
-                fechaAutorizacion: new java.sql.Date(currentTimestamp.time),
-                issuerPartyId: testIssuerPartyId,
-                activo: "true",
-                desde: "1",
-                hasta: "100",
-                cafFragment: cafXml,
-                publicKey: publicKey,
-                privateKey: privateKey
-            ]).call()
             
-        logger.info("Created test CAF for ${testIssuerPartyId}: ${testIssuerPartyId}-33-1")
-        
-        // Create FiscalTaxDocument entries for the CAF range (following load#CafInternal logic)
-        createFiscalTaxDocumentsForCaf("33", "1", "100")
+            try {
+                ec.service.sync().name("create#mchile.dte.Caf")
+                    .parameters([
+                        cafId: cafId,
+                        fiscalTaxDocumentTypeEnumId: dteType.enumId,
+                        fechaAutorizacion: new java.sql.Date(currentTimestamp.time),
+                        issuerPartyId: testIssuerPartyId,
+                        activo: "true",
+                        desde: "1",
+                        hasta: "100",
+                        cafFragment: cafXml,
+                        publicKey: publicKey,
+                        privateKey: privateKey
+                    ]).call()
+                    
+                logger.info("Created test CAF for ${dteType.name}: ${cafId}")
+                
+                // Create FiscalTaxDocument entries for the CAF range
+                createFiscalTaxDocumentsForCaf(dteType.code, "1", "100")
+                
+            } catch (Exception e) {
+                logger.warn("Could not create CAF for ${dteType.name}: ${e.message}")
+            }
+        }
     }
     
     private void refreshCafDates() {
