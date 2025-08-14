@@ -228,6 +228,10 @@ if (tipoDte in ['33', '46', '43']) {
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
     dteExenta = refMap.dteExenta
+    if (referenciaList == null || referenciaList.size() == 0) {
+        ec.message.addError("No se puede crear Nota de Débito sin referencias")
+        return
+    }
     codRef = referenciaList[0].codigo
 
     Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "DebitoItem", codRef as Integer, issuerPartyId)

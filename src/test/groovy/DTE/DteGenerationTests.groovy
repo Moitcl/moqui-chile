@@ -702,8 +702,7 @@ JYljFtsT
         List detailList = [ [ description: "Test Product for ${description}", quantity: 1, amount: amount, afecto: (dteType != 'Ftdt-34') ] ]
         if (dteType != 'Ftdt-34')
             detailList.add([ itemTypeEnumId:'ItemVatTax', quantity:1, amount:amount*0.19 ])
-        Map result = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#Factura")
-            .parameters([
+        Map parameters = [
                 fiscalTaxDocumentTypeEnumId: dteType,
                 issuerPartyId: testIssuerPartyId,
                 rutReceptor: "87654321-4",
@@ -714,7 +713,14 @@ JYljFtsT
                 direccionReceptor: "Receiver Street 456",
                 comunaReceptor: "Valparaiso",
                 detailList: detailList
-            ]).call()
+        ]
+        if (dteType in ['Ftdt-56', 'Ftdt-61']) {
+            Map referencia = [fiscalTaxDocumentTypeEnumId:'Ftdt-33', folio:'12345', razonReferencia:'Modifica el documento', fecha:ec.user.nowTimestamp]
+            if (dteType == 'Ftdt-61')
+                referencia.codigo = 1
+            parameters.referenciaList = [referencia]
+        }
+        Map result = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#Factura").parameters(parameters).call()
 
         if (result.fiscalTaxDocumentId) {
             createdFiscalTaxDocumentIds.add(result.fiscalTaxDocumentId)

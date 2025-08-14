@@ -386,7 +386,7 @@ class MoquiDTEUtils {
                 referenciaMap.tipoDocumento = referenciaEntry.tipoDocumento
             } else if (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals('Ftdt-0')) { // Used for Set de Pruebas SII
                 referenciaMap.tipoDocumento = 'SET'
-            } else {
+            } else if (referenciaEntry.fiscalTaxDocumentTypeEnumId) {
                 Map<String, Object> codeOut = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId: referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
                 String tpoDocRef = codeOut.siiCode
                 referenciaMap.tipoDocumento = tpoDocRef as String
