@@ -1,0 +1,381 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+
+    <!-- ========================================== -->
+    <!-- CAF Auto Request Services -->
+    <!-- ========================================== -->
+
+    <service verb="check" noun="FolioAvailability">
+        <description>
+            Calculate accurate folio availability based on actual FiscalTaxDocument statuses.
+            This service provides precise availability counts by examining real document usage
+            rather than relying on CAF lastFolioUsed estimates.
+        </description>
+        <in-parameters>
+            <parameter name="partyId" required="true"><description>Party (organization) to check folio availability for</description></parameter>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"><description>Type of DTE document to check (Ftdt-33, Ftdt-34, etc.)</description></parameter>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="totalAvailableFolios" type="Integer"><description>Total number of folios available across all active CAFs</description></parameter>
+            <parameter name="activeCafCount" type="Integer"><description>Number of active, non-expired CAFs found</description></parameter>
+            <parameter name="folioBreakdownList" type="List">
+                <description>List of maps with per-CAF details: cafId, totalAmount, usedFolios, availableFolios, isExpired</description>
+            </parameter>
+            <parameter name="hasExpiredCafs" type="Boolean"><description>True if there are expired CAFs that should be cleaned up</description></parameter>
+            <parameter name="calculationTimestamp" type="Timestamp"><description>When this calculation was performed</description></parameter>
+        </out-parameters>
+        <actions>
+            <!-- Set calculation timestamp -->
+            <set field="calculationTimestamp" from="ec.user.nowTimestamp"/>
+
+            <!-- Calculate 6 months ago for expiration checks -->
+            <set field="sixMonthsMs" from="6*30*24*60*60*1000L" type="Long"/><!-- 6 months in milliseconds -->
+            <set field="currentTimeMs" from="System.currentTimeMillis()"/>
+            <set field="expirationTimeMs" from="currentTimeMs - sixMonthsMs"/>
+            <set field="expirationTimestamp" from="new java.sql.Timestamp(expirationTimeMs)"/>
+
+            <!-- Initialize output parameters -->
+            <set field="totalAvailableFolios" value="0" type="Integer"/>
+            <set field="activeCafCount" value="0" type="Integer"/>
+            <set field="folioBreakdownList" from="[]"/>
+            <set field="hasExpiredCafs" value="false" type="Boolean"/>
+
+            <!-- Log service start -->
+            <log message="Calculating folio availability for party ${partyId}, document type ${fiscalTaxDocumentTypeEnumId}"/>
+
+            <!-- Find CAFs for this party and document type, except both, inactive and expired -->
+            <entity-find entity-name="mchile.dte.Caf" list="activeCafList">
+                <econdition field-name="issuerPartyId" from="partyId"/>
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                <econditions combine="or">
+                    <econdition field-name="activo" value="true"/>
+                    <econdition field-name="fechaAutorizacion" operator="greater-equals" from="expirationTimestamp"/>
+                </econditions>
+                <order-by field-name="fechaAutorizacion"/>
+            </entity-find>
+            <iterate list="activeCafList" entry="caf">
+                <set field="isActive" from="caf.activo == 'true'"/>
+                <!-- Check if CAF is expired (older than 6 months) -->
+                <set field="isExpired" value="false" type="Boolean"/>
+                <if condition="caf.fechaAutorizacion &amp;&amp; caf.fechaAutorizacion.before(expirationTimestamp)">
+                    <set field="isExpired" value="true" type="Boolean"/>
+                    <set field="hasExpiredCafs" value="true" type="Boolean"/>
+                    <log message="CAF ${caf.cafId} is expired (authorized on ${caf.fechaAutorizacion}), limit: ${expirationTimestamp}"/>
+                </if>
+                <set field="totalAmount" from="(caf.hasta - caf.desde + 1)"/>
+
+                <!-- Only process active, non-expired CAFs for availability calculation -->
+                <if condition="isActive &amp;&amp; !isExpired"><then>
+                        <set field="activeCafCount" from="activeCafCount + 1"/>
+                        <entity-find-count entity-name="mchile.dte.FiscalTaxDocument" count-field="usedFoliosCount">
+                            <econdition field-name="issuerPartyId" from="partyId"/>
+                            <econdition field-name="fiscalTaxDocumentTypeEnumId" from="fiscalTaxDocumentTypeEnumId"/>
+                            <econdition field-name="fiscalTaxDocumentNumber" operator="greater-equals" from="caf.desde"/>
+                            <econdition field-name="fiscalTaxDocumentNumber" operator="less-equals" from="caf.hasta"/>
+                            <econdition field-name="statusId" operator="not-equals" value="Ftd-NotIssued"/>
+                        </entity-find-count>
+                        <set field="availableFolios" from="totalAmount - usedFoliosCount"/>
+                        <if condition="availableFolios &lt; 0">
+                            <log level="warn" message="CAF ${caf.cafId} has negative available folios (${availableFolios}). Total range: ${totalAmount}, Used: ${usedFoliosCount}"/>
+                            <set field="availableFolios" value="0"/>
+                        </if>
+                        <set field="totalAvailableFolios" from="totalAvailableFolios + availableFolios"/>
+                        <set field="cafBreakdown" from="[cafId:caf.cafId, totalAmount:totalAmount, usedFolios:usedFoliosCount, availableFolios:availableFolios, isExpired:false,
+                                        isActive:true, rangeStart:caf.desde, rangeEnd:caf.hasta, fechaAutorizacion:caf.fechaAutorizacion]"/>
+                        <script>folioBreakdownList.add(cafBreakdown)</script>
+                </then><else>
+                        <!-- Add inactive/expired CAF to breakdown for reporting -->
+                        <set field="inactiveCafBreakdown" from="[cafId: caf.cafId, totalAmount:totalAmount, usedFolios:0, availableFolios:0, isExpired:isExpired, isActive:isActive,
+                                        rangeStart:caf.desde, rangeEnd:caf.hasta, fechaAutorizacion:caf.fechaAutorizacion]"/>
+                        <script>folioBreakdownList.add(inactiveCafBreakdown)</script>
+
+                        <!-- Log inactive CAF -->
+                        <if condition="!isActive">
+                            <log message="CAF ${caf.cafId} is inactive (activo=${caf.activo})"/>
+                        </if>
+                </else></if>
+            </iterate>
+
+            <!-- Log calculation completion -->
+            <log message="Calculation complete: ${totalAvailableFolios} total available folios across ${activeCafCount} active CAFs"/>
+        </actions>
+    </service>
+
+    <service verb="run" noun="CafAutoRequest">
+        <description>
+            Execute CAF auto-request monitoring and fetching process.
+            This is the main orchestration service that checks all active CafAutoRequest configurations
+            and triggers CAF fetching when thresholds are breached and rate limiting allows.
+        </description>
+        <in-parameters>
+            <parameter name="specificPartyId"><description>Optional: run for specific party only (for testing or manual execution)</description></parameter>
+            <parameter name="specificDocumentTypeEnumId"><description>Optional: run for specific document type only (for testing)</description></parameter>
+            <parameter name="dryRun" type="Boolean" default="false"><description>If true, perform all checks but don't actually fetch CAFs (for testing)</description></parameter>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="processedConfigs" type="Integer"><description>Number of configurations processed</description></parameter>
+            <parameter name="requestsTriggered" type="Integer"><description>Number of CAF fetch requests actually triggered</description></parameter>
+            <parameter name="errorList" type="List"><description>List of error messages encountered during processing</description></parameter>
+            <parameter name="configResultList" type="List"><description>Detailed results per configuration processed</description></parameter>
+        </out-parameters>
+        <actions>
+            <!-- Initialize output parameters -->
+            <set field="processedConfigs" value="0" type="Integer"/>
+            <set field="requestsTriggered" value="0" type="Integer"/>
+            <set field="errorList" from="[]"/>
+            <set field="configResultList" from="[]"/>
+            
+            <!-- Set monitoring start time -->
+            <set field="startTime" from="System.currentTimeMillis()"/>
+            <log message="Starting CAF auto-request monitoring${dryRun ? ' (DRY RUN)' : ''} (configurations read from CafAutoRequest entity records)"/>
+            
+            <!-- Find active configurations -->
+            <entity-find entity-name="mchile.dte.CafAutoRequest" list="activeConfigList">
+                <econdition field-name="isActive" value="Y"/>
+                <econdition field-name="partyId" from="specificPartyId" ignore-if-empty="true"/>
+                <econdition field-name="fiscalTaxDocumentTypeEnumId" from="specificDocumentTypeEnumId" ignore-if-empty="true"/>
+                <order-by field-name="partyId"/>
+                <order-by field-name="fiscalTaxDocumentTypeEnumId"/>
+            </entity-find>
+            
+            <log message="Found ${activeConfigList.size()} active CAF auto-request configurations to process"/>
+            
+            <!-- Process each configuration -->
+            <iterate list="activeConfigList" entry="activeConfig">
+                <set field="processedConfigs" from="processedConfigs + 1"/>
+                <set field="configStartTime" from="System.currentTimeMillis()"/>
+                
+                <!-- Extract configuration values from entity (all are required/not-null) -->
+                <set field="partyId" from="activeConfig.partyId"/>
+                <set field="documentType" from="activeConfig.fiscalTaxDocumentTypeEnumId"/>
+                <set field="threshold" from="activeConfig.minimumThreshold"/>
+                <set field="fetchQuantity" from="activeConfig.fetchQuantity"/>
+                <set field="minimumHours" from="activeConfig.minimumHoursBetweenFetches"/>
+                
+                <log message="Processing config for party ${partyId}, document type ${documentType}, threshold: ${threshold}"/>
+                
+                <!-- Check rate limiting -->
+                <set field="canFetch" value="true" type="Boolean"/>
+                <set field="rateLimitReason" value=""/>
+                
+                <if condition="activeConfig.lastAutoFetchDate">
+                    <set field="timeSinceLastFetch" from="System.currentTimeMillis() - activeConfig.lastAutoFetchDate.getTime()"/>
+                    <set field="minimumMs" from="minimumHours * 60 * 60 * 1000"/>
+                    
+                    <if condition="timeSinceLastFetch &lt; minimumMs">
+                        <set field="canFetch" value="false" type="Boolean"/>
+                        <set field="hoursRemaining" from="(minimumMs - timeSinceLastFetch) / (60 * 60 * 1000)"/>
+                        <set field="rateLimitReason" from="'Rate limited: ' + String.format('%.1f', hoursRemaining) + ' hours remaining until next fetch allowed'"/>
+                        <log message="Rate limiting prevents fetch for party ${partyId}, document type ${documentType}: ${rateLimitReason}"/>
+                    </if>
+                </if>
+                
+                <!-- Initialize config result -->
+                <set field="configResult" from="[:]"/>
+                <set field="configResult.partyId" from="partyId"/>
+                <set field="configResult.fiscalTaxDocumentTypeEnumId" from="documentType"/>
+                <set field="configResult.threshold" from="threshold"/>
+                <set field="configResult.fetchQuantity" from="fetchQuantity"/>
+                <set field="configResult.canFetch" from="canFetch"/>
+                <set field="configResult.rateLimitReason" from="rateLimitReason"/>
+                <set field="configResult.processingTimeMs" value="0" type="Integer"/>
+                <set field="configResult.actionTaken" value="NONE"/>
+                <set field="configResult.errorMessage" value=""/>
+                
+                <if condition="canFetch"><then>
+                    <!-- Check current folio availability -->
+                    <service-call name="mchile.sii.dte.DteCafAutoRequestServices.check#FolioAvailability" out-map="availabilityResult"
+                                  in-map="[partyId:partyId, fiscalTaxDocumentTypeEnumId:documentType]"/>
+
+                    <set field="currentAvailable" from="availabilityResult.totalAvailableFolios ?: 0"/>
+
+                    <!-- Update config result with availability data -->
+                    <set field="configResult.currentAvailable" from="currentAvailable"/>
+                    <set field="configResult.activeCafCount" from="availabilityResult.activeCafCount ?: 0"/>
+                    <set field="configResult.hasExpiredCafs" from="availabilityResult.hasExpiredCafs ?: false"/>
+
+                    <log message="Party ${partyId}, document type ${documentType}: ${currentAvailable} available folios, threshold: ${threshold}"/>
+
+                    <!-- Check if threshold is breached -->
+                    <if condition="currentAvailable &lt; threshold"><then>
+                        <set field="configResult.actionTaken" value="FETCH_TRIGGERED"/>
+
+                        <if condition="!dryRun"><then>
+                            <!-- Call process single configuration service for actual CAF fetching -->
+                            <service-call name="process#CafAutoRequest" out-map="fetchResult"
+                                          in-map="[partyId:partyId, fiscalTaxDocumentTypeEnumId:documentType, fetchQuantity:fetchQuantity,
+                                                               currentAvailable:currentAvailable, threshold:threshold]"/>
+
+                            <!-- Update counters and results based on fetch success -->
+                            <if condition="fetchResult.fetchSuccessful">
+                                <set field="requestsTriggered" from="requestsTriggered + 1"/>
+                            </if>
+
+                            <!-- Update config result with fetch results -->
+                            <set field="configResult.fetchSuccessful" from="fetchResult.fetchSuccessful"/>
+                            <set field="configResult.newCafId" from="fetchResult.newCafId"/>
+                            <set field="configResult.availableAfterFetch" from="fetchResult.availableAfterFetch"/>
+                            <if condition="fetchResult.errorMessage">
+                                <set field="configResult.errorMessage" from="fetchResult.errorMessage"/>
+                                <script>errorList.add("Failed to fetch CAF for party " + partyId + ", document type " + documentType + ": " + fetchResult.errorMessage)</script>
+                            </if>
+                        </then><else>
+                            <!-- Dry run mode -->
+                            <set field="configResult.fetchSuccessful" value="true" type="Boolean"/>
+                            <set field="configResult.dryRunNote" value="Would have triggered CAF fetch (dry run mode)"/>
+                            <log message="DRY RUN: Would trigger CAF fetch for party ${partyId}, document type ${documentType}"/>
+                        </else></if>
+                    </then><else>
+                        <!-- No action needed -->
+                        <set field="configResult.actionTaken" value="NO_ACTION_NEEDED"/>
+                        <log message="No action needed for party ${partyId}, document type ${documentType}: ${currentAvailable} >= ${threshold}"/>
+                    </else></if>
+                </then><else>
+                    <!-- Rate limited -->
+                    <set field="configResult.actionTaken" value="RATE_LIMITED"/>
+                </else></if>
+
+                <!-- Finalize config result -->
+                <set field="configResult.processingTimeMs" from="System.currentTimeMillis() - configStartTime"/>
+                <script>configResultList.add(configResult)</script>
+            </iterate>
+
+            <!-- Log completion -->
+            <set field="totalTimeMs" from="System.currentTimeMillis() - startTime"/>
+            <log message="CAF auto-request monitoring complete${dryRun ? ' (DRY RUN)' : ''}. Processed: ${processedConfigs}, Triggered: ${requestsTriggered}, Errors: ${errorList.size()}, Time: ${totalTimeMs}ms"/>
+        </actions>
+    </service>
+
+    <service verb="process" noun="CafAutoRequest">
+        <description>
+            Process a single CAF auto-request configuration, performing the actual CAF fetch and logging.
+            This service encapsulates the complex error handling and logging logic for individual requests.
+        </description>
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="fetchQuantity" type="Integer" required="true"/>
+            <parameter name="currentAvailable" type="Integer" required="true"/>
+            <parameter name="threshold" type="Integer" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="fetchSuccessful" type="Boolean"/>
+            <parameter name="newCafId"/>
+            <parameter name="availableAfterFetch" type="Integer"/>
+            <parameter name="errorMessage" type="text-long"/>
+        </out-parameters>
+        <actions>
+            <!-- Initialize output parameters -->
+            <set field="fetchSuccessful" value="false" type="Boolean"/>
+            <set field="newCafId" value=""/>
+            <set field="availableAfterFetch" value="0" type="Integer"/>
+            <set field="errorMessage" value=""/>
+            
+            <!-- Create initial log entry -->
+            <set field="logStartTime" from="ec.user.nowTimestamp"/>
+            <service-call name="create#mchile.dte.CafAutoRequestLog" transaction="force-new"
+                          in-map="[partyId:partyId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, requestedFolioQuantity:fetchQuantity,
+                                   availableFoliosBefore:currentAvailable, thresholdAtRequest:threshold, requestStartTime:logStartTime]" out-map="context"/>
+            
+            <!-- Attempt CAF fetch -->
+            <service-call name="mchile.sii.dte.DteFolioServices.fetch#NewCaf" out-map="fetchResult" 
+                          in-map="[partyId:partyId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, folioAmount:fetchQuantity, activateCaf:true]"/>
+            
+            <if condition="fetchResult.success != false"><then>
+                    <!-- Fetch was successful -->
+                    <set field="fetchSuccessful" value="true" type="Boolean"/>
+                    <set field="newCafId" from="fetchResult.cafId"/>
+                    
+                    <!-- Update configuration with successful fetch timestamp -->
+                    <service-call name="update#mchile.dte.CafAutoRequest" 
+                                  in-map="[partyId:partyId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, lastAutoFetchDate:ec.user.nowTimestamp]"/>
+                    
+                    <!-- Get updated availability -->
+                    <service-call name="mchile.sii.dte.DteCafAutoRequestServices.check#FolioAvailability" out-map="newAvailabilityResult"
+                                  in-map="[partyId:partyId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"/>
+                    
+                    <set field="availableAfterFetch" from="newAvailabilityResult.totalAvailableFolios ?: 0"/>
+                    
+                    <!-- Update log with success -->
+                    <set field="logEndTime" from="ec.user.nowTimestamp"/>
+                    <set field="durationMs" from="logEndTime.getTime() - logStartTime.getTime()"/>
+                    
+                    <service-call name="update#mchile.dte.CafAutoRequestLog" 
+                                  in-map="[logId:logId, grantedFolioQuantity:(fetchResult.grantedFolios ?: fetchQuantity), availableFoliosAfter:availableAfterFetch, 
+                                           cafId:newCafId, durationMs:durationMs]"/>
+                    
+                    <log message="Successfully fetched new CAF for party ${partyId}, document type ${fiscalTaxDocumentTypeEnumId}. New availability: ${availableAfterFetch}"/>
+            </then><else>
+                    <!-- Fetch failed -->
+                    <set field="fetchSuccessful" value="false" type="Boolean"/>
+                    <set field="errorMessage" from="fetchResult.errorMessage ?: 'Unknown error during CAF fetch'"/>
+                    
+                    <!-- Update log with failure -->
+                    <set field="logEndTime" from="ec.user.nowTimestamp"/>
+                    <set field="durationMs" from="logEndTime.getTime() - logStartTime.getTime()"/>
+                    
+                    <service-call name="update#mchile.dte.CafAutoRequestLog" 
+                                  in-map="[logId:logId, errorMessage:errorMessage, requestEndTime:logEndTime, durationMs:durationMs]"/>
+                    
+                    <log level="error" message="Failed to fetch CAF for party ${partyId}, document type ${fiscalTaxDocumentTypeEnumId}: ${errorMessage}"/>
+            </else></if>
+        </actions>
+    </service>
+
+    <!-- ========================================== -->
+    <!-- CAF Auto Request Management Services -->
+    <!-- ========================================== -->
+
+    <service verb="create" noun="CafAutoRequestConfig">
+        <description>Create a new CAF auto-request configuration for a party and document type</description>
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="minimumThreshold" type="Integer" required="true"/>
+            <parameter name="fetchQuantity" type="Integer" required="true"/>
+            <parameter name="minimumHoursBetweenFetches" type="Integer" default="6"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="configCreated" type="Boolean"/>
+        </out-parameters>
+        <actions>
+            <service-call name="create#mchile.dte.CafAutoRequest" in-map="context" out-map="context"/>
+            <set field="configCreated" from="true"/>
+        </actions>
+    </service>
+
+    <service verb="update" noun="CafAutoRequestConfig">
+        <description>Update an existing CAF auto-request configuration</description>
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+            <parameter name="minimumThreshold" type="Integer"/>
+            <parameter name="fetchQuantity" type="Integer"/>
+            <parameter name="minimumHoursBetweenFetches" type="Integer"/>
+            <parameter name="isActive"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="configUpdated" type="Boolean"/>
+        </out-parameters>
+        <actions>
+            <service-call name="update#mchile.dte.CafAutoRequest" in-map="context" out-map="context"/>
+            <set field="configUpdated" from="true"/>
+        </actions>
+    </service>
+
+    <service verb="delete" noun="CafAutoRequestConfig">
+        <description>Delete a CAF auto-request configuration</description>
+        <in-parameters>
+            <parameter name="partyId" required="true"/>
+            <parameter name="fiscalTaxDocumentTypeEnumId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="configDeleted" type="Boolean"/>
+        </out-parameters>
+        <actions>
+            <service-call name="delete#mchile.dte.CafAutoRequest" in-map="context" out-map="context"/>
+            <set field="configDeleted" from="true"/>
+        </actions>
+    </service>
+
+</services>

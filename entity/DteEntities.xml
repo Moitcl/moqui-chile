@@ -72,6 +72,18 @@
             <index-field name="fiscalTaxDocumentTypeEnumId"/>
             <index-field name="fiscalTaxDocumentNumber"/>
         </index>
+        <!-- Additional indexes for performance optimization -->
+        <index name="FiscalTaxDocumentFolioStatus">
+            <index-field name="issuerPartyId"/>
+            <index-field name="fiscalTaxDocumentTypeEnumId"/>
+            <index-field name="fiscalTaxDocumentNumber"/>
+            <index-field name="statusId"/>
+        </index>
+        <index name="FiscalTaxDocumentRangeQuery">
+            <index-field name="issuerPartyId"/>
+            <index-field name="fiscalTaxDocumentTypeEnumId"/>
+            <index-field name="fiscalTaxDocumentNumber"/>
+        </index>
 
         <seed-data>
             <moqui.basic.StatusType statusTypeId="FiscalTaxDocumentSentAuth" description="Fiscal Tax Document Sent to Tax Authority"/>
@@ -329,6 +341,21 @@
         <relationship type="one" related="mantle.party.Party">
             <key-map field-name="issuerPartyId" related="partyId"/>
         </relationship>
+        
+        <!-- Indexes for CAF performance optimization -->
+        <index name="CafActiveLookup">
+            <index-field name="issuerPartyId"/>
+            <index-field name="fiscalTaxDocumentTypeEnumId"/>
+            <index-field name="activo"/>
+            <index-field name="fechaAutorizacion"/>
+        </index>
+        <index name="CafRangeLookup">
+            <index-field name="issuerPartyId"/>
+            <index-field name="fiscalTaxDocumentTypeEnumId"/>
+            <index-field name="desde"/>
+            <index-field name="hasta"/>
+            <index-field name="activo"/>
+        </index>
     </entity>
 
     <view-entity entity-name="CafDetail" package="mchile.dte">
@@ -1692,5 +1719,86 @@
     <extend-entity entity-name="Invoice" package="mantle.account.invoice">
         <field name="issuerCustomerInternalId" type="id"><description>ID the vendor uses internally for the customer (mapped to CdgIntRecep in DTE)</description></field>
     </extend-entity>
+
+    <entity entity-name="CafAutoRequest" package="mchile.dte">
+        <description>
+            Configuration for automatic CAF (Código de Autorización de Folios) requests.
+            Defines thresholds and parameters for automated folio management per party and DTE type.
+        </description>
+        <field name="partyId" type="id" is-pk="true"><description>Party (organization) that owns this auto-request configuration</description></field>
+        <field name="fiscalTaxDocumentTypeEnumId" type="id" is-pk="true"><description>Type of DTE document (Ftdt-33, Ftdt-34, etc.) for this configuration</description></field>
+        <field name="minimumThreshold" type="number-integer" not-null="true" enable-audit-log="true">
+            <description>Minimum number of available folios before triggering automatic CAF request</description>
+        </field>
+        <field name="fetchQuantity" type="number-integer" not-null="true" enable-audit-log="true">
+            <description>Number of folios to request from SII when threshold is reached</description>
+        </field>
+        <field name="lastAutoFetchDate" type="date-time">
+            <description>Timestamp of last automatic CAF fetch attempt (successful or failed)</description>
+        </field>
+        <field name="minimumHoursBetweenFetches" type="number-integer" not-null="true" default="6" enable-audit-log="true">
+            <description>Minimum hours to wait between automatic CAF fetch attempts</description>
+        </field>
+        <field name="isActive" type="text-indicator" default="'Y'" enable-audit-log="true">
+            <description>Y/N flag to enable/disable automatic CAF fetching for this configuration</description>
+        </field>
+        <relationship type="one" related="mantle.party.Party">
+            <key-map field-name="partyId"/>
+        </relationship>
+        <relationship type="one" related="moqui.basic.Enumeration" title="FiscalTaxDocumentType">
+            <key-map field-name="fiscalTaxDocumentTypeEnumId" related="enumId"/>
+        </relationship>
+        <index name="CafAutoRequestActive">
+            <index-field name="isActive"/>
+            <index-field name="lastAutoFetchDate"/>
+            <index-field name="minimumHoursBetweenFetches"/>
+        </index>
+        <index name="CafAutoRequestParty">
+            <index-field name="partyId"/>
+            <index-field name="isActive"/>
+        </index>
+    </entity>
+
+    <entity entity-name="CafAutoRequestLog" package="mchile.dte">
+        <description>
+            Audit log for CAF auto-request operations.
+            Tracks all automatic CAF fetch attempts, successes, and failures.
+        </description>
+        <field name="logId" type="id" is-pk="true"><description>Unique identifier for this log entry</description></field>
+        <field name="partyId" type="id" not-null="true"><description>Party for which CAF auto-request was executed</description></field>
+        <field name="fiscalTaxDocumentTypeEnumId" type="id" not-null="true"><description>DTE type for which CAF auto-request was executed</description></field>
+        <field name="requestedFolioQuantity" type="number-integer"><description>Number of folios requested from SII</description></field>
+        <field name="grantedFolioQuantity" type="number-integer"><description>Number of folios actually granted by SII (may be less than requested)</description></field>
+        <field name="availableFoliosBefore" type="number-integer"><description>Number of available folios before the request</description></field>
+        <field name="availableFoliosAfter" type="number-integer"><description>Number of available folios after the request (if successful)</description></field>
+        <field name="thresholdAtRequest" type="number-integer"><description>Threshold value that triggered this auto-request</description></field>
+        <field name="cafId" type="id"><description>ID of the CAF that was fetched (if successful)</description></field>
+        <field name="errorMessage" type="text-long"><description>Error message if the request failed</description></field>
+        <field name="requestStartTime" type="date-time" not-null="true"><description>When the auto-request process started</description></field>
+        <field name="durationMs" type="number-integer"><description>Duration of the request process in milliseconds</description></field>
+        <field name="serviceJobRunId" type="id"><description>ID of the ServiceJobRun that triggered this request (if applicable)</description></field>
+        <relationship type="one" related="mchile.dte.CafAutoRequest">
+            <key-map field-name="partyId"/>
+            <key-map field-name="fiscalTaxDocumentTypeEnumId"/>
+        </relationship>
+        <relationship type="one" related="mantle.party.Party">
+            <key-map field-name="partyId"/>
+        </relationship>
+        <relationship type="one" related="moqui.basic.Enumeration" title="FiscalTaxDocumentType">
+            <key-map field-name="fiscalTaxDocumentTypeEnumId" related="enumId"/>
+        </relationship>
+        <relationship type="one" related="mchile.dte.Caf">
+            <key-map field-name="cafId"/>
+        </relationship>
+        <index name="CafAutoRequestLogPartyTime">
+            <index-field name="partyId"/>
+            <index-field name="fiscalTaxDocumentTypeEnumId"/>
+            <index-field name="requestStartTime"/>
+        </index>
+        <index name="CafAutoRequestLogTime">
+            <index-field name="requestStartTime"/>
+            <index-field name="requestStatus"/>
+        </index>
+    </entity>
 
 </entities>
