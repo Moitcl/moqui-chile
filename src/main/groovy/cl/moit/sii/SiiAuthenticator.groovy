@@ -74,6 +74,12 @@ class SiiAuthenticator {
         return restClient
     }
 
+    public RestClient.RestResponse closeSession() {
+        if (restClient)
+            return restClient.method(RestClient.Method.GET).uri("https://zeusr.sii.cl/cgi_AUT2000/autTermino.cgi").call()
+        return null
+    }
+
     public RestClient createRestClient() {
         RestClient restClient = new RestClient()
         RestClient.RestResponse response
