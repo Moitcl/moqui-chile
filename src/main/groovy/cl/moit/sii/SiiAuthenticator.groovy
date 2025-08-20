@@ -29,6 +29,7 @@ class SiiAuthenticator {
     protected boolean trustAll = false
     protected boolean irrecoverableFailure = false
     protected String failureEnumId = null
+    protected boolean sessionClosed = false
 
     protected boolean debug = false
 
@@ -74,9 +75,17 @@ class SiiAuthenticator {
         return restClient
     }
 
+    public boolean getSessionClosed() {
+        return sessionClosed
+    }
+
     public RestClient.RestResponse closeSession() {
-        if (restClient)
-            return restClient.method(RestClient.Method.GET).uri("https://zeusr.sii.cl/cgi_AUT2000/autTermino.cgi").call()
+        if (restClient) {
+            logger.info("Closing Authenticator Session")
+            sessionClosed = true
+            RestClient.RestResponse response = restClient.method(RestClient.Method.GET).uri("https://zeusr.sii.cl/cgi_AUT2000/autTermino.cgi").call()
+            return response
+        }
         return null
     }
 
