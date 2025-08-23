@@ -28,7 +28,8 @@ import org.moqui.Moqui
 @Suite
 @SelectClasses([
     General.RutTests.class,           // Chilean RUT validation utilities
-    DTE.DteGenerationTests.class      // All DTE types via generate#Factura and generate#Boleta services
+    DTE.DteGenerationTests.class,     // All DTE types via generate#Factura and generate#Boleta services
+    DTE.CafAutoRequestTests.class     // CAF auto-request system testing
 ])
 class MoquiChileSuite {
     @AfterAll

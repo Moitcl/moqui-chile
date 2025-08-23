@@ -1,0 +1,332 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-3.xsd" menu-image="fa fa-file-text" menu-image-type="icon" default-menu-title="CAF Management" default-menu-index="95" default-menu-include="true">
+    
+    <parameter name="partyId"/>
+    <parameter name="fiscalTaxDocumentTypeEnumId"/>
+
+    <transition name="createConfig">
+        <service-call name="mchile.sii.dte.DteCafAutoRequestServices.create#CafAutoRequestConfig"/>
+        <default-response url="."/>
+    </transition>
+    <transition name="updateConfig">
+        <service-call name="mchile.sii.dte.DteCafAutoRequestServices.update#CafAutoRequestConfig"/>
+        <default-response url="."/>
+    </transition>
+    <transition name="deleteConfig">
+        <service-call name="mchile.sii.dte.DteCafAutoRequestServices.delete#CafAutoRequestConfig"/>
+        <default-response url="."/>
+    </transition>
+
+    <actions>
+        <!-- Get auto-CAF request logs for monitoring -->
+        <entity-find entity-name="mchile.dte.CafAutoRequestLog" list="autoRequestLogList" limit="50">
+            <econdition field-name="requestStartTime" operator="greater-equals" from="ec.user.nowTimestamp.time - (7*24*60*60*1000)"/>
+            <order-by field-name="-requestStartTime"/>
+        </entity-find>
+
+        <!-- Get folio detail if specific party provided -->
+        <if condition="partyId">
+            <service-call name="moit.erp.sii.dte.DteHealthCheckServices.get#FolioDetail" in-map="[organizationPartyId:partyId]" out-map="folioDetail"/>
+        </if>
+    </actions>
+
+    <widgets>
+        <container>
+            <label text="CAF Auto-Request Configuration and Monitoring" type="h1"/>
+            
+            <!-- Auto-CAF Configuration Panel -->
+            <section name="AutoConfigSection">
+                <widgets>
+                    <label text="Auto-CAF Configurations" type="h3"/>
+                    <container-row>
+                        <row-col md="6">
+                            <container-dialog id="CreateConfigDialog" button-text="Create Configuration" type="success">
+                                <form-single name="CreateConfigForm" transition="createConfig">
+                                    <field name="partyId">
+                                        <default-field title="Party">
+                                            <drop-down>
+                                                <entity-options key="${partyId}" text="PartyNameTemplate">
+                                                    <entity-find entity-name="mchile.dte.PartyDteParamsAndPartyDetail">
+                                                        <order-by field-name="partyId"/>
+                                                    </entity-find>
+                                                </entity-options>
+                                            </drop-down>
+                                        </default-field>
+                                    </field>
+                                    <field name="fiscalTaxDocumentTypeEnumId">
+                                        <default-field title="Document Type">
+                                            <drop-down>
+                                                <entity-options key="${enumId}" text="${description}">
+                                                    <entity-find entity-name="moqui.basic.Enumeration">
+                                                        <econdition field-name="enumTypeId" value="FiscalTaxDocumentType"/>
+                                                        <econdition field-name="parentEnumId" value="Ftdt-DTE"/>
+                                                        <order-by field-name="sequenceNum,description"/>
+                                                    </entity-find>
+                                                </entity-options>
+                                            </drop-down>
+                                        </default-field>
+                                    </field>
+                                    <field name="minimumThreshold">
+                                        <default-field title="Minimum Threshold" tooltip="Trigger auto-request when folios fall below this number">
+                                            <text-line size="10" default-value="10"/>
+                                        </default-field>
+                                    </field>
+                                    <field name="fetchQuantity">
+                                        <default-field title="Fetch Quantity" tooltip="Number of folios to request from SII">
+                                            <text-line size="10" default-value="50"/>
+                                        </default-field>
+                                    </field>
+                                    <field name="minimumHoursBetweenFetches">
+                                        <default-field title="Minimum Hours Between Fetches" tooltip="Rate limiting: minimum hours to wait between requests">
+                                            <text-line size="10" default-value="6"/>
+                                        </default-field>
+                                    </field>
+                                    <field name="submitButton">
+                                        <default-field title="Create Configuration">
+                                            <submit/>
+                                        </default-field>
+                                    </field>
+                                </form-single>
+                            </container-dialog>
+                        </row-col>
+                        <row-col md="6">
+                            <container-dialog id="CheckFolioDetailDialog" button-text="Check Folio Detail" type="primary">
+                                <form-single name="CheckFolioDetailForm">
+                                    <field name="partyId">
+                                        <default-field title="Party">
+                                            <drop-down>
+                                                <entity-options key="${partyId}" text="PartyNameTemplate">
+                                                    <entity-find entity-name="mchile.dte.PartyDteParamsAndPartyDetail">
+                                                        <order-by field-name="partyId"/>
+                                                    </entity-find>
+                                                </entity-options>
+                                            </drop-down>
+                                        </default-field>
+                                    </field>
+                                    <field name="submitButton">
+                                        <default-field title="Check Folio Detail">
+                                            <submit/>
+                                        </default-field>
+                                    </field>
+                                </form-single>
+                            </container-dialog>
+                        </row-col>
+                    </container-row>
+                </widgets>
+            </section>
+
+            <!-- Auto-CAF Configurations List -->
+            <section name="ConfigListSection">
+                <widgets>
+                    <form-list name="AutoConfigList" list="autoConfigList" skip-form="true" header-dialog="true" paginate="true">
+                        <entity-find entity-name="mchile.dte.CafAutoRequest" list="autoConfigList">
+                            <search-form-inputs default-order-by="partyId,fiscalTaxDocumentTypeEnumId"/>
+                        </entity-find>
+                        <field name="partyId">
+                            <header-field title="Party" show-order-by="true">
+                                <drop-down allow-empty="true">
+                                    <entity-options key="${partyId}" text="${partyId}">
+                                        <entity-find entity-name="mchile.dte.PartyDteParams">
+                                            <order-by field-name="partyId"/>
+                                        </entity-find>
+                                    </entity-options>
+                                </drop-down>
+                            </header-field>
+                            <default-field><display/></default-field>
+                        </field>
+                        <field name="fiscalTaxDocumentTypeEnumId">
+                            <header-field title="Document Type" show-order-by="true">
+                                <drop-down allow-empty="true">
+                                    <entity-options key="${enumId}" text="${description}">
+                                        <entity-find entity-name="moqui.basic.Enumeration">
+                                            <econdition field-name="enumTypeId" value="FiscalTaxDocumentType"/>
+                                            <order-by field-name="sequenceNum,description"/>
+                                        </entity-find>
+                                    </entity-options>
+                                </drop-down>
+                            </header-field>
+                            <default-field>
+                                <display-entity entity-name="moqui.basic.Enumeration" text="${description}"/>
+                            </default-field>
+                        </field>
+                        <field name="minimumThreshold">
+                            <header-field title="Threshold" show-order-by="true"/>
+                            <default-field><display/></default-field>
+                        </field>
+                        <field name="fetchQuantity">
+                            <header-field title="Fetch Qty" show-order-by="true"/>
+                            <default-field><display/></default-field>
+                        </field>
+                        <field name="minimumHoursBetweenFetches">
+                            <header-field title="Min Hours" show-order-by="true"/>
+                            <default-field><display/></default-field>
+                        </field>
+                        <field name="lastAutoFetchDate">
+                            <header-field title="Last Fetch" show-order-by="true"/>
+                            <default-field><display format="yyyy-MM-dd HH:mm"/></default-field>
+                        </field>
+                        <field name="isActive">
+                            <header-field title="Active">
+                                <drop-down allow-empty="true">
+                                    <option key="Y" text="Yes"/>
+                                    <option key="N" text="No"/>
+                                </drop-down>
+                            </header-field>
+                            <default-field><display text="${isActive == 'Y' ? 'Yes' : 'No'}" style="${isActive == 'Y' ? 'text-success' : 'text-muted'}"/></default-field>
+                        </field>
+                        <field name="actions">
+                            <header-field title="Actions"/>
+                            <default-field>
+                                <container-dialog id="UpdateConfigDialog_${partyId}_${fiscalTaxDocumentTypeEnumId}" button-text="Edit" btn-type="info" style="btn-sm">
+                                    <form-single name="UpdateConfigForm" transition="updateConfig">
+                                        <field name="partyId"><default-field><hidden/></default-field></field>
+                                        <field name="fiscalTaxDocumentTypeEnumId"><default-field><hidden/></default-field></field>
+                                        <field name="minimumThreshold">
+                                            <default-field title="Threshold"><text-line size="10"/></default-field>
+                                        </field>
+                                        <field name="fetchQuantity">
+                                            <default-field title="Fetch Quantity"><text-line size="10"/></default-field>
+                                        </field>
+                                        <field name="minimumHoursBetweenFetches">
+                                            <default-field title="Min Hours"><text-line size="10"/></default-field>
+                                        </field>
+                                        <field name="isActive">
+                                            <default-field title="Active">
+                                                <drop-down>
+                                                    <option key="Y" text="Yes"/>
+                                                    <option key="N" text="No"/>
+                                                </drop-down>
+                                            </default-field>
+                                        </field>
+                                        <field name="submitButton">
+                                            <default-field title="Update"><submit/></default-field>
+                                        </field>
+                                    </form-single>
+                                </container-dialog>
+                                <link url="deleteConfig" text="Delete" btn-type="danger" style="btn-sm"
+                                      parameter-map="[partyId:partyId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"
+                                      confirmation="Delete this auto-CAF configuration?"/>
+                            </default-field>
+                        </field>
+                    </form-list>
+                </widgets>
+            </section>
+
+            <!-- Folio Detail Display -->
+            <section name="FolioDetailSection">
+                <condition><expression>folioDetail != null</expression></condition>
+                <actions>
+                    <entity-find-one entity-name="mantle.party.PartyDetail" value-field="partyDetail"/>
+                    <set field="partyName" from="ec.resource.expand('PartyNameTemplate', null, partyDetail)"/>
+                </actions>
+                <widgets>
+                    <container-row>
+                        <row-col md="12">
+                            <label text="Folio Detail Report for ${partyName}" type="h3"/>
+                            <section name="FolioStatusSection">
+                                <condition><expression>folioDetail.folioStatusList</expression></condition>
+                                <widgets>
+                                    <label text="Folio Status by Document Type" type="h4"/>
+                                    <form-list name="FolioStatusList" list="folioDetail.folioStatusList" skip-form="true">
+                                        <field name="fiscalTaxDocumentTypeEnumId">
+                                            <header-field title="Document Type"/>
+                                            <default-field>
+                                                <display-entity entity-name="moqui.basic.Enumeration" text="${description}"/>
+                                            </default-field>
+                                        </field>
+                                        <field name="inUse">
+                                            <header-field title="In Use"/>
+                                            <default-field><display text="${inUse ? 'Yes' : 'No'}" style="${inUse ? 'text-success' : 'text-muted'}"/></default-field>
+                                        </field>
+                                        <field name="foliosLeft">
+                                            <header-field title="Folios Left"/>
+                                            <default-field><display style="${foliosLeft > 50 ? 'text-success' : foliosLeft > 10 ? 'text-warning' : 'text-danger'}"/></default-field>
+                                        </field>
+                                        <field name="inactiveFoliosLeft">
+                                            <header-field title="Inactive Folios"/>
+                                            <default-field><display/></default-field>
+                                        </field>
+                                        <field name="estimatedDaysLeft">
+                                            <header-field title="Est. Days Left"/>
+                                            <conditional-field condition="estimatedDaysLeft != null">
+                                                <display text="${ec.l10n.formatNumber(estimatedDaysLeft, '#.#', null)}" style="${estimatedDaysLeft != null &amp;&amp; estimatedDaysLeft &lt; 5 ? 'text-danger' : estimatedDaysLeft != null &amp;&amp; estimatedDaysLeft &lt; 15 ? 'text-warning' : 'text-success'}"/>
+                                            </conditional-field>
+                                            <default-field><display text="N/A"/></default-field>
+                                        </field>
+                                        <field name="issuedDaily90Days">
+                                            <header-field title="Daily Avg (90d)"/>
+                                            <default-field><display text="${issuedDaily90Days != null ? String.format('%.2f', issuedDaily90Days) : 'N/A'}"/></default-field>
+                                        </field>
+                                        <field name="maxIssuedPerDay">
+                                            <header-field title="Max Per Day"/>
+                                            <default-field><display/></default-field>
+                                        </field>
+                                        <field name="expirationBeforeUsageAmount">
+                                            <header-field title="Will Expire Before Use"/>
+                                            <default-field><display text="${expirationBeforeUsageAmount ?: 0}" style="${expirationBeforeUsageAmount &amp;&amp; expirationBeforeUsageAmount &gt; 0 ? 'text-warning' : 'text-success'}"/></default-field>
+                                        </field>
+                                    </form-list>
+                                </widgets>
+                            </section>
+                        </row-col>
+                    </container-row>
+                </widgets>
+            </section>
+
+            <!-- Auto-CAF Request Logs -->
+            <section name="AutoRequestLogsSection">
+                <widgets>
+                    <label text="Recent Auto-CAF Request Logs (Last 7 Days)" type="h3"/>
+                    <form-list name="AutoRequestLogsList" list="autoRequestLogList" skip-form="true" header-dialog="true" paginate="true">
+                        <field name="requestStartTime">
+                            <header-field title="Request Time" show-order-by="true"/>
+                            <default-field><display format="yyyy-MM-dd HH:mm:ss"/></default-field>
+                        </field>
+                        <field name="partyId">
+                            <header-field title="Party" show-order-by="true"/>
+                            <default-field><display/></default-field>
+                        </field>
+                        <field name="fiscalTaxDocumentTypeEnumId">
+                            <header-field title="Document Type" show-order-by="true"/>
+                            <default-field>
+                                <display-entity entity-name="moqui.basic.Enumeration" text="${description}"/>
+                            </default-field>
+                        </field>
+                        <field name="requestedFolioQuantity">
+                            <header-field title="Requested"/>
+                            <default-field><display/></default-field>
+                        </field>
+                        <field name="grantedFolioQuantity">
+                            <header-field title="Granted"/>
+                            <default-field><display/></default-field>
+                        </field>
+                        <field name="availableFoliosBefore">
+                            <header-field title="Before"/>
+                            <default-field><display/></default-field>
+                        </field>
+                        <field name="availableFoliosAfter">
+                            <header-field title="After"/>
+                            <default-field><display/></default-field>
+                        </field>
+                        <field name="thresholdAtRequest">
+                            <header-field title="Threshold"/>
+                            <default-field><display/></default-field>
+                        </field>
+                        <field name="cafId">
+                            <header-field title="CAF ID"/>
+                            <default-field><display text="${cafId ?: 'Failed'}"/></default-field>
+                        </field>
+                        <field name="durationMs">
+                            <header-field title="Duration (ms)"/>
+                            <default-field><display/></default-field>
+                        </field>
+                        <field name="errorMessage">
+                            <header-field title="Error"/>
+                            <default-field><display text="${errorMessage ? (errorMessage.length() > 50 ? errorMessage.substring(0, 50) + '...' : errorMessage) : ''}" style="text-danger"/></default-field>
+                        </field>
+                    </form-list>
+                </widgets>
+            </section>
+        </container>
+    </widgets>
+</screen>
