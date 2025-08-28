@@ -92,11 +92,13 @@ if (rutReceptorCaratula != receptor.RUTRecep.text()) {
     }
 }
 if (!receiverPartyId) {
+    ec.logger.warn("No receiverPartyId identified, finishing")
     return
 }
 
 if (receiverPartyId == issuerPartyId && receiverPartyId != null) {
     processed = true
+    ec.logger.warn("No issuerPartyId and receiverPartyId are the same, finishing")
     return
 }
 
