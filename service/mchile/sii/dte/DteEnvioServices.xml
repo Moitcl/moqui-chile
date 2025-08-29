@@ -378,4 +378,205 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+
+    <service verb="check" noun="FailedDteEnvios">
+        <description>
+            Checks for failed DTE Envios (both outgoing and incoming) for specified parties or all DTE-configured parties.
+            Returns failure counts grouped by party and day for the last 7 days.
+        </description>
+        <in-parameters>
+            <parameter name="partyIdList" type="List">
+                <description>List of party IDs to check. If null/empty, checks all parties with DTE config</description>
+            </parameter>
+            <parameter name="lookbackDays" type="Integer" default="7"/>
+            <parameter name="maxAttemptThreshold" type="Integer" default="5"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="failuresByParty" type="Map">
+                <description>Map of failures by party ID, containing outgoing and incoming failure data with daily counts</description>
+            </parameter>
+        </out-parameters>
+        <actions>
+            <!-- Step 1: Determine parties to check -->
+            <if condition="!partyIdList">
+                <!-- Get all parties with DTE configuration -->
+                <service-call name="mchile.sii.dte.DteInfoServices.get#DteGeneratorParties" out-map="dteGenResult"/>
+                <set field="partyIdList" from="dteGenResult.dteConfigPartyIdList"/>
+            </if>
+            
+            <if condition="!partyIdList || partyIdList.size() == 0">
+                <set field="failuresByParty" from="[:]"/>
+                <return/>
+            </if>
+            
+            <!-- Step 2: Get RUTs for all parties -->
+            <set field="partyRutMap" from="[:]"/>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentList">
+                <econdition field-name="partyId" operator="in" from="partyIdList"/>
+                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+            </entity-find>
+            <iterate list="partyIdentList" entry="partyIdent">
+                <set field="partyRutMap[partyIdent.partyId]" from="partyIdent.idValue"/>
+            </iterate>
+            
+            <!-- Step 3: Calculate date range -->
+            <script><![CDATA[
+                Calendar cal = Calendar.instance
+                cal.setTimeInMillis(ec.user.nowTimestamp.time)
+                cal.set(Calendar.HOUR_OF_DAY, 23)
+                cal.set(Calendar.MINUTE, 59)
+                cal.set(Calendar.SECOND, 59)
+                cal.set(Calendar.MILLISECOND, 999)
+                todayEnd = new Timestamp(cal.timeInMillis)
+                
+                cal.add(Calendar.DAY_OF_MONTH, -lookbackDays)
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                lookbackStart = new Timestamp(cal.timeInMillis)
+                
+                // Calculate 3 days ago for stuck envio detection
+                cal.setTimeInMillis(ec.user.nowTimestamp.time)
+                cal.add(Calendar.DAY_OF_MONTH, -3)
+                threeDaysAgo = new Timestamp(cal.timeInMillis)
+            ]]></script>
+            
+            <!-- Step 4: Query failed envios -->
+            <entity-find entity-name="mchile.dte.DteEnvio" list="failedEnvioList">
+                <econditions combine="or">
+                    <!-- Failed statuses -->
+                    <econdition field-name="statusId" operator="in" 
+                               value="Ftde-Failed,Ftde-Cancelled,Ftde-ProcessFailed,Ftde-ProcessRejectedSchema,Ftde-ProcessRejectedSignature,Ftde-ProcessRejectedEnvelope,Ftde-FailedAtReceiver,Ftde-ProcessedWithRejection,Ftde-ProcessedWithDiscrepancy"/>
+                    <!-- Stuck envios with high attempt count -->
+                    <econditions>
+                        <econdition field-name="statusId" operator="in" value="Ftde-Created,Ftde-Received"/>
+                        <econdition field-name="attemptCount" operator="greater-equals" from="maxAttemptThreshold"/>
+                    </econditions>
+                    <!-- Envios stuck for 3+ days without processing -->
+                    <econditions>
+                        <econdition field-name="statusId" operator="in" value="Ftde-Created,Ftde-Sent,Ftde-Received"/>
+                        <econdition field-name="lastAttempt" operator="less-equals" from="threeDaysAgo"/>
+                    </econditions>
+                </econditions>
+                <econdition field-name="lastAttempt" operator="greater-equals" from="lookbackStart"/>
+                <econdition field-name="lastAttempt" operator="less-equals" from="todayEnd"/>
+                <select-field field-name="envioId,statusId,issuerPartyId,receiverPartyId,rutEmisor,rutReceptor,lastAttempt,attemptCount,envioTypeEnumId,internalId"/>
+            </entity-find>
+            
+            <!-- Step 5: Process results and group by party and day -->
+            <set field="failuresByParty" from="[:]"/>
+            
+            <iterate list="failedEnvioList" entry="envio">
+                <!-- Determine which party this failure belongs to -->
+                <set field="relatedParties" from="[]"/>
+                
+                <!-- Check if it's an outgoing envio for any of our parties -->
+                <if condition="envio.issuerPartyId &amp;&amp; partyIdList.contains(envio.issuerPartyId)">
+                    <script>relatedParties.add([partyId: envio.issuerPartyId, direction: 'outgoing'])</script>
+                </if>
+                <if condition="envio.rutEmisor">
+                    <iterate list="partyRutMap" key="partyId" entry="rut">
+                        <if condition="rut == envio.rutEmisor &amp;&amp; !relatedParties.find { it.partyId == partyId &amp;&amp; it.direction == 'outgoing' }">
+                            <script>relatedParties.add([partyId: partyId, direction: 'outgoing', identifiedByRut: true])</script>
+                        </if>
+                    </iterate>
+                </if>
+                
+                <!-- Check if it's an incoming envio for any of our parties -->
+                <if condition="envio.receiverPartyId &amp;&amp; partyIdList.contains(envio.receiverPartyId)">
+                    <script>relatedParties.add([partyId: envio.receiverPartyId, direction: 'incoming'])</script>
+                </if>
+                <if condition="envio.rutReceptor">
+                    <iterate list="partyRutMap" key="partyId" entry="rut">
+                        <if condition="rut == envio.rutReceptor &amp;&amp; !relatedParties.find { it.partyId == partyId &amp;&amp; it.direction == 'incoming' }">
+                            <script>relatedParties.add([partyId: partyId, direction: 'incoming', identifiedByRut: true])</script>
+                        </if>
+                    </iterate>
+                </if>
+                
+                <!-- Add to results for each related party -->
+                <iterate list="relatedParties" entry="relatedParty">
+                    <set field="partyId" from="relatedParty.partyId"/>
+                    <set field="direction" from="relatedParty.direction"/>
+                    
+                    <!-- Initialize party structure if needed -->
+                    <if condition="!failuresByParty[partyId]">
+                        <set field="failuresByParty[partyId]" from="[
+                            partyId: partyId,
+                            partyRut: partyRutMap[partyId],
+                            outgoing: [totalCount: 0, dailyCounts: [:], envioList: []],
+                            incoming: [totalCount: 0, dailyCounts: [:], envioList: []]
+                        ]"/>
+                    </if>
+                    
+                    <!-- Add to appropriate direction -->
+                    <set field="dayKey" from="ec.l10n.format(envio.lastAttempt, 'yyyy-MM-dd')"/>
+                    <set field="directionData" from="failuresByParty[partyId][direction]"/>
+                    <set field="directionData.totalCount" from="directionData.totalCount + 1"/>
+                    <set field="directionData.dailyCounts[dayKey]" from="(directionData.dailyCounts[dayKey] ?: 0) + 1"/>
+                    <script>
+                        // Calculate days since last attempt
+                        long daysDiff = (ec.user.nowTimestamp.time - envio.lastAttempt.time) / (24 * 60 * 60 * 1000)
+                        directionData.envioList.add([
+                            envioId: envio.envioId, 
+                            statusId: envio.statusId, 
+                            internalId: envio.internalId,
+                            daysSinceLastAttempt: daysDiff as Integer
+                        ])
+                    </script>
+                </iterate>
+            </iterate>
+            
+            <!-- Step 6: Fill in missing days with 0 counts and sort by date -->
+            <iterate list="failuresByParty.values()" entry="partyData">
+                <iterate list="['outgoing', 'incoming']" entry="direction">
+                    <script><![CDATA[
+                        // Fill missing days
+                        cal = Calendar.instance
+                        cal.setTimeInMillis(lookbackStart.time)
+                        Map sortedDailyCounts = new TreeMap()
+                        
+                        for (int i = 0; i <= lookbackDays; i++) {
+                            String dayKey = ec.l10n.format(new Timestamp(cal.timeInMillis), 'yyyy-MM-dd')
+                            sortedDailyCounts[dayKey] = partyData[direction].dailyCounts[dayKey] ?: 0
+                            cal.add(Calendar.DAY_OF_MONTH, 1)
+                        }
+                        
+                        partyData[direction].dailyCounts = sortedDailyCounts
+                    ]]></script>
+                </iterate>
+            </iterate>
+            
+            <!-- Also check parties that might not have any failures -->
+            <iterate list="partyIdList" entry="partyId">
+                <if condition="!failuresByParty[partyId]">
+                    <set field="failuresByParty[partyId]" from="[
+                        partyId: partyId,
+                        partyRut: partyRutMap[partyId],
+                        outgoing: [totalCount: 0, dailyCounts: [:], envioList: []],
+                        incoming: [totalCount: 0, dailyCounts: [:], envioList: []]
+                    ]"/>
+                    <!-- Fill with zeros for all days -->
+                    <script><![CDATA[
+                        cal = Calendar.instance
+                        cal.setTimeInMillis(lookbackStart.time)
+                        Map outgoingDailyCounts = new TreeMap()
+                        Map incomingDailyCounts = new TreeMap()
+                        
+                        for (int i = 0; i <= lookbackDays; i++) {
+                            String dayKey = ec.l10n.format(new Timestamp(cal.timeInMillis), 'yyyy-MM-dd')
+                            outgoingDailyCounts[dayKey] = 0
+                            incomingDailyCounts[dayKey] = 0
+                            cal.add(Calendar.DAY_OF_MONTH, 1)
+                        }
+                        
+                        failuresByParty[partyId].outgoing.dailyCounts = outgoingDailyCounts
+                        failuresByParty[partyId].incoming.dailyCounts = incomingDailyCounts
+                    ]]></script>
+                </if>
+            </iterate>
+        </actions>
+    </service>
+
 </services>
