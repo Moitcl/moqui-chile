@@ -168,9 +168,9 @@ descuentoORecargoGlobalList.each { dor ->
         ec.message.addError("Valor no está presente para recargo o descuento")
     if (dor.tipo == 'D') {
         if (dor.afecto)
-            descuentoGlobalAfecto = (descuentoGlobalAfecto?:0.0) - valor
+            descuentoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + valor
         else
-            descuentoGlobalExento = (descuentoGlobalExento?:0.0) - valor
+            descuentoGlobalExento = (descuentoGlobalExento?:0.0) + valor
     } else if (dor.tipo == 'R') {
         if (dor.afecto)
             recargoGlobalAfecto = (recargoGlobalAfecto?:0.0) + valor

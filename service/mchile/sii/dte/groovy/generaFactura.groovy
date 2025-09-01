@@ -313,40 +313,42 @@ descuentoORecargoGlobalList.each { dor ->
         return // No Facturable
     else
         ec.message.addError("indicadorExento en lista de descuento o recargo global debe tener valor nulo, 1 o 2")
-    valor = null
+    BigDecimal valor = null
+    BigDecimal valorOrigin = null
     try {
         ec.logger.info("procesando descuento o recargo global: ${dor}")
         valor = dor.valor as BigDecimal
+        valorOrigin = dor.montoOrigin as BigDecimal
     } catch (Exception e) {
         ec.message.addError("Valor inválido para recargo o descuento: ${dor.valor}")
     }
     if (dor.tipo == 'D') {
         if (descuentoORecargoAfecto)
             if (dor.montoOrigin != null) {
-                descuentoGlobalAfecto = (descuentoGlobalAfecto?:0.0) - dor.montoOrigin
-                descuentoGlobalAfectoClp = (descuentoGlobalAfecto?:0.0) - dor.monto
+                descuentoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + valorOrigin
+                descuentoGlobalAfectoClp = (descuentoGlobalAfecto?:0.0) + valor
             } else {
-                descuentoGlobalAfecto = (descuentoGlobalAfecto?:0.0) - valor
+                descuentoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + valor
             }
         else
             if (dor.montoOrigin != null) {
-                descuentoGlobalExento = (descuentoGlobalExento?:0.0) - dor.montoOrigin
-                descuentoGlobalExentoClp = (descuentoGlobalExento?:0.0) - dor.monto
+                descuentoGlobalExento = (descuentoGlobalExento?:0.0) + valorOrigin
+                descuentoGlobalExentoClp = (descuentoGlobalExento?:0.0) + valor
             } else {
-                descuentoGlobalExento = (descuentoGlobalExento?:0.0) - valor
+                descuentoGlobalExento = (descuentoGlobalExento?:0.0) + valor
             }
     } else if (dor.tipo == 'R') {
         if (descuentoORecargoAfecto)
             if (dor.montoOrigin != null) {
-                recargoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + dor.montoOrigin
-                recargoGlobalAfectoClp = (descuentoGlobalAfecto?:0.0) + dor.valor
+                recargoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + valorOrigin
+                recargoGlobalAfectoClp = (descuentoGlobalAfecto?:0.0) + valor
             } else {
                 recargoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + valor
             }
         else
             if (dor.montoOrigin != null) {
-                recargoGlobalExento = (descuentoGlobalExento?:0.0) + dor.montoOrigin
-                recargoGlobalExentoClp = (descuentoGlobalExento?:0.0) + dor.valor
+                recargoGlobalExento = (descuentoGlobalExento?:0.0) + valorOrigin
+                recargoGlobalExentoClp = (descuentoGlobalExento?:0.0) + valor
             } else {
                 recargoGlobalExento = (descuentoGlobalExento?:0.0) + valor
             }
