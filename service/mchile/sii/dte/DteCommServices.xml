@@ -20,8 +20,16 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="envioIdList" type="List"/>
             <parameter name="envioTypeEnumIdList" type="List"/>
             <parameter name="maxFail" type="Integer" default="3"/>
+            <parameter name="batchSize" type="Integer" default="300"/>
             <parameter name="secondsBeforeRetry" type="Long" default="3*60*60"/>
         </in-parameters>
+        <out-parameters>
+            <parameter name="totalPendingCount" type="Integer"/>
+            <parameter name="sentEnvioCount" type="Integer"/>
+            <parameter name="sentEnvioBoletaCount" type="Integer"/>
+            <parameter name="sentEnvioDteCount" type="Integer"/>
+            <parameter name="sentEnvioDteReceiverCount" type="Integer"/>
+        </out-parameters>
         <actions>
             <if condition="envioId">
                 <if condition="envioIdList"><then>
@@ -30,17 +38,31 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="envioIdList" from="[envioId]"/>
                 </else></if>
             </if>
-            <entity-find entity-name="mchile.dte.DteEnvio" list="envioList">
+            <entity-find-count entity-name="mchile.dte.DteEnvio" count-field="totalPendingCount">
                 <econdition field-name="envioId" operator="in" from="envioIdList" ignore-if-empty="true"/>
                 <econdition field-name="envioTypeEnumId" operator="in" from="envioTypeEnumIdList" ignore-if-empty="true"/>
                 <econdition field-name="statusId" value="Ftde-Created" ignore="envioIdList"/>
                 <econdition field-name="statusId" operator="in" value="Ftde-Created,Ftde-Failed"/>
                 <econdition field-name="lastAttempt" operator="less-equals" from="ec.user.nowTimestamp.time-(secondsBeforeRetry*1000)" ignore="secondsBeforeRetry == null" ignore-if-empty="true" or-null="true"/>
+            </entity-find-count>
+            <entity-find entity-name="mchile.dte.DteEnvio" list="envioList" limit="batchSize">
+                <econdition field-name="envioId" operator="in" from="envioIdList" ignore-if-empty="true"/>
+                <econdition field-name="envioTypeEnumId" operator="in" from="envioTypeEnumIdList" ignore-if-empty="true"/>
+                <econdition field-name="statusId" value="Ftde-Created" ignore="envioIdList"/>
+                <econdition field-name="statusId" operator="in" value="Ftde-Created,Ftde-Failed"/>
+                <econdition field-name="lastAttempt" operator="less-equals" from="ec.user.nowTimestamp.time-(secondsBeforeRetry*1000)" ignore="secondsBeforeRetry == null" ignore-if-empty="true" or-null="true"/>
+                <order-by field-name="attemptCount,-registerDate"/>
             </entity-find>
+            <set field="sentEnvioCount" from="0"/>
+            <set field="sentEnvioBoletaCount" from="0"/>
+            <set field="sentEnvioDteCount" from="0"/>
+            <set field="sentEnvioDteReceiverCount" from="0"/>
+            <log message="Processing ${envioList.size()} out of ${totalPendingCount} envíos"/>
             <iterate list="envioList" entry="envio">
                 <if condition="envio.envioTypeEnumId == 'Ftde-EnvioBoleta'"><then>
                     <if condition="envio.rutReceptor == '60803000-K'"><then>
                         <service-call name="mchile.sii.dte.DteCommServices.enviaSII#EnvioBoleta" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio" transaction="force-new"/>
+                        <set field="sentEnvioBoletaCount" from="sentEnvioBoletaCount+1"/>
                     </then><else>
                         <message type="danger">Not sending EnvioBoleta ${envio.envioId} with rut not matching SII</message>
                     </else></if>
@@ -48,12 +70,15 @@ along with this software (see the LICENSE.md file). If not, see
                     <if condition="envio.rutReceptor == '60803000-K'"><then>
                         <log message="Sending envio ${envio.envioId} to sii"/>
                         <service-call name="mchile.sii.dte.DteCommServices.enviaSII#EnvioDte" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio" transaction="force-new" ignore-error="true"/>
+                        <set field="sentEnvioDteCount" from="sentEnvioDteCount+1"/>
                     </then><else>
                         <log message="Sending envio ${envio.envioId} to receiver"/>
                         <service-call name="mchile.sii.dte.DteCommServices.send#PendingEnvioDteReceiver" in-map="[envioId:envio.envioId, maxFail:maxFail]" out-map="resultadoEnvio" transaction="force-new" ignore-error="true"/>
+                        <set field="sentEnvioDteReceiverCount" from="sentEnvioDteReceiverCount+1"/>
                     </else></if>
                 </else></if>
             </iterate>
+            <set field="sentEnvioCount" from="sentEnvioBoletaCount+sentEnvioDteCount+sentEnvioDteReceiverCount"/>
         </actions>
     </service>
 
