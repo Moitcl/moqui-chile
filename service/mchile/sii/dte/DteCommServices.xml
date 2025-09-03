@@ -931,6 +931,8 @@ TrackId Token']" type="Map"/>
             </entity-find>
             <set field="rechazoPorTipo" from="[:]"/>
             <set field="reparoPorTipo" from="[:]"/>
+            <set field="dtesPorProcesar" from="[]"/>
+            <script>dtesPorProcesar.addAll(dteList)</script>
             <iterate list="respuesta.detalle_rep_rech" entry="reparoRechazo">
                 <log message="Procesando reparoRechazo: ${reparoRechazo}"/>
                 <service-call name="mchile.sii.dte.DteInternalServices.get#MoquiCode" in-map="[siiCode:reparoRechazo.tipo]" out-map="moquiCode"/>
@@ -938,6 +940,7 @@ TrackId Token']" type="Map"/>
                 <set field="dte" from="dteList.find { it.fiscalTaxDocumentNumber == reparoRechazo.folio &amp;&amp; it.fiscalTaxDocumentTypeEnumId == fiscalTaxDocumentTypeEnumId
                     &amp;&amp; it.sentAuthStatusId in ['Ftd-SentAuthRejected', 'Ftd-SentAuthUnverified', 'Ftd-SentAuthAcceptedWithDiscrepancies'] }"/>
                 <if condition="dte"><then>
+                    <script>dtesPorProcesar.remove(dte)</script>
                     <if condition="reparoRechazo.estado == 'RCH'"><then>
                         <if condition="newStatusId == null || newStatusId == 'Ftde-ProcessedWithDiscrepancy'">
                             <set field="newStatusId" value="Ftde-ProcessedWithRejection"/>
@@ -975,6 +978,7 @@ TrackId Token']" type="Map"/>
                 <set field="aceptadosList" from="dteList.findAll { it.fiscalTaxDocumentTypeEnumId == fiscalTaxDocumentTypeEnumId &amp;&amp; it.sentAuthStatusId in ['Ftd-SentAuthUnverified', 'Ftd-SentAuthAccepted'] }"/>
                 <if condition="aceptadosList.size() == tipoItem.aceptados"><then>
                     <iterate list="aceptadosList" entry="dteAceptado">
+                        <script>dtesPorProcesar.remove(dteAceptado)</script>
                         <set field="dteAceptado.sentAuthStatusId" value="Ftd-SentAuthAccepted"/>
                         <entity-update value-field="dteAceptado"/>
                     </iterate>
@@ -982,6 +986,12 @@ TrackId Token']" type="Map"/>
                     <message error="true">Aceptado mismatch for type ${tipo}, response says ${tipoItem.aceptados}, DB has ${aceptadosList.size()}</message>
                 </else></if>
             </iterate>
+            <if condition="dtesPorProcesar">
+                <log message="Aún hay DTEs por procesar: ${dtesPorProcesar.fiscalTaxDocumentId}"/>
+                <log message="Respuesta del SII: ${respuesta}"/>
+                <message error="true">No se han procesado los siguientes DTEs del envío ${envioId}: ${dtesPorProcesar.fiscalTaxDocumentId}</message>
+                <set field="newStatusId" value="Ftde-Sent"/>
+            </if>
             <if condition="newStatusId == null"><set field="newStatusId" value="Ftde-Processed"/></if>
             <set field="hasError" from="ec.message.hasError()"/>
         </actions>
