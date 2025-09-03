@@ -728,10 +728,15 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="fiscalTaxDocumentNumber"/>
                 <econdition field-name="fiscalTaxDocumentTypeEnumId"/>
                 <econdition field-name="statusId" value="Ftd-Issued"/>
-                <econdition field-name="sentAuthStatusId" operator="in" value="Ftd-SentAuthAccepted,Ftd-SentAuthAcceptedWithDiscrepancies" ignore="!checkAcceptedBySii"/>
             </entity-find>
             <set field="dte" from="dteList.first"/>
             <if condition="!dte"><return error="true" message="Could not find FiscalTaxDocument in create#EmptyCreditMemo"/></if>
+            <if condition="!(dte.sentAuthStatusId in ['Ftd-SentAuthAccepted','Ftd-SentAuthAcceptedWithDiscrepancies']) &amp;&amp; checkAcceptedBySii">
+                <entity-find-one entity-name="moqui.basic.StatusItem" value-field="sentAuthStatus">
+                    <field-map field-name="statusId" from="dte.sentAuthStatusId"/>
+                </entity-find-one>
+                <return error="true" message="Estado de envío al SII (${sentAuthStatus.description}) no es apto para crear Nota de Crédito."/>
+            </if>
             <if condition="dte.invoiceId == null"><return error="true" message="FiscalTaxDocument has no invoice associated"/></if>
             <service-call name="mchile.sii.dte.DteGenerationServices.get#InvoiceTypeMapping" in-map="[issuingDteType:'Credit', fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]" out-map="context"/>
             <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="originalInvoice">
