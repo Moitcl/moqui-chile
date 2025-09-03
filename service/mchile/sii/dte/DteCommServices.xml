@@ -292,8 +292,17 @@ along with this software (see the LICENSE.md file). If not, see
                         <log level="error" message="No contentBytes nor contentText for bodyPart of message ${messageId}"/>
                         <continue/>
                     </if>
-                    <service-call name="mchile.sii.dte.DteEnvioServices.store#ReceivedEnvio" in-map="context + [contentBytes:contentBytes, fileName:bodyPart.filename ]" out-map="storeResult"/>
-                    <log message="Stored Envio ${storeResult.envioId}, filename: ${bodyPart.filename}"/>
+                    <!-- MIME Filename Decoding Integration -->
+                    <service-call name="mchile.general.GeneralServices.decode#MimeFilename" in-map="[filename: bodyPart.filename]" out-map="decodeResult"/>
+                    
+                    <!-- Enhanced logging for decoded filenames -->
+                    <if condition="decodeResult.wasEncoded">
+                        <log level="info" 
+                             message="MIME filename decoded for message ${messageId}: '${bodyPart.filename}' -> '${decodeResult.decodedFilename}' (${decodeResult.charset}/${decodeResult.encoding})"/>
+                    </if>
+                    
+                    <service-call name="mchile.sii.dte.DteEnvioServices.store#ReceivedEnvio" in-map="context + [contentBytes:contentBytes, fileName:decodeResult.decodedFilename ]" out-map="storeResult"/>
+                    <log message="Stored Envio ${storeResult.envioId}, filename: ${decodeResult.decodedFilename} ${decodeResult.wasEncoded ? '(decoded from: ' + bodyPart.filename + ')' : ''}"/>
                     <script>
                         if (storeResult.envioId)
                             envioIdsToProcess.add(storeResult.envioId)

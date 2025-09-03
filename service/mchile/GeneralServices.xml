@@ -428,4 +428,89 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="decode" noun="MimeFilename">
+        <description>Decode RFC 2047 MIME-encoded filenames from email attachments</description>
+        <in-parameters>
+            <parameter name="filename" required="true"/>
+            <parameter name="strictMode" type="Boolean" default="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="decodedFilename"/>
+            <parameter name="originalFilename"/>
+            <parameter name="wasEncoded" type="Boolean"/>
+            <parameter name="encoding"/>
+            <parameter name="charset"/>
+        </out-parameters>
+        <actions>
+            <script><![CDATA[
+                import javax.mail.internet.MimeUtility
+                import java.util.regex.Pattern
+                
+                // Initialize output parameters
+                originalFilename = filename
+                decodedFilename = filename
+                wasEncoded = false
+                encoding = null
+                charset = null
+                
+                // Null/empty input validation
+                if (filename == null || filename.trim().isEmpty()) {
+                    ec.logger.debug("MIME filename decoding: null or empty filename provided")
+                    return
+                }
+                
+                // Fast path: Quick check for RFC 2047 encoding pattern
+                if (!filename.contains("=?")) {
+                    ec.logger.debug("MIME filename decoding: no RFC 2047 pattern detected in '${filename}'")
+                    return
+                }
+                
+                // Pattern for RFC 2047: =?charset?encoding?encoded-text?=
+                Pattern rfc2047Pattern = ~/=\?[^?]+\?[BbQq]\?[^?]*\?=/
+                
+                if (!rfc2047Pattern.matcher(filename).find()) {
+                    ec.logger.debug("MIME filename decoding: RFC 2047 pattern not found in '${filename}'")
+                    return
+                }
+                
+                try {
+                    // Set strict mode for MimeUtility
+                    if (strictMode != null) {
+                        System.setProperty("mail.mime.decodetext.strict", strictMode.toString())
+                    }
+                    
+                    // Attempt to decode using javax.mail.internet.MimeUtility
+                    String decoded = MimeUtility.decodeText(filename)
+                    
+                    // Check if decoding actually occurred
+                    if (decoded != null && !decoded.equals(filename)) {
+                        decodedFilename = decoded
+                        wasEncoded = true
+                        
+                        // Extract encoding metadata from the first encoded-word
+                        def matcher = filename =~ /=\?([^?]+)\?([BbQq])\?[^?]*\?=/
+                        if (matcher.find()) {
+                            charset = matcher.group(1).toUpperCase()
+                            encoding = matcher.group(2).toUpperCase() == 'B' ? 'Base64' : 'Quoted-Printable'
+                        }
+                        
+                        ec.logger.debug("MIME filename successfully decoded: '${filename}' -> '${decoded}' (${charset}/${encoding})")
+                    } else {
+                        ec.logger.debug("MIME filename decoding: MimeUtility returned original filename for '${filename}'")
+                    }
+                    
+                } catch (UnsupportedEncodingException e) {
+                    ec.logger.warn("MIME filename decoding: Unsupported charset in '${filename}': ${e.message}")
+                    // decodedFilename remains as original filename (graceful fallback)
+                } catch (IllegalArgumentException e) {
+                    ec.logger.warn("MIME filename decoding: Malformed encoded-word in '${filename}': ${e.message}")
+                    // decodedFilename remains as original filename (graceful fallback)
+                } catch (Exception e) {
+                    ec.logger.warn("MIME filename decoding: Unexpected error decoding '${filename}': ${e.message}")
+                    // decodedFilename remains as original filename (graceful fallback)
+                }
+            ]]></script>
+        </actions>
+    </service>
+
 </services>

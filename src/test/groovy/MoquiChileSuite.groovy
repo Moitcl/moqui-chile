@@ -21,15 +21,22 @@ import org.moqui.Moqui
  * MoquiChile Component Test Suite
  * Following enterprise patterns from mantle-usl for Chilean localization testing
  * 
- * Simplified structure reflecting unified generate#Factura service architecture:
+ * Comprehensive testing structure covering:
  * - RUT validation utilities
- * - Complete DTE generation testing (all document types via single service)
+ * - Complete DTE generation testing (all document types via unified services)
+ * - CAF auto-request system testing
+ * - Email processing integration with new entity structure
+ * - MIME filename decoding for RFC 2047 compliance
  */
 @Suite
 @SelectClasses([
     General.RutTests.class,           // Chilean RUT validation utilities
     DTE.DteGenerationTests.class,     // All DTE types via generate#Factura and generate#Boleta services
     DTE.CafAutoRequestTests.class     // CAF auto-request system testing
+    General.RutTests.class,                              // Chilean RUT validation utilities
+    DTE.DteGenerationTests.class,                        // All DTE types via generate#Factura and generate#Boleta services
+    DTE.CafAutoRequestTests.class,                       // CAF auto-request system testing
+    MoquiChile.MimeDecodingSpec.class                   // Unit tests for MIME filename decoder service
 ])
 class MoquiChileSuite {
     @AfterAll
