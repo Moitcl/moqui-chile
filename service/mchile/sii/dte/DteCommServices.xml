@@ -1588,6 +1588,201 @@ TrackId Token']" type="Map"/>
         </actions>
     </service>
 
+    <service verb="check" noun="PendingFiscalTaxDocuments">
+        <description>
+            Checks for pending FiscalTaxDocument entities with statusId 'Ftd-Issued' but not accepted/processed by SII.
+            Returns pending document counts grouped by party and day for trend analysis.
+        </description>
+        <in-parameters>
+            <parameter name="partyIdList" type="List">
+                <description>List of party IDs to check. If null/empty, checks all parties with DTE config</description>
+            </parameter>
+            <parameter name="lookbackDays" type="Integer" default="7"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="pendingByParty" type="Map">
+                <description>Map of pending documents by party ID, containing daily counts and age category analysis</description>
+            </parameter>
+        </out-parameters>
+        <actions>
+            <!-- Step 1: Determine parties to check -->
+            <if condition="!partyIdList">
+                <!-- Get all parties with DTE configuration -->
+                <service-call name="mchile.sii.dte.DteInfoServices.get#DteGeneratorParties" out-map="dteGenResult"/>
+                <set field="partyIdList" from="dteGenResult.dteConfigPartyIdList"/>
+            </if>
+            
+            <if condition="!partyIdList || partyIdList.size() == 0">
+                <set field="pendingByParty" from="[:]"/>
+                <return/>
+            </if>
+            
+            <!-- Step 2: Get RUTs for all parties -->
+            <set field="partyRutMap" from="[:]"/>
+            <entity-find entity-name="mantle.party.PartyIdentification" list="partyIdentList">
+                <econdition field-name="partyId" operator="in" from="partyIdList"/>
+                <econdition field-name="partyIdTypeEnumId" value="PtidNationalTaxId"/>
+            </entity-find>
+            <iterate list="partyIdentList" entry="partyIdent">
+                <set field="partyRutMap[partyIdent.partyId]" from="partyIdent.idValue"/>
+            </iterate>
+            
+            <!-- Step 3: Calculate date range and time boundaries -->
+            <script><![CDATA[
+                Calendar cal = Calendar.instance
+                cal.setTimeInMillis(ec.user.nowTimestamp.time)
+                cal.set(Calendar.HOUR_OF_DAY, 23)
+                cal.set(Calendar.MINUTE, 59)
+                cal.set(Calendar.SECOND, 59)
+                cal.set(Calendar.MILLISECOND, 999)
+                todayEnd = new Timestamp(cal.timeInMillis)
+                
+                cal.add(Calendar.DAY_OF_MONTH, -lookbackDays)
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                lookbackStart = new Timestamp(cal.timeInMillis)
+                
+                // Time boundaries for age categories
+                cal.setTimeInMillis(ec.user.nowTimestamp.time)
+                cal.add(Calendar.DAY_OF_MONTH, -7)
+                sevenDaysAgo = new Timestamp(cal.timeInMillis)
+                
+                cal.setTimeInMillis(ec.user.nowTimestamp.time)
+                cal.add(Calendar.DAY_OF_MONTH, -3)
+                threeDaysAgo = new Timestamp(cal.timeInMillis)
+                
+                cal.setTimeInMillis(ec.user.nowTimestamp.time)
+                cal.add(Calendar.DAY_OF_MONTH, -1)
+                oneDayAgo = new Timestamp(cal.timeInMillis)
+            ]]></script>
+            
+            <!-- Step 4: Find pending FiscalTaxDocument entities -->
+            <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="pendingFtdList">
+                <econdition field-name="statusId" value="Ftd-Issued"/>
+                <econdition field-name="sentAuthStatusId" operator="not-in" from="['Ftd-SentAuthAccepted', 'Ftd-SentAuthAcceptedWithDiscrepancies']" or-null="true"/>
+                <econdition field-name="issueDate" operator="greater-equals" from="lookbackStart"/>
+                <econdition field-name="issueDate" operator="less-equals" from="todayEnd"/>
+                <econdition field-name="issuerPartyId" operator="in" from="partyIdList"/>
+                <select-field field-name="fiscalTaxDocumentId,issuerPartyId,sentAuthStatusId,issueDate,fiscalTaxDocumentTypeEnumId"/>
+                <order-by field-name="issueDate"/>
+            </entity-find>
+            
+            <!-- Step 5: Process results and group by party and day -->
+            <set field="pendingByParty" from="[:]"/>
+            
+            <iterate list="pendingFtdList" entry="ftd">
+                <set field="partyId" from="ftd.issuerPartyId"/>
+                
+                <!-- Initialize party structure if needed -->
+                <if condition="!pendingByParty[partyId]">
+                    <set field="pendingByParty[partyId]" from="[
+                        partyId: partyId,
+                        partyRut: partyRutMap[partyId],
+                        totalCount: 0,
+                        dailyCounts: [:],
+                        documentList: [],
+                        ageCategories: [
+                            moreThan7Days: 0,
+                            threeTo7Days: 0,
+                            oneToThreeDays: 0,
+                            lessThanOneDay: 0
+                        ],
+                        statusCounts: [:]
+                    ]"/>
+                </if>
+                
+                <set field="partyData" from="pendingByParty[partyId]"/>
+                
+                <!-- Add to total count and daily counts -->
+                <set field="dayKey" from="ec.l10n.format(ftd.issueDate, 'yyyy-MM-dd')"/>
+                <set field="partyData.totalCount" from="partyData.totalCount + 1"/>
+                <set field="partyData.dailyCounts[dayKey]" from="(partyData.dailyCounts[dayKey] ?: 0) + 1"/>
+                
+                <!-- Count by status -->
+                <set field="statusKey" from="ftd.sentAuthStatusId ?: 'NotSentAuth'"/>
+                <set field="partyData.statusCounts[statusKey]" from="(partyData.statusCounts[statusKey] ?: 0) + 1"/>
+                
+                <!-- Categorize by age -->
+                <script><![CDATA[
+                    // Calculate days since issue date
+                    long daysSinceIssue = (ec.user.nowTimestamp.time - ftd.issueDate.time) / (24 * 60 * 60 * 1000L)
+                    
+                    if (ftd.issueDate.before(sevenDaysAgo)) {
+                        partyData.ageCategories.moreThan7Days++
+                    } else if (ftd.issueDate.before(threeDaysAgo)) {
+                        partyData.ageCategories.threeTo7Days++
+                    } else if (ftd.issueDate.before(oneDayAgo)) {
+                        partyData.ageCategories.oneToThreeDays++
+                    } else {
+                        partyData.ageCategories.lessThanOneDay++
+                    }
+                    
+                    partyData.documentList.add([
+                        fiscalTaxDocumentId: ftd.fiscalTaxDocumentId,
+                        sentAuthStatusId: ftd.sentAuthStatusId,
+                        issueDate: ftd.issueDate,
+                        fiscalTaxDocumentTypeEnumId: ftd.fiscalTaxDocumentTypeEnumId,
+                        daysSinceIssue: daysSinceIssue as Integer
+                    ])
+                ]]></script>
+            </iterate>
+            
+            <!-- Step 6: Fill in missing days with 0 counts and sort by date -->
+            <iterate list="pendingByParty.values()" entry="partyData">
+                <script><![CDATA[
+                    // Fill missing days
+                    cal = Calendar.instance
+                    cal.setTimeInMillis(lookbackStart.time)
+                    Map sortedDailyCounts = new TreeMap()
+                    
+                    for (int i = 0; i <= lookbackDays; i++) {
+                        String dayKey = ec.l10n.format(new Timestamp(cal.timeInMillis), 'yyyy-MM-dd')
+                        sortedDailyCounts[dayKey] = partyData.dailyCounts[dayKey] ?: 0
+                        cal.add(Calendar.DAY_OF_MONTH, 1)
+                    }
+                    
+                    partyData.dailyCounts = sortedDailyCounts
+                ]]></script>
+            </iterate>
+            
+            <!-- Step 7: Initialize empty results for parties with no pending documents -->
+            <iterate list="partyIdList" entry="partyId">
+                <if condition="!pendingByParty[partyId]">
+                    <set field="pendingByParty[partyId]" from="[
+                        partyId: partyId,
+                        partyRut: partyRutMap[partyId],
+                        totalCount: 0,
+                        dailyCounts: [:],
+                        documentList: [],
+                        ageCategories: [
+                            moreThan7Days: 0,
+                            threeTo7Days: 0,
+                            oneToThreeDays: 0,
+                            lessThanOneDay: 0
+                        ],
+                        statusCounts: [:]
+                    ]"/>
+                    <!-- Fill with zeros for all days -->
+                    <script><![CDATA[
+                        cal = Calendar.instance
+                        cal.setTimeInMillis(lookbackStart.time)
+                        Map dailyCounts = new TreeMap()
+                        
+                        for (int i = 0; i <= lookbackDays; i++) {
+                            String dayKey = ec.l10n.format(new Timestamp(cal.timeInMillis), 'yyyy-MM-dd')
+                            dailyCounts[dayKey] = 0
+                            cal.add(Calendar.DAY_OF_MONTH, 1)
+                        }
+                        
+                        pendingByParty[partyId].dailyCounts = dailyCounts
+                    ]]></script>
+                </if>
+            </iterate>
+        </actions>
+    </service>
+
     <service verb="check" noun="DteEnvioPermissions">
         <in-parameters>
             <parameter name="partyId" required="true"/>
