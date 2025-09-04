@@ -8,7 +8,7 @@ import org.moqui.context.ExecutionContext
 
 /**
  * Comprehensive unit tests for MIME filename decoder service
- * Tests the mchile.general.GeneralServices.decode#MimeFilename service
+ * Tests the mchile.GeneralServices.decode#MimeFilename service
  * for proper RFC 2047 MIME header decoding functionality.
  */
 class MimeDecodingSpec extends Specification {
@@ -41,7 +41,7 @@ class MimeDecodingSpec extends Specification {
         String expectedDecoded = "Factura Electrónica 123.xml"
         
         when: "The decode service is called"
-        Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+        Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                 .parameters([filename: encodedFilename])
                 .call()
         
@@ -60,7 +60,7 @@ class MimeDecodingSpec extends Specification {
         String expectedDecoded = "Boleta Niña 456.pdf"
         
         when: "The decode service is called"
-        Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+        Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                 .parameters([filename: encodedFilename])
                 .call()
         
@@ -79,7 +79,7 @@ class MimeDecodingSpec extends Specification {
         String expectedDecoded = "factura_123.xml"
         
         when: "The decode service is called"
-        Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+        Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                 .parameters([filename: encodedFilename])
                 .call()
         
@@ -98,7 +98,7 @@ class MimeDecodingSpec extends Specification {
         String expectedDecoded = "Nota Crédito_789.xml"
         
         when: "The decode service is called"
-        Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+        Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                 .parameters([filename: encodedFilename])
                 .call()
         
@@ -115,7 +115,7 @@ class MimeDecodingSpec extends Specification {
         String expectedDecoded = "DTE_Aprobado_2023.xml"
         
         when: "The decode service is called"
-        Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+        Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                 .parameters([filename: encodedFilename])
                 .call()
         
@@ -131,7 +131,7 @@ class MimeDecodingSpec extends Specification {
         String plainFilename = "simple_document.xml"
         
         when: "The decode service is called"
-        Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+        Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                 .parameters([filename: plainFilename])
                 .call()
         
@@ -149,7 +149,7 @@ class MimeDecodingSpec extends Specification {
         String nullFilename = null
         
         when: "The decode service is called"
-        Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+        Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                 .parameters([filename: nullFilename])
                 .call()
         
@@ -167,7 +167,7 @@ class MimeDecodingSpec extends Specification {
         String emptyFilename = ""
         
         when: "The decode service is called"
-        Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+        Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                 .parameters([filename: emptyFilename])
                 .call()
         
@@ -185,7 +185,7 @@ class MimeDecodingSpec extends Specification {
         String malformedFilename = "=?UTF-8?Q?Invalid_Missing_End"
         
         when: "The decode service is called"
-        Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+        Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                 .parameters([filename: malformedFilename])
                 .call()
         
@@ -203,7 +203,7 @@ class MimeDecodingSpec extends Specification {
         String unsupportedFilename = "=?INVALID-CHARSET?Q?test.xml?="
         
         when: "The decode service is called"
-        Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+        Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                 .parameters([filename: unsupportedFilename])
                 .call()
         
@@ -221,7 +221,7 @@ class MimeDecodingSpec extends Specification {
         String invalidBase64Filename = '=?UTF-8?B?InvalidBase64!@#$?='
         
         when: "The decode service is called"
-        Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+        Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                 .parameters([filename: invalidBase64Filename])
                 .call()
         
@@ -239,7 +239,7 @@ class MimeDecodingSpec extends Specification {
         String invalidQPFilename = "=?UTF-8?Q?Invalid=ZZ_content?="
         
         when: "The decode service is called"
-        Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+        Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                 .parameters([filename: invalidQPFilename])
                 .call()
         
@@ -258,7 +258,7 @@ class MimeDecodingSpec extends Specification {
         String oversizedFilename = "=?UTF-8?Q?${oversizedContent}?="
         
         when: "The decode service is called"
-        Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+        Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                 .parameters([filename: oversizedFilename])
                 .call()
         
@@ -275,7 +275,7 @@ class MimeDecodingSpec extends Specification {
         String expectedDecoded = "✅_DTE_Aprobado_2023.xml"
         
         when: "The decode service is called"
-        Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+        Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                 .parameters([filename: encodedFilename])
                 .call()
         
@@ -294,7 +294,7 @@ class MimeDecodingSpec extends Specification {
         String expectedDecoded = "test_file.xml"
         
         when: "The decode service is called"
-        Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+        Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                 .parameters([filename: encodedFilename])
                 .call()
         
@@ -310,7 +310,7 @@ class MimeDecodingSpec extends Specification {
     @Unroll
     def "016 - service should correctly decode common DTE filenames: #description"() {
         when: "The decode service is called with DTE filename"
-        Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+        Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                 .parameters([filename: encodedFilename])
                 .call()
         
@@ -337,7 +337,7 @@ class MimeDecodingSpec extends Specification {
         when: "The decode service is called multiple times"
         long startTime = System.currentTimeMillis()
         for (int i = 0; i < 100; i++) {
-            ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+            ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                     .parameters([filename: encodedFilename])
                     .call()
         }
@@ -359,7 +359,7 @@ class MimeDecodingSpec extends Specification {
         10.times { i ->
             Thread thread = new Thread({
                 try {
-                    Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+                    Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                             .parameters([filename: encodedFilename])
                             .call()
                     results.add(result)
@@ -384,7 +384,7 @@ class MimeDecodingSpec extends Specification {
         
         when: "The decode service is called"
         long memoryBefore = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()
-        Map result = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+        Map result = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                 .parameters([filename: encodedFilename])
                 .call()
         long memoryAfter = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()
@@ -404,7 +404,7 @@ class MimeDecodingSpec extends Specification {
         when: "The service is called multiple times with the same input"
         List<Map> results = []
         5.times {
-            results.add(ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+            results.add(ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                     .parameters([filename: encodedFilename])
                     .call())
         }

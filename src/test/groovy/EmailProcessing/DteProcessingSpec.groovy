@@ -414,7 +414,7 @@ class DteProcessingSpec extends Specification {
         mockEmailMessage.bodyPartList.each { bodyPart ->
             if (bodyPart.filename != null) {
                 // Call MIME decoding service
-                Map decodeResult = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+                Map decodeResult = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                         .parameters([filename: bodyPart.filename])
                         .call()
                 
@@ -441,7 +441,7 @@ class DteProcessingSpec extends Specification {
         mockEmailMessage.bodyPartList.each { bodyPart ->
             if (bodyPart.filename != null) {
                 // Call MIME decoding service
-                Map decodeResult = ec.service.sync().name("mchile.general.GeneralServices.decode#MimeFilename")
+                Map decodeResult = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
                         .parameters([filename: bodyPart.filename])
                         .call()
                 
