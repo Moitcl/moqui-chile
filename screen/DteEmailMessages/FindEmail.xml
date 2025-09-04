@@ -2,6 +2,10 @@
 <screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-3.xsd" default-menu-title="Email Messages"
         default-menu-index="70">
 
+    <always-actions>
+        <if condition="!dteEmailMessages_envioDetail"><set field="dteEmailMessages_envioDetail" value="//MChileAdmin/DTEAdmin/FindEnvio"/></if>
+    </always-actions>
+
     <transition name="emailDetail">
         <default-response url="../EmailDetail"/>
     </transition>
@@ -11,24 +15,23 @@
     </transition>
 
     <transition name="envioDetail">
-        <default-response url="FindEnvio"/>
+        <default-response url="${dteEmailMessages_envioDetail}"/>
     </transition>
-
-    <actions>
-        <entity-find entity-name="mchile.dte.EmailMessageProcessingDetail" list="emailList">
-            <search-form-inputs default-order-by="-receivedDate,-sentDate"/>
-            <select-field field-name="emailMessageId,statusId,sentDate,receivedDate"/>
-            <select-field field-name="subject,fromAddress,toAddresses"/>
-            <select-field field-name="messageId,emailServerId"/>
-            <select-field field-name="jobRunId,envioId,processDate"/>
-            <select-field field-name="processingStatusId,processingErrorMessage"/>
-        </entity-find>
-    </actions>
 
     <widgets>
         <label text="DTE Email Messages" type="h2"/>
 
         <form-list name="EmailMessageList" list="emailList" header-dialog="true" saved-finds="true">
+            <entity-find entity-name="mchile.dte.EmailMessageProcessingDetail" list="emailList">
+                <search-form-inputs default-order-by="-receivedDate,-sentDate"/>
+            </entity-find>
+            <row-actions>
+                <log message="emailMessageId: ${emailMessageId}"/>
+                <entity-find entity-name="mchile.dte.DteEmailProcessingEnvio" list="envioList">
+                    <econdition field-name="emailMessageId"/>
+                </entity-find>
+                <log message="envioList: ${envioList}"/>
+            </row-actions>
             <field name="emailMessageId">
                 <header-field title="Email ID" show-order-by="true">
                     <text-find size="20"/>
@@ -89,13 +92,22 @@
                 <default-field><display text="${messageId?.take(30)}${messageId?.length() > 30 ? '...' : ''}"/></default-field>
             </field>
 
-            <field name="envioId">
+            <field name="envioCount">
+                <header-field show-order-by="true"><range-find/></header-field>
+                <default-field><display/></default-field>
+            </field>
+
+            <field name="envios">
                 <header-field title="Envio ID"><text-find size="20"/></header-field>
+                <conditional-field condition="envioList">
+                    <section-iterate name="EnvioSection" list="envioList" entry="envio"><widgets>
+                        <container>
+                            <link url="envioDetail" text="${envio.envioId} (${envio.envio.status.description})" parameter-map="[envioId:envio.envioId]" link-type="anchor"/>
+                        </container>
+                    </widgets></section-iterate>
+                </conditional-field>
                 <default-field>
-                    <link url="envioDetail" text="${envioId}"
-                          parameter-map="[envioId:envioId]"
-                          condition="envioId" link-type="anchor"/>
-                    <label text="-" condition="!envioId"/>
+                    <label text="-" condition="!envioList"/>
                 </default-field>
             </field>
 
@@ -150,9 +162,9 @@
             <form-list-column><field-ref name="fromAddress"/><field-ref name="toAddresses"/></form-list-column>
             <form-list-column><field-ref name="subject"/></form-list-column>
             <form-list-column><field-ref name="messageId"/></form-list-column>
-            <form-list-column><field-ref name="envioId"/><field-ref name="processDate"/></form-list-column>
+            <form-list-column><field-ref name="envioCount"/><field-ref name="envios"/></form-list-column>
+            <form-list-column><field-ref name="processDate"/><field-ref name="processingStatusId"/></form-list-column>
             <form-list-column><field-ref name="jobRunId"/><field-ref name="jobHasError"/></form-list-column>
-            <form-list-column><field-ref name="processingStatusId"/></form-list-column>
         </form-list>
     </widgets>
 </screen>

@@ -14,7 +14,7 @@
     </transition>
     
     <transition name="envioDetail">
-        <default-response url="../FindEnvio"/>
+        <default-response url="${dteEmailMessages_envioDetail}"/>
     </transition>
 
     <actions>
@@ -28,13 +28,14 @@
                 <field-map field-name="jobRunId" from="processing.jobRunId"/>
             </entity-find-one>
         </if>
-        
-        <if condition="processing?.envioId">
-            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio">
-                <field-map field-name="envioId" from="processing.envioId"/>
-            </entity-find-one>
-        </if>
-        
+
+        <entity-find entity-name="mchile.dte.DteEmailProcessingEnvio" list="processingEnvioList">
+            <econdition field-name="emailMessageId"/>
+        </entity-find>
+        <entity-find entity-name="mchile.dte.DteEnvio" list="envioList">
+            <econdition field-name="envioId" operator="in" from="processingEnvioList.envioId"/>
+        </entity-find>
+
         <entity-find entity-name="mchile.dte.FiscalTaxDocumentEmailMessageDetail" list="relatedDteList">
             <econdition field-name="emailMessageId"/>
             <order-by field-name="fiscalTaxDocumentTypeEnumId,folio"/>
@@ -104,12 +105,14 @@
                             <field name="processingStatus"><default-field title="Processing Status">
                                 <display text="${processing?.statusId ? ec.entity.find('moqui.basic.StatusItem').condition('statusId', processing.statusId).one()?.description : 'Not Processed'}"/>
                             </default-field></field>
-                            <field name="envioId"><default-field title="Envio ID">
-                                <link url="envioDetail" text="${processing?.envioId}" 
-                                      parameter-map="[envioId:processing?.envioId]"
-                                      condition="processing?.envioId" link-type="anchor"/>
-                                <label text="N/A" condition="!processing?.envioId"/>
-                            </default-field></field>
+                            <field name="envioId">
+                                <conditional-field condition="envioList">
+                                    <section-iterate name="EnvioId" list="envioList" entry="envio"><widgets>
+                                        <link url="envioDetail" text="${envio.envioId}" parameter-map="[envioId:envio.envioId]" link-type="anchor"/>
+                                    </widgets></section-iterate>
+                                </conditional-field>
+                                <default-field title="Envíos"><label text="N/A"/></default-field>
+                            </field>
                             <field name="envioStatus"><default-field title="Envio Status">
                                 <display text="${envio?.statusId ? ec.entity.find('moqui.basic.StatusItem').condition('statusId', envio.statusId).one()?.description : 'N/A'}"/>
                             </default-field></field>
