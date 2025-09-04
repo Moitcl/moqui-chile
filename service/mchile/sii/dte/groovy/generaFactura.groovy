@@ -1113,7 +1113,7 @@ try {
 } catch (Exception e) {
     ec.logger.error("Failed generated DTE validation", e)
     ec.logger.warn("XML:\n${facturaXmlString}")
-    ec.message.addError("Failed generated DTE validation")
+    ec.message.addError("Failed generated DTE validation: ${e.message}")
 }
 
 doc2 = MoquiDTEUtils.parseDocument(facturaXml)
@@ -1195,6 +1195,10 @@ if (draft) {
         nroLinea++
         tipoEnumEv = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referencia.fiscalTaxDocumentTypeEnumId).one()
         esTipoTributario = (tipoEnumEv?.parentEnumId in ['Ftdt-DT','Ftdt-DTE'])
+        if (tipoEnumEv)
+            tipoDocumento = tipoEnumEv.enumCode
+        else
+            tipoDocumento = referencia.tipoDocumento
         if (referencia.rutEmisorFolio) {
             rutEmisorFolio = referencia.rutEmisorFolio
         } else if (esTipoTributario) {
@@ -1206,7 +1210,7 @@ if (draft) {
         ec.service.sync().name("create#mchile.dte.ReferenciaDte")
                 .parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, referenciaTypeEnumId:'RefDteTypeFiscalTaxDocument', fiscalTaxDocumentTypeEnumId:referencia.fiscalTaxDocumentTypeEnumId,
                              folio:referencia.folio, fecha: referencia.fecha, codigoReferenciaEnumId:referencia.codigoReferenciaEnumId, razonReferencia:referencia.razonReferencia,
-                             rutEmisorFolio:rutEmisorFolio, nroLinea:nroLinea, tipoDocumento:tipoEnumEv.enumCode]).call()
+                             rutEmisorFolio:rutEmisorFolio, nroLinea:nroLinea, tipoDocumento:tipoDocumento]).call()
     }
     ec.service.sync().name("mchile.sii.dte.DteModificationRegistrationServices.check#DteModificationReferences").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).call()
 }

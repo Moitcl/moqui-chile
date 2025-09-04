@@ -390,7 +390,8 @@ class MoquiDTEUtils {
                 Map<String, Object> codeOut = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#SiiCode").parameters([fiscalTaxDocumentTypeEnumId: referenciaEntry.fiscalTaxDocumentTypeEnumId]).call()
                 String tpoDocRef = codeOut.siiCode
                 referenciaMap.tipoDocumento = tpoDocRef as String
-                if (tipoFactura == '61' && (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-39") || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41")) && codRef?.equals(1)) {
+                if (tipoFactura == '61' && (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-39") || referenciaEntry.tipoDocumento == '39'
+                        || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41") || referenciaEntry.tipoDocumento == '41') && codRef?.equals(1)) {
                     // Nota de crédito hace referencia a Boletas Electrónicas
                     anulaBoleta = 'true'
                     folioAnulaBoleta = referenciaEntry.folio.toString()
