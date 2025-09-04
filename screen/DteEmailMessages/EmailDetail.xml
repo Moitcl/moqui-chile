@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-3.xsd" 
+        default-menu-title="Email Detail">
+
+    <parameter name="emailMessageId" required="true"/>
+
+    <transition name="jobRunDetail">
+        <default-response url="/qapps/system/ServiceJob/JobRuns/JobRunDetail"/>
+    </transition>
+    
+    <transition name="dteDetail">
+        <default-response url="../FindDTE"/>
+    </transition>
+    
+    <transition name="envioDetail">
+        <default-response url="../FindEnvio"/>
+    </transition>
+
+    <actions>
+        <entity-find-one entity-name="moqui.basic.email.EmailMessage" value-field="emailMessage"/>
+        <entity-find-one entity-name="mchile.dte.DteEmailProcessing" value-field="processing">
+            <field-map field-name="emailMessageId"/>
+        </entity-find-one>
+        
+        <if condition="processing?.jobRunId">
+            <entity-find-one entity-name="moqui.service.job.ServiceJobRun" value-field="jobRun">
+                <field-map field-name="jobRunId" from="processing.jobRunId"/>
+            </entity-find-one>
+        </if>
+        
+        <if condition="processing?.envioId">
+            <entity-find-one entity-name="mchile.dte.DteEnvio" value-field="envio">
+                <field-map field-name="envioId" from="processing.envioId"/>
+            </entity-find-one>
+        </if>
+        
+        <entity-find entity-name="mchile.dte.FiscalTaxDocumentEmailMessageDetail" list="relatedDteList">
+            <econdition field-name="emailMessageId"/>
+            <order-by field-name="fiscalTaxDocumentTypeEnumId,folio"/>
+        </entity-find>
+    </actions>
+
+    <widgets>
+        <link url="../FindEmail" text="Volver a listado"/>
+        <container-row>
+            <row-col lg="6">
+                <container-box>
+                    <box-header title="Email Information"/>
+                    <box-body>
+                        <form-single name="EmailInfo" map="emailMessage">
+                            <field name="emailMessageId"><default-field title="Email ID">
+                                <display/>
+                            </default-field></field>
+                            <field name="statusId"><default-field title="Status">
+                                <display-entity entity-name="moqui.basic.StatusItem" text="${description}"/>
+                            </default-field></field>
+                            <field name="sentDate"><default-field>
+                                <display format="yyyy-MM-dd HH:mm:ss"/>
+                            </default-field></field>
+                            <field name="receivedDate"><default-field>
+                                <display format="yyyy-MM-dd HH:mm:ss"/>
+                            </default-field></field>
+                            <field name="fromAddress"><default-field title="From">
+                                <display/>
+                            </default-field></field>
+                            <field name="fromName"><default-field title="From Name">
+                                <display/>
+                            </default-field></field>
+                            <field name="toAddresses"><default-field title="To">
+                                <display/>
+                            </default-field></field>
+                            <field name="ccAddresses"><default-field title="CC">
+                                <display/>
+                            </default-field></field>
+                            <field name="bccAddresses"><default-field title="BCC">
+                                <display/>
+                            </default-field></field>
+                            <field name="subject"><default-field>
+                                <display/>
+                            </default-field></field>
+                            <field name="messageId"><default-field title="Message ID">
+                                <display/>
+                            </default-field></field>
+                            <field name="contentType"><default-field title="Content Type">
+                                <display/>
+                            </default-field></field>
+                            <field name="emailServerId"><default-field title="Email Server">
+                                <display-entity entity-name="moqui.basic.email.EmailServer" text="${description ?: serverHost}"/>
+                            </default-field></field>
+                        </form-single>
+                    </box-body>
+                </container-box>
+            </row-col>
+            
+            <row-col lg="6">
+                <container-box>
+                    <box-header title="DTE Processing Information"/>
+                    <box-body>
+                        <form-single name="ProcessingInfo">
+                            <field name="processDate"><default-field title="Process Date">
+                                <display text="${processing?.processDate ? ec.l10n.format(processing.processDate, 'yyyy-MM-dd HH:mm:ss') : 'Not Processed'}"/>
+                            </default-field></field>
+                            <field name="processingStatus"><default-field title="Processing Status">
+                                <display text="${processing?.statusId ? ec.entity.find('moqui.basic.StatusItem').condition('statusId', processing.statusId).one()?.description : 'Not Processed'}"/>
+                            </default-field></field>
+                            <field name="envioId"><default-field title="Envio ID">
+                                <link url="envioDetail" text="${processing?.envioId}" 
+                                      parameter-map="[envioId:processing?.envioId]"
+                                      condition="processing?.envioId" link-type="anchor"/>
+                                <label text="N/A" condition="!processing?.envioId"/>
+                            </default-field></field>
+                            <field name="envioStatus"><default-field title="Envio Status">
+                                <display text="${envio?.statusId ? ec.entity.find('moqui.basic.StatusItem').condition('statusId', envio.statusId).one()?.description : 'N/A'}"/>
+                            </default-field></field>
+                            <field name="trackId"><default-field title="Track ID">
+                                <display text="${envio?.trackId ?: 'N/A'}"/>
+                            </default-field></field>
+                            <field name="jobRunId"><default-field title="Job Run">
+                                <link url="jobRunDetail" text="${processing?.jobRunId}" 
+                                      parameter-map="[jobRunId:processing?.jobRunId]"
+                                      condition="processing?.jobRunId" link-type="anchor"/>
+                                <label text="Not Available" condition="!processing?.jobRunId"/>
+                            </default-field></field>
+                            <field name="jobName"><default-field title="Job Name">
+                                <display text="${jobRun?.jobName ?: 'N/A'}"/>
+                            </default-field></field>
+                            <field name="jobStatus"><default-field title="Job Status">
+                                <display text="${jobRun?.hasError == 'Y' ? 'Error' : (jobRun ? 'Success' : 'N/A')}"/>
+                            </default-field></field>
+                            <field name="jobStartTime"><default-field title="Job Start">
+                                <display text="${jobRun?.startTime ? ec.l10n.format(jobRun.startTime, 'yyyy-MM-dd HH:mm:ss') : 'N/A'}"/>
+                            </default-field></field>
+                            <field name="jobEndTime"><default-field title="Job End">
+                                <display text="${jobRun?.endTime ? ec.l10n.format(jobRun.endTime, 'yyyy-MM-dd HH:mm:ss') : 'N/A'}"/>
+                            </default-field></field>
+                            <field name="errorMessage"><default-field title="Error Message">
+                                <display text="${processing?.errorMessage ?: 'None'}"/>
+                            </default-field></field>
+                            <field name="processingNotes"><default-field title="Processing Notes">
+                                <display text="${processing?.processingNotes ?: 'None'}"/>
+                            </default-field></field>
+                        </form-single>
+                    </box-body>
+                </container-box>
+            </row-col>
+        </container-row>
+        
+        <container-box>
+            <box-header title="Email Content"/>
+            <box-body>
+                <container-row>
+                    <row-col lg="6">
+                        <label text="HTML Body" type="h5"/>
+                        <container style="border: 1px solid #ddd; padding: 10px; max-height: 400px; overflow: auto; background: white;">
+                            <render-mode><text type="html,vuet" location="component://webroot/template/screen/BasicHtmlMacros.html.ftl"
+                                    template="html"><![CDATA[${emailMessage.body ?: 'No HTML content'}]]></text></render-mode>
+                        </container>
+                    </row-col>
+                    <row-col lg="6">
+                        <label text="Text Body" type="h5"/>
+                        <container style="border: 1px solid #ddd; padding: 10px; max-height: 400px; overflow: auto; background: white;">
+                            <label text="${emailMessage.bodyText ?: 'No text content'}" type="pre" style="white-space: pre-wrap; word-wrap: break-word;"/>
+                        </container>
+                    </row-col>
+                </container-row>
+            </box-body>
+        </container-box>
+        
+        <container-box>
+            <box-header title="Email Headers"/>
+            <box-body>
+                <container style="border: 1px solid #ddd; padding: 10px; max-height: 300px; overflow: auto; background: #f5f5f5;">
+                    <label text="${emailMessage.headersString ?: 'No headers available'}" type="pre" style="white-space: pre-wrap; word-wrap: break-word; font-size: 0.9em;"/>
+                </container>
+            </box-body>
+        </container-box>
+        
+        <section name="RelatedDtesSection" condition="relatedDteList">
+            <widgets>
+                <container-box>
+                    <box-header title="Related DTEs (${relatedDteList?.size() ?: 0})"/>
+                    <box-body>
+                        <form-list name="RelatedDteList" list="relatedDteList" skip-form="true">
+                            <field name="fiscalTaxDocumentId">
+                                <default-field title="DTE ID">
+                                    <link url="dteDetail" text="${fiscalTaxDocumentId}"
+                                          parameter-map="[fiscalTaxDocumentId:fiscalTaxDocumentId]" link-type="anchor"/>
+                                </default-field>
+                            </field>
+                            <field name="fiscalTaxDocumentTypeEnumId">
+                                <default-field title="Type">
+                                    <display-entity entity-name="moqui.basic.Enumeration" key-field-name="enumId" text="${description}"/>
+                                </default-field>
+                            </field>
+                            <field name="folio">
+                                <default-field><display/></default-field>
+                            </field>
+                            <field name="date">
+                                <default-field title="Date">
+                                    <display format="yyyy-MM-dd"/>
+                                </default-field>
+                            </field>
+                            <field name="issuerPartyId">
+                                <default-field title="Issuer">
+                                    <display-entity entity-name="mantle.party.PartyDetail" text="PartyNameTemplate"/>
+                                </default-field>
+                            </field>
+                            <field name="receiverPartyId">
+                                <default-field title="Receiver">
+                                    <display-entity entity-name="mantle.party.PartyDetail" text="PartyNameTemplate"/>
+                                </default-field>
+                            </field>
+                            <field name="statusId">
+                                <default-field title="Status">
+                                    <display-entity entity-name="moqui.basic.StatusItem" text="${description}"/>
+                                </default-field>
+                            </field>
+                            <field name="grandTotal">
+                                <default-field title="Total">
+                                    <display format="#,##0" text-align="right"/>
+                                </default-field>
+                            </field>
+                        </form-list>
+                    </box-body>
+                </container-box>
+            </widgets>
+        </section>
+        
+        <section name="JobErrorSection" condition="jobRun?.errors">
+            <widgets>
+                <container-box>
+                    <box-header title="Job Errors"/>
+                    <box-body>
+                        <container style="border: 1px solid #dd0000; padding: 10px; background: #fff5f5;">
+                            <label text="${jobRun.errors}" type="pre" style="white-space: pre-wrap; word-wrap: break-word; color: #dd0000;"/>
+                        </container>
+                    </box-body>
+                </container-box>
+            </widgets>
+        </section>
+    </widgets>
+</screen>

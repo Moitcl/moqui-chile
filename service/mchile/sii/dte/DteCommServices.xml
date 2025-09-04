@@ -240,8 +240,54 @@ along with this software (see the LICENSE.md file). If not, see
             <script>
                 import cl.moit.dte.MoquiDTEUtils
                 import org.moqui.context.ExecutionContext
+                import groovy.json.JsonBuilder
             </script>
             <set field="messageId" from="headers.get('message-id')"/>
+            
+            <!-- Attempt to determine current job run ID by matching host, thread, and timing -->
+            <script>
+                // Get current execution context info  
+                def localHost = ec.factory.getLocalhostAddress()
+                def currentHostAddress = localHost?.getHostAddress() ?: '127.0.0.1'
+                def currentHostName = localHost?.getHostName() ?: 'localhost'  
+                def currentThreadName = Thread.currentThread().getName()
+                def currentTime = ec.user.nowTimestamp
+                
+                // Calculate time window (look for jobs started in last 30 minutes)
+                def thirtyMinutesAgo = new java.sql.Timestamp(currentTime.time - (30 * 60 * 1000))
+                
+                jobRunId = null
+            </script>
+            
+            <!-- Query for currently running job that matches our execution context -->
+            <entity-find entity-name="moqui.service.job.ServiceJobRun" list="matchingJobRuns" limit="5">
+                <econdition field-name="hostAddress" from="currentHostAddress"/>
+                <econdition field-name="hostName" from="currentHostName"/>
+                <econdition field-name="runThread" from="currentThreadName"/>
+                <econdition field-name="startTime" operator="greater-equals" from="thirtyMinutesAgo"/>
+                <econdition field-name="endTime" from="null"/>
+                <order-by field-name="-startTime"/>
+            </entity-find>
+            
+            <!-- Prioritize email-related jobs, fallback to most recent job -->
+            <script>
+                def selectedJobRun = null
+                if (matchingJobRuns) {
+                    // First, look for email-related jobs
+                    selectedJobRun = matchingJobRuns.find { it.jobName?.toLowerCase()?.contains('email') }
+                    // If no email job found, use the most recent job
+                    if (!selectedJobRun) selectedJobRun = matchingJobRuns[0]
+                }
+                jobRunId = selectedJobRun?.jobRunId
+            </script>
+            
+            <!-- Log job run detection results for debugging -->
+            <if condition="jobRunId"><then>
+                <log message="Email processing linked to job run ${jobRunId} (${selectedJobRun.jobName}) on thread ${currentThreadName} at ${currentHostName}"/>
+            </then><else>
+                <log level="debug" message="No matching job run found for thread ${currentThreadName} on ${currentHostName} (${matchingJobRuns?.size() ?: 0} candidates found)"/>
+            </else></if>
+
             <!-- Save Message -->
             <if condition="messageId">
                 <entity-find entity-name="moqui.basic.email.EmailMessage" list="emailMessageList">
@@ -251,22 +297,55 @@ along with this software (see the LICENSE.md file). If not, see
                 <if condition="emailMessageList"><then>
                     <set field="emailMessageId" from="emailMessageList.first.emailMessageId"/>
                     <log message="Found duplicate message with Message-ID [${messageId}] from server [${emailServerId}]"/>
+                    
+                    <!-- Check if we already have processing record for duplicate -->
+                    <entity-find-one entity-name="mchile.dte.DteEmailProcessing" value-field="existingProcessing">
+                        <field-map field-name="emailMessageId"/>
+                    </entity-find-one>
+                    <if condition="existingProcessing">
+                        <log level="warn" message="Email processing already exists for duplicate message ${messageId}, status: ${existingProcessing.statusId}"/>
+                        <return/>
+                    </if>
                 </then><else>
                     <service-call name="create#moqui.basic.email.EmailMessage" out-map="context"
-                                  in-map="[sentDate:fields.sentDate, receivedDate:fields.receivedDate, statusId:statusId,
-                    subject:fields.subject, body:body, bodyText:bodyText,
-                    fromAddress:fields.from, toAddresses:fields.toList?.toString(),
-                    ccAddresses:fields.ccList?.toString(), bccAddresses:fields.bccList?.toString(),
-                    messageId:messageId, emailServerId:emailServerId]"/>
+                                  in-map="[sentDate:fields.sentDate, receivedDate:fields.receivedDate, statusId:statusId, subject:fields.subject, body:body, bodyText:bodyText,
+                                           fromAddress:fields.from, toAddresses:fields.toList?.toString(), ccAddresses:fields.ccList?.toString(),
+                                           bccAddresses:fields.bccList?.toString(), messageId:messageId, emailServerId:emailServerId]"/>
                 </else></if>
             </if>
+            
+            <!-- Initialize processing log -->
+            <set field="processingLog" from="[]"/>
+            <script>processingLog.add([timestamp: ec.user.nowTimestamp, event: 'STARTED', message: 'Email processing initiated'])</script>
+            
+            <!-- Create initial processing record -->
+            <service-call name="create#mchile.dte.DteEmailProcessing" in-map="[
+                emailMessageId: emailMessageId,
+                jobRunId: jobRunId,
+                statusId: 'DepReceived',
+                processDate: ec.user.nowTimestamp,
+                processingNotes: new JsonBuilder(processingLog).toString()
+            ]"/>
+            
             <log level="warn" message="Processing email ${messageId}"/>
             <set field="envioIdsToProcess" from="[]"/>
+            <set field="attachmentSeqId" type="Integer" from="0"/>
+            
             <iterate list="bodyPartList" entry="bodyPart">
                 <log message="Processing Part with content type ${bodyPart.contentType}, content disposition ${bodyPart.disposition}"/>
+                <set field="attachmentSeqId" from="attachmentSeqId + 1"/>
+                <set field="filename" from="null"/>
+                <if condition="bodyPart.filename != null">
+                    <service-call name="mchile.general.GeneralServices.decode#MimeFilename" in-map="[filename: bodyPart.filename]" out-map="decodeResult"/>
+                    <if condition="decodeResult.wasEncoded">
+                        <log level="info"
+                             message="MIME filename decoded for message ${messageId}: '${bodyPart.filename}' -> '${decodeResult.decodedFilename}' (${decodeResult.charset}/${decodeResult.encoding})"/>
+                    </if>
+                    <set field="filename" from="decodeResult.decodedFilename"/>
+                </if>
                 <if condition="bodyPart.contentType == null"><then>
                     <log level="warn" message="Ignoring bodyPart with contentType null"/>
-                </then><else-if condition="(bodyPart.contentType.contains('text/plain') || bodyPart.contentType.contains('text/html')) &amp;&amp; bodyPart.filename == null">
+                </then><else-if condition="(bodyPart.contentType.contains('text/plain') || bodyPart.contentType.contains('text/html')) &amp;&amp; filename == null">
                     <if condition="body == null"><then>
                         <set field="body" from="bodyPart.contentText"/>
                     </then><else-if condition="bodyPart.contentType.contains('text/plain')">
@@ -278,39 +357,53 @@ along with this software (see the LICENSE.md file). If not, see
                     </else-if><else>
                         <log level="warn" message="More than one bodyPart with type text/html for mail ${messageId}"/>
                     </else></if>
-                </else-if><else-if condition="(bodyPart.contentType.contains('text/plain') || bodyPart.contentType.contains('text/html')) &amp;&amp; bodyPart.filename != null
-                                            &amp;&amp; (bodyPart.filename == null || !(bodyPart.filename.toLowerCase().endsWith('.xml')))">
-                    <log level="warn" message="Ignoring bodyPart of type ${bodyPart.contentType} and filename ${bodyPart.filename} for mail ${messageId}"/>
+                </else-if><else-if condition="(bodyPart.contentType.contains('text/plain') || bodyPart.contentType.contains('text/html')) &amp;&amp; filename != null
+                                            &amp;&amp; (filename == null || !(filename.toLowerCase().endsWith('.xml')))">
+                    <log level="warn" message="Ignoring bodyPart of type ${bodyPart.contentType} and filename ${filename} for mail ${messageId}"/>
                 </else-if><else-if condition="(bodyPart.disposition in ['attachment', 'inline'] || bodyPart.disposition == null) &amp;&amp;
-                                              bodyPart.filename != null &amp;&amp; bodyPart.filename.toLowerCase().endsWith('.xml')">
+                                              filename != null &amp;&amp; filename.toLowerCase().endsWith('.xml')">
                     <if condition="bodyPart.contentBytes == null &amp;&amp; bodyPart.contentText == null">
-                        <log level="error" message="No contentBytes nor contentText for bodyPart of message ${messageId}, filename ${bodyPart.filename}"/>
+                        <log level="error" message="No contentBytes nor contentText for bodyPart of message ${messageId}, filename ${filename}"/>
+                        <script>processingLog.add([timestamp: ec.user.nowTimestamp, event: 'ERROR', message: "No content for attachment: ${filename}"])</script>
                         <continue/>
                     </if>
                     <set field="contentBytes" from="bodyPart.contentBytes ?: bodyPart.contentText?.getBytes('ISO-8859-1')"/>
                     <if condition="contentBytes == null">
                         <log level="error" message="No contentBytes nor contentText for bodyPart of message ${messageId}"/>
+                        <script>processingLog.add([timestamp: ec.user.nowTimestamp, event: 'ERROR', message: "Failed to get content bytes for: ${filename}"])</script>
                         <continue/>
                     </if>
-                    <!-- MIME Filename Decoding Integration -->
-                    <service-call name="mchile.general.GeneralServices.decode#MimeFilename" in-map="[filename: bodyPart.filename]" out-map="decodeResult"/>
                     
-                    <!-- Enhanced logging for decoded filenames -->
-                    <if condition="decodeResult.wasEncoded">
-                        <log level="info" 
-                             message="MIME filename decoded for message ${messageId}: '${bodyPart.filename}' -> '${decodeResult.decodedFilename}' (${decodeResult.charset}/${decodeResult.encoding})"/>
-                    </if>
-                    
+
                     <service-call name="mchile.sii.dte.DteEnvioServices.store#ReceivedEnvio" in-map="context + [contentBytes:contentBytes, fileName:decodeResult.decodedFilename ]" out-map="storeResult"/>
-                    <log message="Stored Envio ${storeResult.envioId}, filename: ${decodeResult.decodedFilename} ${decodeResult.wasEncoded ? '(decoded from: ' + bodyPart.filename + ')' : ''}"/>
-                    <script>
-                        if (storeResult.envioId)
+                    <log message="Stored Envio ${storeResult.envioId}, filename: ${filename}"/>
+                    
+                    <!-- Create envio association record -->
+                    <if condition="storeResult.envioId">
+                        <service-call name="create#mchile.dte.DteEmailProcessingEnvio" in-map="[
+                            emailMessageId: emailMessageId,
+                            envioId: storeResult.envioId,
+                            attachmentSeqId: attachmentSeqId,
+                            attachmentFileName: decodeResult.decodedFilename
+                        ]"/>
+                        <script>
                             envioIdsToProcess.add(storeResult.envioId)
-                    </script>
+                            processingLog.add([timestamp: ec.user.nowTimestamp, event: 'ENVIO_CREATED', message: "Created envio: ${storeResult.envioId} from ${decodeResult.decodedFilename}"])
+                        </script>
+                    </if>
                 </else-if><else>
-                    <log level="warn" message="Ignoring bodyPart of type ${bodyPart.contentType} and filename ${bodyPart.filename}, disposition ${bodyPart.disposition} for mail ${messageId}"/>
+                    <log level="warn" message="Ignoring bodyPart of type ${bodyPart.contentType} and filename ${filename}, disposition ${bodyPart.disposition} for mail ${messageId}"/>
                 </else></if>
             </iterate>
+            
+            <!-- Update final processing status -->
+            <script>processingLog.add([timestamp: ec.user.nowTimestamp, event: 'COMPLETED', message: "Processing finished, created ${envioIdsToProcess.size()} envios"])</script>
+            <service-call name="update#mchile.dte.DteEmailProcessing" in-map="[
+                emailMessageId: emailMessageId,
+                statusId: (envioIdsToProcess.isEmpty() ? 'DepError' : 'DepProcessed'),
+                processingNotes: new JsonBuilder(processingLog).toString()
+            ]"/>
+            
             <script>
                 if (envioIdsToProcess)
                     ec.service.special().name("mchile.sii.dte.DteEnvioProcessingServices.process#PendingEnvioDte").registerOnCommit()

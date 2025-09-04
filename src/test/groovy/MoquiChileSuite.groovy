@@ -30,13 +30,17 @@ import org.moqui.Moqui
  */
 @Suite
 @SelectClasses([
-    General.RutTests.class,           // Chilean RUT validation utilities
-    DTE.DteGenerationTests.class,     // All DTE types via generate#Factura and generate#Boleta services
-    DTE.CafAutoRequestTests.class     // CAF auto-request system testing
     General.RutTests.class,                              // Chilean RUT validation utilities
     DTE.DteGenerationTests.class,                        // All DTE types via generate#Factura and generate#Boleta services
     DTE.CafAutoRequestTests.class,                       // CAF auto-request system testing
-    MoquiChile.MimeDecodingSpec.class                   // Unit tests for MIME filename decoder service
+    EmailProcessing.DteEmailProcessingTests.class,      // DteEmailProcessing entity CRUD and workflow testing
+    EmailProcessing.DteEmailProcessingEnvioTests.class, // DteEmailProcessingEnvio entity and composite key testing
+    EmailProcessing.EmailProcessingIntegrationTests.class, // Complete email processing workflow integration tests
+    EmailProcessing.EmailProcessingIntegrationServiceTests.class, // Email processing service integration testing
+    EmailProcessing.EmailProcessingMockingExampleTest.class, // Comprehensive test infrastructure demonstration
+    EmailProcessing.DteCommServicesIncomingMessageIntegrationTests.class, // Main DTE email processing service integration tests
+    EmailProcessing.DteProcessingSpec.class,             // Integration tests for DTE processing with MIME decoding  
+    General.MimeDecodingSpec.class                     // Unit tests for MIME filename decoder service
 ])
 class MoquiChileSuite {
     @AfterAll
