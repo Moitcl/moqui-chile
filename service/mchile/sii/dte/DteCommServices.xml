@@ -1755,11 +1755,11 @@ TrackId Token']" type="Map"/>
             <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="pendingFtdList">
                 <econdition field-name="statusId" value="Ftd-Issued"/>
                 <econdition field-name="sentAuthStatusId" operator="not-in" from="['Ftd-SentAuthAccepted', 'Ftd-SentAuthAcceptedWithDiscrepancies']" or-null="true"/>
-                <econdition field-name="issueDate" operator="greater-equals" from="lookbackStart"/>
-                <econdition field-name="issueDate" operator="less-equals" from="todayEnd"/>
+                <econdition field-name="date" operator="greater-equals" from="lookbackStart"/>
+                <econdition field-name="date" operator="less-equals" from="todayEnd"/>
                 <econdition field-name="issuerPartyId" operator="in" from="partyIdList"/>
-                <select-field field-name="fiscalTaxDocumentId,issuerPartyId,sentAuthStatusId,issueDate,fiscalTaxDocumentTypeEnumId"/>
-                <order-by field-name="issueDate"/>
+                <select-field field-name="fiscalTaxDocumentId,issuerPartyId,sentAuthStatusId,date,fiscalTaxDocumentTypeEnumId"/>
+                <order-by field-name="date"/>
             </entity-find>
             
             <!-- Step 5: Process results and group by party and day -->
@@ -1789,7 +1789,7 @@ TrackId Token']" type="Map"/>
                 <set field="partyData" from="pendingByParty[partyId]"/>
                 
                 <!-- Add to total count and daily counts -->
-                <set field="dayKey" from="ec.l10n.format(ftd.issueDate, 'yyyy-MM-dd')"/>
+                <set field="dayKey" from="ec.l10n.format(ftd.date, 'yyyy-MM-dd')"/>
                 <set field="partyData.totalCount" from="partyData.totalCount + 1"/>
                 <set field="partyData.dailyCounts[dayKey]" from="(partyData.dailyCounts[dayKey] ?: 0) + 1"/>
                 
@@ -1800,13 +1800,13 @@ TrackId Token']" type="Map"/>
                 <!-- Categorize by age -->
                 <script><![CDATA[
                     // Calculate days since issue date
-                    long daysSinceIssue = (ec.user.nowTimestamp.time - ftd.issueDate.time) / (24 * 60 * 60 * 1000L)
+                    long daysSinceIssue = (ec.user.nowTimestamp.time - ftd.date.time) / (24 * 60 * 60 * 1000L)
                     
-                    if (ftd.issueDate.before(sevenDaysAgo)) {
+                    if (ftd.date.before(sevenDaysAgo)) {
                         partyData.ageCategories.moreThan7Days++
-                    } else if (ftd.issueDate.before(threeDaysAgo)) {
+                    } else if (ftd.date.before(threeDaysAgo)) {
                         partyData.ageCategories.threeTo7Days++
-                    } else if (ftd.issueDate.before(oneDayAgo)) {
+                    } else if (ftd.date.before(oneDayAgo)) {
                         partyData.ageCategories.oneToThreeDays++
                     } else {
                         partyData.ageCategories.lessThanOneDay++
@@ -1815,7 +1815,7 @@ TrackId Token']" type="Map"/>
                     partyData.documentList.add([
                         fiscalTaxDocumentId: ftd.fiscalTaxDocumentId,
                         sentAuthStatusId: ftd.sentAuthStatusId,
-                        issueDate: ftd.issueDate,
+                        date: ftd.date,
                         fiscalTaxDocumentTypeEnumId: ftd.fiscalTaxDocumentTypeEnumId,
                         daysSinceIssue: daysSinceIssue as Integer
                     ])
