@@ -80,6 +80,9 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="triggerSend" type="Boolean" default="true"/>
             <parameter name="processDtes" type="Boolean" default="true"/>
             <parameter name="processBoletas" type="Boolean" default="true"/>
+            <parameter name="fiscalTaxDocumentIdList" type="List"/>
+            <parameter name="skipFiscalTaxDocumentIdList" type="List"/>
+            <parameter name="batchSize" type="Integer"/>
         </in-parameters>
         <actions>
             <service-call name="mchile.sii.dte.DteInfoServices.get#DteGeneratorParties" out-map="dteConfigResult"/>
@@ -97,13 +100,15 @@ along with this software (see the LICENSE.md file). If not, see
             <iterate list="tipoList" entry="tipo">
                 <log message="Processing type: ${tipo}"/>
                 <log message="internalPartyIdList: ${internalPartyIdList}"/>
-                <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList">
+                <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" limit="batchSize">
                     <econdition field-name="issuerPartyId" operator="in" from="internalPartyIdList"/>
                     <econdition field-name="receiverPartyIdValue" operator="not-in" from="reserved.rutList"/>
                     <econdition field-name="statusId" value="Ftd-Issued"/>
                     <econdition field-name="sentAuthStatusId" value="Ftd-NotSentAuth"/>
                     <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="not-in" value="Ftdt-41,Ftdt-39" ignore="tipo == 'boleta'"/>
                     <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" value="Ftdt-41,Ftdt-39" ignore="tipo != 'boleta'"/>
+                    <econdition field-name="fiscalTaxDocumentId" operator="in" from="fiscalTaxDocumentIdList" ignore-if-empty="true"/>
+                    <econdition field-name="fiscalTaxDocumentId" operator="not-in" from="skipFiscalTaxDocumentIdList" ignore-if-empty="true"/>
                 </entity-find>
                 <log message="Found ${ftdList.size()} DTEs to be sent"/>
                 <set field="ungeneratedDocumentIdsByIssuerPartyId" from="[:]"/>
@@ -129,19 +134,26 @@ along with this software (see the LICENSE.md file). If not, see
                         <script>ungeneratedDocumentIdList.add(dte.fiscalTaxDocumentId)</script>
                     </else></if>
                 </iterate>
+                <set field="errorList" from="[]"/>
                 <iterate list="ungeneratedDocumentIdsByIssuerPartyId" entry="documentIdList" key="issuerPartyId">
                     <log message="Creating envio for documentIdList ${documentIdList}"/>
                     <if condition="tipo == 'dte'"><then>
-                        <service-call name="mchile.sii.dte.DteEnvioServices.genera#EnvioDte" in-map="[organizationPartyId:issuerPartyId, documentIdList:documentIdList]" out-map="envio" transaction="force-new" ignore-error="true"/>
+                        <service-call name="mchile.sii.dte.DteEnvioServices.genera#EnvioDte" in-map="[organizationPartyId:issuerPartyId, documentIdList:documentIdList]"
+                                      out-map="envio" out-map-add-to-existing="false" transaction="force-new" ignore-error="true"/>
+                        <if condition="envio.envioId == null"><script>errorList.add("No se pudo generar envío DTE con documentos: ${documentIdList}")</script></if>
                     </then><else-if condition="tipo == 'boleta'">
                         <service-call name="mchile.sii.dte.DteEnvioServices.genera#EnvioBoleta" in-map="[organizationPartyId:issuerPartyId, documentIdList:documentIdList]" out-map="envio" transaction="force-new" ignore-error="true"/>
+                        <if condition="envio.envioId == null"><script>errorList.add("No se pudo generar envío Boleta con documentos: ${documentIdList}")</script></if>
                     </else-if></if>
-                    <script>envioIdsToSend.add(envio.envioId)</script>
+                    <script>if (envio.envioId) envioIdsToSend.add(envio.envioId)</script>
                 </iterate>
                 <if condition="envioIdsToSend &amp;&amp; triggerSend">
                     <log message="Sending envioIds: ${envioIdsToSend}"/>
                     <service-call name="mchile.sii.dte.DteCommServices.send#PendingEnvioDte" in-map="[envioIdList:envioIdsToSend]"/>
                 </if>
+                <iterate list="errorList" entry="errorMessage">
+                    <script>ec.message.addError(errorMessage)</script>
+                </iterate>
             </iterate>
         </actions>
     </service>
