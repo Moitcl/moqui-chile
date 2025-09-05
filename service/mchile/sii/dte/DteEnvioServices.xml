@@ -18,10 +18,16 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="triggerSend" type="Boolean" default="true"/>
         </in-parameters>
+        <out-parameters>
+            <parameter name="envioCreatedCountByIssuerPartyId"/>
+            <parameter name="dteSendCountByIssuerPartyId"/>
+        </out-parameters>
         <actions>
             <entity-find entity-name="mantle.party.PartyRole" list="internalPartyList">
                 <econdition field-name="roleTypeId" value="OrgInternal"/>
             </entity-find>
+            <set field="envioCreatedCountByIssuerPartyId" from="[:]"/>
+            <set field="dteSendCountByIssuerPartyId" from="[:]"/>
             <set field="internalPartyIdList" from="internalPartyList.partyId"/>
             <service-call name="mchile.sii.SIIServices.get#RutEspeciales" out-map="reserved"/>
             <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList">
@@ -63,7 +69,11 @@ along with this software (see the LICENSE.md file). If not, see
                 </else></if>
             </iterate>
             <iterate list="ungeneratedDocumentIdsByIssuerPartyId" entry="ungeneratedDocumentIdsByReceiverPartyId" key="issuerPartyId">
+                <if condition="envioCreatedCountByIssuerPartyId[issuerPartyId] == null"><set field="envioCreatedCountByIssuerPartyId[issuerPartyId]" from="0"/></if>
+                <if condition="dteSendCountByIssuerPartyId[issuerPartyId] == null"><set field="dteSendCountByIssuerPartyId[issuerPartyId]" from="0"/></if>
                 <iterate list="ungeneratedDocumentIdsByReceiverPartyId" entry="ungeneratedDocumentIdMap" key="receiverPartyId">
+                    <set field="envioCreatedCountByIssuerPartyId[issuerPartyId]" from="envioCreatedCountByIssuerPartyId[issuerPartyId]+1"/>
+                    <set field="dteSendCountByIssuerPartyId[issuerPartyId]" from="dteSendCountByIssuerPartyId[issuerPartyId]+(ungeneratedDocumentIdMap.list?.size())?:0"/>
                     <service-call name="mchile.sii.dte.DteEnvioServices.genera#EnvioDte" in-map="[rutReceptor:ungeneratedDocumentIdMap.receiverPartyIdValue, organizationPartyId:issuerPartyId, documentIdList:ungeneratedDocumentIdMap.list]" out-map="envio" transaction="force-new"/>
                     <script>envioIdsToSend.add(envio.envioId)</script>
                     <log message="Generated envio ${envio.envioId}"/>
@@ -84,6 +94,11 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="skipFiscalTaxDocumentIdList" type="List"/>
             <parameter name="batchSize" type="Integer"/>
         </in-parameters>
+        <out-parameters>
+            <parameter name="errorList" type="List"/>
+            <parameter name="envioSendCount" type="Integer"/>
+            <parameter name="dteCountByIssuerAndType" type="Map"/>
+        </out-parameters>
         <actions>
             <service-call name="mchile.sii.dte.DteInfoServices.get#DteGeneratorParties" out-map="dteConfigResult"/>
             <set field="internalPartyIdList" from="dteConfigResult.dteConfigPartyIdList"/>
@@ -97,6 +112,7 @@ along with this software (see the LICENSE.md file). If not, see
                 if (processDtes) tipoList.add('dte')
                 if (processBoletas) tipoList.add('boleta')
             </script>
+            <set field="dteCountByIssuerAndType" from="[:]"/>
             <iterate list="tipoList" entry="tipo">
                 <log message="Processing type: ${tipo}"/>
                 <log message="internalPartyIdList: ${internalPartyIdList}"/>
@@ -136,12 +152,17 @@ along with this software (see the LICENSE.md file). If not, see
                 </iterate>
                 <set field="errorList" from="[]"/>
                 <iterate list="ungeneratedDocumentIdsByIssuerPartyId" entry="documentIdList" key="issuerPartyId">
+                    <if condition="dteCountByIssuerAndType[issuerPartyId] == null">
+                        <set field="dteCountByIssuerAndType[issuerPartyId]" from="[:]"/>
+                    </if>
                     <log message="Creating envio for documentIdList ${documentIdList}"/>
                     <if condition="tipo == 'dte'"><then>
+                        <set field="dteCountByIssuerAndType[issuerPartyId].dte" from="documentIdList?.size()"/>
                         <service-call name="mchile.sii.dte.DteEnvioServices.genera#EnvioDte" in-map="[organizationPartyId:issuerPartyId, documentIdList:documentIdList]"
                                       out-map="envio" out-map-add-to-existing="false" transaction="force-new" ignore-error="true"/>
                         <if condition="envio.envioId == null"><script>errorList.add("No se pudo generar envío DTE con documentos: ${documentIdList}")</script></if>
                     </then><else-if condition="tipo == 'boleta'">
+                        <set field="dteCountByIssuerAndType[issuerPartyId].boleta" from="documentIdList?.size()"/>
                         <service-call name="mchile.sii.dte.DteEnvioServices.genera#EnvioBoleta" in-map="[organizationPartyId:issuerPartyId, documentIdList:documentIdList]" out-map="envio" transaction="force-new" ignore-error="true"/>
                         <if condition="envio.envioId == null"><script>errorList.add("No se pudo generar envío Boleta con documentos: ${documentIdList}")</script></if>
                     </else-if></if>
@@ -149,8 +170,9 @@ along with this software (see the LICENSE.md file). If not, see
                 </iterate>
                 <if condition="envioIdsToSend &amp;&amp; triggerSend">
                     <log message="Sending envioIds: ${envioIdsToSend}"/>
-                    <service-call name="mchile.sii.dte.DteCommServices.send#PendingEnvioDte" in-map="[envioIdList:envioIdsToSend]"/>
+                    <service-call name="mchile.sii.dte.DteCommServices.send#PendingEnvioDte" in-map="[envioIdList:envioIdsToSend]" transaction="force-new" ignore-error="true"/>
                 </if>
+                <set field="envioSendCount" from="envioIdsToSend?.size()"/>
                 <iterate list="errorList" entry="errorMessage">
                     <script>ec.message.addError(errorMessage)</script>
                 </iterate>
