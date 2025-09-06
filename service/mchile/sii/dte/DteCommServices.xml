@@ -981,7 +981,7 @@ TrackId Token']" type="Map"/>
             <parameter name="hasError" type="Boolean"/>
             <parameter name="newStatusId"/>
             <parameter name="estadisticaSii" type="list"/>
-            <parameter name="detalleReparacionRechazoSii" type="list"/>
+            <parameter name="detalleReparoRechazoSii" type="list"/>
         </out-parameters>
         <actions>
             <set field="hasError" from="true"/>
@@ -1035,10 +1035,8 @@ TrackId Token']" type="Map"/>
                 <econdition field-name="fiscalTaxDocumentId" operator="in" from="dteAndEnvioList.fiscalTaxDocumentId"/>
             </entity-find>
             <set field="estadisticaSii" from="respuesta.estadistica"/>
-            <set field="detalleReparacionRechazoSii" from="respuesta.detalle_rep_rech"/>
-            <if condition="!applyResults">
-                <return/>
-            </if>
+            <set field="detalleReparoRechazoSii" from="respuesta.detalle_rep_rech"/>
+            <if condition="!applyResults"><return/></if>
             <set field="rechazoPorTipo" from="[:]"/>
             <set field="reparoPorTipo" from="[:]"/>
             <set field="dtesPorProcesar" from="[]"/>
@@ -1047,15 +1045,21 @@ TrackId Token']" type="Map"/>
                 <log message="Procesando reparoRechazo: ${reparoRechazo}"/>
                 <service-call name="mchile.sii.dte.DteInternalServices.get#MoquiCode" in-map="[siiCode:reparoRechazo.tipo]" out-map="moquiCode"/>
                 <set field="fiscalTaxDocumentTypeEnumId" from="moquiCode.enumId"/>
+                <entity-find-one entity-name="moqui.basic.Enumeration" value-field="tipoEnum" auto-field-map="[enumId:fiscalTaxDocumentTypeEnumId]"/>
                 <set field="dte" from="dteList.find { it.fiscalTaxDocumentNumber == reparoRechazo.folio &amp;&amp; it.fiscalTaxDocumentTypeEnumId == fiscalTaxDocumentTypeEnumId
                     &amp;&amp; it.sentAuthStatusId in ['Ftd-SentAuthRejected', 'Ftd-SentAuthUnverified', 'Ftd-SentAuthAcceptedWithDiscrepancies'] }"/>
                 <if condition="dte"><then>
                     <script>dtesPorProcesar.remove(dte)</script>
                     <if condition="reparoRechazo.estado == 'RCH'"><then>
+                        <if condition="reparoRechazo.seccion == 'DTE' &amp;&amp; reparoRechazo.linea == 0 &amp;&amp; reparoRechazo.nivel == 3 &amp;&amp;
+                                        reparoRechazo.codigo == 100"><then>
+                            <log message="${tipoEnum.description} ${reparoRechazo.folio} rechazado por duplicado, no se modifica su estado"/>
+                        </then><else>
+                            <set field="dte.sentAuthStatusId" value="Ftd-SentAuthRejected"/>
+                        </else></if>
                         <if condition="newStatusId == null || newStatusId == 'Ftde-ProcessedWithDiscrepancy'">
                             <set field="newStatusId" value="Ftde-ProcessedWithRejection"/>
                         </if>
-                        <set field="dte.sentAuthStatusId" value="Ftd-SentAuthRejected"/>
                         <set field="rechazoPorTipo[reparoRechazo.tipo]" from="(rechazoPorTipo[reparoRechazo.tipo]?:0) + 1"/>
                     </then><else-if condition="reparoRechazo.estado == 'RPR'">
                         <if condition="newStatusId == null"><set field="newStatusId" value="Ftde-ProcessedWithDiscrepancy"/></if>
