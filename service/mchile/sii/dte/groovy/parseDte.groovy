@@ -84,7 +84,15 @@ esLiquidacion = (tipoDte == '43')
 esExportacion = (tipoDte == '110')
 folioDte = encabezado.IdDoc.Folio.text() as Integer
 fiscalTaxDocumentNumber = folioDte
-montosBrutos = encabezado.IdDoc.MntBruto?.text() == "1"
+if (esBoleta) {
+    if (tipoDte == '39' && encabezado.IndMntNeto?.text() == "2") {
+        montosBrutos = false
+    } else {
+        montosBrutos = true
+    }
+} else {
+    montosBrutos = encabezado.IdDoc.MntBruto?.text() == "1"
+}
 indTraslado = encabezado.IdDoc.IndTraslado?.text()
 formaPago = encabezado.IdDoc.FmaPago?.text()
 if (formaPago == null)
