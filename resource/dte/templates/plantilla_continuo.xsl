@@ -51,7 +51,10 @@
                     <xsl:otherwise><xsl:value-of select="30"/></xsl:otherwise>
                 </xsl:choose>
             </xsl:variable>
-            <xsl:variable name="lineHeightMm" select="7"/>
+            <!-- Height per text line considering font size 8pt = 2.82mm + line spacing -->
+            <xsl:variable name="lineHeightMm" select="3.5"/>
+            <!-- Height per Detalle item: 2mm margin-top + minimum 2 lines @ 2.82mm each + spacing -->
+            <xsl:variable name="itemHeightMm" select="8.9"/>
             <xsl:variable name="itemCount" select="count(siidte:Detalle | Detalle)"/>
             <!-- Altura del logo: 0 si hay logo, 20 si no -->
             <xsl:variable name="logoHeight">
@@ -68,21 +71,24 @@
                         <!-- Boleta -->
                         <xsl:choose>
                             <xsl:when test="$unnamedCustomer = 'Y'">0</xsl:when>
+                            <xsl:otherwise>
+                                <xsl:variable name="receptorLinesContainer">
+                                    <xsl:for-each select="siidte:Encabezado/siidte:Receptor/siidte:RznSocRecep | Encabezado/Receptor/RznSocRecep
+                                                          | siidte:Encabezado/siidte:Receptor/siidte:CdgIntRecep | Encabezado/Receptor/CdgIntRecep
+                                                          | siidte:Encabezado/siidte:Receptor/siidte:DirRecep | Encabezado/Receptor/DirRecep
+                                                          | siidte:Encabezado/siidte:Receptor/siidte:GiroRecep | Encabezado/Receptor/GiroRecep">
+                                        <xsl:variable name="length" select="string-length(.)"/>
+                                        <xsl:variable name="lineasParrafo" select="ceiling($length div $charsPerLine)"/>
+                                        <linea><xsl:value-of select="$lineasParrafo"/></linea>
+                                    </xsl:for-each>
+                                </xsl:variable>
+                                <xsl:variable name="receptorLinesCount" select="sum(exsl:node-set($receptorLinesContainer)/linea)"/>
+                                <xsl:choose>
+                                    <xsl:when test="$receptorLinesCount"><xsl:value-of select="$receptorLinesCount"/></xsl:when>
+                                    <xsl:otherwise>0</xsl:otherwise>
+                                </xsl:choose>
+                            </xsl:otherwise>
                         </xsl:choose>
-                        <xsl:otherwise>
-                            <xsl:variable name="receptorLinesContainer">
-                                <xsl:for-each select="siidte:Encabezado/siidte:Receptor/siidte:RznSocRecep | Encabezado/Receptor/RznSocRecep
-                                                      | siidte:Encabezado/siidte:Receptor/siidte:CdgIntRecep | Encabezado/Receptor/CdgIntRecep
-                                                      | siidte:Encabezado/siidte:Receptor/siidte:DirRecep | Encabezado/Receptor/DirRecep
-                                                      | siidte:Encabezado/siidte:Receptor/siidte:GiroRecep | Encabezado/Receptor/GiroRecep">
-                                    <xsl:variable name="length" select="string-length(.)"/>
-                                    <xsl:variable name="lineasParrafo" select="ceiling($length div $charsPerLine)"/>
-                                    <linea><xsl:value-of select="$lineasParrafo"/></linea>
-                                </xsl:for-each>
-                            </xsl:variable>
-                            <xsl:variable name="receptorLinesCount" select="sum(exsl:node-set(receptorLinesContainer)/linea)"/>
-                            <xsl:value-of select="$receptorLinesCount"/>
-                        </xsl:otherwise>
                     </xsl:when>
                     <xsl:otherwise>
                         <xsl:variable name="receptorLinesContainer">
@@ -105,7 +111,13 @@
                                 <linea><xsl:value-of select="ceiling($length div $charsPerLine)"/></linea>
                             </xsl:for-each>
                         </xsl:variable>
-                        <xsl:variable name="receptorLineCount" select="sum(exsl:node-set($receptorLinesContainer)/linea)"/>
+                        <xsl:variable name="receptorLineCountTemp" select="sum(exsl:node-set($receptorLinesContainer)/linea)"/>
+                        <xsl:variable name="receptorLineCount">
+                            <xsl:choose>
+                                <xsl:when test="$receptorLineCountTemp"><xsl:value-of select="$receptorLineCountTemp"/></xsl:when>
+                                <xsl:otherwise>0</xsl:otherwise>
+                            </xsl:choose>
+                        </xsl:variable>
                         <xsl:variable name="guiaDespachoAdditionalLines">
                             <xsl:choose>
                                 <!-- Tipo de Traslado -->
@@ -162,6 +174,35 @@
                 </xsl:choose>
             </xsl:variable>
             <xsl:variable name="additionalOptionalLinesCount" select="sum(exsl:node-set($additionalOptionalLinesCountContainer)/linea)"/>
+            
+            <!-- Calculate additional lines for NmbItem (item names) that can wrap -->
+            <xsl:variable name="itemNameLinesContainer">
+                <xsl:for-each select="siidte:Detalle/siidte:NmbItem | Detalle/NmbItem">
+                    <xsl:variable name="length" select="string-length(.)"/>
+                    <!-- Item names are in the first column (67% of width), with 8pt font = smaller chars
+                         For 80mm paper: ~50 chars total, so ~33 chars for item column
+                         For 57mm paper: ~36 chars total, so ~24 chars for item column -->
+                    <xsl:variable name="itemCharsPerLine">
+                        <xsl:choose>
+                            <xsl:when test="$paperWidthMm = 57">24</xsl:when>
+                            <xsl:when test="$paperWidthMm = 80">33</xsl:when>
+                            <xsl:otherwise>40</xsl:otherwise>
+                        </xsl:choose>
+                    </xsl:variable>
+                    <xsl:variable name="lineasParrafo" select="ceiling($length div $itemCharsPerLine)"/>
+                    <!-- Subtract 1 because first line is already counted in base item height -->
+                    <xsl:choose>
+                        <xsl:when test="$lineasParrafo > 1">
+                            <linea><xsl:value-of select="$lineasParrafo - 1"/></linea>
+                        </xsl:when>
+                        <xsl:otherwise>
+                            <linea>0</linea>
+                        </xsl:otherwise>
+                    </xsl:choose>
+                </xsl:for-each>
+            </xsl:variable>
+            <xsl:variable name="itemNameAdditionalLines" select="sum(exsl:node-set($itemNameLinesContainer)/linea)"/>
+            
             <xsl:variable name="baseDocumentosReferencia">
                 <xsl:choose>
                     <xsl:when test="siidte:Referencia | Referencia">14</xsl:when>
@@ -191,10 +232,21 @@
                 </xsl:choose>
             </xsl:variable>
             <xsl:variable name="itemAdditionalLinesCount" select="count(siidte:Detalle/siidte:DescuentoPct | Detalle/DescuentoPct | siidte:Detalle/siidte:DescuentoMonto | Detalle/DescuentoMonto)"/>
-            <!--
-            <xsl:variable name="estimatedHeightMm" select="95 + $logoHeight + $cedibleSpace + $baseDocumentosReferencia + (($itemCount + $itemAdditionalLinesCount + $additionalOptionalLinesCount + $additionalLinesCount + $commentAfterDetalleLineCount) * $lineHeightMm) + (($referencesCount * 2) * $lineHeightMm)"/>
+            <!-- Precise height calculation (corrected based on actual PDF measurements):
+                 - Base: 217mm (all fixed content: header, totals, signature, table structures) 
+                 - Logo: 25mm when present
+                 - Cedible space: 30-65mm depending on paper width  
+                 - Each Detalle item: 10mm (includes margins, borders, basic spacing)
+                 - Item name additional lines (when wrapping): 4mm each
+                 - Item additional lines (discounts): 4mm each
+                 - Optional description lines (DscItem): 4mm each
+                 - Emisor info lines (RznSoc, DirOrigen, etc): 4mm each
+                 - Receptor info lines (RznSocRecep, DirRecep, etc): 4mm each
+                 - Comment after detalle: 4mm per line + 3mm table margin
+                 - References section: 14mm base + (references * 2 * 4mm)
+                 - Cuenta bancaria text: calculated separately
             -->
-            <xsl:variable name="estimatedHeightMm" select="95 + $logoHeight + $cedibleSpace + $baseDocumentosReferencia + (($itemCount + $itemAdditionalLinesCount + $additionalOptionalLinesCount + $additionalLinesCount + $commentAfterDetalleLineCount + $datosReceptorLineCount) * $lineHeightMm) + (($referencesCount * 2) * $lineHeightMm) + $textoCuentaBancariaHeight"/>
+            <xsl:variable name="estimatedHeightMm" select="117 + $logoHeight + $cedibleSpace + $baseDocumentosReferencia + ($itemCount * 10) + ($itemNameAdditionalLines * 4) + ($itemAdditionalLinesCount * 4) + ($additionalOptionalLinesCount * 4) + ($additionalLinesCount * 4) + ($commentAfterDetalleLineCount * 4 + 3) + ($datosReceptorLineCount * 4) + (($referencesCount * 2) * 4) + $textoCuentaBancariaHeight"/>
             <fo:layout-master-set>
                 <fo:simple-page-master master-name="simple" margin-top="5mm" margin-bottom="5mm">
                     <xsl:attribute name="page-height"><xsl:value-of select="$estimatedHeightMm"/>mm</xsl:attribute>
@@ -260,204 +312,204 @@
                     <fo:block font-size="5pt">paperWidthMm: <xsl:value-of select="$paperWidthMm"/></fo:block>
                     <fo:block font-size="5pt">charsPerLine: <xsl:value-of select="$charsPerLine"/></fo:block>
                     -->
-                    <xsl:call-template name="Documento"><xsl:with-param name="internalWidthMm" select="$internalWidthMm"/></xsl:call-template>
-                </fo:flow>
-            </fo:page-sequence>
-        </fo:root>
-    </xsl:template>
+    <xsl:call-template name="Documento"><xsl:with-param name="internalWidthMm" select="$internalWidthMm"/></xsl:call-template>
+</fo:flow>
+</fo:page-sequence>
+</fo:root>
+</xsl:template>
 
-    <xsl:template name="Documento">
-        <xsl:param name="internalWidthMm"/>
-        <fo:block>
-            <fo:block-container absolute-position="absolute" top="0cm" left="0cm">
-                <xsl:apply-templates select="siidte:Encabezado/siidte:Emisor | Encabezado/Emisor">
-                    <xsl:with-param name="folio">
-                        <xsl:choose>
-                            <xsl:when test="$draft = 'Y'">
-                                <xsl:value-of select="'SIN FOLIO'"/>
-                            </xsl:when>
-                            <xsl:otherwise>
-                                <xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:Folio | Encabezado/IdDoc/Folio"/>
-                            </xsl:otherwise>
-                        </xsl:choose></xsl:with-param>
-                    <xsl:with-param name="tipo"><xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE | Encabezado/IdDoc/TipoDTE"/></xsl:with-param>
-                </xsl:apply-templates>
-                <xsl:apply-templates select="siidte:Encabezado/siidte:Receptor | Encabezado/Receptor">
-                    <xsl:with-param name="fecha"><xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:FchEmis | Encabezado/IdDoc/FchEmis"/></xsl:with-param>
-                    <xsl:with-param name="medioPago"><xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:MedioPago | Encabezado/IdDoc/MedioPago"/></xsl:with-param>
-                    <xsl:with-param name="formaPago"><xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:FmaPago | Encabezado/IdDoc/FmaPago"/></xsl:with-param>
-                    <xsl:with-param name="rutReceptor"><xsl:value-of select="siidte:Encabezado/siidte:Receptor/siidte:RUTRecep | Encabezado/Receptor/RUTRecep"/></xsl:with-param>
-                </xsl:apply-templates>
+<xsl:template name="Documento">
+<xsl:param name="internalWidthMm"/>
+<fo:block>
+<fo:block-container absolute-position="absolute" top="0cm" left="0cm">
+<xsl:apply-templates select="siidte:Encabezado/siidte:Emisor | Encabezado/Emisor">
+    <xsl:with-param name="folio">
+        <xsl:choose>
+            <xsl:when test="$draft = 'Y'">
+                <xsl:value-of select="'SIN FOLIO'"/>
+            </xsl:when>
+            <xsl:otherwise>
+                <xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:Folio | Encabezado/IdDoc/Folio"/>
+            </xsl:otherwise>
+        </xsl:choose></xsl:with-param>
+    <xsl:with-param name="tipo"><xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE | Encabezado/IdDoc/TipoDTE"/></xsl:with-param>
+</xsl:apply-templates>
+<xsl:apply-templates select="siidte:Encabezado/siidte:Receptor | Encabezado/Receptor">
+    <xsl:with-param name="fecha"><xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:FchEmis | Encabezado/IdDoc/FchEmis"/></xsl:with-param>
+    <xsl:with-param name="medioPago"><xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:MedioPago | Encabezado/IdDoc/MedioPago"/></xsl:with-param>
+    <xsl:with-param name="formaPago"><xsl:value-of select="siidte:Encabezado/siidte:IdDoc/siidte:FmaPago | Encabezado/IdDoc/FmaPago"/></xsl:with-param>
+    <xsl:with-param name="rutReceptor"><xsl:value-of select="siidte:Encabezado/siidte:Receptor/siidte:RUTRecep | Encabezado/Receptor/RUTRecep"/></xsl:with-param>
+</xsl:apply-templates>
 
-                <xsl:if test="siidte:Referencia | Referencia">
-                    <fo:block font-size="8pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                              fox:border-radius="4pt" border-width="0.8pt" border-style="solid" margin-right="2pt" margin-top="3mm">
-                        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
-                        <fo:table table-layout="fixed" margin="2pt">
-                            <xsl:call-template name="ReferencesColumnsAndHeader"/>
-                            <fo:table-body>
-                                <xsl:apply-templates select="siidte:Referencia[position() &lt;= $maxRefs] | Referencia[position() &lt;= $maxRefs]"/>
-                                <xsl:if test="count(siidte:Referencia | Referencia) > $maxRefs">
-                                    <fo:table-row>
-                                        <fo:table-cell number-columns-spanned="5"><fo:block font-weight="bold">Más <xsl:value-of select="count(siidte:Referencia | Referencia)-$maxRefs"/> referencias <xsl:choose>
-                                            <xsl:when test="$showExcessRefsInOtherPage = 'Y'"><xsl:value-of select="'en adjunto'"/></xsl:when>
-                                            <xsl:otherwise><xsl:value-of select="'no mostradas'"/></xsl:otherwise>
-                                        </xsl:choose></fo:block></fo:table-cell>
-                                    </fo:table-row>
-                                </xsl:if>
-                            </fo:table-body>
-                        </fo:table>
-                    </fo:block>
+<xsl:if test="siidte:Referencia | Referencia">
+    <fo:block font-size="8pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
+              fox:border-radius="4pt" border-width="0.8pt" border-style="solid" margin-right="2pt" margin-top="3mm">
+        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
+        <fo:table table-layout="fixed" margin="2pt">
+            <xsl:call-template name="ReferencesColumnsAndHeader"/>
+            <fo:table-body>
+                <xsl:apply-templates select="siidte:Referencia[position() &lt;= $maxRefs] | Referencia[position() &lt;= $maxRefs]"/>
+                <xsl:if test="count(siidte:Referencia | Referencia) > $maxRefs">
+                    <fo:table-row>
+                        <fo:table-cell number-columns-spanned="5"><fo:block font-weight="bold">Más <xsl:value-of select="count(siidte:Referencia | Referencia)-$maxRefs"/> referencias <xsl:choose>
+                            <xsl:when test="$showExcessRefsInOtherPage = 'Y'"><xsl:value-of select="'en adjunto'"/></xsl:when>
+                            <xsl:otherwise><xsl:value-of select="'no mostradas'"/></xsl:otherwise>
+                        </xsl:choose></fo:block></fo:table-cell>
+                    </fo:table-row>
                 </xsl:if>
+            </fo:table-body>
+        </fo:table>
+    </fo:block>
+</xsl:if>
 
-                <fo:block font-size="8pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left">
-                    <fo:block-container>
-                        <fo:table table-layout="fixed" width="100%" border-collapse="collapse" margin-top="3mm">
-                            <xsl:call-template name="ItemColumnsAndHeader"/>
-                            <fo:table-body>
-                                <xsl:apply-templates select="siidte:Detalle | Detalle"/>
-                            </fo:table-body>
-                        </fo:table>
-                    </fo:block-container>
+<fo:block font-size="8pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left">
+    <fo:block-container>
+        <fo:table table-layout="fixed" width="100%" border-collapse="collapse" margin-top="3mm">
+            <xsl:call-template name="ItemColumnsAndHeader"/>
+            <fo:table-body>
+                <xsl:apply-templates select="siidte:Detalle | Detalle"/>
+            </fo:table-body>
+        </fo:table>
+    </fo:block-container>
+</fo:block>
+
+<xsl:if test="not ($commentAfterDetalle = '')">
+    <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
+              fox:border-radius="4pt" border-width="0.8pt" border-style="solid">
+        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
+        <fo:table table-layout="fixed" margin="2pt" border-collapse="collapse"><fo:table-body><fo:table-cell>
+            <xsl:for-each select="str:tokenize($commentAfterDetalle , '&#xA;' )">
+                <fo:block margin="2pt" font-size="8.4pt" font-family="Helvetica, Arial, sans-serif"><xsl:value-of select="."/></fo:block>
+            </xsl:for-each>
+        </fo:table-cell></fo:table-body></fo:table>
+    </fo:block>
+</xsl:if>
+<xsl:if test="siidte:DscRcgGlobal | DscRcgGlobal">
+    <xsl:call-template name="DscRcgGlobalTable"/>
+</xsl:if>
+
+<fo:table table-layout="fixed">
+    <fo:table-column column-width="proportional-column-width(1)"/>
+    <fo:table-column column-width="4.6cm"/>
+    <fo:table-body>
+        <fo:table-row>
+            <fo:table-cell><fo:block/></fo:table-cell>
+            <fo:table-cell>
+                <fo:block font-size="8pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
+                          fox:border-radius="4pt" border-width="0.8pt"  border-style="solid">
+                    <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
+                    <fo:table table-layout="fixed" margin-right="1mm" margin-left="1mm">
+                        <fo:table-column column-width="2.0cm"/>
+                        <fo:table-column column-width="2.4cm"/>
+                        <fo:table-body>
+                            <fo:table-row>
+                                <fo:table-cell><fo:block font-weight="bold" margin="2pt">Monto Neto</fo:block></fo:table-cell>
+                                <fo:table-cell><fo:block text-align="right" margin="2pt"><xsl:choose>
+                                    <xsl:when test="siidte:Encabezado/siidte:Totales/siidte:MntNeto | Encabezado/Totales/MntNeto">$ <xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:MntNeto | Encabezado/Totales/MntNeto, '###.###','european')"/></xsl:when>
+                                    <xsl:otherwise>$ 0</xsl:otherwise>
+                                </xsl:choose></fo:block></fo:table-cell>
+                            </fo:table-row>
+                            <xsl:if test="siidte:Encabezado/siidte:Totales/siidte:MntExe | Encabezado/Totales/MntExe">
+                                <fo:table-row>
+                                    <fo:table-cell><fo:block font-weight="bold" margin="2pt">Monto Exento</fo:block></fo:table-cell>
+                                    <fo:table-cell><fo:block text-align="right" margin="2pt"><xsl:choose>
+                                        <xsl:when test="siidte:Encabezado/siidte:Totales/siidte:MntExe | Encabezado/Totales/MntExe">$ <xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:MntExe | Encabezado/Totales/MntExe, '###.###','european')"/></xsl:when>
+                                        <xsl:otherwise>$ 0</xsl:otherwise>
+                                    </xsl:choose></fo:block></fo:table-cell>
+                                </fo:table-row>
+                            </xsl:if>
+                            <fo:table-row>
+                                <fo:table-cell><fo:block font-weight="bold" margin="2pt">IVA <xsl:choose><xsl:when test="siidte:Encabezado/siidte:Totales/siidte:TasaIVA | Encabezado/Totales/TasaIVA"><xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:TasaIVA | Encabezado/Totales/TasaIVA, '###.###,##', 'european')"/>%</xsl:when></xsl:choose></fo:block></fo:table-cell>
+                                <fo:table-cell><fo:block text-align="right" margin="2pt"><xsl:choose>
+                                    <xsl:when test="siidte:Encabezado/siidte:Totales/siidte:IVA | Encabezado/Totales/IVA">$ <xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:IVA | Encabezado/Totales/IVA, '###.###','european')"/></xsl:when>
+                                    <xsl:otherwise>$ 0</xsl:otherwise>
+                                </xsl:choose></fo:block></fo:table-cell>
+                            </fo:table-row>
+                            <fo:table-row>
+                                <fo:table-cell><fo:block font-weight="bold" margin="2pt" font-size="9.01pt">Total</fo:block></fo:table-cell>
+                                <fo:table-cell><fo:block text-align="right" margin="2pt" font-size="9.01pt"><xsl:choose>
+                                    <xsl:when test="siidte:Encabezado/siidte:Totales/siidte:MntTotal | Encabezado/Totales/MntTotal">$ <xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:MntTotal | Encabezado/Totales/MntTotal, '###.###','european')"/></xsl:when>
+                                    <xsl:otherwise>$ 0</xsl:otherwise>
+                                </xsl:choose></fo:block></fo:table-cell>
+                            </fo:table-row>
+                        </fo:table-body>
+                    </fo:table>
                 </fo:block>
+            </fo:table-cell>
+        </fo:table-row>
+    </fo:table-body>
+</fo:table>
 
-                <xsl:if test="not ($commentAfterDetalle = '')">
-                    <fo:block font-size="8.4pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                              fox:border-radius="4pt" border-width="0.8pt" border-style="solid">
-                        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
-                        <fo:table table-layout="fixed" margin="2pt" border-collapse="collapse"><fo:table-body><fo:table-cell>
-                            <xsl:for-each select="str:tokenize($commentAfterDetalle , '&#xA;' )">
-                                <fo:block margin="2pt" font-size="8.4pt" font-family="Helvetica, Arial, sans-serif"><xsl:value-of select="."/></fo:block>
-                            </xsl:for-each>
-                        </fo:table-cell></fo:table-body></fo:table>
-                    </fo:block>
-                </xsl:if>
-                <xsl:if test="siidte:DscRcgGlobal | DscRcgGlobal">
-                    <xsl:call-template name="DscRcgGlobalTable"/>
-                </xsl:if>
+<xsl:if test="$cedible = 'true'">
+    <fo:block font-size="8pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
+              fox:border-radius="4pt" border-width="0.8pt"  border-style="solid" margin-right="2pt" margin-top="3mm">
+        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
+        <fo:table table-layout="fixed" width="100%">
+            <fo:table-column column-width="100%"/>
+            <fo:table-header background-color="#eaeaea"><fo:table-row>
+                <fo:table-cell number-columns-spanned="1"><fo:block font-weight="bold" text-align="center" margin="2pt">ACUSE DE RECIBO</fo:block></fo:table-cell>
+            </fo:table-row></fo:table-header>
+            <fo:table-body>
+                <fo:table-row>
+                    <fo:table-cell><fo:block font-weight="bold" margin="4pt">Nombre:</fo:block></fo:table-cell>
+                </fo:table-row>
+                <fo:table-row>
+                    <fo:table-cell><fo:block font-weight="bold" margin="4pt">RUT:</fo:block></fo:table-cell>
+                </fo:table-row>
+                <fo:table-row>
+                    <fo:table-cell><fo:block font-weight="bold" margin="4pt">Fecha:</fo:block></fo:table-cell>
+                </fo:table-row>
+                <fo:table-row>
+                    <fo:table-cell><fo:block font-weight="bold" margin="4pt">Firma:</fo:block></fo:table-cell>
+                </fo:table-row>
+                <fo:table-row>
+                    <fo:table-cell><fo:block font-weight="bold" margin="4pt" margin-bottom="2pt">Recinto:</fo:block></fo:table-cell></fo:table-row>
+                <fo:table-row>
+                    <fo:table-cell number-columns-spanned="1"><fo:block font-size="7pt" margin="4pt">El acuse de recibo que se declara en este acto, de acuerdo a lo dispuesto en la letra b) del Art. 4° y la letra c) del Art. 5° de la Ley 19.983, acredita que la entrega de mercadería(s) o servicio(s) prestado(s) ha(n) sido recibido(s).</fo:block></fo:table-cell></fo:table-row>
+            </fo:table-body>
+        </fo:table>
+    </fo:block>
+    <fo:block text-align="right" font-size="9.01pt"><xsl:choose><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=52) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=52)">CEDIBLE CON SU FACTURA&#160;&#160;</xsl:when><xsl:otherwise>CEDIBLE&#160;&#160;</xsl:otherwise></xsl:choose></fo:block>
+</xsl:if>
 
-                <fo:table table-layout="fixed">
-                    <fo:table-column/>
-                    <fo:table-column column-width="4.6cm"/>
-                    <fo:table-body>
-                        <fo:table-row>
-                            <fo:table-cell><fo:block/></fo:table-cell>
-                            <fo:table-cell>
-                                <fo:block font-size="8pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                                          fox:border-radius="4pt" border-width="0.8pt"  border-style="solid">
-                                    <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
-                                    <fo:table table-layout="fixed" margin-right="1mm" margin-left="1mm">
-                                        <fo:table-column column-width="2.0cm"/>
-                                        <fo:table-column column-width="2.4cm"/>
-                                        <fo:table-body>
-                                            <fo:table-row>
-                                                <fo:table-cell><fo:block font-weight="bold" margin="2pt">Monto Neto</fo:block></fo:table-cell>
-                                                <fo:table-cell><fo:block text-align="right" margin="2pt"><xsl:choose>
-                                                    <xsl:when test="siidte:Encabezado/siidte:Totales/siidte:MntNeto | Encabezado/Totales/MntNeto">$ <xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:MntNeto | Encabezado/Totales/MntNeto, '###.###','european')"/></xsl:when>
-                                                    <xsl:otherwise>$ 0</xsl:otherwise>
-                                                </xsl:choose></fo:block></fo:table-cell>
-                                            </fo:table-row>
-                                            <xsl:if test="siidte:Encabezado/siidte:Totales/siidte:MntExe | Encabezado/Totales/MntExe">
-                                                <fo:table-row>
-                                                    <fo:table-cell><fo:block font-weight="bold" margin="2pt">Monto Exento</fo:block></fo:table-cell>
-                                                    <fo:table-cell><fo:block text-align="right" margin="2pt"><xsl:choose>
-                                                        <xsl:when test="siidte:Encabezado/siidte:Totales/siidte:MntExe | Encabezado/Totales/MntExe">$ <xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:MntExe | Encabezado/Totales/MntExe, '###.###','european')"/></xsl:when>
-                                                        <xsl:otherwise>$ 0</xsl:otherwise>
-                                                    </xsl:choose></fo:block></fo:table-cell>
-                                                </fo:table-row>
-                                            </xsl:if>
-                                            <fo:table-row>
-                                                <fo:table-cell><fo:block font-weight="bold" margin="2pt">IVA <xsl:choose><xsl:when test="siidte:Encabezado/siidte:Totales/siidte:TasaIVA | Encabezado/Totales/TasaIVA"><xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:TasaIVA | Encabezado/Totales/TasaIVA, '###.###,##', 'european')"/>%</xsl:when></xsl:choose></fo:block></fo:table-cell>
-                                                <fo:table-cell><fo:block text-align="right" margin="2pt"><xsl:choose>
-                                                    <xsl:when test="siidte:Encabezado/siidte:Totales/siidte:IVA | Encabezado/Totales/IVA">$ <xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:IVA | Encabezado/Totales/IVA, '###.###','european')"/></xsl:when>
-                                                    <xsl:otherwise>$ 0</xsl:otherwise>
-                                                </xsl:choose></fo:block></fo:table-cell>
-                                            </fo:table-row>
-                                            <fo:table-row>
-                                                <fo:table-cell><fo:block font-weight="bold" margin="2pt" font-size="9.01pt">Total</fo:block></fo:table-cell>
-                                                <fo:table-cell><fo:block text-align="right" margin="2pt" font-size="9.01pt"><xsl:choose>
-                                                    <xsl:when test="siidte:Encabezado/siidte:Totales/siidte:MntTotal | Encabezado/Totales/MntTotal">$ <xsl:value-of select="format-number(siidte:Encabezado/siidte:Totales/siidte:MntTotal | Encabezado/Totales/MntTotal, '###.###','european')"/></xsl:when>
-                                                    <xsl:otherwise>$ 0</xsl:otherwise>
-                                                </xsl:choose></fo:block></fo:table-cell>
-                                            </fo:table-row>
-                                        </fo:table-body>
-                                    </fo:table>
-                                </fo:block>
-                            </fo:table-cell>
-                        </fo:table-row>
-                    </fo:table-body>
-                </fo:table>
+<xsl:apply-templates select="siidte:TED | TED"><xsl:with-param name="width" select="$internalWidthMm"/></xsl:apply-templates>
 
-                <xsl:if test="$cedible = 'true'">
-                    <fo:block font-size="8pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                              fox:border-radius="4pt" border-width="0.8pt"  border-style="solid" margin-right="2pt" margin-top="3mm">
-                        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
-                        <fo:table table-layout="fixed" width="100%">
-                            <fo:table-column column-width="100%"/>
-                            <fo:table-header background-color="#eaeaea"><fo:table-row>
-                                <fo:table-cell number-columns-spanned="1"><fo:block font-weight="bold" text-align="center" margin="2pt">ACUSE DE RECIBO</fo:block></fo:table-cell>
-                            </fo:table-row></fo:table-header>
-                            <fo:table-body>
-                                <fo:table-row>
-                                    <fo:table-cell><fo:block font-weight="bold" margin="4pt">Nombre:</fo:block></fo:table-cell>
-                                </fo:table-row>
-                                <fo:table-row>
-                                    <fo:table-cell><fo:block font-weight="bold" margin="4pt">RUT:</fo:block></fo:table-cell>
-                                </fo:table-row>
-                                <fo:table-row>
-                                    <fo:table-cell><fo:block font-weight="bold" margin="4pt">Fecha:</fo:block></fo:table-cell>
-                                </fo:table-row>
-                                <fo:table-row>
-                                    <fo:table-cell><fo:block font-weight="bold" margin="4pt">Firma:</fo:block></fo:table-cell>
-                                </fo:table-row>
-                                <fo:table-row>
-                                    <fo:table-cell><fo:block font-weight="bold" margin="4pt" margin-bottom="2pt">Recinto:</fo:block></fo:table-cell></fo:table-row>
-                                <fo:table-row>
-                                    <fo:table-cell number-columns-spanned="1"><fo:block font-size="7pt" margin="4pt">El acuse de recibo que se declara en este acto, de acuerdo a lo dispuesto en la letra b) del Art. 4° y la letra c) del Art. 5° de la Ley 19.983, acredita que la entrega de mercadería(s) o servicio(s) prestado(s) ha(n) sido recibido(s).</fo:block></fo:table-cell></fo:table-row>
-                            </fo:table-body>
-                        </fo:table>
-                    </fo:block>
-                    <fo:block text-align="right" font-size="9.01pt"><xsl:choose><xsl:when test="(/siidte:DTE/siidte:Documento/siidte:Encabezado/siidte:IdDoc/siidte:TipoDTE=52) or (/DTE/Documento/Encabezado/IdDoc/TipoDTE=52)">CEDIBLE CON SU FACTURA&#160;&#160;</xsl:when><xsl:otherwise>CEDIBLE&#160;&#160;</xsl:otherwise></xsl:choose></fo:block>
-                </xsl:if>
+<xsl:if test="$cuentaBancariaText">
+    <fo:block margin-top="3mm" font-size="8pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
+              fox:border-radius="4pt" border-width="0.8pt" border-style="solid">
+        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
+        <fo:table table-layout="fixed">
+            <fo:table-column column-width="100%"/>
+            <fo:table-header background-color="#eaeaea"><fo:table-row>
+                <fo:table-cell height="5mm"><fo:block font-size="9pt" font-weight="bold" text-align="center">Formas de pago:</fo:block></fo:table-cell>
+            </fo:table-row></fo:table-header>
+            <fo:table-body>
+                <fo:table-row>
+                    <fo:table-cell>
+                        <fo:block font-weight="bold" margin-left="4pt" margin-top="4pt">Transferencia bancaria</fo:block>
+                        <fo:block margin-left="4pt" hyphenate="false"><xsl:value-of select="$cuentaBancariaText"/>
+                            <xsl:if test="$cuentaBancariaMail">
+                                <xsl:value-of select="' '"/>
+                                <fo:basic-link><xsl:attribute name="external-destination">mailto:<xsl:value-of select="$cuentaBancariaMail"/></xsl:attribute><xsl:value-of select="$cuentaBancariaMail"/></fo:basic-link>
+                            </xsl:if>
+                        </fo:block>
+                    </fo:table-cell>
+                </fo:table-row>
+            </fo:table-body>
+        </fo:table>
+    </fo:block>
+</xsl:if>
 
-                <xsl:apply-templates select="siidte:TED | TED"><xsl:with-param name="width" select="$internalWidthMm"/></xsl:apply-templates>
+<fo:block font-size="8pt" text-align="center" margin-top="3mm">
+    <fo:basic-link external-destination="https://moit.cl/">Generado por Moit ERP www.moit.cl</fo:basic-link>
+</fo:block>
 
-                <xsl:if test="$cuentaBancariaText">
-                    <fo:block margin-top="3mm" font-size="8pt" font-family="Helvetica, Arial, sans-serif" space-after="2pt" language="es" hyphenate="true" color="black" text-align="left"
-                              fox:border-radius="4pt" border-width="0.8pt" border-style="solid">
-                        <xsl:attribute name="border-color"><xsl:value-of select="$tableBorderColor"/></xsl:attribute>
-                        <fo:table table-layout="fixed">
-                            <fo:table-column column-width="100%"/>
-                            <fo:table-header background-color="#eaeaea"><fo:table-row>
-                                <fo:table-cell height="5mm"><fo:block font-size="9pt" font-weight="bold" text-align="center">Formas de pago:</fo:block></fo:table-cell>
-                            </fo:table-row></fo:table-header>
-                            <fo:table-body>
-                                <fo:table-row>
-                                    <fo:table-cell>
-                                        <fo:block font-weight="bold" margin-left="4pt" margin-top="4pt">Transferencia bancaria</fo:block>
-                                        <fo:block margin-left="4pt" hyphenate="false"><xsl:value-of select="$cuentaBancariaText"/>
-                                            <xsl:if test="$cuentaBancariaMail">
-                                                <xsl:value-of select="' '"/>
-                                                <fo:basic-link><xsl:attribute name="external-destination">mailto:<xsl:value-of select="$cuentaBancariaMail"/></xsl:attribute><xsl:value-of select="$cuentaBancariaMail"/></fo:basic-link>
-                                            </xsl:if>
-                                        </fo:block>
-                                    </fo:table-cell>
-                                </fo:table-row>
-                            </fo:table-body>
-                        </fo:table>
-                    </fo:block>
-                </xsl:if>
+</fo:block-container>
 
-                <fo:block font-size="8pt" text-align="center" margin-top="3mm">
-                    <fo:basic-link external-destination="https://moit.cl/">Generado por Moit ERP www.moit.cl</fo:basic-link>
-                </fo:block>
+</fo:block>
+</xsl:template>
 
-            </fo:block-container>
-
-        </fo:block>
-    </xsl:template>
-
-    <!-- Datos del emisor -->
+<!-- Datos del emisor -->
     <xsl:template match="siidte:Emisor | Emisor">
         <xsl:param name="folio"/>
         <xsl:param name="tipo"/>
