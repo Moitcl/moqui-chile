@@ -711,6 +711,69 @@ class MoquiDTEUtils {
         throw new RuntimeException("Error al parsear: ${errorMessage}");
     }
 
+    public static byte[] canonicalizeXml(org.w3c.dom.Node node) {
+        try {
+            // Create a normalized XML representation for comparison
+            // This approach normalizes the XML structure without requiring external libraries
+            
+            // First, normalize the document structure
+            if (node instanceof Document) {
+                ((Document) node).normalizeDocument()
+            } else if (node.getOwnerDocument() != null) {
+                node.getOwnerDocument().normalizeDocument()
+            }
+            
+            // Use transformer to serialize with consistent settings
+            TransformerFactory tf = TransformerFactory.newInstance()
+            Transformer transformer = tf.newTransformer()
+            
+            // Set consistent output properties for comparison
+            transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes")
+            transformer.setOutputProperty(OutputKeys.INDENT, "no")
+            transformer.setOutputProperty(OutputKeys.METHOD, "xml")
+            transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8")
+            
+            // Transform to string first to normalize text content
+            StringWriter sw = new StringWriter()
+            transformer.transform(new DOMSource(node), new StreamResult(sw))
+            String xmlString = sw.toString()
+            
+            // Parse back and serialize again to ensure consistent structure
+            DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance()
+            dbf.setNamespaceAware(true)
+            dbf.setIgnoringElementContentWhitespace(true)
+            dbf.setIgnoringComments(true)
+            DocumentBuilder db = dbf.newDocumentBuilder()
+            Document doc = db.parse(new ByteArrayInputStream(xmlString.getBytes("UTF-8")))
+            doc.normalizeDocument()
+            
+            // Final serialization
+            ByteArrayOutputStream baos = new ByteArrayOutputStream()
+            transformer.transform(new DOMSource(doc), new StreamResult(baos))
+            
+            return baos.toByteArray()
+            
+        } catch (Exception e) {
+            logger.error("Error canonicalizing XML", e)
+            throw new RuntimeException("Error canonicalizing XML: " + e.getMessage(), e)
+        }
+    }
+
+    public static String canonicalizeXmlToString(org.w3c.dom.Node node) {
+        return new String(canonicalizeXml(node), java.nio.charset.StandardCharsets.UTF_8)
+    }
+
+    public static boolean compareCanonicalXml(org.w3c.dom.Node node1, org.w3c.dom.Node node2) {
+        try {
+            byte[] canonical1 = canonicalizeXml(node1)
+            byte[] canonical2 = canonicalizeXml(node2)
+            return java.util.Arrays.equals(canonical1, canonical2)
+        } catch (Exception e) {
+            logger.error("Error comparing canonical XML", e)
+            return false
+        }
+    }
+
     public static groovy.util.Node dom2GroovyNode(org.w3c.dom.Node node) {
         String xml = getStringXML(node, true)
         return dom2GroovyNode(xml)

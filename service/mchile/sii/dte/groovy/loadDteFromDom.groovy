@@ -1,4 +1,6 @@
 import org.moqui.context.ExecutionContext
+import cl.moit.dte.MoquiDTEUtils
+import org.w3c.dom.Element
 
 ExecutionContext ec = context.ec
 
@@ -192,8 +194,13 @@ if (existingDteList) {
                 return
         } else {
             xmlInDb = ec.resource.getLocationReference(contentList.first().contentLocation).openStream().readAllBytes()
-            if (xmlInDb == dteMap.dteBytes)
-                isDuplicated = true
+            dbDoc = MoquiDTEUtils.parseDocument(xmlInDb)
+            Element dbDocElem = dbDoc.getDocumentElement()
+            canonicalFromDb = MoquiDTEUtils.canonicalizeXmlToString(dbDocElem)
+            canonicalFromEnvio = MoquiDTEUtils.canonicalizeXmlToString(domNode)
+            isDuplicated = canonicalFromDb.replaceAll(">\\s+<", "><").equals(canonicalFromEnvio.replaceAll(">\\s+<", "><"))
+            ec.logger.info("Comparando DTE en BD con DTE de envío usando canonicalización, son equivalentes: ${isDuplicated}")
+
             if (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-ReceiverAccept']) {
                 if (isDuplicated) {
                     ec.logger.warn("Contenido existe, DTE está aprobado, enviando aceptación")
@@ -209,9 +216,14 @@ if (existingDteList) {
                     recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
                     if (recepDteGlosa.length()  > 256) recepDteGlosa = recepDteGlosa.substring(0, 256)
                     return
+                } else {
+                    estadoRecepDte = 2
+                    return
                 }
             } else if (!isDuplicated) {
-                ec.message.addError("No se puede procesar XML diferente al existente en BD si estado no es aceptado")
+                errorMessages.add("Ya existe registrada DTE tipo ${dteMap.tipoDte} para emisor ${rutEmisor} y folio ${dteMap.fiscalTaxDocumentNumber}, diferente al recibido")
+                estadoRecepDte = 2
+                recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
                 return
             }
             if (dte.receiverPartyId == null && receiverPartyId != null) {
