@@ -87,7 +87,7 @@ receptor = setDte.DTE[0].Documento.Encabezado.Receptor
 if (rutReceptorCaratula != receptor.RUTRecep.text()) {
     if (rutReceptorCaratula in ['60803000-K', '60803000-k']) {
         ec.logger.warn("Rut receptor de carátula es del SII en lugar del receptor")
-        receiverRutResult = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:envio.rutReceptor, createUnknown:false, failOnDuplicate:false]).call()
+        receiverRutResult = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRut").parameters([idValue:receptor.RUTRecep.text(), createUnknown:false, failOnDuplicate:false]).call()
         receiverPartyId = receiverRutResult.partyId
     } else {
         ec.logger.error("Rut receptor de carátula (${rutReceptorCaratula} y DTE (${receptor.RUTRecep.text()}) no coinciden")
@@ -166,8 +166,9 @@ if (allDuplicated) {
     newEnvioStatusId = 'Ftde-DuplicateNotProcessed'
 }
 
-envioRespuestaId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters([envioTypeEnumId:'Ftde-RespuestaDte', statusId:'Ftde-Created', rutEmisor:rutReceptorCaratula, rutReceptor:rutEmisorCaratula,
-                                                                                    issuerPartyId:receiverPartyId, receiverPartyId:issuerPartyId, fechaEnvio:ec.user.nowTimestamp, internalId:idRecepcionDte]).call().envioId
+envioRespuestaId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters(
+        [envioTypeEnumId:'Ftde-RespuestaDte', statusId:'Ftde-Created', rutEmisor:rutReceptorCaratula, rutReceptor:rutEmisorCaratula, issuerPartyId:receiverPartyId,
+         receiverPartyId:issuerPartyId, fechaEnvio:ec.user.nowTimestamp, internalId:idRecepcionDte, responseToEnvioId:dteEnvioEv.envioId]).call().envioId
 withResponse = envioRespuestaId != null
 
 estadoGlosaMap = [0:'Envio Recibido Conforme', 1:'Envio Rechazado - Error de Schema', 2:'Envio Rechazado - Error de Firma', 3:'Envio Rechazado - RUT Receptor No Corresponde', 90:'Envio Rechazado - Archivo Repetido',

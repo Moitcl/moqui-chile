@@ -177,7 +177,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <if condition="envioDteList.size() == 0">
                         <log level="error" message="No se encuentra envío al cual hace referencia RespuestaDte ${envioId}: ${envioDteId} (nmbEnvio: ${nmbEnvio})"/>
                         <set field="processed" from="true"/>
-                        <set field="withError" from="true"/>
+                        <set field="withError" from="false"/>
                         <return/>
                     </if>
                     <set field="envioDteEnvioId" from="envioDteList.first.envioId"/>
@@ -414,7 +414,7 @@ along with this software (see the LICENSE.md file). If not, see
                         <entity-update value-field="dte"/>
                         <set field="attributes.fechaAcuseRecibo" from="fechaAcuseRecibo"/>
                         <entity-update value-field="attributes"/>
-                        <service-call name="create#mchile.dte.DteEnvioFiscalTaxDocument" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, envioId:envioId]"/>
+                        <service-call name="store#mchile.dte.DteEnvioFiscalTaxDocument" in-map="[fiscalTaxDocumentId:dte.fiscalTaxDocumentId, envioId:envioId]"/>
                     </then><else>
                         <log message="Not processing, attributes.amount (${attributes.amount}) != montoTotal (${montoTotal})"/>
                         <set field="withError" from="true"/>
@@ -451,6 +451,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="totalItems" from="totalItems + ((subtotal.INFORMADO.text() ?:0) as Integer)"/>
             </iterate>
             <set field="processedItems" from="0"/>
+            <set field="failedItems" from="0"/>
             <set field="processedFiscalTaxDocumentIds" from="[]"/>
             <if condition="estadoResultado == 'EPR - Envio Procesado'"><then>
                 <iterate list="dteList" entry="dte">
@@ -479,9 +480,9 @@ along with this software (see the LICENSE.md file). If not, see
                         </then></if>
                         <entity-update value-field="ftd"/>
                         <service-call name="store#mchile.dte.DteEnvioFiscalTaxDocument" in-map="[fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, envioId:envioId]"/>
+                        <script>processedFiscalTaxDocumentIds.add(ftd.fiscalTaxDocumentId)</script>
                     </if>
                     <set field="processedItems" from="processedItems+1"/>
-                    <script>processedFiscalTaxDocumentIds.add(ftd.fiscalTaxDocumentId)</script>
                 </iterate>
                 <!-- When all are accepted, no detail by document is sent, have to mark all others as accepted -->
                 <entity-find entity-name="mchile.dte.DteEnvioAndFiscalTaxDocument" list="otherFtdList">
@@ -505,13 +506,17 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="processedItems" from="processedItems+1"/>
                 </iterate>
             </then><else>
-                <message error="true">Unknown estado for resultado envioId ${envioId}: ${estadoResultado}</message>
+                <set field="failedItems" from="failedItems + 1"/>
+                <message error="true">Unknown estado for resultado in ResultadoEnvio, envioId ${envioId}: ${estadoResultado}</message>
             </else></if>
             <entity-update value-field="envio"/>
             <if condition="totalItems == processedItems"><then>
                 <set field="processed" from="true"/>
-            </then><else>
-                <message error="true">Itemes procesados: ${processedItems}, indicados en resultado: ${totalItems}</message>
+            </then><else-if condition="totalItems &gt;= processedItems &amp;&amp; failedItems == 0">
+                <message type="warning">Procesados menos ítemes (${processedItems}) de los indicados en resultado (${totalItems})</message>
+                <set field="processed" from="true"/>
+            </else-if><else>
+                <message error="true">Itemes procesados: ${processedItems}, fallidos: ${failedItems}, indicados en resultado: ${totalItems}</message>
             </else></if>
         </actions>
     </service>
@@ -548,7 +553,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <set field="envio.receiverPartyId" from="rcof.issuerPartyId"/>
                 <set field="processed" from="true"/>
             </then><else>
-                <message error="true">Unknown estado for resultado envioId ${envioId}: ${estadoResultado}</message>
+                <message error="true">Unknown estado for resultado in ResultadoConsumoFolios, envioId ${envioId}: ${estadoResultado}</message>
             </else></if>
             <entity-update value-field="envio"/>
         </actions>
