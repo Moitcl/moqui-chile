@@ -72,8 +72,11 @@ if (rutEmisorCaratula != dteEnvioEv.rutEmisor)
 if (rutReceptorCaratula != dteEnvioEv.rutReceptor)
     ec.message.addError("Mismatch rutReceptor, en BD DteEnvio: ${dteEnvioEv.rutReceptor}, en Carátula de Envío: ${rutReceptorCaratula}")
 
-if (ec.message.hasError())
+processingMessages = []
+if (ec.message.hasError()) {
+    ec.message.errors.each { processingMessages.add(it) }
     return
+}
 
 partyIdProcessingDetailMap = ec.service.sync().name("mchile.sii.dte.DteEnvioProcessingServices.get#PartyIdProcessingDetailForEnvio").parameters([envioId:envioId]).call()
 issuerPartyId = partyIdProcessingDetailMap.issuerPartyId
@@ -92,13 +95,19 @@ if (rutReceptorCaratula != receptor.RUTRecep.text()) {
     }
 }
 if (!receiverPartyId) {
-    ec.logger.warn("No receiverPartyId identified, finishing")
+    resultMessage = "No receiverPartyId identified, finishing"
+    processed = true
+    newEnvioStatusId = 'Ftde-ReceiverUnknown'
+    processingMessages.add(resultMessage)
+    ec.logger.warn(resultMessage)
     return
 }
 
 if (receiverPartyId == issuerPartyId && receiverPartyId != null) {
     processed = true
-    ec.logger.warn("No issuerPartyId and receiverPartyId are the same, finishing")
+    resultMessage = "No issuerPartyId and receiverPartyId are the same, finishing"
+    processingMessages.add(resultMessage)
+    ec.logger.warn(resultMessage)
     return
 }
 
@@ -107,7 +116,8 @@ issuerTaxName = issuer?.taxOrganizationName
 if (issuerTaxName == null || issuerTaxName.size() == 0)
     issuerTaxName = ec.resource.expand("PartyNameOnlyTemplate", null, issuer)
 
-ec.logger.warn("Emisor según carátula: ${rutEmisorCaratula}, issuerTaxName ${issuerTaxName}")
+processingMessage = "Emisor según carátula: ${rutEmisorCaratula}, issuerTaxName ${issuerTaxName}"
+ec.logger.warn(processingMessage)
 
 digestValue = envioDte.Signature.SignedInfo.Reference.DigestValue.text()
 
@@ -131,12 +141,16 @@ dteNodeList.each { org.w3c.dom.Node domNode ->
     recepcion = ec.service.sync().name("mchile.sii.dte.DteLoadServices.load#DteFromDom").parameters(context+[domNode:domNode]).call()
     if (issuerPartyId == null)
         issuerPartyId = recepcion.issuerPartyId
-    else if (issuerPartyId != recepcion.issuerPartyId)
-        ec.message.addError("No se soporta EnvíoDTE con varios emisores: ${issuerPartyId}, ${recepcion.issuerPartyId}")
+    else if (issuerPartyId != recepcion.issuerPartyId) {
+        processingMessage = "No se soporta EnvíoDTE con varios emisores: ${issuerPartyId}, ${recepcion.issuerPartyId}"
+        ec.message.addError(processingMessage)
+    }
     if (receiverPartyId == null)
         receiverPartyId = recepcion.receiverPartyId
-    else if (receiverPartyId != recepcion.receiverPartyId)
-        ec.message.addError("No se soporta EnvíoDTE con varios receptores")
+    else if (receiverPartyId != recepcion.receiverPartyId) {
+        processingMessage = "No se soporta EnvíoDTE con varios receptores"
+        ec.message.addError(processingMessage)
+    }
 
     if (!recepcion.isDuplicated)
         allDuplicated = false
@@ -210,17 +224,20 @@ byte[] salida = MoquiDTEUtils.sign(doc2, "#" + idAcuseRecibo, pkey, certificate,
 try {
     MoquiDTEUtils.validateDocumentSii(ec, salida, schemaLocation)
 } catch (Exception e) {
-    ec.message.addError("Failed validation of Envio: " + e.getMessage())
+    processingMessage = "Failed validation of Envio: " + e.getMessage()
+    ec.message.addError(processingMessage)
 }
 
 doc2 = MoquiDTEUtils.parseDocument(salida)
 
 if (MoquiDTEUtils.verifySignature(doc2, "/sii:RespuestaDTE/sii:Resultado", "./sii:Caratula/sii:TmstFirmaResp/text()")) {
     xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDte/${rutReceptorCaratula}/${idAcuseRecibo}.xml"
-    ec.logger.warn("Envio generado OK")
+    processingMessage = "Envio generado OK"
+    ec.logger.warn(processingMessage)
 } else {
     xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDte/${rutOrganizacion}/${idAcuseRecibo}-mala.xml"
-    ec.logger.warn("Error al generar envio")
+    processingMessage = "Error al generar envio"
+    ec.logger.warn(processingMessage)
 }
 xmlContentRr = ec.resource.getLocationReference(xmlContentLocation)
 xmlContentRr.putBytes(salida)

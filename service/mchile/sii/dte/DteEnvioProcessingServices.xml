@@ -21,6 +21,9 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="envioIdList" type="List"/>
             <parameter name="ignoreLastAttempt" type="Boolean" default="false"/>
         </in-parameters>
+        <out-parameters>
+            <parameter name="processResultsByType" type="Map"/>
+        </out-parameters>
         <actions>
             <if condition="context.DteCommServices_processingPendingEnvioDte == 'yes'">
                 <!-- was already triggered -->
@@ -50,10 +53,15 @@ along with this software (see the LICENSE.md file). If not, see
                 <econdition field-name="envioId" operator="in" from="envioIdList" ignore-if-empty="true"/>
             </entity-find>
             <set field="responseCount" from="0"/>
+            <set field="processResultsByType" from="[:]"/>
             <iterate list="envioList" entry="envio">
                 <log message="Processing envio ${envio.envioId}"/>
                 <entity-find-one entity-name="moqui.basic.Enumeration" value-field="envEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
-                <service-call name="mchile.sii.dte.DteEnvioProcessingServices.process#${envEv.enumCode}" in-map="[envioId:envio.envioId]" out-map="processOut" ignore-error="true" transaction="force-new" out-map-add-to-existing="false"/>
+                <if condition="processResultsByType[envio.envioTypeEnumId] == null"><set field="processResultsByType[envio.envioTypeEnumId]" from="[]"/></if>
+                <service-call name="mchile.sii.dte.DteEnvioProcessingServices.process#${envEv.enumCode}" in-map="[envioId:envio.envioId]" out-map="processOut"
+                              ignore-error="true" transaction="force-new" out-map-add-to-existing="false"/>
+                <set field="processOut.envioId" from="envio.envioId"/>
+                <script>processResultsByType[envio.envioTypeEnumId].add(processOut)</script>
                 <if condition="processOut.withResponse"><set field="responseCount" from="responseCount+1"/></if>
                 <set field="newAttemptCount" from="(envio.attemptCount?:0) + 1"/>
                 <if condition="processOut.processed"><then>
@@ -98,6 +106,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="rejectionCount" type="Integer"/>
             <parameter name="discrepancyCount" type="Integer"/>
             <parameter name="newEnvioStatusId"/>
+            <parameter name="processingMessages" type="List"/>
         </out-parameters>
     </service>
 
