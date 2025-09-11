@@ -290,16 +290,39 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="dteIsProductionByPartyId" from="[:]"/>
             <set field="boletaIsProductionByPartyId" from="[:]"/>
             <set field="bheIsProductionByPartyId" from="[:]"/>
-            <entity-find entity-name="mantle.party.PartyRole" list="internalOrgList">
-                <econdition field-name="roleTypeId" value="OrgInternal"/>
+            <entity-find entity-name="mchile.dte.PartyDteParams" list="dteParamList">
+                <econdition field-name="partyId" operator="in" from="partyIdListToCheck" ignore-if-empty="true"/>
+                <econditions combine="or">
+                    <econditions>
+                        <econdition field-name="certData" operator="is-not-null"/>
+                        <econdition field-name="passCert" operator="is-not-null"/>
+                    </econditions>
+                    <econdition field-name="siiPass" operator="is-not-null"/>
+                    <econdition field-name="useCertificateFromPartyId" operator="is-not-null"/>
+                </econditions>
             </entity-find>
-            <iterate list="internalOrgList" entry="internalOrg">
-                <service-call name="mantle.party.PartyServices.get#PartySettingValue" in-map="[partyId:internalOrg.partyId, partySettingTypeId:'moit.dte.DteIsProduction']" out-map="settingMap" out-map-add-to-existing="false"/>
-                <set field="dteIsProductionByPartyId[internalOrg.partyId]" from="systemIsProduction &amp;&amp; (settingMap.settingValue == 'true')"/>
-                <service-call name="mantle.party.PartyServices.get#PartySettingValue" in-map="[partyId:internalOrg.partyId, partySettingTypeId:'moit.dte.BoletaIsProduction']" out-map="settingMap" out-map-add-to-existing="false"/>
-                <set field="boletaIsProductionByPartyId[internalOrg.partyId]" from="systemIsProduction &amp;&amp; (settingMap.settingValue == 'true')"/>
-                <service-call name="mantle.party.PartyServices.get#PartySettingValue" in-map="[partyId:internalOrg.partyId, partySettingTypeId:'moit.dte.BheIsProduction']" out-map="settingMap" out-map-add-to-existing="false"/>
-                <set field="bheIsProductionByPartyId[internalOrg.partyId]" from="systemIsProduction &amp;&amp; (settingMap.settingValue == 'true')"/>
+            <set field="dteConfigPartyIdList" from="dteParamList.partyId"/>
+            <entity-find-one entity-name="mantle.party.PartySettingType" value-field="defaultDteIsProductionSetting">
+                <field-map field-name="partySettingTypeId" value="moit.dte.DteIsProduction"/>
+            </entity-find-one>
+            <entity-find-one entity-name="mantle.party.PartySettingType" value-field="defaultDteIsProductionSetting">
+                <field-map field-name="partySettingTypeId" value="moit.dte.BoletaIsProduction"/>
+            </entity-find-one>
+            <entity-find-one entity-name="mantle.party.PartySettingType" value-field="defaultDteIsProductionSetting">
+                <field-map field-name="partySettingTypeId" value="moit.dte.BheIsProduction"/>
+            </entity-find-one>
+            <entity-find entity-name="mantle.party.PartySetting" list="partySettingList">
+                <econdition field-name="partyId" operator="in" from="dteConfigPartyIdList"/>
+                <econdition field-name="partySettingTypeId" operator="in" value="moit.dte.DteIsProduction,moit.dte.BoletaIsProduction,moit.dte.BheIsProduction"/>
+            </entity-find>
+            <iterate list="dteConfigPartyIdList" entry="partyId">
+                <set field="partySettingMapList" from="partySettingList.findAll { it.partyId == partyId }"/>
+                <set field="dteIsProductionMap" from="partySettingMapList.find { it.partySettingTypeId == 'moit.dte.DteIsProduction'}"/>
+                <set field="dteIsProductionByPartyId[partyId]" from="systemIsProduction &amp;&amp; (dteIsProductionMap?.settingValue == 'true')"/>
+                <set field="boletaIsProductionMap" from="partySettingMapList.find { it.partySettingTypeId == 'moit.dte.BoletaIsProduction'}"/>
+                <set field="boletaIsProductionByPartyId[partyId]" from="systemIsProduction &amp;&amp; (boletaIsProductionMap?.settingValue == 'true')"/>
+                <set field="bheIsProductionMap" from="partySettingMapList.find { it.partySettingTypeId == 'moit.dte.BheIsProduction'}"/>
+                <set field="bheIsProductionByPartyId[partyId]" from="systemIsProduction &amp;&amp; (bheIsProductionMap?.settingValue == 'true')"/>
             </iterate>
         </actions>
     </service>
