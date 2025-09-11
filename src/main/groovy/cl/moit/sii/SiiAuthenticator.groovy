@@ -136,7 +136,7 @@ class SiiAuthenticator {
             }
             requestFactory = new ClientAuthRequestFactory(null, null, proxyHost, proxyPort)
             restClient.withRequestFactory(requestFactory)
-            restClient.uri("https://zeusr.sii.cl/cgi_AUT2000/CAutInicio.cgi").method("POST")
+            restClient.uri("https://herculesr.sii.cl/cgi_AUT2000/CAutInicio.cgi").method("POST")
             restClient.contentType("application/x-www-form-urlencoded")
             int pos = username.indexOf('-')
             if (pos < 0)
@@ -171,7 +171,7 @@ class SiiAuthenticator {
             if (rutRepresentado) {
                 // Cambiar a Representar
                 if (debug) logger.warn("Cambiando a representar")
-                restClient.uri('https://zeusr.sii.cl/cgi_AUT2000/admRPDOBuild.cgi')
+                restClient.uri('https://herculesr.sii.cl/cgi_AUT2000/admRPDOBuild.cgi')
                 try {
                     response = restClient.call()
                 } catch (Exception e) {
