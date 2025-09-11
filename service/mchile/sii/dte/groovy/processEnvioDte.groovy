@@ -166,83 +166,86 @@ if (allDuplicated) {
     newEnvioStatusId = 'Ftde-DuplicateNotProcessed'
 }
 
-envioRespuestaId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters(
-        [envioTypeEnumId:'Ftde-RespuestaDte', statusId:'Ftde-Created', rutEmisor:rutReceptorCaratula, rutReceptor:rutEmisorCaratula, issuerPartyId:receiverPartyId,
-         receiverPartyId:issuerPartyId, fechaEnvio:ec.user.nowTimestamp, internalId:idRecepcionDte, responseToEnvioId:dteEnvioEv.envioId]).call().envioId
-withResponse = envioRespuestaId != null
+if (sendResponse) {
+    envioRespuestaId = ec.service.sync().name("create#mchile.dte.DteEnvio").parameters(
+            [envioTypeEnumId: 'Ftde-RespuestaDte', statusId: 'Ftde-Created', rutEmisor: rutReceptorCaratula, rutReceptor: rutEmisorCaratula, issuerPartyId: receiverPartyId,
+             receiverPartyId: issuerPartyId, fechaEnvio: ec.user.nowTimestamp, internalId: idRecepcionDte, responseToEnvioId: dteEnvioEv.envioId]).call().envioId
+    withResponse = envioRespuestaId != null
 
-estadoGlosaMap = [0:'Envio Recibido Conforme', 1:'Envio Rechazado - Error de Schema', 2:'Envio Rechazado - Error de Firma', 3:'Envio Rechazado - RUT Receptor No Corresponde', 90:'Envio Rechazado - Archivo Repetido',
-                  91:'Envio Rechazado - Archivo Ilegible', 99:'Envio Rechazado - Otros']
-idAcuseRecibo = "RespuestaDte-" + envioRespuestaId
-StringWriter writer = new StringWriter()
-MarkupBuilder acuseRecibo = new MarkupBuilder(writer)
-String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
-String schemaLocation = 'http://www.sii.cl/SiiDte RespuestaEnvioDTE_v10.xsd'
-acuseRecibo.RespuestaDTE('xmlns': 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version:'1.0', 'xsi:schemaLocation': schemaLocation) {
-    Resultado(ID:idAcuseRecibo) {
-        Caratula(version:"1.0") {
-            RutResponde(rutReceptorCaratula)
-            RutRecibe(rutEmisorCaratula)
-            IdRespuesta(envioRespuestaId)
-            NroDetalles(processedItems)
-            //NmbContacto("")
-            //FonoContacto("")
-            //MailContacto("")
-            TmstFirmaResp(tmstFirmaResp)
-        }
-        RecepcionEnvio {
-            NmbEnvio(dteEnvioEv.fileName)
-            FchRecep(ec.l10n.format(dteEnvioEv.registerDate, "yyyy-MM-dd'T'HH:mm:ss"))
-            CodEnvio(envioRespuestaId)
-            EnvioDTEID(dteEnvioEv.internalId)
-            Digest(digestValue)
-            RutEmisor(rutEmisorCaratula)
-            RutReceptor(rutReceptorCaratula)
-            EstadoRecepEnv(estadoRecepEnv)
-            RecepEnvGlosa(estadoGlosaMap[estadoRecepEnv])
-            NroDTE(processedItems)
-            recepcionList.each { Map recepcion ->
-                RecepcionDTE {
-                    TipoDTE(recepcion.tipoDte)
-                    Folio(recepcion.folioDte)
-                    FchEmis(ec.l10n.format(recepcion.fechaEmision, 'yyyy-MM-dd'))
-                    RUTEmisor(recepcion.rutEmisor)
-                    RUTRecep(recepcion.rutReceptor)
-                    MntTotal(recepcion.montoTotal)
-                    EstadoRecepDTE(recepcion.estadoRecepDte)
-                    RecepDTEGlosa(recepcion.recepDteGlosa)
+    estadoGlosaMap = [0 : 'Envio Recibido Conforme', 1: 'Envio Rechazado - Error de Schema', 2: 'Envio Rechazado - Error de Firma', 3: 'Envio Rechazado - RUT Receptor No Corresponde', 90: 'Envio Rechazado - Archivo Repetido',
+                      91: 'Envio Rechazado - Archivo Ilegible', 99: 'Envio Rechazado - Otros']
+    idAcuseRecibo = "RespuestaDte-" + envioRespuestaId
+    StringWriter writer = new StringWriter()
+    MarkupBuilder acuseRecibo = new MarkupBuilder(writer)
+    String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
+    String schemaLocation = 'http://www.sii.cl/SiiDte RespuestaEnvioDTE_v10.xsd'
+    acuseRecibo.RespuestaDTE('xmlns': 'http://www.sii.cl/SiiDte', 'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance', version: '1.0', 'xsi:schemaLocation': schemaLocation) {
+        Resultado(ID: idAcuseRecibo) {
+            Caratula(version: "1.0") {
+                RutResponde(rutReceptorCaratula)
+                RutRecibe(rutEmisorCaratula)
+                IdRespuesta(envioRespuestaId)
+                NroDetalles(processedItems)
+                //NmbContacto("")
+                //FonoContacto("")
+                //MailContacto("")
+                TmstFirmaResp(tmstFirmaResp)
+            }
+            RecepcionEnvio {
+                NmbEnvio(dteEnvioEv.fileName)
+                FchRecep(ec.l10n.format(dteEnvioEv.registerDate, "yyyy-MM-dd'T'HH:mm:ss"))
+                CodEnvio(envioRespuestaId)
+                EnvioDTEID(dteEnvioEv.internalId)
+                Digest(digestValue)
+                RutEmisor(rutEmisorCaratula)
+                RutReceptor(rutReceptorCaratula)
+                EstadoRecepEnv(estadoRecepEnv)
+                RecepEnvGlosa(estadoGlosaMap[estadoRecepEnv])
+                NroDTE(processedItems)
+                recepcionList.each { Map recepcion ->
+                    RecepcionDTE {
+                        TipoDTE(recepcion.tipoDte)
+                        Folio(recepcion.folioDte)
+                        FchEmis(ec.l10n.format(recepcion.fechaEmision, 'yyyy-MM-dd'))
+                        RUTEmisor(recepcion.rutEmisor)
+                        RUTRecep(recepcion.rutReceptor)
+                        MntTotal(recepcion.montoTotal)
+                        EstadoRecepDTE(recepcion.estadoRecepDte)
+                        RecepDTEGlosa(recepcion.recepDteGlosa)
+                    }
                 }
             }
         }
     }
+
+    ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInternalServices.load#DteConfig").parameters([partyId: receiverPartyId]).call())
+    xml = writer.toString()
+    Document doc2 = MoquiDTEUtils.parseDocument(xml.getBytes())
+    byte[] salida = MoquiDTEUtils.sign(doc2, "#" + idAcuseRecibo, pkey, certificate, "#" + idAcuseRecibo, "Resultado")
+
+    try {
+        MoquiDTEUtils.validateDocumentSii(ec, salida, schemaLocation)
+    } catch (Exception e) {
+        processingMessage = "Failed validation of Envio: " + e.getMessage()
+        ec.message.addError(processingMessage)
+    }
+
+    doc2 = MoquiDTEUtils.parseDocument(salida)
+
+    if (MoquiDTEUtils.verifySignature(doc2, "/sii:RespuestaDTE/sii:Resultado", "./sii:Caratula/sii:TmstFirmaResp/text()")) {
+        xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDte/${rutReceptorCaratula}/${idAcuseRecibo}.xml"
+        processingMessage = "Envio generado OK"
+        ec.logger.warn(processingMessage)
+    } else {
+        xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDte/${rutOrganizacion}/${idAcuseRecibo}-mala.xml"
+        processingMessage = "Error al generar envio"
+        ec.logger.warn(processingMessage)
+    }
+    xmlContentRr = ec.resource.getLocationReference(xmlContentLocation)
+    xmlContentRr.putBytes(salida)
+    ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId: envioRespuestaId, documentLocation: xmlContentLocation, internalId: idAcuseRecibo, fileName: xmlContentRr.fileName]).call()
+
 }
-
-ec.context.putAll(ec.service.sync().name("mchile.sii.dte.DteInternalServices.load#DteConfig").parameters([partyId:receiverPartyId]).call())
-xml = writer.toString()
-Document doc2 = MoquiDTEUtils.parseDocument(xml.getBytes())
-byte[] salida = MoquiDTEUtils.sign(doc2, "#" + idAcuseRecibo, pkey, certificate, "#" + idAcuseRecibo,"Resultado")
-
-try {
-    MoquiDTEUtils.validateDocumentSii(ec, salida, schemaLocation)
-} catch (Exception e) {
-    processingMessage = "Failed validation of Envio: " + e.getMessage()
-    ec.message.addError(processingMessage)
-}
-
-doc2 = MoquiDTEUtils.parseDocument(salida)
-
-if (MoquiDTEUtils.verifySignature(doc2, "/sii:RespuestaDTE/sii:Resultado", "./sii:Caratula/sii:TmstFirmaResp/text()")) {
-    xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDte/${rutReceptorCaratula}/${idAcuseRecibo}.xml"
-    processingMessage = "Envio generado OK"
-    ec.logger.warn(processingMessage)
-} else {
-    xmlContentLocation = "dbresource://moit/erp/dte/RespuestaDte/${rutOrganizacion}/${idAcuseRecibo}-mala.xml"
-    processingMessage = "Error al generar envio"
-    ec.logger.warn(processingMessage)
-}
-xmlContentRr = ec.resource.getLocationReference(xmlContentLocation)
-xmlContentRr.putBytes(salida)
-ec.service.sync().name("update#mchile.dte.DteEnvio").parameters([envioId:envioRespuestaId, documentLocation:xmlContentLocation, internalId:idAcuseRecibo, fileName:xmlContentRr.fileName]).call()
 
 dteEnvioEv.receiverPartyId = receiverPartyId
 dteEnvioEv.issuerPartyId = issuerPartyId

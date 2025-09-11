@@ -405,7 +405,7 @@ dteRefList.each { groovy.util.Node referencia ->
         return
     }
     if (nroLinRef != nroRef)
-        errorMessages.add("Valor inesperado en referencia, campo NroLinRef, esperado ${nroRef}, recibido ${referencia.NroLinRef.text()}")
+        discrepancyMessages.add("Valor inesperado en referencia, campo NroLinRef, esperado ${nroRef}, recibido ${referencia.NroLinRef.text()}")
     tipoDocumento = referencia.TpoDocRef.text()
     if (tipoDocumento == null || tipoDocumento == '') {
         errorMessages.add("Referencia ${nroLinRef} no especifica campo TpoDocRef")
@@ -427,7 +427,7 @@ dteRefList.each { groovy.util.Node referencia ->
     rutOtro = referencia.RUTOtr.text()
     folio = referencia.FolioRef.text()
     referenciaList.add([referenciaTipoDteEnumId:referenciaTipoDteEnumId, folio:folio, refDate:refDate, codRefEnumId:codRefEnumId, razonReferencia:referencia.RazonRef?.text(),
-                        rutOtro:rutOtro, nroLinRef:nroLinRef, tipoDocumento:tipoDocumento])
+                        rutOtro:rutOtro, nroLinRef:nroRef, tipoDocumento:tipoDocumento])
 }
 
 return;

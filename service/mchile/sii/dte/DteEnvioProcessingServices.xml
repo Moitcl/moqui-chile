@@ -20,6 +20,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="envioId"/>
             <parameter name="envioIdList" type="List"/>
             <parameter name="ignoreLastAttempt" type="Boolean" default="false"/>
+            <parameter name="sendResponse" type="Boolean"/>
         </in-parameters>
         <out-parameters>
             <parameter name="processResultsByType" type="Map"/>
@@ -58,7 +59,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <log message="Processing envio ${envio.envioId}"/>
                 <entity-find-one entity-name="moqui.basic.Enumeration" value-field="envEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
                 <if condition="processResultsByType[envio.envioTypeEnumId] == null"><set field="processResultsByType[envio.envioTypeEnumId]" from="[]"/></if>
-                <service-call name="mchile.sii.dte.DteEnvioProcessingServices.process#${envEv.enumCode}" in-map="[envioId:envio.envioId]" out-map="processOut"
+                <service-call name="mchile.sii.dte.DteEnvioProcessingServices.process#${envEv.enumCode}" in-map="[envioId:envio.envioId, sendResponse:sendResponse]" out-map="processOut"
                               ignore-error="true" transaction="force-new" out-map-add-to-existing="false"/>
                 <set field="processOut.envioId" from="envio.envioId"/>
                 <script>processResultsByType[envio.envioTypeEnumId].add(processOut)</script>
@@ -89,6 +90,7 @@ along with this software (see the LICENSE.md file). If not, see
     <service verb="process" noun="EnvioInterface" type="interface">
         <in-parameters>
             <parameter name="envioId" required="true"/>
+            <parameter name="sendResponse" type="Boolean" default="true"/>
         </in-parameters>
         <out-parameters>
             <parameter name="totalItems" type="Integer"/>
@@ -484,27 +486,29 @@ along with this software (see the LICENSE.md file). If not, see
                     </if>
                     <set field="processedItems" from="processedItems+1"/>
                 </iterate>
-                <!-- When all are accepted, no detail by document is sent, have to mark all others as accepted -->
-                <entity-find entity-name="mchile.dte.DteEnvioAndFiscalTaxDocument" list="otherFtdList">
-                    <econdition field-name="envioTrackId" operator="is-not-null"/>
-                    <econdition field-name="envioTrackId" from="trackId"/>
-                    <econdition field-name="ftdTrackId" operator="is-not-null"/>
-                    <econdition field-name="ftdTrackId" from="trackId"/>
-                    <econdition field-name="fiscalTaxDocumentId" operator="not-in" from="processedFiscalTaxDocumentIds"/>
-                </entity-find>
-                <iterate list="otherFtdList" entry="ftd">
-                    <if condition="envio.receiverPartyId == null"><then>
-                        <set field="envio.receiverPartyId" from="ftd.ftdIssuerPartyId"/>
-                    </then><else-if condition="envio.receiverPartyId != ftd.ftdIssuerPartyId">
-                        <return error="true" message="ReceiverPartyId mismatch: previously ${envio.receiverPartyId}, for tipo DTE ${tipoDte}, folio ${folio}: ${ftd.ftdIssuerPartyId}"/>
-                    </else-if></if>
-                    <if condition="ftd.ftdStatusId in ['Ftd-SentAuthUnverified', 'Ftd-SentAuthAccepted']"><then>
-                        <message error="true">FiscalTaxDocument {ftd.fiscalTaxDocumentId} should be marked as Accepted but is currently in status ${ftd.ftdStatusId}</message>
-                    </then><else>
-                        <service-call name="update#mchile.dte.FiscalTaxDocument" in-map="[fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, sentAuthStatusId:'Ftd-SentAuthAccepted']"/>
-                    </else></if>
-                    <set field="processedItems" from="processedItems+1"/>
-                </iterate>
+                <if condition="itemSubtotalList.INFORMADO.text() == itemSubtotalList.ACEPTA.text()">
+                    <!-- When all are accepted, no detail by document is sent, have to mark all others as accepted -->
+                    <entity-find entity-name="mchile.dte.DteEnvioAndFiscalTaxDocument" list="otherFtdList">
+                        <econdition field-name="envioTrackId" operator="is-not-null"/>
+                        <econdition field-name="envioTrackId" from="trackId"/>
+                        <econdition field-name="ftdTrackId" operator="is-not-null"/>
+                        <econdition field-name="ftdTrackId" from="trackId"/>
+                        <econdition field-name="fiscalTaxDocumentId" operator="not-in" from="processedFiscalTaxDocumentIds"/>
+                    </entity-find>
+                    <iterate list="otherFtdList" entry="ftd">
+                        <if condition="envio.receiverPartyId == null"><then>
+                            <set field="envio.receiverPartyId" from="ftd.ftdIssuerPartyId"/>
+                        </then><else-if condition="envio.receiverPartyId != ftd.ftdIssuerPartyId">
+                            <return error="true" message="ReceiverPartyId mismatch: previously ${envio.receiverPartyId}, for tipo DTE ${tipoDte}, folio ${folio}: ${ftd.ftdIssuerPartyId}"/>
+                        </else-if></if>
+                        <if condition="ftd.ftdStatusId in ['Ftd-SentAuthUnverified', 'Ftd-SentAuthAccepted']"><then>
+                            <message error="true">FiscalTaxDocument {ftd.fiscalTaxDocumentId} should be marked as Accepted but is currently in status ${ftd.ftdStatusId}</message>
+                        </then><else>
+                            <service-call name="update#mchile.dte.FiscalTaxDocument" in-map="[fiscalTaxDocumentId:ftd.fiscalTaxDocumentId, sentAuthStatusId:'Ftd-SentAuthAccepted']"/>
+                        </else></if>
+                        <set field="processedItems" from="processedItems+1"/>
+                    </iterate>
+                </if>
             </then><else>
                 <set field="failedItems" from="failedItems + 1"/>
                 <message error="true">Unknown estado for resultado in ResultadoEnvio, envioId ${envioId}: ${estadoResultado}</message>

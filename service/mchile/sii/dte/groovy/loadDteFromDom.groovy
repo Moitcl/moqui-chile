@@ -224,6 +224,7 @@ if (existingDteList) {
                 errorMessages.add("Ya existe registrada DTE tipo ${dteMap.tipoDte} para emisor ${rutEmisor} y folio ${dteMap.fiscalTaxDocumentNumber}, diferente al recibido")
                 estadoRecepDte = 2
                 recepDteGlosa = 'RECHAZADO, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+                if (recepDteGlosa.length()  > 256) recepDteGlosa = recepDteGlosa.substring(0, 256)
                 return
             }
             if (dte.receiverPartyId == null && receiverPartyId != null) {
@@ -243,6 +244,7 @@ if (ec.message.hasError()) {
     estadoRecepDte = 2
     recepDteGlosa = 'A Reclamar, Errores: ' + ec.message.getErrors().join(', ') + ((errorMessages.size() > 0) ? (', ' + errorMessages.join(', ')) : '')
                     + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
+    if (recepDteGlosa.length()  > 256) recepDteGlosa = recepDteGlosa.substring(0, 256)
     sentRecStatusId = 'Ftd-ReceiverToReject'
     return
 }
@@ -292,8 +294,7 @@ if (errorMessages.size() > 0) {
     recepDteGlosa = 'A Reclamar, Errores: ' + errorMessages.join(', ') + ((discrepancyMessages.size() > 0) ? (', Discrepancias: ' + discrepancyMessages.join(', ')) : '')
     sentRecStatusId = 'Ftd-ReceiverToReject'
     ec.logger.error(recepDteGlosa)
-    if (recepDteGlosa.length() > 256)
-        recepDteGlosa = recepDteGlosa.substring(0, 256)
+    if (recepDteGlosa.length() > 255) recepDteGlosa = recepDteGlosa.substring(0, 256)
     if (invoice) {
         invoice.statusId = 'InvoiceCancelled'
         invoice.invoiceMessage = recepDteGlosa
