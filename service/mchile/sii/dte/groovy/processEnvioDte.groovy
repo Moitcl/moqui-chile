@@ -82,6 +82,11 @@ partyIdProcessingDetailMap = ec.service.sync().name("mchile.sii.dte.DteEnvioProc
 issuerPartyId = partyIdProcessingDetailMap.issuerPartyId
 receiverPartyId = partyIdProcessingDetailMap.receiverPartyId
 organizationPartyIdAsOwnerWhenCreating = partyIdProcessingDetailMap.organizationPartyIdAsOwnerWhenCreating
+additionalAllowedOwnerPartyIdList = ['_NA_', organizationPartyIdAsOwnerWhenCreating]
+if (createUnknownIssuer && receiverPartyId != organizationPartyIdAsOwnerWhenCreating)
+    additionalAllowedOwnerPartyIdList.add(receiverPartyId)
+if (createUnknownReceiver && issuerPartyId != organizationPartyIdAsOwnerWhenCreating)
+    additionalAllowedOwnerPartyIdList.add(issuerPartyId)
 
 receptor = setDte.DTE[0].Documento.Encabezado.Receptor
 if (rutReceptorCaratula != receptor.RUTRecep.text()) {
@@ -100,12 +105,14 @@ if (!receiverPartyId) {
     newEnvioStatusId = 'Ftde-ReceiverUnknown'
     processingMessages.add(resultMessage)
     ec.logger.warn(resultMessage)
+    processed = false
+    newEnvioStatusId = null
     return
 }
 
 if (receiverPartyId == issuerPartyId && receiverPartyId != null) {
     processed = true
-    resultMessage = "No issuerPartyId and receiverPartyId are the same, finishing"
+    resultMessage = "issuerPartyId and receiverPartyId are the same, finishing"
     processingMessages.add(resultMessage)
     ec.logger.warn(resultMessage)
     return
@@ -116,7 +123,7 @@ issuerTaxName = issuer?.taxOrganizationName
 if (issuerTaxName == null || issuerTaxName.size() == 0)
     issuerTaxName = ec.resource.expand("PartyNameOnlyTemplate", null, issuer)
 
-processingMessage = "Emisor según carátula: ${rutEmisorCaratula}, issuerTaxName ${issuerTaxName}"
+processingMessage = "Emisor según carátula: ${rutEmisorCaratula}, issuerPartyId: ${issuerPartyId}, issuerTaxName: ${issuerTaxName}"
 ec.logger.warn(processingMessage)
 
 digestValue = envioDte.Signature.SignedInfo.Reference.DigestValue.text()

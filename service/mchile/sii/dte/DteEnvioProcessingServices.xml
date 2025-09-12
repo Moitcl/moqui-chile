@@ -622,7 +622,26 @@ along with this software (see the LICENSE.md file). If not, see
             </then><else-if condition="issuerInternalRole">
                 <set field="organizationPartyIdAsOwnerWhenCreating" from="issuerPartyId"/>
             </else-if></if>
-            <!-- Obs: receiver or issuer might be a sub-organization of tenant, and in that case no necessarily the owner (might be the tenant) -->
+            <!-- receiver or issuer might be a sub-organization of tenant, and in that case not necessarily the owner (might be the tenant) -->
+            <set field="pendingOrgPartyIdList" from="[organizationPartyIdAsOwnerWhenCreating]"/>
+            <set field="visitedPartyIdList" from="[organizationPartyIdAsOwnerWhenCreating]"/>
+            <while condition="pendingOrgPartyIdList">
+                <entity-find entity-name="mantle.party.PartyRelationship" list="partyRelationshipList" cache="true">
+                    <date-filter/>
+                    <econdition field-name="fromPartyId" operator="in" from="pendingOrgPartyIdList"/>
+                    <econdition field-name="relationshipTypeEnumId" value="PrtOrgRollup"/>
+                    <econdition field-name="toPartyId" operator="not-in" from="visitedPartyIdList"/>
+                    <econdition field-name="fromPartyId" operator="not-equals" to-field-name="toPartyId"/>
+                </entity-find>
+                <set field="pendingOrgPartyIdList" from="partyRelationshipList.toPartyId.sort().unique()"/>
+                <script>visitedPartyIdList.addAll(pendingOrgPartyIdList)</script>
+                <if condition="pendingOrgPartyIdList.size() == 1">
+                    <set field="topAncestorPartyId" from="pendingOrgPartyIdList[0]"/>
+                </if>
+            </while>
+            <if condition="topAncestorPartyId">
+                <set field="organizationPartyIdAsOwnerWhenCreating" from="topAncestorPartyId"/>
+            </if>
         </actions>
     </service>
 
