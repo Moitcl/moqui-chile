@@ -168,8 +168,8 @@ along with this software (see the LICENSE.md file). If not, see
                     </if>
                     <set field="xmlReceptionEmailAddress" from="null"/>
                     <if condition="emisorPartyId != null">
-                        <service-call name="mchile.sii.dte.DteCommServices.get#XmlReceptionEmail" in-map="[partyId:receptorPartyId, partyIdValue:envio.rutReceptor, dtePartyId:emisorPartyId]" out-map="context"
-                                      ignore-error="true" transaction="force-new"/>
+                        <service-call name="mchile.sii.dte.DteCommServices.get#XmlReceptionEmail" in-map="[partyId:receptorPartyId, partyIdValue:envio.rutReceptor, dtePartyId:emisorPartyId]"
+                                      out-map="context" ignore-error="true" transaction="force-new"/>
                         <entity-find-one entity-name="moqui.basic.Enumeration" value-field="tipoEnvioEv" auto-field-map="[enumId:envio.envioTypeEnumId]"/>
                     </if>
                     <if condition="xmlReceptionEmailAddress"><then>
@@ -180,10 +180,10 @@ along with this software (see the LICENSE.md file). If not, see
                         <service-call name="org.moqui.impl.EmailServices.send#EmailTemplate" in-map="[toAddresses:xmlReceptionEmailAddress, emailTemplateId:'MchDteSendEnvio', emailTypeEnumId:emailTypeEnumId,
                     attachments:[xmlAttachment], bodyParameters:bodyParameters, subject:subject]" out-map="context"/>
                         <set field="sent" from="emailMessageId != null"/>
-                    </then><else>
+                    </then><else-if condition="!authoritativeNotRecipient">
                         <log level="error" message="No se encuentra dirección de mail para envío tipo ${tipoEnvioEv.description}: ${envio.envioId}"/>
                         <set field="sent" from="false"/>
-                    </else></if>
+                    </else-if></if>
                 </else></if>
                 <if condition="sent"><then>
                     <entity-find entity-name="mchile.dte.DteEnvioFiscalTaxDocument" list="envioDteList">
@@ -197,7 +197,9 @@ along with this software (see the LICENSE.md file). If not, see
                     </iterate>
                     <set field="envio.statusId" value="Ftde-Sent"/>
                     <set field="envio.emailMessageId" from="emailMessageId"/>
-                </then><else>
+                </then><else-if condition="authoritativeNotRecipient">
+                    <set field="envio.statusId" value="Ftde-RecipientNotDteReceiver"/>
+                </else-if><else>
                     <if condition="envio.attemptCount >= maxFail">
                         <set field="envio.statusId" value="Ftde-Failed"/>
                         <iterate list="dteList" entry="envioDte">
@@ -1644,6 +1646,7 @@ TrackId Token']" type="Map"/>
         </in-parameters>
         <out-parameters>
             <parameter name="xmlReceptionEmailAddress"/>
+            <parameter name="authoritativeNotRecipient" type="Boolean"/>
         </out-parameters>
         <actions>
             <set field="maxDaysWithoutChecking" from="3"/>
@@ -1660,7 +1663,7 @@ TrackId Token']" type="Map"/>
             <set field="cm" from="pcm?.contactMech"/>
             <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:partyId]" out-map="rut"/>
             <if condition="rut.rutSinFormato == null || rut.rutSinFormato != partyIdValue"><return error="true" message="Rut mismatch for partyId ${partyId}, received ${partyIdValue}, found in DB ${rut.rutSinFormato}"/></if>
-            <if condition="dteIsProduction"><then>
+            <if condition="true || dteIsProduction"><then>
                 <set field="refreshContact" type="Boolean" from="pcm == null || pcm.verifyCodeDate == null || (ec.user.nowTimestamp.time - pcm.verifyCodeDate.time) > 3*24*60*60*1000"/>
             </then><else>
                 <set field="refreshContact" type="Boolean" from="ec.user.getPreference('mchile.dte.FetchEmailFromSiiInCert')"/>
@@ -1672,8 +1675,12 @@ TrackId Token']" type="Map"/>
                     <return/>
                 </if>
                 <service-call name="mchile.sii.SIIServices.consulta#ContribuyentesAutorizadosContacto" in-map="[rut:rut.rutSinDv, dv:rut.dv, dtePartyId:dtePartyId]" out-map="cac"/>
-                <if condition="cac.mailContacto == null || cac.mailContacto.length() &lt; 5">
-                    <return error="true" message="Error obteniendo mailContacto del SII, recibido: ${cac.mailContacto}"/>
+                <if condition="cac.authoritativeNotRecipient">
+                    <set field="authoritativeNotRecipient" from="true"/>
+                    <return/>
+                </if>
+                <if condition="cac.mailContacto == null || cac.mailContacto.size() &lt; 5">
+                    <return error="true" message="Error obteniendo mailContacto del SII, recibido: ${cac.mailContacto} (cac: ${cac})"/>
                 </if>
                 <set field="xmlReceptionEmailAddress" from="cac.mailContacto"/>
                 <if condition="cm == null"><then>
