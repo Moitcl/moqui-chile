@@ -278,33 +278,33 @@
                                    availableFoliosBefore:currentAvailable, thresholdAtRequest:threshold, requestStartTime:logStartTime]" out-map="cafAutoRequestLog"/>
             
             <!-- Attempt CAF fetch -->
-            <service-call name="mchile.sii.dte.DteFolioServices.request#NewCaf" out-map="fetchResult"
+            <service-call name="mchile.sii.dte.DteFolioServices.request#NewCaf" out-map="fetchResult" transaction="force-new"
                           in-map="[partyId:partyId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, folioAmount:fetchQuantity, activateCaf:true]"/>
             
             <if condition="fetchResult.success != false"><then>
-                    <!-- Fetch was successful -->
-                    <set field="fetchSuccessful" value="true" type="Boolean"/>
-                    <set field="newCafId" from="fetchResult.cafId"/>
-                    
-                    <!-- Update configuration with successful fetch timestamp -->
-                    <service-call name="update#mchile.dte.CafAutoRequest" 
-                                  in-map="[partyId:partyId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, lastAutoFetchDate:ec.user.nowTimestamp]"/>
-                    
-                    <!-- Get updated availability -->
-                    <service-call name="mchile.sii.dte.DteCafAutoRequestServices.check#FolioAvailability" out-map="newAvailabilityResult"
-                                  in-map="[partyId:partyId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"/>
-                    
-                    <set field="availableAfterFetch" from="newAvailabilityResult.totalAvailableFolios ?: 0"/>
-                    
-                    <!-- Update log with success -->
-                    <set field="logEndTime" from="ec.user.nowTimestamp"/>
-                    <set field="durationMs" from="logEndTime.getTime() - logStartTime.getTime()"/>
-                    
-                    <service-call name="update#mchile.dte.CafAutoRequestLog" transaction="force-new"
-                                  in-map="[logId:cafAutoRequestLog.logId, grantedFolioQuantity:(fetchResult.grantedFolios ?: fetchQuantity), availableFoliosAfter:availableAfterFetch,
+                <!-- Fetch was successful -->
+                <set field="fetchSuccessful" value="true" type="Boolean"/>
+                <set field="newCafId" from="fetchResult.cafId"/>
+
+                <!-- Update configuration with successful fetch timestamp -->
+                <service-call name="update#mchile.dte.CafAutoRequest"
+                              in-map="[partyId:partyId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId, lastAutoFetchDate:ec.user.nowTimestamp]"/>
+
+                <!-- Get updated availability -->
+                <service-call name="mchile.sii.dte.DteCafAutoRequestServices.check#FolioAvailability" out-map="newAvailabilityResult" transaction="force-new"
+                              in-map="[partyId:partyId, fiscalTaxDocumentTypeEnumId:fiscalTaxDocumentTypeEnumId]"/>
+
+                <set field="availableAfterFetch" from="newAvailabilityResult.totalAvailableFolios ?: 0"/>
+
+                <!-- Update log with success -->
+                <set field="logEndTime" from="ec.user.nowTimestamp"/>
+                <set field="durationMs" from="logEndTime.getTime() - logStartTime.getTime()"/>
+
+                <service-call name="update#mchile.dte.CafAutoRequestLog" transaction="force-new"
+                              in-map="[logId:cafAutoRequestLog.logId, grantedFolioQuantity:(fetchResult.grantedFolios ?: fetchQuantity), availableFoliosAfter:availableAfterFetch,
                                            cafId:newCafId, durationMs:durationMs]"/>
-                    
-                    <log message="Successfully fetched new CAF for party ${partyId}, document type ${fiscalTaxDocumentTypeEnumId}. New availability: ${availableAfterFetch}"/>
+
+                <log message="Successfully fetched new CAF for party ${partyId}, document type ${fiscalTaxDocumentTypeEnumId}. New availability: ${availableAfterFetch}"/>
             </then><else>
                     <!-- Fetch failed -->
                     <set field="fetchSuccessful" value="false" type="Boolean"/>
