@@ -207,8 +207,6 @@ if (existingDteList) {
                     estadoRecepDte = 0
                     recepDteGlosa = 'ACEPTADO OK'
                     sentRecStatusId = 'Ftde-DuplicateNotProcessed'
-                    if (sendResponse && envioId)
-                        ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()
                     return
                 } else if (sendResponse) {
                     errorMessages.add("Ya existe registrada DTE tipo ${dteMap.tipoDte} para emisor ${rutEmisor} y folio ${dteMap.fiscalTaxDocumentNumber}, diferente al recibido")
