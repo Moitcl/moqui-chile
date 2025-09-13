@@ -427,7 +427,7 @@ along with this software (see the LICENSE.md file). If not, see
         </in-parameters>
         <out-parameters>
             <parameter name="failuresByParty" type="Map">
-                <description>Map of failures by party ID, containing outgoing and incoming failure data with daily counts</description>
+                <description>Map of failures by party ID, containing outgoing and incoming failure data with daily counts and severity classification</description>
             </parameter>
         </out-parameters>
         <actions>
@@ -539,8 +539,8 @@ along with this software (see the LICENSE.md file). If not, see
                         <set field="failuresByParty[partyId]" from="[
                             partyId: partyId,
                             partyRut: partyRutMap[partyId],
-                            outgoing: [totalCount: 0, dailyCounts: [:], envioList: []],
-                            incoming: [totalCount: 0, dailyCounts: [:], envioList: []]
+                            outgoing: [totalCount: 0, errorCount: 0, warningCount: 0, dailyCounts: [:], envioList: [], errorEnvioList: [], warningEnvioList: []],
+                            incoming: [totalCount: 0, errorCount: 0, warningCount: 0, dailyCounts: [:], envioList: [], errorEnvioList: [], warningEnvioList: []]
                         ]"/>
                     </if>
                     
@@ -549,17 +549,44 @@ along with this software (see the LICENSE.md file). If not, see
                     <set field="directionData" from="failuresByParty[partyId][direction]"/>
                     <set field="directionData.totalCount" from="directionData.totalCount + 1"/>
                     <set field="directionData.dailyCounts[dayKey]" from="(directionData.dailyCounts[dayKey] ?: 0) + 1"/>
-                    <script>
+                    <script><![CDATA[
                         // Calculate days since last attempt
                         long daysDiff = (ec.user.nowTimestamp.time - envio.lastAttempt.time) / (24 * 60 * 60 * 1000)
-                        directionData.envioList.add([
+                        
+                        // CENTRALIZED CLASSIFICATION LOGIC: Determine if this is a warning or error
+                        boolean isWarning = false
+                        
+                        // WARNINGS: 
+                        // 1. Status ProcessedWithDiscrepancy
+                        // 2. Status Created or Received with >= 3 days since last attempt
+                        if (envio.statusId == 'Ftde-ProcessedWithDiscrepancy' ||
+                            (envio.statusId in ['Ftde-Created', 'Ftde-Received'] && daysDiff >= 3)) {
+                            isWarning = true
+                        }
+                        
+                        // ERRORS: All other failure conditions (default)
+                        
+                        Map envioInfo = [
                             envioId: envio.envioId, 
                             statusId: envio.statusId, 
                             internalId: envio.internalId,
                             envioTypeEnumId: envio.envioTypeEnumId,
-                            daysSinceLastAttempt: daysDiff as Integer
-                        ])
-                    </script>
+                            daysSinceLastAttempt: daysDiff as Integer,
+                            severity: isWarning ? 'warning' : 'error'
+                        ]
+                        
+                        // Add to main list
+                        directionData.envioList.add(envioInfo)
+                        
+                        // Add to severity-specific lists and update counts
+                        if (isWarning) {
+                            directionData.warningEnvioList.add(envioInfo)
+                            directionData.warningCount = directionData.warningCount + 1
+                        } else {
+                            directionData.errorEnvioList.add(envioInfo)
+                            directionData.errorCount = directionData.errorCount + 1
+                        }
+                    ]]></script>
                 </iterate>
             </iterate>
             
