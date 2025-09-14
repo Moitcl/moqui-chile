@@ -315,6 +315,10 @@ descuentoORecargoGlobalList.each { dor ->
         ec.message.addError("indicadorExento en lista de descuento o recargo global debe tener valor nulo, 1 o 2")
     BigDecimal valor = null
     BigDecimal valorOrigin = null
+    if (dor.tipoValor == "%")
+        esPorcentaje = true
+    else
+        esPorcentaje = false
     try {
         ec.logger.info("procesando descuento o recargo global: ${dor}")
         valor = dor.valor as BigDecimal
@@ -325,32 +329,32 @@ descuentoORecargoGlobalList.each { dor ->
     if (dor.tipo == 'D') {
         if (descuentoORecargoAfecto)
             if (dor.montoOrigin != null) {
-                descuentoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + valorOrigin
-                descuentoGlobalAfectoClp = (descuentoGlobalAfecto?:0.0) + valor
+                descuentoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + (valorOrigin * (esPorcentaje ? (0.01 * totalNeto) : 1.0))
+                descuentoGlobalAfectoClp = (descuentoGlobalAfecto?:0.0) + (valor * (esPorcentaje ? (0.01 * totalNeto) : 1.0))
             } else {
-                descuentoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + valor
+                descuentoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + (valor * (esPorcentaje ? (0.01 * totalNeto) : 1.0))
             }
         else
             if (dor.montoOrigin != null) {
-                descuentoGlobalExento = (descuentoGlobalExento?:0.0) + valorOrigin
-                descuentoGlobalExentoClp = (descuentoGlobalExento?:0.0) + valor
+                descuentoGlobalExento = (descuentoGlobalExento?:0.0) + (valorOrigin * (esPorcentaje ? (0.01 * totalExento) : 1.0))
+                descuentoGlobalExentoClp = (descuentoGlobalExento?:0.0) + (valor * (esPorcentaje ? (0.01 * totalExento) : 1.0))
             } else {
-                descuentoGlobalExento = (descuentoGlobalExento?:0.0) + valor
+                descuentoGlobalExento = (descuentoGlobalExento?:0.0) + (valor * (esPorcentaje ? (0.01 * totalExento) : 1.0))
             }
     } else if (dor.tipo == 'R') {
         if (descuentoORecargoAfecto)
             if (dor.montoOrigin != null) {
-                recargoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + valorOrigin
-                recargoGlobalAfectoClp = (descuentoGlobalAfecto?:0.0) + valor
+                recargoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + (valorOrigin * (esPorcentaje ? (0.01 * totalNeto) : 1.0))
+                recargoGlobalAfectoClp = (descuentoGlobalAfecto?:0.0) + (valor * (esPorcentaje ? (0.01 * totalNeto) : 1.0))
             } else {
-                recargoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + valor
+                recargoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + (valor * (esPorcentaje ? (0.01 * totalNeto) : 1.0))
             }
         else
             if (dor.montoOrigin != null) {
-                recargoGlobalExento = (descuentoGlobalExento?:0.0) + valorOrigin
-                recargoGlobalExentoClp = (descuentoGlobalExento?:0.0) + valor
+                recargoGlobalExento = (descuentoGlobalExento?:0.0) + (valorOrigin * (esPorcentaje ? (0.01 * totalExento) : 1.0))
+                recargoGlobalExentoClp = (descuentoGlobalExento?:0.0) + (valor * (esPorcentaje ? (0.01 * totalExento) : 1.0))
             } else {
-                recargoGlobalExento = (descuentoGlobalExento?:0.0) + valor
+                recargoGlobalExento = (descuentoGlobalExento?:0.0) + (valor * (esPorcentaje ? (0.01 * totalExento) : 1.0))
             }
     }
 }

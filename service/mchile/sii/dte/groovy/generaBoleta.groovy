@@ -166,16 +166,20 @@ descuentoORecargoGlobalList.each { dor ->
     }
     if (valor == null)
         ec.message.addError("Valor no está presente para recargo o descuento")
+    if (dor.tipoValor == "%")
+        esPorcentaje = true
+    else
+        esPorcentaje = false
     if (dor.tipo == 'D') {
         if (dor.afecto)
-            descuentoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + valor
+            descuentoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + (valor * (esPorcentaje ? (0.01 * totalNeto) : 1.0))
         else
-            descuentoGlobalExento = (descuentoGlobalExento?:0.0) + valor
+            descuentoGlobalExento = (descuentoGlobalExento?:0.0) + (valor * (esPorcentaje ? (0.01 * totalExento) : 1.0))
     } else if (dor.tipo == 'R') {
         if (dor.afecto)
-            recargoGlobalAfecto = (recargoGlobalAfecto?:0.0) + valor
+            recargoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + (valor * (esPorcentaje ? (0.01 * totalNeto) : 1.0))
         else
-            recargoGlobalExento = (recargoGlobalExento?:0.0) + valor
+            recargoGlobalExento = (descuentoGlobalExento?:0.0) + (valor * (esPorcentaje ? (0.01 * totalExento) : 1.0))
     }
 }
 
