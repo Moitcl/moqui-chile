@@ -2,18 +2,31 @@ package EmailProcessing
 
 import org.moqui.Moqui
 import org.moqui.context.ExecutionContext
+import org.moqui.entity.EntityValue
 import spock.lang.Shared
 import spock.lang.Specification
 import spock.lang.Unroll
 import java.util.UUID
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 
 /**
- * Comprehensive test suite for DteEmailProcessing entity functionality.
- * Tests cover CRUD operations, status transitions, JSON processingNotes handling,
- * and relationship management with EmailMessage and ServiceJobRun entities.
+ * Simplified test suite for DteEmailProcessing entity functionality.
+ * Tests cover CRUD operations, status transitions, and relationship management
+ * with EmailMessage and ServiceJobRun entities.
+ *
+ * Updated to match actual entity definition with fields:
+ * - emailMessageId (id, pk)
+ * - jobRunId (id)
+ * - statusId (id)
+ * - processDate (date-time)
+ * - errorMessage (text-long)
+ * - processingNotes (text-very-long)
  */
 class DteEmailProcessingTests extends Specification {
     @Shared ExecutionContext ec
+    @Shared ServiceJobRunMockHelper jobMockHelper
+    @Shared Logger logger = LoggerFactory.getLogger(DteEmailProcessingTests.class)
     @Shared String testEmailMessageId = "TEST-EMAIL-MSG-${UUID.randomUUID().toString().substring(0, 8)}"
     @Shared String testJobRunId = "TEST-JOB-RUN-${UUID.randomUUID().toString().substring(0, 8)}"
     @Shared String testUsername = "john.doe"
@@ -21,6 +34,7 @@ class DteEmailProcessingTests extends Specification {
     def setupSpec() {
         // Initialize framework
         ec = Moqui.getExecutionContext()
+        jobMockHelper = new ServiceJobRunMockHelper()
 
         // Login test user
         if (!ec.user.userId) {
@@ -30,56 +44,54 @@ class DteEmailProcessingTests extends Specification {
             }
         }
 
+        // Disable authorization for test execution
+        ec.artifactExecution.disableAuthz()
+
         // Set unique sequence ranges for test isolation
         ec.entity.tempSetSequencedIdPrimary("moqui.basic.email.EmailMessage", 75000, 50)
         ec.entity.tempSetSequencedIdPrimary("moqui.service.job.ServiceJobRun", 76000, 50)
         ec.entity.tempSetSequencedIdPrimary("mchile.dte.DteEmailProcessing", 77000, 50)
 
-        ec.artifactExecution.disableAuthz()
-
-        // Create test infrastructure data
-        createTestEmailMessage()
-        createTestJobRun()
-
-        // Clear any existing test data for clean state
-        cleanupTestData()
+        // NOTE: Test infrastructure (EmailMessage, JobRun) is created per-test in createTestEmailProcessing()
+        // to ensure proper test isolation and avoid cross-test contamination
     }
 
     def cleanupSpec() {
-        ec.artifactExecution.disableAuthz()
-        // Cleanup test data
-        cleanupTestData()
-        cleanupTestInfrastructure()
-
-        // Clear error messages
-        ec.message.clearErrors()
-
-        // Logout
-        ec.user.logoutUser()
+        // Final cleanup in case any tests failed to clean up properly
+        try {
+            ec.artifactExecution.disableAuthz()
+            cleanupTestData()
+        } catch (Exception e) {
+            // Ignore cleanup errors during teardown
+            logger.warn("Error during final cleanup: ${e.message}")
+        }
+        ec.artifactExecution.enableAuthz()
+        ec.destroy()
     }
 
     def setup() {
+        ec.message.clearErrors()
         ec.artifactExecution.disableAuthz()
         ec.transaction.begin(null)
     }
 
     def cleanup() {
-        cleanupTestData()
+        // Handle transaction rollback first, then cleanup data only if transaction is valid
+        if (ec.transaction.status == javax.transaction.Status.STATUS_MARKED_ROLLBACK) {
+            ec.transaction.rollback("Marked as Rollback", null)
+        } else {
+            // Only clean up data if transaction is not marked for rollback
+            cleanupTestData()
+            ec.transaction.commit()
+        }
+
         // Follow mantle-usl pattern: warn about unexpected errors, don't proactively clear
         if (ec.message.hasError()) {
             logger.warn("Unexpected errors in test: ${ec.message.getErrorsString()}")
+            // DO NOT clear errors here - let tests fail if unexpected errors occur
         }
         ec.artifactExecution.enableAuthz()
-        if (ec.transaction.status == javax.transaction.Status.STATUS_MARKED_ROLLBACK)
-            ec.transaction.rollback("Marked as Rollback", null)
-        else
-            ec.transaction.commit()
-        ec.message.clearErrors()
     }
-
-    // ========================================
-    // Test Helper Methods
-    // ========================================
 
     private void createTestEmailMessage() {
         def existingEmail = ec.entity.find("moqui.basic.email.EmailMessage")
@@ -89,12 +101,12 @@ class DteEmailProcessingTests extends Specification {
             ec.service.sync().name("create#moqui.basic.email.EmailMessage")
                     .parameters([
                             emailMessageId: testEmailMessageId,
-                            subject: "Test Email for DTE Processing",
+                            subject: "Test Email Subject",
                             body: "Test email body content",
                             fromAddress: "test@example.com",
                             toAddresses: "recipient@example.com",
                             sentDate: ec.user.nowTimestamp,
-                            statusId: "EmsgReceived"
+                            statusId: "ES_RECEIVED"
                     ]).call()
         }
     }
@@ -104,45 +116,51 @@ class DteEmailProcessingTests extends Specification {
                 .condition("jobRunId", testJobRunId)
                 .one()
         if (!existingJobRun) {
-            ec.service.sync().name("create#moqui.service.job.ServiceJobRun")
-                    .parameters([
-                            jobRunId: testJobRunId,
-                            jobName: "Test DTE Processing Job",
-                            serviceName: "mchile.dte.EmailProcessingServices.process#EmailDteAttachments",
-                            startTime: ec.user.nowTimestamp,
-                            hasError: "N"
-                    ]).call()
+            jobMockHelper.createAndStartJobRun(ec, [
+                    jobRunId: testJobRunId,
+                    jobName: "Test DTE Processing Job",
+                    serviceName: "mchile.dte.EmailProcessingServices.process#EmailDteAttachments",
+                    startTime: ec.user.nowTimestamp,
+                    hasError: "N"
+            ])
         }
     }
 
     private void cleanupTestData() {
-        // Delete test email processing records
-        ec.entity.find("mchile.dte.DteEmailProcessing")
-                .condition("emailMessageId", testEmailMessageId)
-                .deleteAll()
-    }
+        // Clean up test data in proper dependency order to avoid foreign key violations
+        try {
+            // 1. Delete child records that reference parent entities first
+            ec.entity.find("mchile.dte.DteEmailProcessing")
+                    .condition("emailMessageId", testEmailMessageId)
+                    .deleteAll()
 
-    private void cleanupTestInfrastructure() {
-        // Delete test email message
-        ec.entity.find("moqui.basic.email.EmailMessage")
-                .condition("emailMessageId", testEmailMessageId)
-                .deleteAll()
-        
-        // Delete test job run
-        ec.entity.find("moqui.service.job.ServiceJobRun")
-                .condition("jobRunId", testJobRunId)
-                .deleteAll()
+            // 2. Delete parent entities in correct order
+            ec.entity.find("moqui.basic.email.EmailMessage")
+                    .condition("emailMessageId", testEmailMessageId)
+                    .deleteAll()
+
+            ec.entity.find("moqui.service.job.ServiceJobRun")
+                    .condition("jobRunId", testJobRunId)
+                    .deleteAll()
+
+            logger.info("Deleted test data in dependency order: ${testEmailMessageId}, ${testJobRunId}")
+        } catch (Exception e) {
+            logger.warn("Error during test data cleanup: ${e.message}")
+        }
     }
 
     private Map createTestEmailProcessing(Map params = [:]) {
+        // BEST PRACTICE: Create test infrastructure per-test for proper isolation
+        // This ensures each test has its own EmailMessage and JobRun records
+        // avoiding cross-test contamination and dependencies
+        createTestEmailMessage()
+        createTestJobRun()
+
         def defaultParams = [
                 emailMessageId: testEmailMessageId,
                 jobRunId: testJobRunId,
                 statusId: "DepReceived",
-                totalEnviosFound: 0,
-                totalEnviosProcessed: 0,
-                totalEnviosError: 0,
-                processingAttemptCount: 0
+                processDate: ec.user.nowTimestamp
         ]
         defaultParams.putAll(params)
 
@@ -163,7 +181,7 @@ class DteEmailProcessingTests extends Specification {
         result.emailMessageId == testEmailMessageId
         !ec.message.hasError()
 
-        // Verify entity was created
+        // Verify record exists
         def created = ec.entity.find("mchile.dte.DteEmailProcessing")
                 .condition("emailMessageId", testEmailMessageId)
                 .one()
@@ -172,30 +190,27 @@ class DteEmailProcessingTests extends Specification {
         created.emailMessageId == testEmailMessageId
         created.jobRunId == testJobRunId
         created.statusId == "DepReceived"
-        created.totalEnviosFound == 0
-        created.totalEnviosProcessed == 0
-        created.totalEnviosError == 0
-        created.processingAttemptCount == 0
+        created.errorMessage == null
+        created.processingNotes == null
         created.processDate != null
     }
 
     def "002 - Create DteEmailProcessing with all fields populated"() {
         given:
-        def testProcessingNotes = '{"step1": "Email received", "step2": "Attachments analyzed", "enviosDetected": 3}'
-        def testErrorMessage = "Test error message for comprehensive testing"
-        def testLastProcessingAttempt = ec.user.nowTimestamp
+        def testErrorMessage = "Test error message"
+        def testProcessingNotes = "Test processing notes with detailed information"
 
-        when:
+        when: "Create record with default status and then transition to DepProcessed"
+        // First create with default status (DepReceived)
         def result = createTestEmailProcessing([
-                statusId: "DepProcessing",
                 errorMessage: testErrorMessage,
-                processingNotes: testProcessingNotes,
-                totalEnviosFound: 3,
-                totalEnviosProcessed: 2,
-                totalEnviosError: 1,
-                lastProcessingAttempt: testLastProcessingAttempt,
-                processingAttemptCount: 2
+                processingNotes: testProcessingNotes
         ])
+
+        // Then progress to processed status: DepReceived -> DepProcessed
+        ec.service.sync().name("update#mchile.dte.DteEmailProcessing")
+                .parameters([emailMessageId: testEmailMessageId, statusId: "DepProcessed"])
+                .call()
 
         then:
         result.emailMessageId == testEmailMessageId
@@ -206,22 +221,20 @@ class DteEmailProcessingTests extends Specification {
                 .condition("emailMessageId", testEmailMessageId)
                 .one()
 
-        created.statusId == "DepProcessing"
+        created.statusId == "DepProcessed"
         created.errorMessage == testErrorMessage
         created.processingNotes == testProcessingNotes
-        created.totalEnviosFound == 3
-        created.totalEnviosProcessed == 2
-        created.totalEnviosError == 1
-        created.lastProcessingAttempt == testLastProcessingAttempt
-        created.processingAttemptCount == 2
+        created.processDate != null
     }
 
     def "003 - Read DteEmailProcessing with relationships"() {
-        given:
-        createTestEmailProcessing([
-                statusId: "DepEnviosDetected",
-                totalEnviosFound: 2
-        ])
+        given: "Create record and progress to DepProcessed status"
+        createTestEmailProcessing()
+
+        // Progress to processed status: DepReceived -> DepProcessed
+        ec.service.sync().name("update#mchile.dte.DteEmailProcessing")
+                .parameters([emailMessageId: testEmailMessageId, statusId: "DepProcessed"])
+                .call()
 
         when:
         def emailProcessing = ec.entity.find("mchile.dte.DteEmailProcessing")
@@ -230,58 +243,49 @@ class DteEmailProcessingTests extends Specification {
 
         then:
         emailProcessing != null
-        emailProcessing.emailMessageId == testEmailMessageId
 
-        // Test relationships
-        def emailMessage = emailProcessing.getRelatedOne("moqui.basic.email.EmailMessage", null, false)
-        emailMessage != null
-        emailMessage.emailMessageId == testEmailMessageId
-        emailMessage.subject == "Test Email for DTE Processing"
+        // Test relationship to EmailMessage
+        def relatedEmail = emailProcessing.findRelatedOne("moqui.basic.email.EmailMessage", null, false)
+        relatedEmail != null
+        relatedEmail.emailMessageId == testEmailMessageId
+        relatedEmail.subject == "Test Email Subject"
 
-        def jobRun = emailProcessing.getRelatedOne("moqui.service.job.ServiceJobRun", null, false)
-        jobRun != null
-        jobRun.jobRunId == testJobRunId
+        // Test relationship to ServiceJobRun
+        def relatedJobRun = emailProcessing.findRelatedOne("moqui.service.job.ServiceJobRun", null, false)
+        relatedJobRun != null
+        relatedJobRun.jobRunId == testJobRunId
+        relatedJobRun.jobName == "Test DTE Processing Job"
 
-        def statusItem = emailProcessing.getRelatedOne("DteEmailProcessing#moqui.basic.StatusItem", null, false)
+        // Test relationship to StatusItem
+        def statusItem = emailProcessing.findRelatedOne("DteEmailProcessing#moqui.basic.StatusItem", null, false)
         statusItem != null
-        statusItem.statusId == "DepEnviosDetected"
-        statusItem.description == "Envios Detected"
+        statusItem.statusId == "DepProcessed"
     }
 
     def "004 - Update DteEmailProcessing fields"() {
         given:
-        createTestEmailProcessing([
-                statusId: "DepReceived",
-                totalEnviosFound: 0
-        ])
+        createTestEmailProcessing()
 
-        when:
+        when: "Update to DepProcessed with field updates"
+        // Update to processed status with field changes
         def updateResult = ec.service.sync().name("update#mchile.dte.DteEmailProcessing")
                 .parameters([
                         emailMessageId: testEmailMessageId,
-                        statusId: "DepProcessing",
-                        totalEnviosFound: 3,
-                        totalEnviosProcessed: 1,
-                        processingNotes: '{"status": "Processing started", "enviosFound": 3}',
-                        processingAttemptCount: 1,
-                        lastProcessingAttempt: ec.user.nowTimestamp
+                        statusId: "DepProcessed",
+                        errorMessage: "Updated error message",
+                        processingNotes: "Updated processing notes"
                 ]).call()
 
         then:
-        updateResult.emailMessageId == testEmailMessageId
         !ec.message.hasError()
 
-        // Verify updates were applied
         def updated = ec.entity.find("mchile.dte.DteEmailProcessing")
                 .condition("emailMessageId", testEmailMessageId)
                 .one()
 
-        updated.statusId == "DepProcessing"
-        updated.totalEnviosFound == 3
-        updated.totalEnviosProcessed == 1
-        updated.processingAttemptCount == 1
-        updated.processingNotes.contains("Processing started")
-        updated.lastProcessingAttempt != null
+        updated.statusId == "DepProcessed"
+        updated.errorMessage == "Updated error message"
+        updated.processingNotes == "Updated processing notes"
     }
 
     def "005 - Delete DteEmailProcessing"() {
@@ -294,454 +298,154 @@ class DteEmailProcessingTests extends Specification {
                 .call()
 
         then:
-        deleteResult.emailMessageId == testEmailMessageId
         !ec.message.hasError()
 
-        // Verify deletion
         def deleted = ec.entity.find("mchile.dte.DteEmailProcessing")
                 .condition("emailMessageId", testEmailMessageId)
                 .one()
-
         deleted == null
     }
 
     // ========================================
-    // Status Transition Tests
+    // Status Management Tests
     // ========================================
 
-    def "006 - Test valid status transitions"() {
-        given:
-        createTestEmailProcessing([statusId: "DepReceived"])
+    @Unroll
+    def "006 - Test status transitions: #fromStatus to #toStatus"() {
+        given: "Create record and progress to the required starting status"
+        createTestEmailProcessing() // Always starts with DepReceived
 
-        when: "Transition from DepReceived to DepQueued"
-        def result1 = ec.service.sync().name("update#mchile.dte.DteEmailProcessing")
+        // Set up the fromStatus if not already DepReceived
+        if (fromStatus == "DepProcessed") {
+            ec.service.sync().name("update#mchile.dte.DteEmailProcessing")
+                    .parameters([emailMessageId: testEmailMessageId, statusId: "DepProcessed"])
+                    .call()
+        }
+
+        when:
+        def result = ec.service.sync().name("update#mchile.dte.DteEmailProcessing")
                 .parameters([
                         emailMessageId: testEmailMessageId,
-                        statusId: "DepQueued"
+                        statusId: toStatus
                 ]).call()
 
         then:
         !ec.message.hasError()
-        def entity1 = ec.entity.find("mchile.dte.DteEmailProcessing")
-                .condition("emailMessageId", testEmailMessageId).one()
-        entity1.statusId == "DepQueued"
+        def entity = ec.entity.find("mchile.dte.DteEmailProcessing")
+                .condition("emailMessageId", testEmailMessageId)
+                .one()
+        entity.statusId == toStatus
 
-        when: "Transition from DepQueued to DepProcessing"
-        def result2 = ec.service.sync().name("update#mchile.dte.DteEmailProcessing")
-                .parameters([
-                        emailMessageId: testEmailMessageId,
-                        statusId: "DepProcessing"
-                ]).call()
-
-        then:
-        !ec.message.hasError()
-        def entity2 = ec.entity.find("mchile.dte.DteEmailProcessing")
-                .condition("emailMessageId", testEmailMessageId).one()
-        entity2.statusId == "DepProcessing"
-
-        when: "Transition from DepProcessing to DepEnviosDetected"
-        def result3 = ec.service.sync().name("update#mchile.dte.DteEmailProcessing")
-                .parameters([
-                        emailMessageId: testEmailMessageId,
-                        statusId: "DepEnviosDetected"
-                ]).call()
-
-        then:
-        !ec.message.hasError()
-        def entity3 = ec.entity.find("mchile.dte.DteEmailProcessing")
-                .condition("emailMessageId", testEmailMessageId).one()
-        entity3.statusId == "DepEnviosDetected"
+        where:
+        fromStatus     | toStatus
+        "DepReceived"  | "DepProcessed"
+        "DepReceived"  | "DepError"
     }
 
     def "007 - Test error status handling"() {
         given:
-        createTestEmailProcessing([statusId: "DepProcessing"])
+        def errorMessage = "Critical processing error occurred"
 
-        when:
-        def result = ec.service.sync().name("update#mchile.dte.DteEmailProcessing")
-                .parameters([
-                        emailMessageId: testEmailMessageId,
-                        statusId: "DepError",
-                        errorMessage: "Processing failed due to invalid attachment format",
-                        processingNotes: '{"error": "XML parsing failed", "timestamp": "2024-09-03T10:30:00Z"}'
-                ]).call()
+        when: "Create record and transition to DepError"
+        // Create with default status and transition to error
+        createTestEmailProcessing([errorMessage: errorMessage])
 
-        then:
-        !ec.message.hasError()
-        
-        def entity = ec.entity.find("mchile.dte.DteEmailProcessing")
-                .condition("emailMessageId", testEmailMessageId).one()
-        
-        entity.statusId == "DepError"
-        entity.errorMessage == "Processing failed due to invalid attachment format"
-        entity.processingNotes.contains("XML parsing failed")
-    }
-
-    def "008 - Test duplicate detection status"() {
-        given:
-        createTestEmailProcessing([statusId: "DepReceived"])
-
-        when:
-        def result = ec.service.sync().name("update#mchile.dte.DteEmailProcessing")
-                .parameters([
-                        emailMessageId: testEmailMessageId,
-                        statusId: "DepDuplicate",
-                        processingNotes: '{"reason": "Email already processed", "originalProcessDate": "2024-09-01T15:20:00Z"}'
-                ]).call()
-
-        then:
-        !ec.message.hasError()
-        
-        def entity = ec.entity.find("mchile.dte.DteEmailProcessing")
-                .condition("emailMessageId", testEmailMessageId).one()
-        
-        entity.statusId == "DepDuplicate"
-        entity.processingNotes.contains("already processed")
-    }
-
-    // ========================================
-    // JSON Processing Notes Tests
-    // ========================================
-
-    def "009 - Test JSON processingNotes field functionality"() {
-        given:
-        def complexProcessingNotes = '''
-        {
-            "processingStarted": "2024-09-03T10:00:00Z",
-            "steps": [
-                {"step": 1, "action": "Email received", "timestamp": "2024-09-03T10:00:01Z"},
-                {"step": 2, "action": "Attachments parsed", "count": 3, "timestamp": "2024-09-03T10:00:15Z"},
-                {"step": 3, "action": "Envios detected", "envioIds": ["ENV001", "ENV002"], "timestamp": "2024-09-03T10:00:30Z"}
-            ],
-            "metadata": {
-                "emailSize": "2.5MB",
-                "attachmentCount": 3,
-                "processingServer": "server-01"
-            },
-            "diagnostics": {
-                "xmlValidationTime": "125ms",
-                "totalProcessingTime": "2.3s"
-            }
-        }
-        '''.trim()
-
-        when:
-        def result = createTestEmailProcessing([
-                processingNotes: complexProcessingNotes,
-                statusId: "DepEnviosDetected",
-                totalEnviosFound: 2
-        ])
-
-        then:
-        !ec.message.hasError()
-
-        // Verify JSON was stored correctly
-        def entity = ec.entity.find("mchile.dte.DteEmailProcessing")
-                .condition("emailMessageId", testEmailMessageId).one()
-
-        entity.processingNotes != null
-        entity.processingNotes.contains("processingStarted")
-        entity.processingNotes.contains("ENV001")
-        entity.processingNotes.contains("server-01")
-        entity.processingNotes.contains("xmlValidationTime")
-    }
-
-    def "010 - Test processingNotes with special characters and encoding"() {
-        given:
-        def notesWithSpecialChars = '''
-        {
-            "message": "Procesamiento de email con caracteres especiales: ñáéíóú",
-            "errorDescription": "Error en validación XML: 'elemento &lt;DTE&gt; no válido'",
-            "fileName": "Envío_DTE_Compañía_González&Hijos.xml",
-            "specialCases": {
-                "utf8Test": "Test: áéíóúñÁÉÍÓÚÑ",
-                "symbolsTest": "Symbols: @#$%^&*(){}[]|\\:;\"'<>,.?/",
-                "quotesTest": "Double \"quotes\" and single 'quotes'"
-            }
-        }
-        '''.trim()
-
-        when:
-        def result = createTestEmailProcessing([
-                processingNotes: notesWithSpecialChars,
-                statusId: "DepError",
-                errorMessage: "Encoding test error"
-        ])
+        // Transition to error status: DepReceived -> DepError
+        ec.service.sync().name("update#mchile.dte.DteEmailProcessing")
+                .parameters([emailMessageId: testEmailMessageId, statusId: "DepError"])
+                .call()
 
         then:
         !ec.message.hasError()
 
         def entity = ec.entity.find("mchile.dte.DteEmailProcessing")
-                .condition("emailMessageId", testEmailMessageId).one()
-
-        entity.processingNotes.contains("ñáéíóú")
-        entity.processingNotes.contains("González&Hijos")
-        entity.processingNotes.contains("Double \"quotes\"")
-        entity.processingNotes.contains("single 'quotes'")
-    }
-
-    // ========================================
-    // Validation and Constraint Tests
-    // ========================================
-
-    def "011 - Test numeric field constraints and validation"() {
-        when: "Create with valid numeric values"
-        def result = createTestEmailProcessing([
-                totalEnviosFound: 5,
-                totalEnviosProcessed: 3,
-                totalEnviosError: 2,
-                processingAttemptCount: 1
-        ])
-
-        then:
-        !ec.message.hasError()
-        
-        def entity = ec.entity.find("mchile.dte.DteEmailProcessing")
-                .condition("emailMessageId", testEmailMessageId).one()
-        
-        entity.totalEnviosFound == 5
-        entity.totalEnviosProcessed == 3
-        entity.totalEnviosError == 2
-        entity.processingAttemptCount == 1
-    }
-
-    @Unroll
-    def "012 - Test business logic constraints: found=#found, processed=#processed, error=#error, valid=#isValid"() {
-        when:
-        def result = createTestEmailProcessing([
-                totalEnviosFound: found,
-                totalEnviosProcessed: processed,
-                totalEnviosError: error
-        ])
-
-        then:
-        if (isValid) {
-            !ec.message.hasError()
-            def entity = ec.entity.find("mchile.dte.DteEmailProcessing")
-                    .condition("emailMessageId", testEmailMessageId).one()
-            entity != null
-            // Business rule: totalEnviosFound >= totalEnviosProcessed + totalEnviosError
-            entity.totalEnviosFound >= (entity.totalEnviosProcessed + entity.totalEnviosError)
-        } else {
-            // Note: Business rule validation would be implemented in service layer
-            // This test documents the expected constraint behavior
-            true // Framework allows creation, business validation in services
-        }
-
-        where:
-        found | processed | error | isValid
-        5     | 3         | 2     | true    // 5 >= 3 + 2 (valid)
-        5     | 2         | 2     | true    // 5 >= 2 + 2 (valid)
-        10    | 0         | 0     | true    // 10 >= 0 + 0 (valid)
-        3     | 2         | 2     | false   // 3 < 2 + 2 (invalid - business rule)
-        0     | 1         | 0     | false   // 0 < 1 + 0 (invalid - business rule)
-    }
-
-    def "013 - Test required field validation"() {
-        when: "Try to create without required emailMessageId"
-        def result = ec.service.sync().name("create#mchile.dte.DteEmailProcessing")
-                .parameters([
-                        // emailMessageId missing
-                        statusId: "DepReceived"
-                ]).call()
-
-        then:
-        ec.message.hasError()
-        ec.message.getErrorsString().contains("emailMessageId") || 
-        ec.message.getErrorsString().contains("required") ||
-        ec.message.getErrorsString().contains("null")
-    }
-
-    // ========================================
-    // Relationship and Foreign Key Tests
-    // ========================================
-
-    def "014 - Test relationships with valid foreign keys"() {
-        given:
-        createTestEmailProcessing([
-                statusId: "DepProcessing",
-                totalEnviosFound: 2
-        ])
-
-        when:
-        def emailProcessing = ec.entity.find("mchile.dte.DteEmailProcessing")
                 .condition("emailMessageId", testEmailMessageId)
                 .one()
 
-        then:
-        // Test EmailMessage relationship
-        def emailMessage = emailProcessing.getRelatedOne("moqui.basic.email.EmailMessage", null, false)
-        emailMessage != null
-        emailMessage.emailMessageId == testEmailMessageId
-        emailMessage.subject == "Test Email for DTE Processing"
-
-        // Test ServiceJobRun relationship  
-        def jobRun = emailProcessing.getRelatedOne("moqui.service.job.ServiceJobRun", null, false)
-        jobRun != null
-        jobRun.jobRunId == testJobRunId
-        jobRun.jobName == "Test DTE Processing Job"
-
-        // Test StatusItem relationship
-        def statusItem = emailProcessing.getRelatedOne("DteEmailProcessing#moqui.basic.StatusItem", null, false)
-        statusItem != null
-        statusItem.statusId == "DepProcessing"
-        statusItem.statusTypeId == "DteEmailProcessing"
+        entity.statusId == "DepError"
+        entity.errorMessage == errorMessage
+        entity.errorMessage.contains("Critical processing error")
     }
 
-    def "015 - Test optional relationships (nullable foreign keys)"() {
-        when: "Create with optional jobRunId as null"
-        def result = ec.service.sync().name("create#mchile.dte.DteEmailProcessing")
+    // ========================================
+    // Field Validation Tests
+    // ========================================
+
+    def "008 - Test processingNotes field functionality"() {
+        given:
+        def longNotes = "This is a very long processing note that contains detailed information " * 10
+
+        when:
+        createTestEmailProcessing([
+                processingNotes: longNotes
+        ])
+
+        then:
+        !ec.message.hasError()
+
+        def entity = ec.entity.find("mchile.dte.DteEmailProcessing")
+                .condition("emailMessageId", testEmailMessageId)
+                .one()
+
+        entity.processingNotes == longNotes
+        entity.processingNotes.length() > 500 // Verify it can handle long text
+    }
+
+    def "009 - Test required field validation"() {
+        given: "Create supporting infrastructure but don't create the DteEmailProcessing record"
+        createTestEmailMessage()
+        createTestJobRun()
+
+        when: "Try to create without emailMessageId (PK)"
+        ec.service.sync().name("create#mchile.dte.DteEmailProcessing")
                 .parameters([
-                        emailMessageId: testEmailMessageId + "-NULL-FK",
-                        jobRunId: null,
+                        jobRunId: testJobRunId,
                         statusId: "DepReceived"
                 ]).call()
 
-        then:
-        !ec.message.hasError()
+        then: "Should fail validation"
+        ec.message.hasError()
+        ec.message.getErrorsString().contains("emailMessageId")
 
+        cleanup: "Clear expected errors from this error-testing test"
+        // This test intentionally triggers errors to test validation
+        // Clear them so they don't affect subsequent tests
+        ec.message.clearErrors()
+    }
+
+    def "010 - Test relationships with valid foreign keys"() {
+        given:
+        createTestEmailProcessing()
+
+        when:
         def entity = ec.entity.find("mchile.dte.DteEmailProcessing")
-                .condition("emailMessageId", testEmailMessageId + "-NULL-FK")
+                .condition("emailMessageId", testEmailMessageId)
                 .one()
 
-        entity != null
-        entity.jobRunId == null
-        
-        // Relationship should handle null gracefully
-        def jobRun = entity.getRelatedOne("moqui.service.job.ServiceJobRun", null, false)
-        jobRun == null
+        def jobRun = entity.findRelatedOne("moqui.service.job.ServiceJobRun", null, false)
 
-        cleanup:
-        ec.entity.find("mchile.dte.DteEmailProcessing")
-                .condition("emailMessageId", testEmailMessageId + "-NULL-FK")
-                .deleteAll()
+        then:
+        jobRun != null
+        jobRun.jobRunId == testJobRunId
+        jobRun.jobName == "Test DTE Processing Job"
     }
 
-    // ========================================
-    // Performance and Edge Case Tests
-    // ========================================
-
-    def "016 - Test large processingNotes field handling"() {
+    def "011 - Test timestamp field behavior"() {
         given:
-        def largeProcessingNotes = generateLargeJsonNotes(10000) // ~10KB JSON
+        def beforeTime = ec.user.nowTimestamp
 
         when:
-        def result = createTestEmailProcessing([
-                processingNotes: largeProcessingNotes,
-                statusId: "DepProcessing"
-        ])
+        createTestEmailProcessing()
+
+        def afterTime = ec.user.nowTimestamp
 
         then:
-        !ec.message.hasError()
-
         def entity = ec.entity.find("mchile.dte.DteEmailProcessing")
-                .condition("emailMessageId", testEmailMessageId).one()
+                .condition("emailMessageId", testEmailMessageId)
+                .one()
 
-        entity.processingNotes != null
-        entity.processingNotes.length() >= 10000
-        entity.processingNotes.contains("largeDataEntry_1000")
-    }
-
-    def "017 - Test concurrent processing scenarios"() {
-        given:
-        createTestEmailProcessing([
-                statusId: "DepProcessing",
-                processingAttemptCount: 1
-        ])
-
-        when: "Simulate concurrent updates"
-        def update1 = ec.service.sync().name("update#mchile.dte.DteEmailProcessing")
-                .parameters([
-                        emailMessageId: testEmailMessageId,
-                        totalEnviosProcessed: 1,
-                        processingNotes: '{"thread": "worker-1", "timestamp": "2024-09-03T10:00:01Z"}'
-                ]).call()
-
-        def update2 = ec.service.sync().name("update#mchile.dte.DteEmailProcessing")
-                .parameters([
-                        emailMessageId: testEmailMessageId,
-                        totalEnviosError: 1,
-                        processingAttemptCount: 2,
-                        processingNotes: '{"thread": "worker-2", "timestamp": "2024-09-03T10:00:02Z"}'
-                ]).call()
-
-        then:
-        !ec.message.hasError()
-
-        // Verify final state (last update wins)
-        def finalEntity = ec.entity.find("mchile.dte.DteEmailProcessing")
-                .condition("emailMessageId", testEmailMessageId).one()
-
-        finalEntity.processingAttemptCount == 2
-        finalEntity.totalEnviosError == 1
-        finalEntity.processingNotes.contains("worker-2")
-    }
-
-    def "018 - Test timestamp field behavior"() {
-        given:
-        def beforeCreation = ec.user.nowTimestamp
-        
-        when:
-        def result = createTestEmailProcessing([
-                statusId: "DepReceived",
-                lastProcessingAttempt: null // Should be nullable
-        ])
-        
-        def afterCreation = ec.user.nowTimestamp
-
-        then:
-        !ec.message.hasError()
-
-        def entity = ec.entity.find("mchile.dte.DteEmailProcessing")
-                .condition("emailMessageId", testEmailMessageId).one()
-
-        // processDate should be auto-set to current timestamp
         entity.processDate != null
-        entity.processDate.getTime() >= beforeCreation.getTime()
-        entity.processDate.getTime() <= afterCreation.getTime()
-        
-        // lastProcessingAttempt should be nullable and null initially
-        entity.lastProcessingAttempt == null
-
-        when: "Update lastProcessingAttempt"
-        def updateTime = ec.user.nowTimestamp
-        ec.service.sync().name("update#mchile.dte.DteEmailProcessing")
-                .parameters([
-                        emailMessageId: testEmailMessageId,
-                        lastProcessingAttempt: updateTime
-                ]).call()
-
-        then:
-        def updatedEntity = ec.entity.find("mchile.dte.DteEmailProcessing")
-                .condition("emailMessageId", testEmailMessageId).one()
-        
-        updatedEntity.lastProcessingAttempt == updateTime
-    }
-
-    // ========================================
-    // Helper Methods for Complex Tests
-    // ========================================
-
-    private String generateLargeJsonNotes(int targetSize) {
-        def json = new StringBuilder()
-        json.append('{"processingLog": [')
-        
-        def entrySize = 100 // approximate size per entry
-        def entriesNeeded = Math.max(targetSize / entrySize, 10)
-        
-        for (int i = 1; i <= entriesNeeded; i++) {
-            if (i > 1) json.append(',')
-            json.append("""
-            {
-                "entry": ${i},
-                "timestamp": "2024-09-03T10:${String.format('%02d', i % 60)}:${String.format('%02d', (i * 13) % 60)}Z",
-                "action": "Processing step ${i}",
-                "data": "largeDataEntry_${i}",
-                "details": "Detailed processing information for entry ${i} with additional text to increase size"
-            }""".trim())
-        }
-        
-        json.append(']}')
-        return json.toString()
+        entity.processDate.time >= beforeTime.time
+        entity.processDate.time <= afterTime.time
     }
 }

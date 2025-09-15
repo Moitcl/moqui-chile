@@ -219,7 +219,7 @@ class EmailProcessingTestUtilities {
         String xmlContent = attachmentData.attachmentData ?: generateTestDteXml(attachmentData)
         
         // Create attachment using auto-service
-        Map attachmentResult = ec.service.sync().name("create#moqui.basic.email.EmailMessageAttachment")
+        Map attachmentResult = ec.service.sync().name("create#moqui.basic.email.EmailTemplateAttachment")
                 .parameters([
                     emailMessageId: emailMessageId,
                     attachmentName: attachmentName,
@@ -355,7 +355,7 @@ class EmailProcessingTestUtilities {
         String documentNumber = params.documentNumber ?: "${(Math.random() * 99999).intValue()}"
         String issueDate = params.issueDate ?: "2024-09-03"
         String totalAmount = params.totalAmount ?: "${(Math.random() * 1000000).intValue()}"
-        String statusId = params.statusId ?: "DteEnvioReceived"
+        String statusId = params.statusId ?: "Ftde-Received"
         
         // Generate XML content if not provided
         String xmlContent = params.xmlContent ?: generateTestDteXml([
@@ -565,7 +565,7 @@ class EmailProcessingTestUtilities {
             envioId: "TEST-ENVIO-ERROR-SCENARIO",
             documentNumber: "ERROR-DOC",
             totalAmount: "0",
-            statusId: "DteEnvioError",
+            statusId: "Ftde-Failed",
             xmlContent: generateMalformedDteXml("parsing"),
             receptionAck: "N"
         ])
@@ -702,7 +702,7 @@ class EmailProcessingTestUtilities {
      */
     static void cleanupTestEmails(ExecutionContext ec) {
         // Delete test attachments first (due to foreign key constraints)
-        ec.entity.find("moqui.basic.email.EmailMessageAttachment")
+        ec.entity.find("moqui.basic.email.EmailTemplateAttachment")
                 .condition("emailMessageId", org.moqui.entity.EntityCondition.ComparisonOperator.LIKE, "TEST-%")
                 .deleteAll()
         
@@ -782,7 +782,7 @@ class EmailProcessingTestUtilities {
             emailMessages: ec.entity.find("moqui.basic.email.EmailMessage")
                     .condition("emailMessageId", org.moqui.entity.EntityCondition.ComparisonOperator.LIKE, "TEST-%")
                     .count(),
-            emailAttachments: ec.entity.find("moqui.basic.email.EmailMessageAttachment")
+            emailAttachments: ec.entity.find("moqui.basic.email.EmailTemplateAttachment")
                     .condition("emailMessageId", org.moqui.entity.EntityCondition.ComparisonOperator.LIKE, "TEST-%")
                     .count(),
             dteEnvios: ec.entity.find("mchile.dte.DteEnvio")
@@ -793,6 +793,245 @@ class EmailProcessingTestUtilities {
                     .count(),
             mockJobContextSize: mockJobContext.size(),
             timestamp: ec.user.nowTimestamp.toString()
+        ]
+    }
+
+    // ========================================
+    // DTE XML Sample Management (SystemMessage-based)
+    // ========================================
+
+    /**
+     * Get DTE XML sample by ID from SystemMessage entities
+     */
+    static String getDteXmlSample(ExecutionContext ec, String sampleId) {
+        def sample = ec.entity.find("moqui.service.message.SystemMessage")
+                .condition("systemMessageId", sampleId)
+                .one()
+        
+        if (!sample) {
+            throw new IllegalArgumentException("DTE XML sample not found: ${sampleId}")
+        }
+        
+        return sample.bodyText
+    }
+
+    /**
+     * Get all valid DTE XML samples
+     */
+    static List<Map> getValidDteXmlSamples(ExecutionContext ec) {
+        return ec.entity.find("moqui.service.message.SystemMessage")
+                .condition("systemMessageTypeId", "DteXmlSample-Valid")
+                .list()
+                .collect { sample ->
+                    [
+                        sampleId: sample.systemMessageId,
+                        messageId: sample.messageId,
+                        documentType: sample.docType,
+                        description: sample.messageText,
+                        xmlContent: sample.bodyText
+                    ]
+                }
+    }
+
+    /**
+     * Get all error DTE XML samples for testing error scenarios
+     */
+    static List<Map> getErrorDteXmlSamples(ExecutionContext ec) {
+        return ec.entity.find("moqui.service.message.SystemMessage")
+                .condition("systemMessageTypeId", "DteXmlSample-Error")
+                .list()
+                .collect { sample ->
+                    [
+                        sampleId: sample.systemMessageId,
+                        messageId: sample.messageId,
+                        errorType: sample.docType,
+                        description: sample.messageText,
+                        xmlContent: sample.bodyText
+                    ]
+                }
+    }
+
+    /**
+     * Get complex DTE XML samples for advanced testing
+     */
+    static List<Map> getComplexDteXmlSamples(ExecutionContext ec) {
+        return ec.entity.find("moqui.service.message.SystemMessage")
+                .condition("systemMessageTypeId", "DteXmlSample-Complex")
+                .list()
+                .collect { sample ->
+                    [
+                        sampleId: sample.systemMessageId,
+                        messageId: sample.messageId,
+                        documentType: sample.docType,
+                        description: sample.messageText,
+                        xmlContent: sample.bodyText
+                    ]
+                }
+    }
+
+    /**
+     * Get DTE XML sample by document type and scenario
+     */
+    static String getDteXmlSampleByType(ExecutionContext ec, String documentType, String scenario = "valid") {
+        String messageTypeId
+        switch (scenario.toLowerCase()) {
+            case "valid":
+                messageTypeId = "DteXmlSample-Valid"
+                break
+            case "error":
+                messageTypeId = "DteXmlSample-Error"
+                break
+            case "complex":
+                messageTypeId = "DteXmlSample-Complex"
+                break
+            default:
+                throw new IllegalArgumentException("Invalid scenario: ${scenario}")
+        }
+
+        def sample = ec.entity.find("moqui.service.message.SystemMessage")
+                .condition("systemMessageTypeId", messageTypeId)
+                .condition("docType", documentType)
+                .list()
+                .first()
+
+        if (!sample) {
+            throw new IllegalArgumentException("DTE XML sample not found for type: ${documentType}, scenario: ${scenario}")
+        }
+
+        return sample.bodyText
+    }
+
+    /**
+     * Create test email attachment using XML sample
+     */
+    static Map<String, Object> createEmailAttachmentFromSample(ExecutionContext ec, String emailMessageId, String sampleId, Map<String, Object> overrides = [:]) {
+        String xmlContent = getDteXmlSample(ec, sampleId)
+        
+        String attachmentName = overrides.attachmentName ?: "DTE_Sample_${sampleId}.xml"
+        String contentType = overrides.contentType ?: "text/xml"
+        
+        Map attachmentData = [
+            attachmentName: attachmentName,
+            contentType: contentType,
+            attachmentData: xmlContent
+        ]
+        attachmentData.putAll(overrides)
+        
+        return createEmailAttachment(ec, emailMessageId, attachmentData)
+    }
+
+    /**
+     * Create test DTE envio using XML sample
+     */
+    static Map<String, Object> createTestDteEnvioFromSample(ExecutionContext ec, String sampleId, Map<String, Object> overrides = [:]) {
+        String xmlContent = getDteXmlSample(ec, sampleId)
+        
+        // Extract document info from sample
+        def sample = ec.entity.find("moqui.service.message.SystemMessage")
+                .condition("systemMessageId", sampleId)
+                .one()
+                
+        String documentType = sample.docType
+        String documentNumber = overrides.documentNumber ?: extractDocumentNumber(xmlContent)
+        
+        Map envioParams = [
+            xmlContent: xmlContent,
+            fiscalTaxDocumentTypeEnumId: documentType != "ERROR" ? "Ftdt-${documentType}" : "Ftdt-33",
+            documentNumber: documentNumber
+        ]
+        envioParams.putAll(overrides)
+        
+        return createTestDteEnvio(ec, envioParams)
+    }
+
+    /**
+     * Extract document number from DTE XML content
+     */
+    private static String extractDocumentNumber(String xmlContent) {
+        try {
+            def xml = new XmlSlurper().parseText(xmlContent.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&"))
+            return xml.Documento.Encabezado.IdDoc.Folio.text() ?: "DEFAULT-001"
+        } catch (Exception e) {
+            return "ERROR-${System.currentTimeMillis()}"
+        }
+    }
+
+    /**
+     * Create test scenario using XML samples
+     */
+    static Map<String, Object> buildScenarioWithXmlSamples(ExecutionContext ec, String scenarioType, Map<String, Object> params = [:]) {
+        List<String> sampleIds
+        String messageTypeId
+        
+        switch (scenarioType) {
+            case "valid-documents":
+                sampleIds = ["SAMPLE-FACTURA-ELECTRONICA", "SAMPLE-FACTURA-EXENTA", "SAMPLE-BOLETA-ELECTRONICA"]
+                messageTypeId = "DteXmlSample-Valid"
+                break
+            case "error-documents":
+                sampleIds = ["ERROR-MALFORMED-XML", "ERROR-INVALID-DATA", "ERROR-MISSING-REQUIRED", "ERROR-WRONG-STRUCTURE"]
+                messageTypeId = "DteXmlSample-Error"
+                break
+            case "complex-documents":
+                sampleIds = ["COMPLEX-MULTI-LINE-INVOICE"]
+                messageTypeId = "DteXmlSample-Complex"
+                break
+            default:
+                throw new IllegalArgumentException("Invalid scenario type: ${scenarioType}")
+        }
+        
+        // Create job run
+        Map jobRun = createMockJobRun(ec, [
+            jobName: "XML-SAMPLE-SCENARIO-${scenarioType.toUpperCase()}",
+            statusId: messageTypeId == "DteXmlSample-Error" ? "SjsError" : "SjsRunning"
+        ])
+        
+        // Create email with attachments from samples
+        List attachments = []
+        sampleIds.each { sampleId ->
+            String xmlContent = getDteXmlSample(ec, sampleId)
+            attachments.add([
+                attachmentName: "DTE_${sampleId}.xml",
+                attachmentData: xmlContent,
+                contentType: "text/xml"
+            ])
+        }
+        
+        Map email = createTestEmailWithAttachments(ec, [
+            subject: "DTE Test - ${scenarioType} scenario",
+            fromAddress: "test-${scenarioType}@test-samples.cl",
+            attachments: attachments
+        ])
+        
+        // Create envios from samples
+        List envios = []
+        sampleIds.each { sampleId ->
+            try {
+                Map envio = createTestDteEnvioFromSample(ec, sampleId, [
+                    statusId: messageTypeId == "DteXmlSample-Error" ? "Ftde-Failed" : "Ftde-Received"
+                ])
+                envios.add(envio)
+            } catch (Exception e) {
+                // For error samples, create a basic error envio
+                envios.add([
+                    envioId: "TEST-ERROR-${sampleId}",
+                    statusId: "Ftde-Failed",
+                    success: false,
+                    error: "Sample processing failed: ${e.message}"
+                ])
+            }
+        }
+        
+        return [
+            success: true,
+            scenarioType: scenarioType,
+            messageTypeId: messageTypeId,
+            jobRun: jobRun,
+            email: email,
+            envios: envios,
+            sampleIds: sampleIds,
+            attachmentCount: attachments.size(),
+            envioCount: envios.size()
         ]
     }
 }

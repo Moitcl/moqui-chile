@@ -104,6 +104,7 @@ class RutTests extends Specification {
    }
 
    def setup() {
+      ec.message.clearErrors()  // Clear any errors from previous tests
       // Disable authorization for test service calls (following mantle-usl pattern)
       // User is authenticated but authorization is disabled for accessing test services
       ec.artifactExecution.disableAuthz()
@@ -111,9 +112,13 @@ class RutTests extends Specification {
    }
 
    def cleanup() {
+      // Follow mantle-usl pattern: warn about unexpected errors, don't proactively clear
+      if (ec.message.hasError()) {
+         logger.warn("Unexpected errors in test: ${ec.message.getErrorsString()}")
+         // DO NOT clear errors here - let tests fail if unexpected errors occur
+      }
       ec.artifactExecution.enableAuthz()
       ec.transaction.commit()  // Commit transaction after each test
-      ec.message.clearErrors()
    }
 
    def "001 - Verifica RUTs Válidos (#rut)"() {
@@ -166,10 +171,13 @@ class RutTests extends Specification {
       
       // Check if the service had validation errors (empty RUTs, etc)
       boolean hasErrors = ec.message.hasError() || responseMap?.errorMessage != null
-      ec.message.clearErrors() // Clear errors for next test
 
       expect:
       !hasErrors == esValido
+
+      cleanup:
+      // This test intentionally triggers validation errors - clear them
+      ec.message.clearErrors()
 
       where:
       rut           | esValido | descripcion
@@ -240,14 +248,15 @@ class RutTests extends Specification {
       if (duplicateAttemptFailed) {
           logger.info("[General] Duplicate RUT correctly rejected via MessageFacade")
       }
-      ec.message.clearErrors() // Clear errors for next test
-      
+
       totalTestChecked += 1
 
       expect:
       duplicateAttemptFailed == true  // Should fail when trying to add duplicate RUT to same party
-      
+
       cleanup:
+      // This test intentionally triggers duplicate RUT errors - clear them
+      ec.message.clearErrors()
       // Clean up test data using delete services (preferred for resilient cleanup)
       try {
           // Delete PartyIdentification records
@@ -309,14 +318,15 @@ class RutTests extends Specification {
       } else {
           logger.warn("[General] RUT duplication was allowed when it should have failed")
       }
-      ec.message.clearErrors() // Clear errors for next test
-      
+
       totalTestChecked += 1
 
       expect:
       duplicateAttemptFailed == true  // Should fail when same ownerPartyId
-      
+
       cleanup:
+      // This test intentionally triggers duplicate RUT errors - clear them
+      ec.message.clearErrors()
       // Clean up test data using delete services (preferred for resilient cleanup)
       try {
           [testOrg1Id, testOrg2Id].each { partyId ->
@@ -378,8 +388,7 @@ class RutTests extends Specification {
       if (!firstResultSuccess) {
           logger.warn("[General] First RUT creation failed: ${firstResult?.errorMessage}")
       }
-      ec.message.clearErrors()
-      
+
       // Switch to tenant 2 user context - can only see organizations owned by TENANT2-OWNER
       ec.user.context.filterOrgIds = [tenant2OwnerPartyId]
       logger.info("[General] Set filterOrgIds to tenant 2: ${ec.user.context.filterOrgIds}")
@@ -404,8 +413,7 @@ class RutTests extends Specification {
           logger.warn("[General] Current ec.user.context.filterOrgIds: ${ec.user.context.filterOrgIds}")
           logger.warn("[General] Current user groups: ${ec.user.userAccount?.groups*.userGroupId}")
       }
-      ec.message.clearErrors() // Clear errors for next test
-      
+
       totalTestChecked += 1
 
       expect:
@@ -416,9 +424,12 @@ class RutTests extends Specification {
       secondRutAdded == true          // Should succeed if EntityFilters work in EECA context
       
       cleanup:
+      // This test may trigger errors during RUT validation - clear them
+      ec.message.clearErrors()
+
       // Clear tenant context
       ec.user.context.remove('filterOrgIds')
-      
+
       // Disable authorization for cleanup operations
       ec.artifactExecution.disableAuthz()
       
@@ -492,8 +503,7 @@ class RutTests extends Specification {
       } else {
           logger.warn("[General] Special RUT duplication failed")
       }
-      ec.message.clearErrors() // Clear errors for next test
-      
+
       totalTestChecked += 1
 
       expect:
@@ -501,6 +511,9 @@ class RutTests extends Specification {
       specialRutDuplicationAllowed == true    // Should succeed for special RUTs
       
       cleanup:
+      // This test may trigger errors during special RUT validation - clear them
+      ec.message.clearErrors()
+
       // Clean up test data using delete services (preferred for resilient cleanup)
       try {
           [testOrg1Id, testOrg2Id].each { partyId ->

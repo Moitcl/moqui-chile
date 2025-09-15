@@ -5,39 +5,83 @@ import spock.lang.Shared
 import spock.lang.Unroll
 import org.moqui.Moqui
 import org.moqui.context.ExecutionContext
+import java.util.Base64
 
 /**
  * Comprehensive integration tests for DTE processing with MIME filename decoding
  * Tests the full workflow of processing incoming DTE messages with encoded attachment filenames
  * and verifies integration with mchile.sii.dte.DteCommServices.process#IncomingDteMessage
+ *
+ * COMPLIANCE: Agent OS Testing Guidelines
+ * - Per-test setup/cleanup with proper transaction management
+ * - Entity auto-services for all data operations
+ * - Manual entity deletion in dependency order
+ * - Error clearing and proper test isolation
  */
 class DteProcessingSpec extends Specification {
-    
+
     @Shared ExecutionContext ec
-    
+    @Shared List<String> testDataIds = []
+
     def setupSpec() {
         ec = Moqui.getExecutionContext()
-        
-        // Login with existing test user if needed  
+
+        // Login with existing test user if needed
         if (!ec.user.userId) {
             boolean loginSuccess = ec.user.loginUser("john.doe", "moqui")
             if (!loginSuccess) {
                 throw new RuntimeException("Failed to login - ensure test data is loaded with correct data types (moquichile-test)")
             }
         }
-        
-        // Disable authorization for test setup operations
-        ec.artifactExecution.disableAuthz()
-        
-        // Load integration test data
-        loadIntegrationTestData()
     }
-    
+
     def cleanupSpec() {
-        // Clean up integration test data
-        cleanupIntegrationTestData()
+        // Final cleanup and logout
         ec.user.logoutUser()
         ec.destroy()
+    }
+
+    def setup() {
+        // Clear any existing errors from previous tests
+        ec.message.clearErrors()
+
+        // Begin transaction for test isolation
+        boolean transactionBegun = ec.transaction.begin()
+        if (!transactionBegun) {
+            ec.logger.warn("Could not begin transaction for test")
+        }
+
+        // Disable authorization for test operations
+        ec.artifactExecution.disableAuthz()
+
+        // Create test infrastructure for each test
+        createTestInfrastructure()
+    }
+
+    def cleanup() {
+        try {
+            // Clean up test data in dependency order
+            cleanupTestData()
+
+            // Commit or rollback transaction
+            if (ec.transaction.isTransactionInPlace()) {
+                ec.transaction.commit()
+            }
+        } catch (Exception e) {
+            ec.logger.warn("Error during test cleanup: ${e.message}", e)
+            if (ec.transaction.isTransactionInPlace()) {
+                ec.transaction.rollback()
+            }
+        } finally {
+            // Re-enable authorization
+            ec.artifactExecution.enableAuthz()
+
+            // Clear any remaining errors
+            ec.message.clearErrors()
+
+            // Clear test data IDs for next test
+            testDataIds.clear()
+        }
     }
     
     def "001 - DTE processing should handle encoded attachment filenames correctly"() {
@@ -51,10 +95,10 @@ class DteProcessingSpec extends Specification {
         
         then: "The attachment is processed with decoded filename"
         result.errors == null
-        result.processedAttachments?.size() >= 1
-        result.processedAttachments[0].originalFilename == encodedFilename
-        result.processedAttachments[0].decodedFilename == expectedDecoded
-        result.processedAttachments[0].wasDecoded == true
+        result.processedAttachments && result.processedAttachments.size() >= 1
+        result.processedAttachments.get(0).originalFilename == encodedFilename
+        result.processedAttachments.get(0).decodedFilename == expectedDecoded
+        result.processedAttachments.get(0).wasDecoded == true
     }
     
     def "002 - DTE processing should handle ISO-8859-1 encoded filenames correctly"() {
@@ -68,9 +112,9 @@ class DteProcessingSpec extends Specification {
         
         then: "The attachment is processed with correctly decoded filename"
         result.errors == null
-        result.processedAttachments?.size() >= 1
-        result.processedAttachments[0].decodedFilename == expectedDecoded
-        result.processedAttachments[0].wasDecoded == true
+        result.processedAttachments && result.processedAttachments.size() >= 1
+        result.processedAttachments.get(0).decodedFilename == expectedDecoded
+        result.processedAttachments.get(0).wasDecoded == true
     }
     
     def "003 - DTE processing should handle Base64 encoded filenames correctly"() {
@@ -84,9 +128,9 @@ class DteProcessingSpec extends Specification {
         
         then: "The attachment is processed with Base64 decoded filename"
         result.errors == null
-        result.processedAttachments?.size() >= 1
-        result.processedAttachments[0].decodedFilename == expectedDecoded
-        result.processedAttachments[0].wasDecoded == true
+        result.processedAttachments && result.processedAttachments.size() >= 1
+        result.processedAttachments.get(0).decodedFilename == expectedDecoded
+        result.processedAttachments.get(0).wasDecoded == true
     }
     
     def "004 - DTE processing should handle non-encoded filenames without disruption"() {
@@ -99,10 +143,10 @@ class DteProcessingSpec extends Specification {
         
         then: "The attachment is processed normally without decoding"
         result.errors == null
-        result.processedAttachments?.size() >= 1
-        result.processedAttachments[0].originalFilename == plainFilename
-        result.processedAttachments[0].decodedFilename == plainFilename
-        result.processedAttachments[0].wasDecoded == false
+        result.processedAttachments && result.processedAttachments.size() >= 1
+        result.processedAttachments.get(0).originalFilename == plainFilename
+        result.processedAttachments.get(0).decodedFilename == plainFilename
+        result.processedAttachments.get(0).wasDecoded == false
     }
     
     def "005 - DTE processing should handle multiple encoded attachments"() {
@@ -119,11 +163,11 @@ class DteProcessingSpec extends Specification {
         
         then: "All attachments are processed with correct decoded filenames"
         result.errors == null
-        result.processedAttachments?.size() == 3
+        result.processedAttachments && result.processedAttachments.size() == 3
         result.processedAttachments.every { it.wasDecoded == true }
-        result.processedAttachments[0].decodedFilename == "Factura_001.xml"
-        result.processedAttachments[1].decodedFilename == "Boleta_002.xml"  
-        result.processedAttachments[2].decodedFilename == "Nota_Crédito_003.xml"
+        result.processedAttachments.get(0).decodedFilename == "Factura 001.xml"
+        result.processedAttachments.get(1).decodedFilename == "Boleta 002.xml"
+        result.processedAttachments.get(2).decodedFilename == "Nota Crédito 003.xml"
     }
     
     def "006 - DTE processing should fallback gracefully for malformed encoded filenames"() {
@@ -136,16 +180,16 @@ class DteProcessingSpec extends Specification {
         
         then: "The attachment is processed with original filename as fallback"
         result.errors == null
-        result.processedAttachments?.size() >= 1
-        result.processedAttachments[0].originalFilename == malformedFilename
-        result.processedAttachments[0].decodedFilename == malformedFilename
-        result.processedAttachments[0].wasDecoded == false
+        result.processedAttachments && result.processedAttachments.size() >= 1
+        result.processedAttachments.get(0).originalFilename == malformedFilename
+        result.processedAttachments.get(0).decodedFilename == malformedFilename
+        result.processedAttachments.get(0).wasDecoded == false
     }
     
     def "007 - DTE processing should log decoded vs original filenames appropriately"() {
         given: "A DTE message with encoded attachment filename"
         String encodedFilename = "=?UTF-8?Q?Log_Test_Document.xml?="
-        String expectedDecoded = "Log_Test_Document.xml"
+        String expectedDecoded = "Log Test Document.xml"
         Map mockEmailMessage = createMockDteEmailMessage(encodedFilename)
         
         when: "The DTE message processing service is called with logging enabled"
@@ -189,18 +233,18 @@ class DteProcessingSpec extends Specification {
         
         then: "The document is processed correctly regardless of type"
         result.errors == null
-        result.processedAttachments?.size() >= 1
-        result.processedAttachments[0].decodedFilename == expectedDecoded
-        result.processedAttachments[0].wasDecoded == true
+        result.processedAttachments && result.processedAttachments.size() >= 1
+        result.processedAttachments.get(0).decodedFilename == expectedDecoded
+        result.processedAttachments.get(0).wasDecoded == true
         
         where:
         documentType         | encodedFilename                                      | expectedDecoded
         "Factura"           | "=?UTF-8?Q?Factura_Electr=C3=B3nica.xml?="         | "Factura Electrónica.xml"
-        "Boleta"            | "=?UTF-8?Q?Boleta_Honorarios.xml?="                | "Boleta_Honorarios.xml"
-        "Nota Crédito"      | "=?UTF-8?Q?Nota_Cr=C3=A9dito.xml?="                | "Nota_Crédito.xml"
-        "Nota Débito"       | "=?UTF-8?Q?Nota_D=C3=A9bito.xml?="                 | "Nota_Débito.xml"
-        "Guía Despacho"     | "=?UTF-8?Q?Gu=C3=ADa_Despacho.xml?="               | "Guía_Despacho.xml"
-        "Factura Compra"    | "=?UTF-8?Q?Factura_Compra.xml?="                   | "Factura_Compra.xml"
+        "Boleta"            | "=?UTF-8?Q?Boleta_Honorarios.xml?="                | "Boleta Honorarios.xml"
+        "Nota Crédito"      | "=?UTF-8?Q?Nota_Cr=C3=A9dito.xml?="                | "Nota Crédito.xml"
+        "Nota Débito"       | "=?UTF-8?Q?Nota_D=C3=A9bito.xml?="                 | "Nota Débito.xml"
+        "Guía Despacho"     | "=?UTF-8?Q?Gu=C3=ADa_Despacho.xml?="               | "Guía Despacho.xml"
+        "Factura Compra"    | "=?UTF-8?Q?Factura_Compra.xml?="                   | "Factura Compra.xml"
     }
     
     def "010 - DTE processing should handle concurrent processing with MIME decoding safely"() {
@@ -228,13 +272,13 @@ class DteProcessingSpec extends Specification {
         
         then: "All concurrent requests complete successfully"
         results.size() == 5
-        results.every { it.errors == null && it.processedAttachments?.size() >= 1 }
+        results.every { it.errors == null && it.processedAttachments && it.processedAttachments.size() >= 1 }
     }
     
     def "011 - DTE processing should validate attachment storage uses decoded filenames"() {
         given: "A DTE message with encoded attachment filename"
         String encodedFilename = "=?UTF-8?Q?Storage_Test.xml?="
-        String expectedDecoded = "Storage_Test.xml"
+        String expectedDecoded = "Storage Test.xml"
         Map mockEmailMessage = createMockDteEmailMessage(encodedFilename)
         
         when: "The DTE message is processed and stored"
@@ -257,12 +301,12 @@ class DteProcessingSpec extends Specification {
         
         then: "Legacy functionality remains unaffected"
         result.errors == null
-        result.processedAttachments?.size() >= 1
-        result.processedAttachments[0].originalFilename == plainFilename
-        result.processedAttachments[0].decodedFilename == plainFilename
-        result.processedAttachments[0].wasDecoded == false
+        result.processedAttachments && result.processedAttachments.size() >= 1
+        result.processedAttachments.get(0).originalFilename == plainFilename
+        result.processedAttachments.get(0).decodedFilename == plainFilename
+        result.processedAttachments.get(0).wasDecoded == false
         // Verify no new fields break existing code
-        result.processedAttachments[0].containsKey('encoding') == false || result.processedAttachments[0].encoding == null
+        result.processedAttachments.get(0).containsKey('encoding') == false || result.processedAttachments[0].encoding == null
     }
     
     def "013 - DTE processing should handle memory efficiently with large encoded filenames"() {
@@ -279,14 +323,14 @@ class DteProcessingSpec extends Specification {
         
         then: "Memory usage remains reasonable"
         result.errors == null
-        result.processedAttachments?.size() >= 1
+        result.processedAttachments && result.processedAttachments.size() >= 1
         memoryUsed < 2 * 1024 * 1024  // Less than 2MB for processing
     }
     
     def "014 - DTE processing should validate complete end-to-end workflow with decoding"() {
         given: "A complete DTE email message with encoded attachment"
         String encodedFilename = "=?UTF-8?Q?End_to_End_Test.xml?="
-        String expectedDecoded = "End_to_End_Test.xml"
+        String expectedDecoded = "End to End Test.xml"
         Map completeEmailMessage = createCompleteEmailMessage(encodedFilename)
         
         when: "The complete DTE workflow is executed"
@@ -311,65 +355,89 @@ class DteProcessingSpec extends Specification {
         
         then: "The main workflow continues despite decoding issues"
         result.errors == null  // Main workflow should not error
-        result.processedAttachments?.size() >= 1
-        result.processedAttachments[0].originalFilename == problematicFilename
-        result.processedAttachments[0].decodedFilename == problematicFilename  // Fallback to original
-        result.processedAttachments[0].wasDecoded == false
+        result.processedAttachments && result.processedAttachments.size() >= 1
+        result.processedAttachments.get(0).originalFilename == problematicFilename
+        result.processedAttachments.get(0).decodedFilename == problematicFilename  // Fallback to original
+        result.processedAttachments.get(0).wasDecoded == false
     }
     
-    // Helper methods for test data setup
-    
-    private void loadIntegrationTestData() {
-        // Load necessary test data using auto-services to avoid authentication issues
+    // Helper methods for test infrastructure and data management
+
+    /**
+     * Create test infrastructure for each test
+     * Uses entity auto-services to avoid authentication issues
+     */
+    private void createTestInfrastructure() {
         try {
-            // Create test email server configuration if needed
-            createTestEmailServerConfig()
-            
-            // Create test party data if needed  
-            createTestPartyData()
-            
-        } catch (Exception e) {
-            ec.logger.warn("Error loading integration test data: ${e.message}", e)
-        }
-    }
-    
-    private void cleanupIntegrationTestData() {
-        try {
-            // Clean up test data created during test execution
-            cleanupTestEmailMessages()
-            cleanupTestAttachments()
-            
-        } catch (Exception e) {
-            ec.logger.warn("Error cleaning up integration test data: ${e.message}", e)
-        }
-    }
-    
-    private void createTestEmailServerConfig() {
-        // Create minimal email server config for testing using auto-services
-        try {
-            ec.service.sync().name("create#moqui.basic.email.EmailServer")
+            // Create test email server configuration using auto-service
+            String emailServerId = "TEST_EMAIL_SERVER_${System.currentTimeMillis()}"
+            Map emailServerResult = ec.service.sync().name("create#moqui.basic.email.EmailServer")
                 .parameters([
-                    emailServerId: "TEST_EMAIL_SERVER",
+                    emailServerId: emailServerId,
                     serverName: "Test MIME Email Server",
                     serverHost: "test.example.com",
                     serverPort: 995,
-                    serverUsername: "test@example.com"
+                    serverUsername: "test@example.com",
+                    serverPassword: "testpassword"
                 ]).call()
-        } catch (Exception e) {
-            // Server might already exist, ignore
-        }
-    }
-    
-    private void createTestPartyData() {
-        // Create minimal test party data using auto-services
-        try {
-            ec.service.sync().name("create#mantle.party.Party")
+
+            if (emailServerResult.emailServerId) {
+                testDataIds.add("EmailServer:${emailServerResult.emailServerId}")
+            }
+
+            // Create test party data using auto-service
+            String partyId = "TEST_DTE_PARTY_${System.currentTimeMillis()}"
+            Map partyResult = ec.service.sync().name("create#mantle.party.Party")
                 .parameters([
-                    partyId: "TEST_DTE_PARTY",
+                    partyId: partyId,
                     partyTypeEnumId: "PtyOrganization"
                 ]).call()
+
+            if (partyResult.partyId) {
+                testDataIds.add("Party:${partyResult.partyId}")
+            }
+
         } catch (Exception e) {
-            // Party might already exist, ignore
+            ec.logger.warn("Error creating test infrastructure: ${e.message}", e)
+            throw e
+        }
+    }
+
+    /**
+     * Clean up test data in proper dependency order
+     * Removes entities created during test execution
+     */
+    private void cleanupTestData() {
+        // Process testDataIds in reverse order to respect dependencies
+        testDataIds.reverse().each { dataId ->
+            try {
+                String[] parts = dataId.split(":", 2)
+                String entityName = parts[0]
+                String entityId = parts[1]
+
+                switch (entityName) {
+                    case "EmailMessage":
+                        ec.service.sync().name("delete#moqui.basic.email.EmailMessage")
+                            .parameters([messageId: entityId])
+                            .call()
+                        break
+                    case "EmailServer":
+                        ec.service.sync().name("delete#moqui.basic.email.EmailServer")
+                            .parameters([emailServerId: entityId])
+                            .call()
+                        break
+                    case "Party":
+                        ec.service.sync().name("delete#mantle.party.Party")
+                            .parameters([partyId: entityId])
+                            .call()
+                        break
+                    default:
+                        ec.logger.info("Unknown entity type for cleanup: ${entityName}")
+                }
+            } catch (Exception e) {
+                ec.logger.warn("Error cleaning up test data ${dataId}: ${e.message}", e)
+                // Continue with cleanup of other entities
+            }
         }
     }
     
@@ -410,24 +478,27 @@ class DteProcessingSpec extends Specification {
     private Map processDteMessageWithMocking(Map mockEmailMessage) {
         // Mock the DTE processing workflow with MIME decoding integration
         List<Map> processedAttachments = []
-        
-        mockEmailMessage.bodyPartList.each { bodyPart ->
-            if (bodyPart.filename != null) {
-                // Call MIME decoding service
-                Map decodeResult = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
-                        .parameters([filename: bodyPart.filename])
-                        .call()
-                
-                processedAttachments.add([
-                    originalFilename: bodyPart.filename,
-                    decodedFilename: decodeResult.decodedFilename,
-                    wasDecoded: decodeResult.wasEncoded,
-                    encoding: decodeResult.encoding,
-                    charset: decodeResult.charset
-                ])
+
+        // Use safe array access as per Agent OS guidelines
+        if (mockEmailMessage.bodyPartList && mockEmailMessage.bodyPartList.size() > 0) {
+            mockEmailMessage.bodyPartList.each { bodyPart ->
+                if (bodyPart.filename != null) {
+                    // Call MIME decoding service
+                    Map decodeResult = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
+                            .parameters([filename: bodyPart.filename])
+                            .call()
+
+                    processedAttachments.add([
+                        originalFilename: bodyPart.filename,
+                        decodedFilename: decodeResult.decodedFilename,
+                        wasDecoded: decodeResult.wasEncoded,
+                        encoding: decodeResult.encoding,
+                        charset: decodeResult.charset
+                    ])
+                }
             }
         }
-        
+
         return [
             processedAttachments: processedAttachments,
             errors: null
@@ -437,25 +508,28 @@ class DteProcessingSpec extends Specification {
     private Map processDteMessageWithLogging(Map mockEmailMessage) {
         List<String> logEntries = []
         List<Map> processedAttachments = []
-        
-        mockEmailMessage.bodyPartList.each { bodyPart ->
-            if (bodyPart.filename != null) {
-                // Call MIME decoding service
-                Map decodeResult = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
-                        .parameters([filename: bodyPart.filename])
-                        .call()
-                
-                logEntries.add("Original filename: ${bodyPart.filename}")
-                logEntries.add("Decoded filename: ${decodeResult.decodedFilename}")
-                
-                processedAttachments.add([
-                    originalFilename: bodyPart.filename,
-                    decodedFilename: decodeResult.decodedFilename,
-                    wasDecoded: decodeResult.wasEncoded
-                ])
+
+        // Use safe array access as per Agent OS guidelines
+        if (mockEmailMessage.bodyPartList && mockEmailMessage.bodyPartList.size() > 0) {
+            mockEmailMessage.bodyPartList.each { bodyPart ->
+                if (bodyPart.filename != null) {
+                    // Call MIME decoding service
+                    Map decodeResult = ec.service.sync().name("mchile.GeneralServices.decode#MimeFilename")
+                            .parameters([filename: bodyPart.filename])
+                            .call()
+
+                    logEntries.add("Original filename: ${bodyPart.filename}")
+                    logEntries.add("Decoded filename: ${decodeResult.decodedFilename}")
+
+                    processedAttachments.add([
+                        originalFilename: bodyPart.filename,
+                        decodedFilename: decodeResult.decodedFilename,
+                        wasDecoded: decodeResult.wasEncoded
+                    ])
+                }
             }
         }
-        
+
         return [
             processedAttachments: processedAttachments,
             logEntries: logEntries,
@@ -465,18 +539,19 @@ class DteProcessingSpec extends Specification {
     
     private Map processDteMessageWithStorage(Map mockEmailMessage) {
         Map processedAttachments = processDteMessageWithMocking(mockEmailMessage)
-        
+
         // Simulate attachment storage with decoded filename
         Map storedAttachment = null
-        if (processedAttachments.processedAttachments?.size() > 0) {
-            Map attachment = processedAttachments.processedAttachments[0]
+        if (processedAttachments.processedAttachments && processedAttachments.processedAttachments.size() > 0) {
+            // Use safe array access
+            Map attachment = processedAttachments.processedAttachments.get(0)
             storedAttachment = [
                 filename: attachment.decodedFilename,
                 originalMimeFilename: attachment.originalFilename,
                 storageLocation: "test-storage/${attachment.decodedFilename}"
             ]
         }
-        
+
         return [
             storedAttachment: storedAttachment,
             errors: null
@@ -503,34 +578,31 @@ class DteProcessingSpec extends Specification {
     private Map executeCompleteWorkflow(Map emailMessage) {
         // Simulate complete end-to-end workflow
         Map processedAttachments = processDteMessageWithMocking(emailMessage)
-        
+
+        // Use safe array access for workflow result
+        String decodedFilename = null
+        String originalFilename = null
+        boolean attachmentProcessed = false
+
+        if (processedAttachments.processedAttachments && processedAttachments.processedAttachments.size() > 0) {
+            Map firstAttachment = processedAttachments.processedAttachments.get(0)
+            decodedFilename = firstAttachment?.decodedFilename
+            originalFilename = firstAttachment?.originalFilename
+            attachmentProcessed = true
+        }
+
         return [
             emailProcessed: true,
-            attachmentProcessed: processedAttachments.processedAttachments?.size() > 0,
-            decodedFilename: processedAttachments.processedAttachments?[0]?.decodedFilename,
-            originalFilename: processedAttachments.processedAttachments?[0]?.originalFilename,
+            attachmentProcessed: attachmentProcessed,
+            decodedFilename: decodedFilename,
+            originalFilename: originalFilename,
             workflowComplete: true,
             errors: null
         ]
     }
     
-    private void cleanupTestEmailMessages() {
-        // Clean up any test email messages created during testing
-        try {
-            ec.service.sync().name("delete#moqui.basic.email.EmailMessage")
-                .parameters([emailServerId: "TEST_EMAIL_SERVER"])
-                .call()
-        } catch (Exception e) {
-            // Ignore cleanup errors
-        }
-    }
-    
-    private void cleanupTestAttachments() {
-        // Clean up any test attachments or related data
-        try {
-            // Implementation would depend on actual storage mechanism
-        } catch (Exception e) {
-            // Ignore cleanup errors
-        }
-    }
+    /**
+     * Create mock DTE email message for testing
+     * Uses safe array access patterns as per Agent OS guidelines
+     */
 }

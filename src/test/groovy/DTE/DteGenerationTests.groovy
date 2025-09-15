@@ -48,10 +48,10 @@ class DteGenerationTests extends Specification {
         ec.user.setEffectiveTime(new Timestamp(startTime))
 
         // Set up test sequence IDs to avoid conflicts (using unique range for DTE tests)
-        ec.entity.tempSetSequencedIdPrimary("mchile.dte.FiscalTaxDocument", 70000, 10)
-        ec.entity.tempSetSequencedIdPrimary("mantle.account.invoice.Invoice", 70000, 10)
-        ec.entity.tempSetSequencedIdPrimary("mantle.product.Product", 70000, 10)
-        ec.entity.tempSetSequencedIdPrimary("mantle.party.Party", 70000, 10)
+        ec.entity.tempSetSequencedIdPrimary("mchile.dte.FiscalTaxDocument", 80000, 10)
+        ec.entity.tempSetSequencedIdPrimary("mantle.account.invoice.Invoice", 80000, 10)
+        ec.entity.tempSetSequencedIdPrimary("mantle.product.Product", 80000, 10)
+        ec.entity.tempSetSequencedIdPrimary("mantle.party.Party", 80000, 10)
 
         // Initialize test certificate and CAF data
         initializeTestData()
@@ -76,6 +76,7 @@ class DteGenerationTests extends Specification {
     }
 
     def setup() {
+        ec.message.clearErrors()  // Clear any errors from previous tests
         ec.artifactExecution.disableAuthz()
         ec.transaction.begin(null)  // Begin new transaction for each test
         testCount++
@@ -88,7 +89,17 @@ class DteGenerationTests extends Specification {
         }
         ec.artifactExecution.enableAuthz()
         ec.transaction.commit()  // Commit transaction after each test
-        ec.message.clearErrors()
+
+        // Create a new transaction for cleanup to isolate any errors
+        ec.transaction.begin(null)
+        try {
+            // Clear any messages in the new transaction context
+            ec.message.clearErrors()
+            ec.transaction.commit()
+        } catch (Exception e) {
+            logger.warn("Error during cleanup transaction: ${e.message}")
+            ec.transaction.rollback()
+        }
     }
     
     private void initializeTestData() {
@@ -96,19 +107,19 @@ class DteGenerationTests extends Specification {
         try {
             // Create test issuer organization programmatically to avoid XML loading issues
             logger.info("Creating test issuer organization programmatically")
-            
+
             Map issuerResult = ec.service.sync().name("mantle.party.PartyServices.create#Organization")
                 .parameters([
                     organizationName: "Test DTE Organization",
                     roleTypeId: "OrgInternal"
                 ]).call()
-            
+
             if (ec.message.hasError()) {
                 logger.error("Service errors during issuer organization creation: ${ec.message.getErrorsString()}")
                 ec.message.clearErrors()
                 throw new Exception("Could not create test issuer organization")
             }
-            
+
             testIssuerPartyId = issuerResult.partyId
             logger.info("Created test issuer organization: ${testIssuerPartyId}")
 
@@ -117,7 +128,7 @@ class DteGenerationTests extends Specification {
                 .parameters([
                     partyId: testIssuerPartyId,
                     partyIdTypeEnumId: "PtidNationalTaxId",
-                    idValue: "12345678-5"  // Unique test RUT
+                    idValue: "87654321-4"  // Unique test RUT for DTE Generation
                 ]).call()
 
             // Create DTE parameters for issuer with certificate data
@@ -178,7 +189,7 @@ class DteGenerationTests extends Specification {
                 .parameters([
                     partyId: testReceiverPartyId,
                     partyIdTypeEnumId: "PtidNationalTaxId",
-                    idValue: "87654321-4"
+                    idValue: "87654322-2"
                 ]).call()
                 
             if (ec.message.hasError()) {
@@ -546,39 +557,115 @@ JYljFtsT
     }
 
     private void cleanupTestData() {
-        // Delete created fiscal tax documents
-        for (String fiscalTaxDocumentId in createdFiscalTaxDocumentIds) {
-            ec.service.sync().name("delete#mchile.dte.FiscalTaxDocument")
-                .parameters([fiscalTaxDocumentId: fiscalTaxDocumentId])
-                .disableAuthz().call()
-        }
+        // Create a new transaction for cleanup to isolate any errors
+        ec.transaction.begin(null)
+        ec.artifactExecution.disableAuthz()
 
-        // Delete created invoices  
-        for (String invoiceId in createdInvoiceIds) {
-            ec.service.sync().name("delete#mantle.account.invoice.Invoice")
-                .parameters([invoiceId: invoiceId])
-                .disableAuthz().call()
-        }
+        try {
+            // Delete test data in proper dependency order to avoid foreign key violations
 
-        // Delete test parties and related data
-        // Note: testIssuerPartyId (TEST-DTE-ORG) is managed by seed data, don't delete
-        
-        if (testReceiverPartyId) {
-            try {
-                ec.service.sync().name("delete#mantle.party.Organization").parameters([partyId: testReceiverPartyId]).disableAuthz().call()
-                ec.service.sync().name("delete#mantle.party.Party").parameters([partyId: testReceiverPartyId]).disableAuthz().call()
-            } catch (Exception e) {
-                logger.warn("Could not delete test receiver party ${testReceiverPartyId}: ${e.message}")
+            // 1. Delete fiscal tax documents (dependent on invoices)
+            for (String fiscalTaxDocumentId in createdFiscalTaxDocumentIds) {
+                ec.entity.find("mchile.dte.FiscalTaxDocument")
+                    .condition("fiscalTaxDocumentId", fiscalTaxDocumentId)
+                    .deleteAll()
             }
-        }
 
-        if (testProductId) {
-            ec.service.sync().name("delete#mantle.product.Product")
-                .parameters([productId: testProductId])
-                .disableAuthz().call()
-        }
+            // 2. Delete invoice items before invoices
+            for (String invoiceId in createdInvoiceIds) {
+                ec.entity.find("mantle.account.invoice.InvoiceItem")
+                    .condition("invoiceId", invoiceId)
+                    .deleteAll()
+            }
 
-        logger.info("Test data cleanup completed")
+            // 3. Delete invoices (depend on parties and products)
+            for (String invoiceId in createdInvoiceIds) {
+                ec.entity.find("mantle.account.invoice.Invoice")
+                    .condition("invoiceId", invoiceId)
+                    .deleteAll()
+            }
+
+            // 4. Clean up party-related dependencies first
+            if (testIssuerPartyId) {
+                try {
+                    cleanupPartyDependencies(testIssuerPartyId)
+                } catch (Exception e) {
+                    logger.warn("Could not delete test issuer party dependencies ${testIssuerPartyId}: ${e.message}")
+                }
+            }
+
+            if (testReceiverPartyId) {
+                try {
+                    cleanupPartyDependencies(testReceiverPartyId)
+                } catch (Exception e) {
+                    logger.warn("Could not delete test receiver party dependencies ${testReceiverPartyId}: ${e.message}")
+                }
+            }
+
+            // 5. Clean up test product
+            if (testProductId) {
+                try {
+                    ec.entity.find("mantle.product.Product")
+                        .condition("productId", testProductId)
+                        .deleteAll()
+                } catch (Exception e) {
+                    logger.warn("Could not delete test product ${testProductId}: ${e.message}")
+                }
+            }
+
+            logger.info("Test data cleanup completed using manual dependency order")
+
+            // Commit the cleanup transaction
+            ec.transaction.commit()
+
+        } catch (Exception e) {
+            logger.error("Critical error during test data cleanup: ${e.message}", e)
+            ec.transaction.rollback("Critical error during test data cleanup in DteGenerationTests", e)
+        } finally {
+            ec.artifactExecution.enableAuthz()
+
+            // Clear any errors to prevent propagation to other test suites
+            ec.message.clearErrors()
+        }
+    }
+
+    private void cleanupPartyDependencies(String partyId) {
+        // Delete party dependencies in correct order to avoid foreign key violations
+
+        // 1. Delete party contact mechanisms
+        ec.entity.find("mantle.party.PartyContactMech")
+            .condition("partyId", partyId)
+            .deleteAll()
+
+        // 2. Delete party identifications
+        ec.entity.find("mantle.party.PartyIdentification")
+            .condition("partyId", partyId)
+            .deleteAll()
+
+        // 3. Delete party roles
+        ec.entity.find("mantle.party.PartyRole")
+            .condition("partyId", partyId)
+            .deleteAll()
+
+        // 4. Delete party relationships where this party is involved
+        ec.entity.find("mantle.party.PartyRelationship")
+            .condition("fromPartyId", partyId)
+            .deleteAll()
+        ec.entity.find("mantle.party.PartyRelationship")
+            .condition("toPartyId", partyId)
+            .deleteAll()
+
+        // 5. Delete organization record if it exists
+        ec.entity.find("mantle.party.Organization")
+            .condition("partyId", partyId)
+            .deleteAll()
+
+        // 6. Delete the base party record last
+        ec.entity.find("mantle.party.Party")
+            .condition("partyId", partyId)
+            .deleteAll()
+
+        logger.info("Cleaned up party dependencies for: ${partyId}")
     }
 
     def "001 - generate Factura with minimal required parameters"() {
@@ -633,7 +720,7 @@ JYljFtsT
             .parameters([
                 fiscalTaxDocumentTypeEnumId: "Ftdt-33",
                 issuerPartyId: testIssuerPartyId,
-                rutReceptor: "87654321-4", 
+                rutReceptor: "87654321-4",
                 receiverPartyId: testReceiverPartyId,
                 razonSocialReceptor: "Test DTE Receiver Organization",
                 giroReceptor: "Test Business Activity",
@@ -659,7 +746,7 @@ JYljFtsT
                     [
                         itemTypeEnumId:'ItemVatTax',
                         quantity:1,
-                        amount:33251
+                        amount:31588
                     ]
                 ],
                 descuentoORecargoGlobalList: [

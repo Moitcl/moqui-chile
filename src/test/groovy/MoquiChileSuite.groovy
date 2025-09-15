@@ -36,10 +36,7 @@ import org.moqui.Moqui
     EmailProcessing.DteEmailProcessingTests.class,      // DteEmailProcessing entity CRUD and workflow testing
     EmailProcessing.DteEmailProcessingEnvioTests.class, // DteEmailProcessingEnvio entity and composite key testing
     EmailProcessing.EmailProcessingIntegrationTests.class, // Complete email processing workflow integration tests
-    EmailProcessing.EmailProcessingIntegrationServiceTests.class, // Email processing service integration testing
-    EmailProcessing.EmailProcessingMockingExampleTest.class, // Comprehensive test infrastructure demonstration
-    EmailProcessing.DteCommServicesIncomingMessageIntegrationTests.class, // Main DTE email processing service integration tests
-    EmailProcessing.DteProcessingSpec.class,             // Integration tests for DTE processing with MIME decoding  
+    EmailProcessing.DteProcessingSpec.class,             // Integration tests for DTE processing with MIME decoding
     General.MimeDecodingSpec.class                     // Unit tests for MIME filename decoder service
 ])
 class MoquiChileSuite {

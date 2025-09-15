@@ -142,6 +142,9 @@ class ServiceJobRunMockHelper {
      */
     private static void createServiceJobRunEntity(ExecutionContext ec, JobRunContext context) {
         try {
+            // First ensure the ServiceJob exists (required for foreign key)
+            createServiceJobIfNotExists(ec, context.jobName, context.serviceName)
+
             Map createResult = ec.service.sync().name("create#moqui.service.job.ServiceJobRun")
                     .parameters([
                         jobRunId: context.jobRunId,
@@ -154,13 +157,36 @@ class ServiceJobRunMockHelper {
                         runBy: context.runBy,
                         results: new JsonBuilder(context.results).toString()
                     ]).call()
-            
+
             if (createResult.errors) {
                 throw new RuntimeException("Failed to create ServiceJobRun entity: ${createResult.errors}")
             }
         } catch (Exception e) {
             context.logMessages.add("Warning: Failed to create ServiceJobRun entity: ${e.message}")
             // Continue without database entity for testing purposes
+        }
+    }
+
+    /**
+     * Create ServiceJob record if it doesn't exist (required for ServiceJobRun foreign key)
+     */
+    private static void createServiceJobIfNotExists(ExecutionContext ec, String jobName, String serviceName) {
+        try {
+            def existingJob = ec.entity.find("moqui.service.job.ServiceJob")
+                    .condition("jobName", jobName).one()
+
+            if (!existingJob) {
+                ec.service.sync().name("create#moqui.service.job.ServiceJob")
+                        .parameters([
+                                jobName: jobName,
+                                serviceName: serviceName,
+                                description: "Mock job created by test helper for ${jobName}",
+                                cronExpression: "0 0 0 * * ?" // Dummy cron expression for test
+                        ]).call()
+            }
+        } catch (Exception e) {
+            // Log warning but continue - some tests may not need database consistency
+            // This allows tests to work even if ServiceJob creation fails
         }
     }
     
@@ -593,6 +619,40 @@ class ServiceJobRunMockHelper {
         activeJobs.clear()
         jobEventHistory.clear()
         currentJobRunId.set(null)
+    }
+
+    /**
+     * Clean up all mock job data including database entities
+     */
+    static void cleanupAllJobsAndEntities(ExecutionContext ec) {
+        // Clean up ServiceJobRun entities created by mock helper
+        activeJobs.keySet().each { jobRunId ->
+            try {
+                ec.entity.find("moqui.service.job.ServiceJobRun")
+                        .condition("jobRunId", jobRunId)
+                        .deleteAll()
+            } catch (Exception e) {
+                // Ignore cleanup errors in tests
+            }
+        }
+
+        // Clean up ServiceJob entities created by mock helper
+        Set<String> jobNamesToClean = activeJobs.values().collect { it.jobName } as Set
+        jobNamesToClean.each { jobName ->
+            try {
+                // Only delete jobs that were created by mock helper (contain "mock" or "test")
+                if (jobName.toLowerCase().contains("mock") || jobName.toLowerCase().contains("test")) {
+                    ec.entity.find("moqui.service.job.ServiceJob")
+                            .condition("jobName", jobName)
+                            .deleteAll()
+                }
+            } catch (Exception e) {
+                // Ignore cleanup errors in tests
+            }
+        }
+
+        // Clean up in-memory data
+        cleanupAllJobs()
     }
     
     /**
