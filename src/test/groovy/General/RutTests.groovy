@@ -198,7 +198,7 @@ class RutTests extends Specification {
    def "004 - Verifica RUTs Especiales del SII"() {
       setup:
       logger.info("[General] Obtener lista de RUTs especiales del SII")
-      Map responseMap = ec.service.sync().name("mchile.sii.SiiServices.get#RutEspeciales").call()
+      Map responseMap = ec.service.sync().name("mchile.sii.SIIServices.get#RutEspeciales").call()
       totalTestChecked += 1
 
       expect:
@@ -467,7 +467,7 @@ class RutTests extends Specification {
       String specialRut = "11111111-1"  // Special RUT: "Utilizado en Ejemplos"
       
       // Get special RUTs list to confirm
-      Map specialRuts = ec.service.sync().name("mchile.sii.SiiServices.get#RutEspeciales").call()
+      Map specialRuts = ec.service.sync().name("mchile.sii.SIIServices.get#RutEspeciales").call()
       
       // Create test organizations
       ec.service.sync().name("mantle.party.PartyServices.create#Organization")
