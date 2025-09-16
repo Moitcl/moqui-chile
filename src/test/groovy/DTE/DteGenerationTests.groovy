@@ -98,7 +98,7 @@ class DteGenerationTests extends Specification {
             ec.transaction.commit()
         } catch (Exception e) {
             logger.warn("Error during cleanup transaction: ${e.message}")
-            ec.transaction.rollback()
+            ec.transaction.rollback(null, null)
         }
     }
     

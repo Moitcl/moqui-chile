@@ -70,7 +70,7 @@ class DteProcessingSpec extends Specification {
         } catch (Exception e) {
             ec.logger.warn("Error during test cleanup: ${e.message}", e)
             if (ec.transaction.isTransactionInPlace()) {
-                ec.transaction.rollback()
+                ec.transaction.rollback(null, null)
             }
         } finally {
             // Re-enable authorization

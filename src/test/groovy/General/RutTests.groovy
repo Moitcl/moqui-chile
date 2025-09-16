@@ -195,7 +195,203 @@ class RutTests extends Specification {
       "99999999-K"  | false    | "RUT inválido con K"
    }
 
-   def "004 - Verifica RUTs Especiales del SII"() {
+   def "004 - Verifica Normalización de RUTs con k minúscula (#rut, #descripcion)"() {
+      setup:
+      logger.info("[General] Verificar normalización de RUT: ${descripcion} (${rut})")
+      String testOrgId = "TEST-RUT-NORMALIZE-${rut.replace('-', '')}"
+      String expectedNormalizedRut = rut.toLowerCase().endsWith('-k') ? rut.toLowerCase().replace('-k', '-K') : rut
+
+      when: "Validating RUT format"
+      Map responseMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut")
+              .parameters([rut:rut, ignoreErrors:true])
+              .call()
+
+      // Check if the service had validation errors
+      boolean hasErrors = ec.message.hasError() || responseMap?.errorMessage != null
+
+      and: "Creating organization with the RUT if validation passes"
+      Map createResult = null
+      if (esValido && !hasErrors) {
+          // Create test organization
+          ec.service.sync().name("mantle.party.PartyServices.create#Organization")
+                  .parameters([partyId: testOrgId, organizationName: "Test RUT Normalization Org"])
+                  .call()
+
+          // Add RUT identification - this should store the normalized version
+          createResult = ec.service.sync().name("create#mantle.party.PartyIdentification")
+                  .parameters([
+                      partyId: testOrgId,
+                      partyIdTypeEnumId: "PtidNationalTaxId",
+                      idValue: rut
+                  ])
+                  .call()
+      }
+
+      then: "RUT validation should match expected result"
+      !hasErrors == esValido
+
+      and: "Service should normalize lowercase k to uppercase K"
+      if (esValido && rut.toLowerCase().endsWith('-k')) {
+          // The service should normalize lowercase 'k' to uppercase 'K'
+          responseMap.normalizedRut == expectedNormalizedRut || responseMap.rut == expectedNormalizedRut
+      }
+
+      and: "Database should store the normalized RUT with uppercase K"
+      if (esValido && !hasErrors && createResult != null) {
+          // Query the database to verify the stored RUT
+          def storedPartyId = ec.entity.find("mantle.party.PartyIdentification")
+                  .condition("partyId", testOrgId)
+                  .condition("partyIdTypeEnumId", "PtidNationalTaxId")
+                  .one()
+
+          storedPartyId != null
+          storedPartyId.idValue == expectedNormalizedRut
+
+          logger.info("[General] RUT stored in DB: '${storedPartyId.idValue}', expected: '${expectedNormalizedRut}'")
+
+          // Specifically verify that lowercase 'k' was converted to uppercase 'K'
+          if (rut.toLowerCase().endsWith('-k')) {
+              assert storedPartyId.idValue.endsWith('-K') : "RUT should be stored with uppercase K, but found: ${storedPartyId.idValue}"
+              assert !storedPartyId.idValue.endsWith('-k') : "RUT should not be stored with lowercase k"
+          }
+      }
+
+      totalTestChecked += 1
+
+      cleanup:
+      // This test may trigger validation errors - clear them
+      ec.message.clearErrors()
+
+      // Clean up test data if organization was created
+      if (esValido && testOrgId) {
+          try {
+              // Delete PartyIdentification records
+              def partyIdentifications = ec.entity.find("mantle.party.PartyIdentification")
+                      .condition("partyId", testOrgId).list()
+              partyIdentifications.each { partyIdRecord ->
+                  ec.service.sync().name("delete#mantle.party.PartyIdentification")
+                      .parameters([partyId: partyIdRecord.partyId, partyIdTypeEnumId: partyIdRecord.partyIdTypeEnumId, idValue: partyIdRecord.idValue])
+                      .disableAuthz().call()
+              }
+
+              // Delete Party record
+              ec.service.sync().name("delete#mantle.party.Organization").parameters([partyId: testOrgId]).disableAuthz().call()
+              ec.service.sync().name("delete#mantle.party.Party").parameters([partyId: testOrgId]).disableAuthz().call()
+          } catch (Exception e) {
+              logger.warn("[General] Cleanup warning for ${testOrgId}: ${e.message}")
+          }
+      }
+
+      where:
+      rut           | esValido | descripcion
+      "34567893-k"  | true     | "RUT válido con k minúscula"
+      "11111111-k"  | false    | "RUT inválido con k minúscula"
+      "7826361-k"   | true     | "RUT válido con k minúscula (7 dígitos)"
+      "34567893-K"  | true     | "RUT válido con K mayúscula"
+   }
+
+   def "005 - Verifica Normalización de RUTs con separadores de miles (#rut, #descripcion)"() {
+      setup:
+      logger.info("[General] Verificar normalización de RUT con separadores: ${descripcion} (${rut})")
+      String testOrgId = "TEST-RUT-DOTS-${System.currentTimeMillis()}"
+      String expectedNormalizedRut = rut.replace('.', '').toLowerCase().endsWith('-k') ?
+              rut.replace('.', '').toLowerCase().replace('-k', '-K') :
+              rut.replace('.', '')
+
+      when: "Validating RUT format with dot separators"
+      Map responseMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut")
+              .parameters([rut:rut, ignoreErrors:true])
+              .call()
+
+      // Check if the service had validation errors
+      boolean hasErrors = ec.message.hasError() || responseMap?.errorMessage != null
+
+      and: "Creating organization with the RUT if validation passes"
+      Map createResult = null
+      if (esValido && !hasErrors) {
+          // Create test organization
+          ec.service.sync().name("mantle.party.PartyServices.create#Organization")
+                  .parameters([partyId: testOrgId, organizationName: "Test RUT Dots Normalization Org"])
+                  .call()
+
+          // Add RUT identification - this should store the normalized version (no dots)
+          createResult = ec.service.sync().name("create#mantle.party.PartyIdentification")
+                  .parameters([
+                      partyId: testOrgId,
+                      partyIdTypeEnumId: "PtidNationalTaxId",
+                      idValue: rut
+                  ])
+                  .call()
+      }
+
+      then: "RUT validation should match expected result"
+      !hasErrors == esValido
+
+      and: "Service should normalize dots and case"
+      if (esValido) {
+          // The service should remove dots and normalize case
+          responseMap.normalizedRut == expectedNormalizedRut || responseMap.rut == expectedNormalizedRut
+      }
+
+      and: "Database should store the normalized RUT without dots and with uppercase K"
+      if (esValido && !hasErrors && createResult != null) {
+          // Query the database to verify the stored RUT
+          def storedPartyId = ec.entity.find("mantle.party.PartyIdentification")
+                  .condition("partyId", testOrgId)
+                  .condition("partyIdTypeEnumId", "PtidNationalTaxId")
+                  .one()
+
+          storedPartyId != null
+          storedPartyId.idValue == expectedNormalizedRut
+
+          logger.info("[General] RUT with dots stored in DB: '${storedPartyId.idValue}', expected: '${expectedNormalizedRut}'")
+
+          // Specifically verify normalization rules
+          assert !storedPartyId.idValue.contains('.') : "RUT should be stored without dots, but found: ${storedPartyId.idValue}"
+
+          if (rut.toLowerCase().endsWith('-k')) {
+              assert storedPartyId.idValue.endsWith('-K') : "RUT should be stored with uppercase K, but found: ${storedPartyId.idValue}"
+              assert !storedPartyId.idValue.endsWith('-k') : "RUT should not be stored with lowercase k"
+          }
+      }
+
+      totalTestChecked += 1
+
+      cleanup:
+      // This test may trigger validation errors - clear them
+      ec.message.clearErrors()
+
+      // Clean up test data if organization was created
+      if (esValido && testOrgId) {
+          try {
+              // Delete PartyIdentification records
+              def partyIdentifications = ec.entity.find("mantle.party.PartyIdentification")
+                      .condition("partyId", testOrgId).list()
+              partyIdentifications.each { partyIdRecord ->
+                  ec.service.sync().name("delete#mantle.party.PartyIdentification")
+                      .parameters([partyId: partyIdRecord.partyId, partyIdTypeEnumId: partyIdRecord.partyIdTypeEnumId, idValue: partyIdRecord.idValue])
+                      .disableAuthz().call()
+              }
+
+              // Delete Party record
+              ec.service.sync().name("delete#mantle.party.Organization").parameters([partyId: testOrgId]).disableAuthz().call()
+              ec.service.sync().name("delete#mantle.party.Party").parameters([partyId: testOrgId]).disableAuthz().call()
+          } catch (Exception e) {
+              logger.warn("[General] Cleanup warning for ${testOrgId}: ${e.message}")
+          }
+      }
+
+      where:
+      rut              | esValido | descripcion
+      "12.345.678-5"   | true     | "RUT con separadores de miles válido"
+      "1.234.567-k"    | true     | "RUT con separadores y k minúscula"
+      "76.514.104-4"   | true     | "RUT empresa con separadores"
+      "7.826.361-K"    | true     | "RUT con separadores y K mayúscula"
+      "12.345.678-9"   | false    | "RUT con separadores inválido"
+      "1.111.111-k"    | false    | "RUT con separadores inválido y k minúscula"
+   }
+
+   def "006 - Verifica RUTs Especiales del SII"() {
       setup:
       logger.info("[General] Obtener lista de RUTs especiales del SII")
       Map responseMap = ec.service.sync().name("mchile.sii.SIIServices.get#RutEspeciales").call()
@@ -205,16 +401,16 @@ class RutTests extends Specification {
       responseMap.rutMap != null
       responseMap.rutList != null
       responseMap.rutMap.size() > 0
-      
+
       // Verify specific known special RUTs
       responseMap.rutMap['11111111-1'] == 'Utilizado en Ejemplos'
       responseMap.rutMap['66666666-6'] == 'Persona con rut desconocido'
       responseMap.rutMap['77777777-7'] == 'Agrupación de transacciones con tarjetas de crédito bancarias'
-      
+
       logger.info("[General] RUTs especiales encontrados: ${responseMap.rutMap.keySet()}")
    }
 
-   def "005 - Verifica Duplicación de RUTs - Misma Organización"() {
+   def "007 - Verifica Duplicación de RUTs - Misma Organización"() {
       setup:
       logger.info("[General] Probar duplicación de RUTs en la misma organización")
       String testOrgId = "TEST-RUT-DUP-ORG"
@@ -276,7 +472,7 @@ class RutTests extends Specification {
       }
    }
 
-   def "006 - Verifica Duplicación de RUTs - Organizaciones con Mismo ownerPartyId (debe fallar)"() {
+   def "008 - Verifica Duplicación de RUTs - Organizaciones con Mismo ownerPartyId (debe fallar)"() {
       setup:
       logger.info("[General] Probar duplicación de RUTs entre organizaciones con mismo ownerPartyId")
       String testOrg1Id = "TEST-RUT-SAME-OWNER-ORG1"
@@ -348,7 +544,7 @@ class RutTests extends Specification {
       }
    }
 
-   def "007 - Verifica Duplicación de RUTs - Organizaciones con Diferentes Tenants (EntityFilter simulation)"() {
+   def "009 - Verifica Duplicación de RUTs - Organizaciones con Diferentes Tenants (EntityFilter simulation)"() {
       setup:
       logger.info("[General] Probar duplicación de RUTs entre organizaciones de diferentes tenants usando EntityFilters")
       String testOrg1Id = "TEST-RUT-TENANT1-ORG1"
@@ -459,7 +655,7 @@ class RutTests extends Specification {
       }
    }
 
-   def "008 - Verifica RUTs Especiales Permiten Duplicación"() {
+   def "010 - Verifica RUTs Especiales Permiten Duplicación"() {
       setup:
       logger.info("[General] Probar que RUTs especiales permiten duplicación")
       String testOrg1Id = "TEST-SPECIAL-RUT-ORG1"
