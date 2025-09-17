@@ -256,9 +256,9 @@ class RutTests extends Specification {
           }
       }
 
-      totalTestChecked += 1
-
       cleanup:
+
+      totalTestChecked += 1
       // This test may trigger validation errors - clear them
       ec.message.clearErrors()
 
