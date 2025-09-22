@@ -196,9 +196,9 @@ if (existingDteList) {
             xmlInDb = ec.resource.getLocationReference(contentList.first().contentLocation).openStream().readAllBytes()
             dbDoc = MoquiDTEUtils.parseDocument(xmlInDb)
             Element dbDocElem = dbDoc.getDocumentElement()
-            canonicalFromDb = MoquiDTEUtils.canonicalizeXmlToString(dbDocElem)
-            canonicalFromEnvio = MoquiDTEUtils.canonicalizeXmlToString(domNode)
-            isDuplicated = canonicalFromDb.replaceAll(">\\s+<", "><").equals(canonicalFromEnvio.replaceAll(">\\s+<", "><"))
+            String canonicalFromDb = MoquiDTEUtils.canonicalizeXmlToString(dbDocElem).replaceAll("\\s*xmlns=\"http://www.sii.cl/SiiDte\"\\s*", " ").replaceAll(">\\s+<", "><")
+            String canonicalFromEnvio = MoquiDTEUtils.canonicalizeXmlToString(domNode).replaceAll("\\s*xmlns=\"http://www.sii.cl/SiiDte\"\\s*", " ").replaceAll(">\\s+<", "><")
+            isDuplicated = canonicalFromDb.equals(canonicalFromEnvio)
             ec.logger.info("Comparando DTE en BD con DTE de envío usando canonicalización, son equivalentes: ${isDuplicated}")
 
             if (dte.sentRecStatusId in ['Ftd-ReceiverAck', 'Ftd-ReceiverAccept']) {
