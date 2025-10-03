@@ -75,6 +75,10 @@ class MoquiDTEUtils {
         return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, null, issuerPartyId, preciosIncluyenIva, false)
     }
 
+    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, String issuerPartyId, Boolean preciosIncluyenIva, Boolean generarXmlConIndicador) throws BaseArtifactException {
+        return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, null, issuerPartyId, preciosIncluyenIva, generarXmlConIndicador)
+    }
+
     public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, Integer codRef, String issuerPartyId, Boolean preciosIncluyenIva, Boolean generarXmlConIndicador) throws BaseArtifactException {
         List detalleList = []
         // Text Correction DTEs have no detail list
