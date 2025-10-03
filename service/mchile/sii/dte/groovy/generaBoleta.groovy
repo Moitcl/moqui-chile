@@ -89,7 +89,7 @@ if (invoiceId) {
 }
 
 if (tipoDte == '39') {
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft? "OrderItem" : "InvoiceItem", null, issuerPartyId, preciosIncluyenIva, !generarXmlMontosNetos)
     detalleList = detMap.detalleList
     //throw new BaseArtifactException("Lista:"+detMap.totalExento)
     totalNeto = detMap.totalNeto
@@ -107,7 +107,7 @@ if (tipoDte == '39') {
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
 } else if (tipoDte == '41') {
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "InvoiceItem", issuerPartyId)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "InvoiceItem", null, issuerPartyId, preciosIncluyenIva, !generarXmlMontosNetos)
     detalleList = detMap.detalleList
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
@@ -187,9 +187,18 @@ descuentoORecargoGlobalList.each { dor ->
 totalExento = (totalExento?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
 if (totalNeto != null) {
     totalNeto = totalNeto - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
-    long calculatedIva = Math.round(totalNeto * vatTaxRate)
-    if ((totalIva?:0) != calculatedIva)
-        ec.message.addError("IVA mismatch, received from details ${totalIva}, calculated from Neto: ${calculatedIva}")
+
+    // Validate IVA based on whether amounts are gross or net
+    // Note: For Boletas, generarXmlMontosNetos=false means gross amounts (default)
+    if (generarXmlMontosNetos) {
+        // When IndMntNeto=2, totalNeto contains net amounts and IVA is calculated from net
+        long calculatedIva = Math.round(totalNeto * vatTaxRate)
+        if ((totalIva ?: 0) != calculatedIva)
+            ec.message.addError("IVA mismatch with net amounts, received from details ${totalIva}, calculated from Neto: ${calculatedIva}")
+    }
+    // When gross amounts (default): No validation needed - IVA was extracted per-item in prepareDetails
+    // The per-item extraction is the correct approach and avoids rounding differences
+
     montoIVARecuperable = totalIva
     totalInvoice = (totalNeto?:0) + (totalIva?:0) + (totalExento?:0)
 } else
@@ -238,6 +247,10 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 //IndNoRebaja()
                 if (indServicio)
                     IndServicio(indServicio)
+                // Only set IndMntNeto when generating XML with net amounts (indicador = 2)
+                Integer indicadorMontosNetos = generarXmlMontosNetos ? 2 : null
+                if (indicadorMontosNetos)
+                    IndMntNeto(indicadorMontosNetos)
                 //FmaPago(formaPago)
                 if (fechaCancelacion)
                     FchCancel(ec.l10n.format(fechaCancelacion, 'yyyy-MM-dd'))

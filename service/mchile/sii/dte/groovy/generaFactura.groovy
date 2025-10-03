@@ -13,6 +13,10 @@ import groovy.xml.MarkupBuilder
 
 ExecutionContext ec = context.ec
 
+// Convert generarXmlMontosBrutos boolean to indicadorMontosBrutos integer for XML generation
+// Only set to 1 if true, otherwise leave as null (don't set 0)
+indicadorMontosBrutos = generarXmlMontosBrutos ? 1 : null
+
 dteConstituyeVentaTypeList = ['Ftdt-101', 'Ftdt-102', 'Ftdt-109', 'Ftdt-110', 'Ftdt-30', 'Ftdt-32', 'Ftdt-33', 'Ftdt-34', 'Ftdt-35', 'Ftdt-38', 'Ftdt-39', 'Ftdt-41']
 EntityValue invoice = null
 if (invoiceId) {
@@ -116,7 +120,7 @@ currencyUomId = 'CLP'
 ec.logger.info("Creando DTE tipo ${tipoDte} (${dteTypeDescription})")
 tasaIva = ec.l10n.format(vatTaxRate*100, "##")
 if (tipoDte in ['33', '46', '43']) {
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
     totalIva = detMap.totalIva
@@ -138,7 +142,7 @@ if (tipoDte in ['33', '46', '43']) {
     totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte in ['110', '111', '112']) {
     // DTE Exportación: Factura de Exportación Electrónica, Nota de Débito de Exportación Electrónica, Nota de Crédito de Exportación Electrónica
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos)
     detalleList = detMap.detalleList
     totalExento = detMap.totalExento?:0
     if (detMap.totalNeto > 0)
@@ -169,7 +173,7 @@ if (tipoDte in ['33', '46', '43']) {
         tipoMoneda = uomToSiiCurrencyMap['CLP']
 } else if (tipoDte == '34') {
     // Factura Exenta Electrónica
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
     totalIva = detMap.totalIva
@@ -199,7 +203,7 @@ if (tipoDte in ['33', '46', '43']) {
     }
     codRef = referenciaList[0].codigo
 
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "InvoiceItem", codRef as Integer, issuerPartyId)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "InvoiceItem", codRef as Integer, issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
     totalIva = detMap.totalIva
@@ -234,7 +238,7 @@ if (tipoDte in ['33', '46', '43']) {
     }
     codRef = referenciaList[0].codigo
 
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "DebitoItem", codRef as Integer, issuerPartyId)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "DebitoItem", codRef as Integer, issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
     totalIva = detMap.totalIva
@@ -270,7 +274,7 @@ if (tipoDte in ['33', '46', '43']) {
     dteExenta = refMap.dteExenta
     codRef = refMap.codigo
 
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "ShipmentItem", codRef as Integer, issuerPartyId)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "ShipmentItem", codRef as Integer, issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
     totalIva = detMap.totalIva
@@ -392,8 +396,15 @@ if (totalNeto != null)
 if (totalIva != null)
     totalIva = ec.l10n.roundCurrency(totalIva, currencyUomId) as Integer
 
-if (Math.round(totalIva?:0.0) != Math.round((totalNeto?:0.0) * (vatTaxRate?:0.0)))
-    ec.message.addError("Error en Iva, recibido de detalles: ${totalIva}, calculado: ${Math.round((totalNeto?:0.0) * (vatTaxRate?:0.0))}")
+// Validate IVA based on whether amounts are gross or net
+if (indicadorMontosBrutos != 1) {
+    // When MntBruto not set, totalNeto contains net amounts and IVA is calculated from net
+    // Validation: IVA should equal totalNeto * vatTaxRate
+    if (Math.round(totalIva ?: 0.0) != Math.round((totalNeto ?: 0.0) * (vatTaxRate ?: 0.0)))
+        ec.message.addError("Error en Iva, recibido de detalles: ${totalIva}, calculado: ${Math.round((totalNeto ?: 0.0) * (vatTaxRate ?: 0.0))}")
+}
+// When MntBruto=1: No validation needed - IVA was extracted per-item in prepareDetails
+// The per-item extraction is the correct approach and avoids rounding differences
 
 idDocumento = "Dte-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
 String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")

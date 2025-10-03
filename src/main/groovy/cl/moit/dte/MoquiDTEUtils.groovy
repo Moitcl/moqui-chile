@@ -64,10 +64,18 @@ class MoquiDTEUtils {
     protected final static Logger logger = LoggerFactory.getLogger(MoquiDTEUtils.class)
 
     public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, String issuerPartyId) throws BaseArtifactException {
-        return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, null, issuerPartyId)
+        return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, null, issuerPartyId, false, false)
     }
 
     public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, Integer codRef, String issuerPartyId) throws BaseArtifactException {
+        return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, codRef, issuerPartyId, false, false)
+    }
+
+    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, String issuerPartyId, Boolean preciosIncluyenIva) throws BaseArtifactException {
+        return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, null, issuerPartyId, preciosIncluyenIva, false)
+    }
+
+    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, Integer codRef, String issuerPartyId, Boolean preciosIncluyenIva, Boolean generarXmlConIndicador) throws BaseArtifactException {
         List detalleList = []
         // Text Correction DTEs have no detail list
         if ((detailList == null || detailList.size()) == 0 && codRef == 2) {
@@ -261,6 +269,41 @@ class MoquiDTEUtils {
                 priceItem = detailEntry.amount as BigDecimal
                 totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (montoRecargo ?: 0) + (ajusteDecimal ?: 0)
             }
+
+            // Bidirectional price conversion based on input format and desired XML output
+            if (itemAfecto && detailEntry.itemTypeEnumId != "ItemVatTax") {
+                if (preciosIncluyenIva && !generarXmlConIndicador) {
+                    // Input: gross, Output: net → Convert gross to net
+                    Map netPriceMap = ec.service.sync().name("mchile.TaxServices.calculate#NetFromGrossPrice")
+                        .parameter("grossPrice", totalItem).call()
+                    BigDecimal vatAmount = netPriceMap.vatAmount
+                    totalItem = netPriceMap.netPrice
+                    if (quantity != null && quantity > 0) {
+                        priceItem = totalItem / quantity
+                    }
+                    totalIva = (totalIva ?: 0) + vatAmount
+                } else if (!preciosIncluyenIva && generarXmlConIndicador) {
+                    // Input: net, Output: gross → Convert net to gross (add IVA)
+                    Map grossPriceMap = ec.service.sync().name("mchile.TaxServices.calculate#GrossFromNetPrice")
+                        .parameter("netPrice", totalItem).call()
+                    BigDecimal vatAmount = grossPriceMap.vatAmount
+                    totalItem = grossPriceMap.grossPrice
+                    if (quantity != null && quantity > 0) {
+                        priceItem = totalItem / quantity
+                    }
+                    // IVA is now included in totalItem, don't add separately to totalIva
+                    totalIva = (totalIva ?: 0) + vatAmount
+                } else if (preciosIncluyenIva && generarXmlConIndicador) {
+                    // Input: gross, Output: gross → No conversion but extract IVA for totals
+                    Map netPriceMap = ec.service.sync().name("mchile.TaxServices.calculate#NetFromGrossPrice")
+                        .parameter("grossPrice", totalItem).call()
+                    BigDecimal vatAmount = netPriceMap.vatAmount
+                    // Keep totalItem as gross, just accumulate IVA for validation
+                    totalIva = (totalIva ?: 0) + vatAmount
+                }
+                // If both false (net input, net output), no conversion or IVA extraction needed
+            }
+
             if (montoDescuento)
                 totalDescuentos += montoDescuento
             if (montoRecargo)
