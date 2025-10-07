@@ -281,29 +281,33 @@ class MoquiDTEUtils {
                     Map netPriceMap = ec.service.sync().name("mchile.TaxServices.calculate#NetFromGrossPrice")
                         .parameter("grossPrice", totalItem).call()
                     BigDecimal vatAmount = netPriceMap.vatAmount
-                    totalItem = netPriceMap.netPrice
+                    // Round per-item net amount to ensure consistency with validation
+                    // Validation recalculates by converting each gross item to net and summing
+                    totalItem = netPriceMap.netPrice.setScale(0, RoundingMode.HALF_UP)
                     if (quantity != null && quantity > 0) {
                         priceItem = totalItem / quantity
                     }
-                    totalIva = (totalIva ?: 0) + vatAmount
+                    // Round per-item IVA before accumulating to prevent rounding discrepancies in totals
+                    totalIva = (totalIva ?: 0) + vatAmount.setScale(0, RoundingMode.HALF_UP)
                 } else if (!preciosIncluyenIva && generarXmlConIndicador) {
                     // Input: net, Output: gross → Convert net to gross (add IVA)
                     Map grossPriceMap = ec.service.sync().name("mchile.TaxServices.calculate#GrossFromNetPrice")
                         .parameter("netPrice", totalItem).call()
                     BigDecimal vatAmount = grossPriceMap.vatAmount
-                    totalItem = grossPriceMap.grossPrice
+                    // Round per-item gross amount for consistency
+                    totalItem = grossPriceMap.grossPrice.setScale(0, RoundingMode.HALF_UP)
                     if (quantity != null && quantity > 0) {
                         priceItem = totalItem / quantity
                     }
-                    // IVA is now included in totalItem, don't add separately to totalIva
-                    totalIva = (totalIva ?: 0) + vatAmount
+                    // Round per-item IVA before accumulating (IVA is included in gross totalItem)
+                    totalIva = (totalIva ?: 0) + vatAmount.setScale(0, RoundingMode.HALF_UP)
                 } else if (preciosIncluyenIva && generarXmlConIndicador) {
                     // Input: gross, Output: gross → No conversion but extract IVA for totals
                     Map netPriceMap = ec.service.sync().name("mchile.TaxServices.calculate#NetFromGrossPrice")
                         .parameter("grossPrice", totalItem).call()
                     BigDecimal vatAmount = netPriceMap.vatAmount
-                    // Keep totalItem as gross, just accumulate IVA for validation
-                    totalIva = (totalIva ?: 0) + vatAmount
+                    // Round per-item IVA before accumulating to prevent rounding discrepancies
+                    totalIva = (totalIva ?: 0) + vatAmount.setScale(0, RoundingMode.HALF_UP)
                 }
                 // If both false (net input, net output), no conversion or IVA extraction needed
             }

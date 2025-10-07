@@ -148,7 +148,7 @@ encabezado.Totales.ImptoReten.each { it ->
     }
 }
 
-if ((montoNeto + montoExento + iva + impuestos) != montoTotal) errorMessages.add("Total inválido (montoTotal no coincide con suma de monto neto, monto exento, iva e impuestos)")
+if ((montoNeto + montoExento + iva + impuestos) != montoTotal) errorMessages.add("Total inválido, montoTotal (${montoTotal}) no coincide con suma de monto neto, monto exento, iva e impuestos (${montoNeto + montoExento + iva + impuestos})")
 if ((montoNeto > 0 && tasaIva / 100 != vatTaxRate) && !esBoleta) errorMessages.add("Tasa IVA no coincide: esperada: ${vatTaxRate*100}%, recibida: ${tasaIva}%")
 
 tipoDteEnumId = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#MoquiCode").parameter("siiCode", tipoDte).call().enumId
@@ -368,6 +368,8 @@ globalList.each { globalItem ->
 
 requiresManualIntervention = false
 totalCalculadoIva = (montoNeto * vatTaxRate).setScale(0, RoundingMode.HALF_UP)
+if (totalCalculado != null)
+    totalCalculado = totalCalculado.setScale(0, RoundingMode.HALF_UP)
 if (totalCalculado != (montoNeto + montoExento)) discrepancyMessages.add("Monto total (neto + exento) no coincide, calculado: ${totalCalculado}, en totales de DTE: ${montoNeto + montoExento}")
 if (totalExento != montoExento) {
     discrepancyMessages.add("Monto exento no coincide, calculado: ${totalExento}, en totales de DTE: ${montoExento}")
