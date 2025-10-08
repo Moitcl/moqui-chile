@@ -397,7 +397,7 @@ if (totalIva != null)
     totalIva = ec.l10n.roundCurrency(totalIva, currencyUomId) as Integer
 
 // Validate IVA based on whether amounts are gross or net
-if (indicadorMontosBrutos != 1) {
+if (indicadorMontosBrutos != 1 && !skipIvaMismatchCalculation) {
     // When MntBruto not set, totalNeto contains net amounts and IVA is calculated from net
     // Validation: IVA should equal totalNeto * vatTaxRate
     if (Math.round(totalIva ?: 0.0) != Math.round((totalNeto ?: 0.0) * (vatTaxRate ?: 0.0)))
@@ -444,8 +444,11 @@ xmlBuilder.DD() {
 datosTed = xmlWriter.toString()
 xmlWriter.close()
 
-if (forceIva)
+if (forceIva) {
+    diff = forceIva - totalIva
     totalIva = forceIva
+    totalInvoice += diff
+}
 
 xmlWriter = new StringWriter()
 xmlBuilder = new MarkupBuilder(xmlWriter)

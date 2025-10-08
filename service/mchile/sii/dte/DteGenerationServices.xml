@@ -121,6 +121,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="formatoPdf" default-value="carta">
                 <description>Tipo de formato para generar PDF (valores válidos: 'carta', 'rollo57mm', 'rollo80mm')</description>
             </parameter>
+            <parameter name="skipIvaMismatchCalculation" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
@@ -222,6 +223,8 @@ along with this software (see the LICENSE.md file). If not, see
                 <description>Tipo de formato para generar PDF (valores válidos: 'carta', 'rollo57mm', 'rollo80mm')</description>
             </parameter>
             <parameter name="draft" type="Boolean" default="false"/>
+            <parameter name="skipSalesTaxCalculation" type="Boolean" default="false"/>
+            <parameter name="skipIvaMismatchCalculation" type="Boolean" default="false"/>
         </in-parameters>
         <out-parameters>
             <parameter name="fiscalTaxDocumentId"/>
@@ -239,8 +242,12 @@ along with this software (see the LICENSE.md file). If not, see
 
             <!-- Calculate Sales Tax for Credit and Debit Memos -->
             <if condition="invoice.invoiceTypeEnumId in ['InvoiceCreditMemo', 'InvoiceDebitMemo', 'InvoiceCreditMemoExport', 'InvoiceDebitMemoExport']">
-                <log message="Calculating Tax for invoice ${invoiceId}"/>
-                <service-call name="mchile.TaxServices.calculate#SalesTaxForInvoice" in-map="[invoiceId:invoiceId]"/>
+                <if condition="skipSalesTaxCalculation"><then>
+                    <log message="Skipping Tax calculation for invoice ${invoiceId}"/>
+                </then><else>
+                    <log message="Calculating Tax for invoice ${invoiceId}"/>
+                    <service-call name="mchile.TaxServices.calculate#SalesTaxForInvoice" in-map="[invoiceId:invoiceId]"/>
+                </else></if>
             </if>
 
             <!-- Return invoiceItemList, Applying discounts to parent when necessary -->
@@ -375,7 +382,7 @@ along with this software (see the LICENSE.md file). If not, see
 
                 <set field="detailList" from="invoiceItemList"/>
                 <set field="invoiceMessage" from="invoice.invoiceMessage"/>
-                <service-call name="mchile.sii.dte.DteGenerationServices.generate#Factura" in-map="context" out-map="context"/>
+                <service-call name="mchile.sii.dte.DteGenerationServices.generate#FacturaInternal" in-map="context" out-map="context"/>
                 <iterate list="dteTermList" entry="term">
                     <service-call name="create#mchile.dte.FiscalTaxDocumentTerm" in-map="[fiscalTaxDocumentId:fiscalTaxDocumentId, settlementTermId:term.settlementTermId]"/>
                 </iterate>
@@ -1471,6 +1478,26 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="ftd.statusId" value="Ftd-NotIssued"/>
             <set field="ftd.invoiceId" from="null"/>
             <entity-update value-field="ftd"/>
+        </actions>
+    </service>
+
+    <service verb="generate" noun="CreditNoteWithVerbatimIva">
+        <description>Generate Credit Note for a DTE without IVA recalculation</description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="notaCreditoId"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="originalDte"/>
+            <if condition="!originalDte"><return error="true" message="Could not find DTE ${fiscalTaxDocumentId}"/></if>
+            <service-call name="mchile.sii.dte.DteGenerationServices.create#CreditMemoFromExistingDte" in-map="[issuerPartyId: originalDte.issuerPartyId,
+                            fiscalTaxDocumentNumber: originalDte.fiscalTaxDocumentNumber, fiscalTaxDocumentTypeEnumId: originalDte.fiscalTaxDocumentTypeEnumId,
+                            copyItemsFromReference:true]" out-map="context"/>
+            <service-call name="mchile.sii.dte.DteGenerationServices.generate#DteFromInvoice" in-map="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:'Ftdt-61',
+                            skipSalesTaxCalculation:true, skipIvaMismatchCalculation:true]" out-map="ncResult"/>
+            <set field="notaCreditoId" from="ncResult.fiscalTaxDocmentId"/>
         </actions>
     </service>
 
