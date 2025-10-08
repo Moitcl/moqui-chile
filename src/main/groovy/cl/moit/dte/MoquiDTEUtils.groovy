@@ -413,7 +413,7 @@ class MoquiDTEUtils {
             String folioRef = referenciaEntry.folio
             String codRef = null
             if (referenciaEntry.codigo)
-                codRef = referenciaEntry.codigo
+                codRef = referenciaEntry.codigo as String
             else if (referenciaEntry.codigoReferenciaEnumId != null)
                 codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as String
             //codRef = ec.entity.find("moqui.basic.Enumeration").condition("enumId", referenciaEntry.codigoReferenciaEnumId).one().enumCode as Integer
@@ -442,7 +442,7 @@ class MoquiDTEUtils {
                 String tpoDocRef = codeOut.siiCode
                 referenciaMap.tipoDocumento = tpoDocRef as String
                 if (tipoFactura == '61' && (referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-39") || referenciaEntry.tipoDocumento == '39'
-                        || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41") || referenciaEntry.tipoDocumento == '41') && codRef?.equals(1)) {
+                        || referenciaEntry.fiscalTaxDocumentTypeEnumId.equals("Ftdt-41") || referenciaEntry.tipoDocumento == '41') && codRef?.equals("1")) {
                     // Nota de crédito hace referencia a Boletas Electrónicas
                     anulaBoleta = 'true'
                     folioAnulaBoleta = referenciaEntry.folio.toString()

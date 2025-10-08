@@ -209,7 +209,7 @@ if (tipoDte in ['33', '46', '43']) {
     totalIva = detMap.totalIva
     totalExento = detMap.totalExento
 
-    if (codRef == 2 && detalleList.size() > 1) {
+    if (codRef == "2" && detalleList.size() > 1) {
         ec.message.addError("codRef = 2 && detalleList.size() = ${detalleList.size()}")
         return
     }
@@ -221,7 +221,7 @@ if (tipoDte in ['33', '46', '43']) {
 
     // Si la razon es modifica texto (2) no van los montos
     //ec.logger.warn("Codref: " + codRef + ", dteExenta: " + dteExenta)
-    if (codRef == 2) {
+    if (codRef == "2") {
         totalNeto = 0
         totalExento = 0
     }
@@ -244,14 +244,22 @@ if (tipoDte in ['33', '46', '43']) {
     totalIva = detMap.totalIva
     totalExento = detMap.totalExento
 
-    if (codRef == 2 && detalleList.size() > 1) {
+    if (codRef == "2" && detalleList.size() > 1) {
         ec.message.addError("codRef = 2 && detalleList.size() = ${detalleList.size()}")
         return
     }
 
+    if (codRef == "1") {
+        referenciaNoNC = referenciaList.find { it.tipoDocumento != '61' }
+        if (referenciaNoNC) {
+            ec.message.addError("Una Nota de Débito de Anulación solamente puede anular una Nota de Crédito")
+            return
+        }
+    }
+
     // Si la razon es modifica texto (2) no van los montos
     // Notas de débito son siempre afectas
-    if (codRef == 2) {
+    if (codRef == "2") {
         totalNeto = 0
         totalExento = 0
     }
