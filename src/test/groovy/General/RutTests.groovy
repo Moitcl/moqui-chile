@@ -298,6 +298,28 @@ class RutTests extends Specification {
               rut.replace('.', '').toLowerCase().replace('-k', '-K') :
               rut.replace('.', '')
 
+      // Clean up any existing PartyIdentification with this RUT from previous tests
+      // This prevents "Duplicated Rut" errors from leftover test data
+      try {
+          def existingPartyIds = ec.entity.find("mantle.party.PartyIdentification")
+                  .condition("partyIdTypeEnumId", "PtidNationalTaxId")
+                  .condition("idValue", expectedNormalizedRut)
+                  .list()
+
+          existingPartyIds.each { existingPartyId ->
+              logger.info("[General] Cleaning up existing RUT ${expectedNormalizedRut} for party ${existingPartyId.partyId}")
+              ec.service.sync().name("delete#mantle.party.PartyIdentification")
+                      .parameters([
+                          partyId: existingPartyId.partyId,
+                          partyIdTypeEnumId: existingPartyId.partyIdTypeEnumId,
+                          idValue: existingPartyId.idValue
+                      ])
+                      .disableAuthz().call()
+          }
+      } catch (Exception e) {
+          logger.warn("[General] Error cleaning up existing RUT: ${e.message}")
+      }
+
       when: "Validating RUT format with dot separators"
       Map responseMap = ec.service.sync().name("mchile.GeneralServices.verify#Rut")
               .parameters([rut:rut, ignoreErrors:true])
@@ -383,10 +405,10 @@ class RutTests extends Specification {
       where:
       rut              | esValido | descripcion
       "12.345.678-5"   | true     | "RUT con separadores de miles válido"
-      "1.234.567-k"    | true     | "RUT con separadores y k minúscula"
+      "1.234.564-k"    | true     | "RUT con separadores y k minúscula"
       "76.514.104-4"   | true     | "RUT empresa con separadores"
       "7.826.361-K"    | true     | "RUT con separadores y K mayúscula"
-      "12.345.678-9"   | false    | "RUT con separadores inválido"
+      "12.345.679-9"   | false    | "RUT con separadores inválido"
       "1.111.111-k"    | false    | "RUT con separadores inválido y k minúscula"
    }
 
