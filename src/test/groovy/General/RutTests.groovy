@@ -104,7 +104,7 @@ class RutTests extends Specification {
    }
 
    def setup() {
-      ec.message.clearErrors()  // Clear any errors from previous tests
+      ec.message.clearAll()  // Clear any messages from previous tests
       // Disable authorization for test service calls (following mantle-usl pattern)
       // User is authenticated but authorization is disabled for accessing test services
       ec.artifactExecution.disableAuthz()

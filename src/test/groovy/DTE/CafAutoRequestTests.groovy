@@ -54,7 +54,7 @@ class CafAutoRequestTests extends Specification {
     }
 
     def setup() {
-        ec.message.clearErrors()  // Clear any errors from previous tests
+        ec.message.clearAll()  // Clear any messages from previous tests
         ec.artifactExecution.disableAuthz()
         ec.transaction.begin(null)  // Begin new transaction for each test
     }

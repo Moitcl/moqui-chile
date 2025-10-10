@@ -70,7 +70,7 @@ class DteEmailProcessingTests extends Specification {
     }
 
     def setup() {
-        ec.message.clearErrors()
+        ec.message.clearAll()
         ec.artifactExecution.disableAuthz()
         ec.transaction.begin(null)
     }

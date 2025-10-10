@@ -37,7 +37,7 @@ class MimeDecodingSpec extends Specification {
     }
 
     def setup() {
-        ec.message.clearErrors()  // Clear any errors from previous tests
+        ec.message.clearAll()  // Clear any messages from previous tests
         // Follow mantle-usl pattern for per-test transaction management
         ec.artifactExecution.disableAuthz()
         ec.transaction.begin(null)

@@ -75,8 +75,8 @@ class EmailProcessingIntegrationTests extends Specification {
     }
 
     def setup() {
-        // AGENT OS COMPLIANCE: Critical error clearing and transaction setup
-        ec.message.clearErrors()
+        // AGENT OS COMPLIANCE: Critical message clearing and transaction setup
+        ec.message.clearAll()
         ec.artifactExecution.disableAuthz()
         ec.transaction.begin(null)
 

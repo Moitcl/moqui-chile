@@ -42,8 +42,8 @@ class DteProcessingSpec extends Specification {
     }
 
     def setup() {
-        // Clear any existing errors from previous tests
-        ec.message.clearErrors()
+        // Clear any existing messages from previous tests
+        ec.message.clearAll()
 
         // Begin transaction for test isolation
         boolean transactionBegun = ec.transaction.begin()

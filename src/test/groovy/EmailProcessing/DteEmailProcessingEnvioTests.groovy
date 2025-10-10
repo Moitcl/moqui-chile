@@ -71,8 +71,8 @@ class DteEmailProcessingEnvioTests extends Specification {
     }
 
     def setup() {
-        // CRITICAL: Clear errors from previous tests for test independence
-        ec.message.clearErrors()
+        // CRITICAL: Clear all messages from previous tests for test independence
+        ec.message.clearAll()
 
         // Start fresh transaction for each test
         ec.transaction.begin(null)

@@ -76,30 +76,22 @@ class DteGenerationTests extends Specification {
     }
 
     def setup() {
-        ec.message.clearErrors()  // Clear any errors from previous tests
+        ec.message.clearAll()  // Clear any errors from previous tests
         ec.artifactExecution.disableAuthz()
         ec.transaction.begin(null)  // Begin new transaction for each test
         testCount++
     }
 
     def cleanup() {
-        // Follow mantle-usl pattern: warn about unexpected errors, don't proactively clear
-        if (ec.message.hasError()) {
-            logger.warn("Unexpected errors in test: ${ec.message.getErrorsString()}")
-        }
-        ec.artifactExecution.enableAuthz()
-        ec.transaction.commit()  // Commit transaction after each test
+        // Clean up test-specific data (if any per-test data exists)
+        // Note: Most cleanup happens in cleanupSpec() for this test suite
 
-        // Create a new transaction for cleanup to isolate any errors
-        ec.transaction.begin(null)
-        try {
-            // Clear any messages in the new transaction context
-            ec.message.clearErrors()
-            ec.transaction.commit()
-        } catch (Exception e) {
-            logger.warn("Error during cleanup transaction: ${e.message}")
-            ec.transaction.rollback(null, null)
-        }
+        ec.artifactExecution.enableAuthz()
+        ec.transaction.commit()
+
+        // According to testing-guide.md: Do NOT clear errors in cleanup()
+        // Errors should be cleared in setup() at the start of each test
+        // This ensures unexpected errors cause proper test failures
     }
     
     private void initializeTestData() {
@@ -175,7 +167,7 @@ class DteGenerationTests extends Specification {
                 logger.error("Service errors during receiver organization creation: ${ec.message.getErrorsString()}")
                 String errorDetails = ec.message.getErrorsString()
                 ec.message.clearErrors()
-                throw new Exception("Could not create test receiver organization: ${errorDetails}")
+            throw new Exception("Could not create test receiver organization: ${errorDetails}")
             }
             
             if (!receiverResult || !receiverResult.partyId) {
@@ -823,6 +815,11 @@ JYljFtsT
         fiscalDoc.fiscalTaxDocumentTypeEnumId == dteType
 
         cleanup:
+        // Clear any errors between parameterized test iterations
+        if (ec.message.hasError()) {
+            logger.warn("Unexpected errors in parameterized test iteration (${description}): ${ec.message.getErrorsString()}")
+        }
+        ec.message.clearAll()
         totalFieldsChecked += 2
         logger.info("✓ ${description} generation test passed")
 
@@ -869,6 +866,11 @@ JYljFtsT
         fiscalDoc.fiscalTaxDocumentTypeEnumId == dteType
 
         cleanup:
+        // Clear any errors between parameterized test iterations
+        if (ec.message.hasError()) {
+            logger.warn("Unexpected errors in parameterized test iteration (${description}): ${ec.message.getErrorsString()}")
+        }
+        ec.message.clearAll()
         totalFieldsChecked += 2
         logger.info("✓ ${description} generation test passed")
 
@@ -931,11 +933,10 @@ JYljFtsT
         then:
         ec.message.hasError()
         !result?.fiscalTaxDocumentId
-        
-        // Clear errors for next test
-        ec.message.clearErrors()
-        
+
         cleanup:
+        // Clear the expected error from this test
+        ec.message.clearAll()
         totalFieldsChecked += 2
         logger.info("✓ Missing parameter error handling test passed")
     }
@@ -961,10 +962,10 @@ JYljFtsT
 
         then:
         ec.message.hasError() || !result.fiscalTaxDocumentId
-        
-        ec.message.clearErrors()
-        
+
         cleanup:
+        // Clear the expected error from this test
+        ec.message.clearAll()
         totalFieldsChecked += 1
         logger.info("✓ Invalid issuer party error handling test passed")
     }
