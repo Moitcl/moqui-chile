@@ -3,6 +3,7 @@ package DTE
 import org.moqui.Moqui
 import org.moqui.context.ExecutionContext
 import org.moqui.entity.EntityValue
+import org.moqui.entity.EntityCondition.ComparisonOperator
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import spock.lang.Shared
@@ -17,6 +18,11 @@ import java.security.PrivateKey
 import java.security.spec.PKCS8EncodedKeySpec
 import java.security.cert.X509Certificate
 import java.security.cert.CertificateFactory
+import javax.xml.parsers.DocumentBuilderFactory
+import org.w3c.dom.Document
+import javax.xml.xpath.XPathFactory
+import javax.xml.xpath.XPath
+import javax.xml.xpath.XPathConstants
 
 /**
  * Comprehensive tests for DTE Generation Services
@@ -33,7 +39,7 @@ class DteGenerationTests extends Specification {
     @Shared String testIssuerPartyId
     @Shared String testReceiverPartyId 
     @Shared String testProductId
-    @Shared List<String> createdFiscalTaxDocumentIds = []
+    @Shared List createdFiscalTaxDocumentIds = []
     @Shared List<String> createdInvoiceIds = []
 
     def setupSpec() {
@@ -97,30 +103,52 @@ class DteGenerationTests extends Specification {
     private void initializeTestData() {
         ec.artifactExecution.disableAuthz()
         try {
-            // Create test issuer organization programmatically to avoid XML loading issues
+            // Create test issuer organization with unique party ID using timestamp
             logger.info("Creating test issuer organization programmatically")
+            String testPartyId = "TEST_DTE_PARTY_${System.currentTimeMillis()}"
 
-            Map issuerResult = ec.service.sync().name("mantle.party.PartyServices.create#Organization")
-                .parameters([
-                    organizationName: "Test DTE Organization",
-                    roleTypeId: "OrgInternal"
-                ]).call()
+            // Try to reuse existing test party if it exists
+            EntityValue existingParty = ec.entity.find("mantle.party.Party")
+                .condition("partyId", testPartyId)
+                .one()
 
-            if (ec.message.hasError()) {
-                logger.error("Service errors during issuer organization creation: ${ec.message.getErrorsString()}")
-                ec.message.clearErrors()
-                throw new Exception("Could not create test issuer organization")
+            if (existingParty) {
+                testIssuerPartyId = testPartyId
+                logger.info("Reusing existing test issuer organization: ${testIssuerPartyId}")
+            } else {
+                // Create new party with explicit party ID
+                ec.service.sync().name("create#mantle.party.Party")
+                    .parameters([
+                        partyId: testPartyId,
+                        partyTypeEnumId: "PtyOrganization",
+                        disabled: "N"
+                    ]).call()
+
+                if (ec.message.hasError()) {
+                    logger.error("Service errors during party creation: ${ec.message.getErrorsString()}")
+                    ec.message.clearErrors()
+                    throw new Exception("Could not create test party")
+                }
+
+                testIssuerPartyId = testPartyId
+                logger.info("Created test issuer organization: ${testIssuerPartyId}")
+
+                // Add OrgInternal role
+                ec.service.sync().name("create#mantle.party.PartyRole")
+                    .parameters([
+                        partyId: testIssuerPartyId,
+                        roleTypeId: "OrgInternal"
+                    ]).call()
             }
 
-            testIssuerPartyId = issuerResult.partyId
-            logger.info("Created test issuer organization: ${testIssuerPartyId}")
-
-            // Add RUT identification to issuer (using unique RUT for tests)
+            // Add RUT identification to issuer (using valid test RUT)
+            long timestamp = System.currentTimeMillis()
+            String issuerRut = "66666666-6"  // Valid test RUT
             ec.service.sync().name("create#mantle.party.PartyIdentification")
                 .parameters([
                     partyId: testIssuerPartyId,
                     partyIdTypeEnumId: "PtidNationalTaxId",
-                    idValue: "87654321-4"  // Unique test RUT for DTE Generation
+                    idValue: issuerRut
                 ]).call()
 
             // Create DTE parameters for issuer with certificate data
@@ -156,32 +184,39 @@ class DteGenerationTests extends Specification {
                 ec.message.clearErrors()
             }
             
-            // Create a test receiver organization for the tests
-            Map receiverResult = ec.service.sync().name("mantle.party.PartyServices.create#Organization")
+            // Create a test receiver organization with unique party ID
+            String testReceiverPartyId = "TEST_DTE_RECEIVER_${System.currentTimeMillis()}"
+
+            ec.service.sync().name("create#mantle.party.Party")
                 .parameters([
-                    organizationName: "Test DTE Receiver Organization",
-                    roleTypeId: "Customer"
+                    partyId: testReceiverPartyId,
+                    partyTypeEnumId: "PtyOrganization",
+                    disabled: "N"
                 ]).call()
-            
+
             if (ec.message.hasError()) {
-                logger.error("Service errors during receiver organization creation: ${ec.message.getErrorsString()}")
+                logger.error("Service errors during receiver party creation: ${ec.message.getErrorsString()}")
                 String errorDetails = ec.message.getErrorsString()
                 ec.message.clearErrors()
-            throw new Exception("Could not create test receiver organization: ${errorDetails}")
+                throw new Exception("Could not create test receiver party: ${errorDetails}")
             }
-            
-            if (!receiverResult || !receiverResult.partyId) {
-                logger.error("Failed to create receiver organization: ${receiverResult}")
-                throw new Exception("Could not create test receiver organization - no partyId returned")
-            }
-            testReceiverPartyId = receiverResult.partyId
+
+            // Add Customer role to receiver
+            ec.service.sync().name("create#mantle.party.PartyRole")
+                .parameters([
+                    partyId: testReceiverPartyId,
+                    roleTypeId: "Customer"
+                ]).call()
+
+            this.testReceiverPartyId = testReceiverPartyId
             logger.info("Created test receiver organization: ${testReceiverPartyId}")
 
+            String receiverRut = "77777777-7"  // Valid test RUT
             Map idResult = ec.service.sync().name("create#mantle.party.PartyIdentification")
                 .parameters([
                     partyId: testReceiverPartyId,
                     partyIdTypeEnumId: "PtidNationalTaxId",
-                    idValue: "87654322-2"
+                    idValue: receiverRut
                 ]).call()
                 
             if (ec.message.hasError()) {
@@ -189,19 +224,25 @@ class DteGenerationTests extends Specification {
                 ec.message.clearErrors()
             }
 
-            // Create test product using entity auto-service
-            Map productResult = ec.service.sync().name("create#mantle.product.Product")
+            // Create test product with unique product ID
+            String testProductId = "TEST_DTE_PRODUCT_${System.currentTimeMillis()}"
+            ec.service.sync().name("create#mantle.product.Product")
                 .parameters([
+                    productId: testProductId,
                     productName: "Test DTE Product",
                     productTypeEnumId: "PtService",
                     description: "Test product for DTE generation"
                 ]).call()
-            
-            if (!productResult || !productResult.productId) {
-                logger.error("Failed to create test product: ${productResult}")
-                throw new Exception("Could not create test product")
+
+            if (ec.message.hasError()) {
+                logger.error("Service errors during product creation: ${ec.message.getErrorsString()}")
+                String errorDetails = ec.message.getErrorsString()
+                ec.message.clearErrors()
+                throw new Exception("Could not create test product: ${errorDetails}")
             }
-            testProductId = productResult.productId
+
+            this.testProductId = testProductId
+            logger.info("Created test product: ${testProductId}")
             
             // Generate dynamic test certificate and update CAF if needed
             generateTestCertificateAndCaf()
@@ -292,7 +333,7 @@ q4+htPABTvIWzZcF4LILEDnaZS791SWJYxbbE72D
         <TD>${dteType.code}</TD>
         <RNG>
             <D>1</D>
-            <H>100</H>
+            <H>1000</H>
         </RNG>
         <FA>${xmlDate}</FA>
         <RSAPK>
@@ -313,16 +354,16 @@ q4+htPABTvIWzZcF4LILEDnaZS791SWJYxbbE72D
                         issuerPartyId: testIssuerPartyId,
                         activo: "true",
                         desde: "1",
-                        hasta: "100",
+                        hasta: "1000",
                         cafFragment: cafXml,
                         publicKey: publicKey,
                         privateKey: privateKey
                     ]).call()
                     
                 logger.info("Created test CAF for ${dteType.name}: ${cafId}")
-                
+
                 // Create FiscalTaxDocument entries for the CAF range
-                createFiscalTaxDocumentsForCaf(dteType.code, "1", "100")
+                createFiscalTaxDocumentsForCaf(dteType.code, "1", "1000")
                 
             } catch (Exception e) {
                 logger.warn("Could not create CAF for ${dteType.name}: ${e.message}")
@@ -386,7 +427,7 @@ q4+htPABTvIWzZcF4LILEDnaZS791SWJYxbbE72D
         <TD>33</TD>
         <RNG>
             <D>1</D>
-            <H>100</H>
+            <H>1000</H>
         </RNG>
         <FA>''' + xmlDate + '''</FA>
         <RSAPK>
@@ -658,6 +699,221 @@ JYljFtsT
             .deleteAll()
 
         logger.info("Cleaned up party dependencies for: ${partyId}")
+    }
+
+    /**
+     * Generic helper method to validate XML content in generated DTE documents
+     * @param fiscalTaxDocumentId The fiscal tax document ID
+     * @param validations List of validation maps, each containing:
+     *   - xpath: The XPath expression to evaluate (required)
+     *   - expected: The expected value (optional, can be null to skip validation)
+     *   - name: A descriptive name for this validation (required)
+     *   - type: The expected data type: 'string', 'number', 'decimal' (default: 'string')
+     * @param logXml If true, logs the full XML content for debugging (default: false)
+     * @return Map with:
+     *   - valid: boolean indicating if all validations passed
+     *   - errors: List of error messages
+     *   - results: List of maps with name, xpath, expected, actual, valid for each validation
+     */
+    private Map validateXmlContent(String fiscalTaxDocumentId, List<Map> validations, boolean logXml = false) {
+        // Use DteContentServices to get the XML content
+        Map contentResult = ec.service.sync().name("mchile.sii.dte.DteContentServices.get#DteContent")
+            .parameters([
+                fiscalTaxDocumentId: fiscalTaxDocumentId,
+                fiscalTaxDocumentContentTypeEnumId: "Ftdct-Xml"
+            ]).call()
+
+        if (!contentResult.contentRef) {
+            return [valid: false, error: "No XML found for document ${fiscalTaxDocumentId}", results: []]
+        }
+
+        try {
+            // Get XML text from resource reference
+            String xmlText = null
+            try {
+                xmlText = contentResult.contentRef.getText()
+            } catch (Exception e) {
+                logger.error("Error reading XML content: ${e.message}", e)
+                return [valid: false, error: "Error reading XML content: ${e.message}", results: []]
+            }
+
+            if (!xmlText) {
+                return [valid: false, error: "XML content is empty for document ${fiscalTaxDocumentId}", results: []]
+            }
+
+            // Log XML content if requested (for debugging)
+            if (logXml) {
+                logger.info("=" * 80)
+                logger.info("XML Content for document ${fiscalTaxDocumentId}:")
+                logger.info("=" * 80)
+                logger.info(xmlText)
+                logger.info("=" * 80)
+            }
+
+            // Parse XML once
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance()
+            factory.setNamespaceAware(false)
+            Document doc = factory.newDocumentBuilder().parse(new ByteArrayInputStream(xmlText.getBytes("UTF-8")))
+
+            // Create XPath
+            XPath xpath = XPathFactory.newInstance().newXPath()
+
+            // Process all validations in a single pass
+            boolean allValid = true
+            List<String> errors = []
+            List<Map> results = []
+
+            for (Map validation : validations) {
+                String xpathExpr = validation.xpath
+                Object expectedValue = validation.expected
+                String name = validation.name
+                String type = validation.type ?: 'string'
+
+                Object actualValue = null
+                boolean validationPassed = true
+                String errorMsg = null
+
+                try {
+                    String rawValue = xpath.evaluate(xpathExpr, doc)
+
+                    if (rawValue != null && !rawValue.isEmpty()) {
+                        // Convert based on type
+                        switch (type) {
+                            case 'decimal':
+                            case 'number':
+                                actualValue = new BigDecimal(rawValue)
+                                break
+                            case 'integer':
+                                actualValue = Integer.parseInt(rawValue)
+                                break
+                            default:
+                                actualValue = rawValue
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.debug("Could not evaluate XPath '${xpathExpr}' for ${name}: ${e.message}")
+                }
+
+                // Validate if expected value is provided
+                if (expectedValue != null && actualValue != null) {
+                    if (actualValue != expectedValue) {
+                        validationPassed = false
+                        errorMsg = "${name} mismatch: expected ${expectedValue}, got ${actualValue}"
+                        errors.add(errorMsg)
+                        allValid = false
+                    }
+                }
+
+                results.add([
+                    name: name,
+                    xpath: xpathExpr,
+                    expected: expectedValue,
+                    actual: actualValue,
+                    valid: validationPassed,
+                    error: errorMsg
+                ])
+            }
+
+            return [
+                valid: allValid,
+                errors: errors,
+                results: results
+            ]
+
+        } catch (Exception e) {
+            logger.error("Error parsing XML for validation: ${e.message}", e)
+            return [valid: false, error: "XML parsing error: ${e.message}", results: []]
+        }
+    }
+
+    /**
+     * Unified helper method to validate XML totals and items in generated DTE (wrapper for validateXmlContent)
+     * Performs a single XML parse and validation pass for both totals and items
+     * @param fiscalTaxDocumentId The fiscal tax document ID
+     * @param expectedNeto Expected net total (Monto Neto) - optional
+     * @param expectedExento Expected exempt total (Monto Exento) - optional
+     * @param expectedIva Expected VAT total (IVA) - optional
+     * @param expectedItems List of expected item values, each map should contain:
+     *   - prcItem: Expected unit price (optional)
+     *   - montoItem: Expected line total (optional)
+     * @param logXml If true, logs the full XML content for debugging (default: false)
+     * @return Map with validation results including:
+     *   - valid: boolean indicating if all validations passed
+     *   - errors: List of error messages
+     *   - actualNeto: Actual net total from XML
+     *   - actualExento: Actual exempt total from XML
+     *   - actualIva: Actual VAT total from XML
+     *   - actualItems: List of actual item values from XML
+     */
+    private Map validateXmlTotalsAndItems(String fiscalTaxDocumentId,
+                                          BigDecimal expectedNeto = null,
+                                          BigDecimal expectedExento = null,
+                                          BigDecimal expectedIva = null,
+                                          List<Map> expectedItems = null,
+                                          boolean logXml = false) {
+        // Build all validations in a single list
+        List<Map> validations = []
+
+        // Add totals validations
+        validations.add([xpath: "//Totales/MntNeto", expected: expectedNeto, name: "MntNeto", type: "decimal"])
+        validations.add([xpath: "//Totales/MntExe", expected: expectedExento, name: "MntExe", type: "decimal"])
+        validations.add([xpath: "//Totales/IVA", expected: expectedIva, name: "IVA", type: "decimal"])
+
+        // Add item validations if provided
+        if (expectedItems) {
+            for (int i = 0; i < expectedItems.size(); i++) {
+                Map expectedItem = expectedItems[i]
+                int nroLinDet = i + 1
+
+                validations.add([
+                    xpath: "//Detalle[NroLinDet='${nroLinDet}']/PrcItem",
+                    expected: expectedItem.prcItem,
+                    name: "Line ${nroLinDet} PrcItem",
+                    type: "decimal"
+                ])
+
+                validations.add([
+                    xpath: "//Detalle[NroLinDet='${nroLinDet}']/MontoItem",
+                    expected: expectedItem.montoItem,
+                    name: "Line ${nroLinDet} MontoItem",
+                    type: "decimal"
+                ])
+            }
+        }
+
+        // Perform single XML validation pass
+        Map result = validateXmlContent(fiscalTaxDocumentId, validations, logXml)
+
+        // Extract totals results
+        def netoResult = result.results?.find { it.name == "MntNeto" }
+        def exentoResult = result.results?.find { it.name == "MntExe" }
+        def ivaResult = result.results?.find { it.name == "IVA" }
+
+        // Extract item results if items were validated
+        List<Map> actualItems = []
+        if (expectedItems) {
+            for (int i = 0; i < expectedItems.size(); i++) {
+                int nroLinDet = i + 1
+                def prcItemResult = result.results?.find { it.name == "Line ${nroLinDet} PrcItem" }
+                def montoItemResult = result.results?.find { it.name == "Line ${nroLinDet} MontoItem" }
+
+                actualItems.add([
+                    nroLinDet: nroLinDet,
+                    prcItem: prcItemResult?.actual,
+                    montoItem: montoItemResult?.actual
+                ])
+            }
+        }
+
+        return [
+            valid: result.valid,
+            errors: result.errors,
+            error: result.error,
+            actualNeto: netoResult?.actual,
+            actualExento: exentoResult?.actual,
+            actualIva: ivaResult?.actual,
+            actualItems: actualItems
+        ]
     }
 
     def "001 - generate Factura with minimal required parameters"() {
@@ -1079,5 +1335,390 @@ JYljFtsT
         cleanup:
         totalFieldsChecked += 4
         logger.info("✓ DTE config RUT extraction test passed - RUT enviador: ${dteConfig.rutEnviador}")
+    }
+
+    @Unroll
+    def "012 - generate Factura with preciosIncluyenIva and generarXmlMontosBrutos combinations (#testCase)"() {
+        when:
+        // Base amount for testing: 100,000 CLP (net) or 119,000 CLP (gross with 19% VAT)
+        BigDecimal inputAmount = preciosIncluyenIva ? 119000 : 100000
+        BigDecimal expectedNetAmount = 100000
+        BigDecimal expectedGrossAmount = 119000
+        BigDecimal expectedVatAmount = 19000
+
+        // Build detailList based on whether conversion is happening
+        // When no conversion (both false), VAT item must be provided manually
+        List detailList = [
+            [
+                description: "Test Product - ${testCase}",
+                quantity: 1,
+                amount: inputAmount
+            ]
+        ]
+
+        // Add VAT item when preciosIncluyenIva = false (net prices require explicit VAT)
+        if (!preciosIncluyenIva) {
+            detailList.add([itemTypeEnumId: 'ItemVatTax', quantity: 1, amount: expectedVatAmount])
+        }
+
+        Map result = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#Factura")
+            .parameters([
+                fiscalTaxDocumentTypeEnumId: "Ftdt-33",
+                issuerPartyId: testIssuerPartyId,
+                rutReceptor: "87654321-4",
+                receiverPartyId: testReceiverPartyId,
+                razonSocialReceptor: "Test DTE Receiver Organization",
+                giroReceptor: "Test Business Activity",
+                contactoReceptor: "Test Contact",
+                direccionReceptor: "Receiver Street 456",
+                comunaReceptor: "Valparaiso",
+                preciosIncluyenIva: preciosIncluyenIva,
+                generarXmlMontosBrutos: generarXmlMontosBrutos,
+                detailList: detailList
+            ]).call()
+
+        if (result.fiscalTaxDocumentId) {
+            createdFiscalTaxDocumentIds.add(result.fiscalTaxDocumentId)
+        }
+
+        // Retrieve the generated document
+        EntityValue fiscalDoc = ec.entity.find("mchile.dte.FiscalTaxDocument")
+            .condition("fiscalTaxDocumentId", result.fiscalTaxDocumentId)
+            .one()
+
+        // Calculate expected XML values based on price conversion logic
+        // For Facturas: generarXmlMontosBrutos=true means XML shows gross amounts
+        BigDecimal expectedXmlNeto = 100000
+        BigDecimal expectedXmlIva = 19000
+        BigDecimal expectedPrcItem = generarXmlMontosBrutos ? 119000 : 100000
+        BigDecimal expectedMontoItem = generarXmlMontosBrutos ? 119000 : 100000
+
+        // Validate XML totals and items in a single pass (only if document was created successfully)
+        Map validation = result.fiscalTaxDocumentId ?
+            validateXmlTotalsAndItems(result.fiscalTaxDocumentId, expectedXmlNeto, null, expectedXmlIva,
+                [[prcItem: expectedPrcItem, montoItem: expectedMontoItem]]) :
+            [valid: false, error: "No document created", actualItems: []]
+
+        if (!validation.valid && result.fiscalTaxDocumentId) {
+            logger.error("XML validation failed for ${testCase}: ${validation.errors ?: validation.error}")
+        }
+
+        then:
+        !ec.message.hasError()
+        result.fiscalTaxDocumentId
+        fiscalDoc != null
+        fiscalDoc.fiscalTaxDocumentTypeEnumId == "Ftdt-33"
+        fiscalDoc.statusId == "Ftd-Issued"
+        validation.valid
+        validation.actualIva == expectedXmlIva
+        validation.actualItems[0].prcItem == expectedPrcItem
+        validation.actualItems[0].montoItem == expectedMontoItem
+
+        cleanup:
+        // Clear any errors between parameterized test iterations
+        if (ec.message.hasError()) {
+            logger.warn("Unexpected errors in parameterized test iteration (${testCase}): ${ec.message.getErrorsString()}")
+            ec.message.clearErrors()
+        }
+        totalFieldsChecked += 6  // Added XML validation checks
+        logger.info("✓ Factura ${testCase} test passed - FiscalDoc: ${result.fiscalTaxDocumentId}")
+
+        where:
+        testCase                                    | preciosIncluyenIva | generarXmlMontosBrutos
+        "Net input, Net XML (default)"              | false              | false
+        "Net input, Gross XML"                      | false              | true
+        "Gross input, Net XML"                      | true               | false
+        "Gross input, Gross XML"                    | true               | true
+    }
+
+    @Unroll
+    def "013 - generate FacturaInternal with preciosIncluyenIva and generarXmlMontosBrutos combinations (#testCase)"() {
+        when:
+        // For *Internal services, provide a properly structured detailList (like the REST API does)
+        // rather than creating invoice items in the database
+        BigDecimal inputAmount = preciosIncluyenIva ? 119000 : 100000
+
+        List detailList = [
+            [
+                description: "Test Product - ${testCase}",
+                quantity: 1,
+                amount: inputAmount,
+                itemTypeEnumId: "ItemProduct"
+            ]
+        ]
+
+        // Add VAT item when preciosIncluyenIva = false (net prices require explicit VAT)
+        if (!preciosIncluyenIva) {
+            detailList.add([
+                itemTypeEnumId: "ItemVatTax",
+                quantity: 1,
+                amount: 19000  // 19% of 100000
+            ])
+        }
+
+        Map result = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#FacturaInternal")
+            .parameters([
+                fiscalTaxDocumentTypeEnumId: "Ftdt-33",
+                detailList: detailList,
+                issuerPartyId: testIssuerPartyId,
+                rutReceptor: "87654321-4",
+                razonSocialReceptor: "Test DTE Receiver Organization",
+                giroReceptor: "Test Business Activity",
+                contactoReceptor: "Test Contact",
+                direccionReceptor: "Receiver Street 456",
+                comunaReceptor: "Valparaiso",
+                preciosIncluyenIva: preciosIncluyenIva,
+                generarXmlMontosBrutos: generarXmlMontosBrutos
+            ]).call()
+
+        if (result.fiscalTaxDocumentId) {
+            createdFiscalTaxDocumentIds.add(result.fiscalTaxDocumentId)
+        }
+
+        EntityValue fiscalDoc = ec.entity.find("mchile.dte.FiscalTaxDocument")
+            .condition("fiscalTaxDocumentId", result.fiscalTaxDocumentId)
+            .one()
+
+        // Calculate expected XML values based on price conversion logic
+        // For Facturas: MntNeto is ALWAYS present (Chilean SII requirement)
+        // generarXmlMontosBrutos=true means line items show gross amounts with MntBruto indicator
+        BigDecimal expectedXmlNeto = 100000  // Always present for Facturas
+        BigDecimal expectedXmlIva = 19000
+        BigDecimal expectedPrcItem = generarXmlMontosBrutos ? 119000 : 100000
+        BigDecimal expectedMontoItem = generarXmlMontosBrutos ? 119000 : 100000
+
+        // Validate XML totals and items in a single pass (only if document was created successfully)
+        Map validation = result.fiscalTaxDocumentId ?
+            validateXmlTotalsAndItems(result.fiscalTaxDocumentId, expectedXmlNeto, null, expectedXmlIva,
+                [[prcItem: expectedPrcItem, montoItem: expectedMontoItem]]) :
+            [valid: false, error: "No document created", actualItems: []]
+
+        if (!validation.valid && result.fiscalTaxDocumentId) {
+            logger.error("XML validation failed for ${testCase}: ${validation.errors ?: validation.error}")
+        }
+
+        then:
+        !ec.message.hasError()
+        result.fiscalTaxDocumentId
+        fiscalDoc != null
+        fiscalDoc.fiscalTaxDocumentTypeEnumId == "Ftdt-33"
+        fiscalDoc.statusId == "Ftd-Issued"
+        validation.valid
+        validation.actualIva == expectedXmlIva
+        validation.actualItems[0].prcItem == expectedPrcItem
+        validation.actualItems[0].montoItem == expectedMontoItem
+
+        cleanup:
+        // Clear any errors between parameterized test iterations
+        if (ec.message.hasError()) {
+            logger.warn("Unexpected errors in parameterized test iteration (${testCase}): ${ec.message.getErrorsString()}")
+            ec.message.clearErrors()
+        }
+        totalFieldsChecked += 4
+        logger.info("✓ FacturaInternal ${testCase} test passed - FiscalDoc: ${result.fiscalTaxDocumentId}")
+
+        where:
+        testCase                                    | preciosIncluyenIva | generarXmlMontosBrutos
+        "Net input, Net XML (default)"             | false              | false
+        "Net input, Gross XML"                      | false              | true
+        "Gross input, Net XML"                      | true               | false
+        "Gross input, Gross XML"                    | true               | true
+    }
+
+    @Unroll
+    def "014 - generate Boleta with preciosIncluyenIva and generarXmlMontosNetos combinations (#testCase)"() {
+        when:
+        // For Boletas, default is preciosIncluyenIva=true (gross prices)
+        BigDecimal inputAmount = preciosIncluyenIva ? 11900 : 10000
+        BigDecimal expectedNetAmount = 10000
+        BigDecimal expectedGrossAmount = 11900
+        BigDecimal expectedVatAmount = 1900
+
+        // Build detailList for Boleta
+        List detailList = [
+            [
+                description: "Boleta Product - ${testCase}",
+                quantity: 1,
+                amount: inputAmount
+            ]
+        ]
+
+        // Add VAT item when preciosIncluyenIva = false (net prices require explicit VAT)
+        if (!preciosIncluyenIva) {
+            detailList.add([itemTypeEnumId: 'ItemVatTax', quantity: 1, amount: expectedVatAmount])
+        }
+
+        ec.logger.info("Executing generate#Boleta with preciosIncluyenIva: ${preciosIncluyenIva}, generarXmlMontosNetos: ${generarXmlMontosNetos}, detailList: ${detailList}")
+        Map result = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#Boleta")
+            .parameters([
+                fiscalTaxDocumentTypeEnumId: "Ftdt-39",
+                issuerPartyId: testIssuerPartyId,
+                rutReceptor: "87654321-4",
+                receiverPartyId: testReceiverPartyId,
+                razonSocialReceptor: "Test DTE Receiver Organization",
+                contactoReceptor: "Test Contact",
+                direccionReceptor: "Receiver Street 456",
+                comunaReceptor: "Valparaiso",
+                preciosIncluyenIva: preciosIncluyenIva,
+                generarXmlMontosNetos: generarXmlMontosNetos,
+                detailList: detailList
+            ]).call()
+
+        // Capture errors immediately after service call for better debugging
+        String errorString = ec.message.getErrorsString()
+        if (errorString) {
+            logger.error("Service errors in test (${testCase}): ${errorString}")
+        }
+
+        if (result.fiscalTaxDocumentId) {
+            createdFiscalTaxDocumentIds.add(result.fiscalTaxDocumentId)
+        }
+
+        EntityValue fiscalDoc = ec.entity.find("mchile.dte.FiscalTaxDocument")
+            .condition("fiscalTaxDocumentId", result.fiscalTaxDocumentId)
+            .one()
+
+        // Calculate expected XML values based on price conversion logic
+        // For Boletas: generarXmlMontosNetos=true shows net amounts, false shows gross amounts (default)
+        BigDecimal expectedXmlNeto = generarXmlMontosNetos ? 10000 : null
+        BigDecimal expectedXmlIva = 1900
+        BigDecimal expectedPrcItem = generarXmlMontosNetos ? 10000 : 11900
+        BigDecimal expectedMontoItem = generarXmlMontosNetos ? 10000 : 11900
+
+        // Validate XML totals and items in a single pass (only if document was created successfully)
+        Map validation = result.fiscalTaxDocumentId ?
+            validateXmlTotalsAndItems(result.fiscalTaxDocumentId, expectedXmlNeto, null, expectedXmlIva,
+                [[prcItem: expectedPrcItem, montoItem: expectedMontoItem]]) :
+            [valid: false, error: "No document created", actualItems: []]
+
+        if (!validation.valid && result.fiscalTaxDocumentId) {
+            logger.error("XML validation failed for ${testCase}: ${validation.errors ?: validation.error}")
+        }
+
+        then:
+        errorString == null || errorString.isEmpty()
+        result.fiscalTaxDocumentId
+        fiscalDoc != null
+        fiscalDoc.fiscalTaxDocumentTypeEnumId == "Ftdt-39"
+        fiscalDoc.statusId == "Ftd-Issued"
+        validation.valid
+        validation.actualIva == expectedXmlIva
+        validation.actualItems[0].prcItem == expectedPrcItem
+        validation.actualItems[0].montoItem == expectedMontoItem
+
+        cleanup:
+        // Clear any errors between parameterized test iterations
+        if (ec.message.hasError()) {
+            logger.warn("Unexpected errors in parameterized test iteration (${testCase}): ${ec.message.getErrorsString()}")
+            ec.message.clearErrors()
+        }
+        totalFieldsChecked += 4
+        logger.info("✓ Boleta ${testCase} test passed - FiscalDoc: ${result.fiscalTaxDocumentId}")
+
+        where:
+        testCase                                    | preciosIncluyenIva | generarXmlMontosNetos
+        "Gross input, Gross XML (default)"         | true               | false
+        "Gross input, Net XML"                      | true               | true
+        "Net input, Gross XML"                      | false              | false
+        "Net input, Net XML"                        | false              | true
+    }
+
+    @Unroll
+    def "015 - generate BoletaInternal with preciosIncluyenIva and generarXmlMontosNetos combinations (#testCase)"() {
+        when:
+        // For *Internal services, provide a properly structured detailList (like the REST API does)
+        // rather than creating invoice items in the database
+        BigDecimal inputAmount = preciosIncluyenIva ? 11900 : 10000
+
+        List detailList = [
+            [
+                description: "Boleta Product - ${testCase}",
+                quantity: 1,
+                amount: inputAmount,
+                itemTypeEnumId: "ItemProduct"
+            ]
+        ]
+
+        // Add VAT item when preciosIncluyenIva = false (net prices require explicit VAT)
+        if (!preciosIncluyenIva) {
+            detailList.add([
+                itemTypeEnumId: "ItemVatTax",
+                quantity: 1,
+                amount: 1900  // 19% of 10000
+            ])
+        }
+
+        Map result = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#BoletaInternal")
+            .parameters([
+                fiscalTaxDocumentTypeEnumId: "Ftdt-39",
+                detailList: detailList,
+                issuerPartyId: testIssuerPartyId,
+                rutReceptor: "87654321-4",
+                razonSocialReceptor: "Test DTE Receiver Organization",
+                giroReceptor: "Test Business Activity",
+                contactoReceptor: "Test Contact",
+                direccionReceptor: "Receiver Street 456",
+                comunaReceptor: "Valparaiso",
+                preciosIncluyenIva: preciosIncluyenIva,
+                generarXmlMontosNetos: generarXmlMontosNetos
+            ]).call()
+
+        // Capture errors immediately after service call for better debugging
+        String errorString = ec.message.getErrorsString()
+        if (errorString) {
+            logger.error("Service errors in test (${testCase}): ${errorString}")
+        }
+
+        if (result.fiscalTaxDocumentId) {
+            createdFiscalTaxDocumentIds.add(result.fiscalTaxDocumentId)
+        }
+
+        EntityValue fiscalDoc = ec.entity.find("mchile.dte.FiscalTaxDocument")
+            .condition("fiscalTaxDocumentId", result.fiscalTaxDocumentId)
+            .one()
+
+        // Calculate expected XML values based on price conversion logic
+        // For Boletas: generarXmlMontosNetos=true shows net amounts, false shows gross amounts (default)
+        BigDecimal expectedXmlNeto = generarXmlMontosNetos ? 10000 : null
+        BigDecimal expectedXmlIva = 1900
+        BigDecimal expectedPrcItem = generarXmlMontosNetos ? 10000 : 11900
+        BigDecimal expectedMontoItem = generarXmlMontosNetos ? 10000 : 11900
+
+        // Validate XML totals and items in a single pass (only if document was created successfully)
+        Map validation = result.fiscalTaxDocumentId ?
+            validateXmlTotalsAndItems(result.fiscalTaxDocumentId, expectedXmlNeto, null, expectedXmlIva,
+                [[prcItem: expectedPrcItem, montoItem: expectedMontoItem]]) :
+            [valid: false, error: "No document created", actualItems: []]
+
+        if (!validation.valid && result.fiscalTaxDocumentId) {
+            logger.error("XML validation failed for ${testCase}: ${validation.errors ?: validation.error}")
+        }
+
+        then:
+        errorString == null || errorString.isEmpty()
+        result.fiscalTaxDocumentId
+        fiscalDoc != null
+        fiscalDoc.fiscalTaxDocumentTypeEnumId == "Ftdt-39"
+        fiscalDoc.statusId == "Ftd-Issued"
+        validation.valid
+        validation.actualIva == expectedXmlIva
+        validation.actualItems[0].prcItem == expectedPrcItem
+        validation.actualItems[0].montoItem == expectedMontoItem
+
+        cleanup:
+        // Clear any errors between parameterized test iterations
+        if (ec.message.hasError()) {
+            logger.warn("Unexpected errors in parameterized test iteration (${testCase}): ${ec.message.getErrorsString()}")
+            ec.message.clearErrors()
+        }
+        totalFieldsChecked += 4
+        logger.info("✓ BoletaInternal ${testCase} test passed - FiscalDoc: ${result.fiscalTaxDocumentId}")
+
+        where:
+        testCase                                    | preciosIncluyenIva | generarXmlMontosNetos
+        "Gross input, Gross XML (default)"         | true               | false
+        "Gross input, Net XML"                      | true               | true
+        "Net input, Gross XML"                      | false              | false
+        "Net input, Net XML"                        | false              | true
     }
 }

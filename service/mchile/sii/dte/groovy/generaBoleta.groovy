@@ -332,22 +332,14 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 //FchVencim()
                 if (detalle.uom)
                     UnmdItem(detalle.uom)
-                if (detalle.indicadorExento && detalle.priceItem != null && detalle.priceItem != 0 && detalle.priceItem != "0")
+                if (detalle.priceItem != null && detalle.priceItem != 0 && detalle.priceItem != "0")
                     PrcItem((detalle.priceItem as BigDecimal).setScale(6, RoundingMode.HALF_UP))
-                if(!detalle.indicadorExento && detalle.priceItem != null && detalle.priceItem != 0 && detalle.priceItem != "0")
-                    PrcItem((detalle.priceItem + ((detalle.priceItem * vatTaxRate) as BigDecimal).setScale(0, RoundingMode.HALF_UP) as BigDecimal).setScale(6, RoundingMode.HALF_UP))
                 //OtrMnda{}
                 if (detalle.porcentajeDescuento)
                     DescuentoPct(detalle.porcentajeDescuento)
                 if (detalle.montoDescuento)
-                    if (detalle.indicadorExento)
-                        DescuentoMonto(detalle.montoDescuento)
-                    else
-                        DescuentoMonto((detalle.montoDescuento + ((detalle.montoDescuento * vatTaxRate) as BigDecimal).setScale(0, RoundingMode.HALF_UP) as BigDecimal).setScale(6, RoundingMode.HALF_UP))
-                if(detalle.indicadorExento)
-                    MontoItem((detalle.montoItem as BigDecimal).setScale(0, RoundingMode.HALF_UP))
-                if(!detalle.indicadorExento)
-                    MontoItem(((detalle.montoItem + (detalle.montoItem * vatTaxRate as BigDecimal).setScale(0, RoundingMode.HALF_UP)) as BigDecimal).setScale(0, RoundingMode.HALF_UP))
+                    DescuentoMonto((detalle.montoDescuento as BigDecimal).setScale(0, RoundingMode.HALF_UP))
+                MontoItem((detalle.montoItem as BigDecimal).setScale(0, RoundingMode.HALF_UP))
             }
         }
         //SubTotInfo{}
