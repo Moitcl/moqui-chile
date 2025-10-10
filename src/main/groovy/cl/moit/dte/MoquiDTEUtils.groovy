@@ -75,11 +75,11 @@ class MoquiDTEUtils {
         return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, null, issuerPartyId, preciosIncluyenIva, false)
     }
 
-    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, String issuerPartyId, Boolean preciosIncluyenIva, Boolean generarXmlConIndicador) throws BaseArtifactException {
-        return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, null, issuerPartyId, preciosIncluyenIva, generarXmlConIndicador)
+    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, String issuerPartyId, Boolean preciosIncluyenIva, Boolean generarXmlConMontosBrutos) throws BaseArtifactException {
+        return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, null, issuerPartyId, preciosIncluyenIva, generarXmlConMontosBrutos)
     }
 
-    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, Integer codRef, String issuerPartyId, Boolean preciosIncluyenIva, Boolean generarXmlConIndicador) throws BaseArtifactException {
+    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, Integer codRef, String issuerPartyId, Boolean preciosIncluyenIva, Boolean generarXmlConMontosBrutos) throws BaseArtifactException {
         List detalleList = []
         // Text Correction DTEs have no detail list
         if ((detailList == null || detailList.size()) == 0 && codRef == 2) {
@@ -276,7 +276,7 @@ class MoquiDTEUtils {
 
             // Bidirectional price conversion based on input format and desired XML output
             if (itemAfecto && detailEntry.itemTypeEnumId != "ItemVatTax") {
-                if (preciosIncluyenIva && !generarXmlConIndicador) {
+                if (preciosIncluyenIva && !generarXmlConMontosBrutos) {
                     // Input: gross, Output: net → Convert gross to net
                     Map netPriceMap = ec.service.sync().name("mchile.TaxServices.calculate#NetFromGrossPrice")
                         .parameter("grossPrice", totalItem).call()
@@ -289,7 +289,7 @@ class MoquiDTEUtils {
                     }
                     // Round per-item IVA before accumulating to prevent rounding discrepancies in totals
                     totalIva = (totalIva ?: 0) + vatAmount.setScale(0, RoundingMode.HALF_UP)
-                } else if (!preciosIncluyenIva && generarXmlConIndicador) {
+                } else if (!preciosIncluyenIva && generarXmlConMontosBrutos) {
                     // Input: net, Output: gross → Convert net to gross (add IVA)
                     Map grossPriceMap = ec.service.sync().name("mchile.TaxServices.calculate#GrossFromNetPrice")
                         .parameter("netPrice", totalItem).call()
@@ -301,7 +301,7 @@ class MoquiDTEUtils {
                     }
                     // Round per-item IVA before accumulating (IVA is included in gross totalItem)
                     totalIva = (totalIva ?: 0) + vatAmount.setScale(0, RoundingMode.HALF_UP)
-                } else if (preciosIncluyenIva && generarXmlConIndicador) {
+                } else if (preciosIncluyenIva && generarXmlConMontosBrutos) {
                     // Input: gross, Output: gross → No conversion but extract IVA for totals
                     Map netPriceMap = ec.service.sync().name("mchile.TaxServices.calculate#NetFromGrossPrice")
                         .parameter("grossPrice", totalItem).call()
