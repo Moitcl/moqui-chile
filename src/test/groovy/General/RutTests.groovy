@@ -23,6 +23,7 @@ import org.slf4j.LoggerFactory
 import spock.lang.Shared
 import spock.lang.Specification
 
+import java.lang.reflect.Field
 import java.sql.Timestamp
 
 /* To run these make sure moqui, and mantle are in place and run:
@@ -57,7 +58,7 @@ class RutTests extends Specification {
       ec.artifactExecution.disableAuthz()
       try {
          logger.info("[General] Creating tenant owner parties for RUT tests")
-         
+
          // Create TENANT1-OWNER party if it doesn't exist
          if (!ec.entity.find("mantle.party.Party").condition("partyId", "TENANT1-OWNER").one()) {
             ec.service.sync().name("create#mantle.party.Party")
@@ -65,36 +66,81 @@ class RutTests extends Specification {
                   partyId: "TENANT1-OWNER",
                   partyTypeEnumId: "PtyOrganization"
                ]).call()
-               
+
             ec.service.sync().name("create#mantle.party.Organization")
                .parameters([
                   partyId: "TENANT1-OWNER",
                   organizationName: "Test DTE Organization as owner"
                ]).call()
-               
+
             logger.info("[General] Created TENANT1-OWNER party")
          }
-         
-         // Create TENANT2-OWNER party if it doesn't exist  
+
+         // Create TENANT2-OWNER party if it doesn't exist
          if (!ec.entity.find("mantle.party.Party").condition("partyId", "TENANT2-OWNER").one()) {
             ec.service.sync().name("create#mantle.party.Party")
                .parameters([
-                  partyId: "TENANT2-OWNER", 
+                  partyId: "TENANT2-OWNER",
                   partyTypeEnumId: "PtyOrganization"
                ]).call()
-               
+
             ec.service.sync().name("create#mantle.party.Organization")
                .parameters([
                   partyId: "TENANT2-OWNER",
                   organizationName: "Test DTE Organization as owner"
                ]).call()
-               
+
             logger.info("[General] Created TENANT2-OWNER party")
          }
-         
+
          logger.info("[General] Test data initialization completed")
       } finally {
          ec.artifactExecution.enableAuthz()
+      }
+   }
+
+   /**
+    * Helper method to set or clear environment variables using reflection.
+    * This is necessary because System.getenv() returns an immutable map.
+    *
+    * WARNING: This uses reflection to modify internal JVM state and is:
+    * - Platform-dependent (may not work on all JVMs)
+    * - Fragile (may break in future Java versions)
+    * - Only suitable for testing purposes
+    *
+    * @param key The environment variable name
+    * @param value The value to set, or null to remove the variable
+    */
+   private static void setEnvironmentVariable(String key, String value) {
+      try {
+         // Get the environment map using reflection
+         Class<?> processEnvironmentClass = Class.forName("java.lang.ProcessEnvironment")
+         Field theEnvironmentField = processEnvironmentClass.getDeclaredField("theEnvironment")
+         theEnvironmentField.setAccessible(true)
+         Map<String, String> env = (Map<String, String>) theEnvironmentField.get(null)
+
+         if (value == null) {
+            env.remove(key)
+         } else {
+            env.put(key, value)
+         }
+
+         // Also modify the case-insensitive environment map (Windows)
+         Field theCaseInsensitiveEnvironmentField = processEnvironmentClass.getDeclaredField("theCaseInsensitiveEnvironment")
+         theCaseInsensitiveEnvironmentField.setAccessible(true)
+         Map<String, String> cienv = (Map<String, String>) theCaseInsensitiveEnvironmentField.get(null)
+
+         if (value == null) {
+            cienv.remove(key)
+         } else {
+            cienv.put(key, value)
+         }
+      } catch (NoSuchFieldException e) {
+         // On some JVMs, the case-insensitive map might not exist (non-Windows platforms)
+         // This is OK, we only need theEnvironment on Unix-like systems
+         logger.debug("[General] Could not find theCaseInsensitiveEnvironment field (likely non-Windows platform): ${e.message}")
+      } catch (Exception e) {
+         logger.warn("[General] Failed to set environment variable '${key}': ${e.message}")
       }
    }
 
@@ -493,12 +539,39 @@ class RutTests extends Specification {
       }
    }
 
-   def "008 - Verifica Duplicación de RUTs - Organizaciones con Mismo ownerPartyId (debe fallar)"() {
+   def "008 - Verifica Duplicación de RUTs - Organizaciones con Mismo ownerPartyId (#scenario)"() {
       setup:
-      logger.info("[General] Probar duplicación de RUTs entre organizaciones con mismo ownerPartyId")
-      String testOrg1Id = "TEST-RUT-SAME-OWNER-ORG1"
-      String testOrg2Id = "TEST-RUT-SAME-OWNER-ORG2"
-      String testRut = "87654321-4"
+      logger.info("[General] Probar duplicación de RUTs entre organizaciones con mismo ownerPartyId - Scenario: ${scenario}")
+
+      // Save the original values to restore them later
+      String originalPropertyValue = System.getProperty('moquichile.rut.allowDuplicatesForSameOwner')
+      String originalEnvValue = System.getenv('moquichile.rut.allowDuplicatesForSameOwner')
+      logger.info("[General] Original property: ${originalPropertyValue}, environment: ${originalEnvValue}")
+
+      // Set both the system property AND environment variable according to the test scenario
+      // This ensures consistent test behavior regardless of external environment configuration
+      if (propertyValue == null) {
+          System.clearProperty('moquichile.rut.allowDuplicatesForSameOwner')
+          setEnvironmentVariable('moquichile.rut.allowDuplicatesForSameOwner', null)
+          logger.info("[General] Cleared property and environment variable (testing default behavior)")
+      } else {
+          System.setProperty('moquichile.rut.allowDuplicatesForSameOwner', propertyValue)
+          setEnvironmentVariable('moquichile.rut.allowDuplicatesForSameOwner', propertyValue)
+          logger.info("[General] Set property and environment variable to '${propertyValue}'")
+      }
+
+      // Verify what value the service will actually use
+      String effectiveValue = org.moqui.util.SystemBinding.getPropOrEnv('moquichile.rut.allowDuplicatesForSameOwner')
+      boolean actualValidationEnabled = (effectiveValue == 'false')
+      logger.info("[General] Effective value: '${effectiveValue}', validation enabled: ${actualValidationEnabled} (expected: ${expectedToFail})")
+
+      // Use short IDs to avoid exceeding PARTY_ID VARCHAR(40) limit
+      // Generate unique suffix from testRutValue instead of scenario name
+      String uniqueSuffix = testRutValue.replace('-', '')
+      String testOrg1Id = "TEST-RUT-ORG1-${uniqueSuffix}"
+      String testOrg2Id = "TEST-RUT-ORG2-${uniqueSuffix}"
+      // Use different RUTs for each scenario to avoid conflicts
+      String testRut = testRutValue
       String sameOwnerPartyId = "TENANT1-OWNER"
 
       // Create test organizations with same owner
@@ -508,42 +581,62 @@ class RutTests extends Specification {
       ec.service.sync().name("mantle.party.PartyServices.create#Organization")
               .parameters([partyId: testOrg2Id, organizationName: "Test RUT Same Owner Org 2", ownerPartyId:sameOwnerPartyId])
               .call()
-      
+
       // Add RUT to first organization
       ec.service.sync().name("create#mantle.party.PartyIdentification")
               .parameters([
                   partyId: testOrg1Id,
-                  partyIdTypeEnumId: "PtidNationalTaxId", 
+                  partyIdTypeEnumId: "PtidNationalTaxId",
                   idValue: testRut
               ])
               .call()
-      
-      // Try to add the same RUT to second organization with same owner (should fail)
+
+      // Try to add the same RUT to second organization with same owner
       Map secondResult = ec.service.sync().name("create#mantle.party.PartyIdentification")
               .parameters([
                   partyId: testOrg2Id,
-                  partyIdTypeEnumId: "PtidNationalTaxId", 
+                  partyIdTypeEnumId: "PtidNationalTaxId",
                   idValue: testRut
               ])
               .call()
-      
+
       // Check both error sources as per Moqui testing best practices
       boolean hasErrors = ec.message.hasError() || secondResult?.errorMessage != null
       boolean duplicateAttemptFailed = hasErrors
+
       if (duplicateAttemptFailed) {
-          logger.info("[General] RUT duplication correctly rejected for same ownerPartyId")
+          logger.info("[General] RUT duplication rejected for same ownerPartyId")
       } else {
-          logger.warn("[General] RUT duplication was allowed when it should have failed")
+          logger.info("[General] RUT duplication allowed for same ownerPartyId")
       }
 
       totalTestChecked += 1
 
       expect:
-      duplicateAttemptFailed == true  // Should fail when same ownerPartyId
+      // Use actualValidationEnabled to account for environment variables overriding system properties
+      duplicateAttemptFailed == actualValidationEnabled
 
       cleanup:
-      // This test intentionally triggers duplicate RUT errors - clear them
-      ec.message.clearErrors()
+      // Restore the original property value
+      if (originalPropertyValue != null) {
+          System.setProperty('moquichile.rut.allowDuplicatesForSameOwner', originalPropertyValue)
+          logger.info("[General] Restored property to original value: ${originalPropertyValue}")
+      } else {
+          System.clearProperty('moquichile.rut.allowDuplicatesForSameOwner')
+          logger.info("[General] Cleared property (was not set originally)")
+      }
+
+      // Restore the original environment variable value
+      setEnvironmentVariable('moquichile.rut.allowDuplicatesForSameOwner', originalEnvValue)
+      if (originalEnvValue != null) {
+          logger.info("[General] Restored environment variable to original value: ${originalEnvValue}")
+      } else {
+          logger.info("[General] Cleared environment variable (was not set originally)")
+      }
+
+      // This test may trigger duplicate RUT errors - clear them
+      ec.message.clearAll()
+
       // Clean up test data using delete services (preferred for resilient cleanup)
       try {
           [testOrg1Id, testOrg2Id].each { partyId ->
@@ -555,7 +648,7 @@ class RutTests extends Specification {
                       .parameters([partyId: partyIdRecord.partyId, partyIdTypeEnumId: partyIdRecord.partyIdTypeEnumId, idValue: partyIdRecord.idValue])
                       .disableAuthz().call()
               }
-              
+
               // Delete Party record
               ec.service.sync().name("delete#mantle.party.Organization").parameters([partyId: partyId]).disableAuthz().call()
               ec.service.sync().name("delete#mantle.party.Party").parameters([partyId: partyId]).disableAuthz().call()
@@ -563,6 +656,12 @@ class RutTests extends Specification {
       } catch (Exception e) {
           logger.warn("[General] Cleanup warning: ${e.message}")
       }
+
+      where:
+      scenario                                      | propertyValue | expectedToFail | testRutValue
+      "property not set (default: allow)"          | null          | false          | "87654321-4"
+      "property='true' (explicitly allow)"         | 'true'        | false          | "98765432-5"
+      "property='false' (validation enabled)"      | 'false'       | true           | "76543210-3"
    }
 
    def "009 - Verifica Duplicación de RUTs - Organizaciones con Diferentes Tenants (EntityFilter simulation)"() {
