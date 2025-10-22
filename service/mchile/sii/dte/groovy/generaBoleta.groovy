@@ -483,6 +483,7 @@ if (importInvoiceFromXml) {
     outMap = ec.service.sync().name("mchile.sii.dte.DteLoadServices.load#DteFromDom").parameters([domNode:doc2, organizationPartyIdAsOwnerWhenCreating:issuerPartyId, sendResponse: false,
                                                                                                   createUnknownIssuer:false, requireIssuerInternalOrg:true, createUnknownReceiver:true, requireReceiverInternalOrg:false]).call()
     outMap.errorMessages.each { errorMessage ->
+        fiscalTaxDocumentId = null
         ec.message.addError(errorMessage)
     }
 }
