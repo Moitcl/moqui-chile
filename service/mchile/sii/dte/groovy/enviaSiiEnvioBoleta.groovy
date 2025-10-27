@@ -72,14 +72,31 @@ if (proxyHost != null && proxyPort != 0) {
 RestClient.RestResponse response = restClient.call()
 respSII = response.text()
 
-def jsonSlurper = new JsonSlurper()
-try {
-    respuesta = jsonSlurper.parseText(respSII)
-} catch (Exception e) {
-    ec.message.addError("Error parsing response from SII: ${e.getMessage()}\nrespuesta SII: ${respSII}")
+// Check if the response is a "Ya existe" message with X-Location URL
+if (respSII.contains("Ya existe X-Location:")) {
+    // Extract trackId from URL pattern: https://api.sii.cl/recursos/v1/boleta.electronica.envio/{rutEmisor}-{trackId}
+    def locationPattern = /boleta\.electronica\.envio\/([0-9]+-[0-9kK])-(\d+)/
+    def matcher = (respSII =~ locationPattern)
+    if (matcher.find()) {
+        trackId = matcher.group(2)
+        estado = 'REC'  // "Ya existe" means it was already successfully sent
+        ec.logger.info("DTE ya existe en SII con trackId ${trackId}")
+    } else {
+        ec.message.addError("No se pudo extraer trackId del mensaje 'Ya existe': ${respSII}")
+        trackId = null
+        estado = null
+    }
+} else {
+    // Try to parse as JSON
+    def jsonSlurper = new JsonSlurper()
+    try {
+        respuesta = jsonSlurper.parseText(respSII)
+    } catch (Exception e) {
+        ec.message.addError("Error parsing response from SII: ${e.getMessage()}\nrespuesta SII: ${respSII}")
+    }
+    trackId = respuesta.trackid
+    estado = respuesta.estado
 }
-trackId = respuesta.trackid
-estado = respuesta.estado
 
 attemptCount = (envio.attemptCount ?: 0) + 1
 
