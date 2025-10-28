@@ -1001,6 +1001,8 @@ TrackId Token']" type="Map"/>
 
             <service-call name="mchile.sii.dte.DteInternalServices.load#DteConfig" in-map="[partyId:envio.issuerPartyId]" out-map="context"/>
 
+            <set field="boletaIsProduction" from="true"/>
+
             <service-call name="mchile.sii.dte.DteCommServices.get#TokenBoleta" in-map="[boletaIsProduction:boletaIsProduction,  partyId:envio.issuerPartyId]" out-map="tokenMap"/>
             <set field="token" from="tokenMap.token"/>
             <set field="urlSolicitud" from="boletaIsProduction? 'https://api.sii.cl/recursos/v1/boleta.electronica.envio': 'https://apicert.sii.cl/recursos/v1/boleta.electronica.envio'"/>
@@ -1027,7 +1029,7 @@ TrackId Token']" type="Map"/>
                 restClient.acceptContentType("application/json")
 
                 RestClient.RestResponse response = restClient.call()
-                respSII = response.text()
+                respSII = new String(response.bytes, "UTF-8")
 
                 def jsonSlurper = new JsonSlurper()
                 try {
@@ -1078,13 +1080,10 @@ TrackId Token']" type="Map"/>
                         <if condition="newStatusId == null"><set field="newStatusId" value="Ftde-ProcessedWithDiscrepancy"/></if>
                         <set field="dte.sentAuthStatusId" value="Ftd-SentAuthAcceptedWithDiscrepancies"/>
                         <set field="reparoPorTipo[reparoRechazo.tipo]" from="(reparoPorTipo[reparoRechazo.tipo]?:0) + 1"/>
-                    </else-if><else-if condition="reparoRechazo.estado == 'RLV'">
-                        <!-- Reparo leve -->
-                        <set field="dte.sentAuthStatusId" value="Ftd-SentAuthAccepted"/>
                     </else-if><else>
                         <message error="true">Unknown status for reparo o rechazo: ${reparoRechazo.estado}</message>
                     </else></if>
-                    <set field="dte.authComment" from="groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(reparoRechazo.error))"/>
+                    <set field="dte.authComment" value="${reparoRechazo.descripcion}: ${groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(reparoRechazo.error))}"/>
                     <entity-update value-field="dte"/>
                 </then><else>
                     <message error="true">Did not find DTE for reparo o rechazo: ${reparoRechazo}</message>
