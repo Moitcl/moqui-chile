@@ -224,7 +224,6 @@ detalleDteList.each { detalleDte ->
         descuentoMontoBruto = descuentoMonto
         descuentoMonto = ec.service.sync().name("mchile.TaxServices.calculate#NetFromGrossPrice").parameters([grossPrice:descuentoMonto]).call().netPrice
         totalBruto += montoItemBruto
-        ec.logger.info("Recalculando montoItem, montoItemBruto ${montoItemBruto}, montoItem ${montoItem}, totalBruto ${totalBruto}")
     }
     if (((price?:0) * (quantity?:0)) == 0 && montoItem) {
         if (quantity == null || quantity == 0)
