@@ -235,6 +235,9 @@ if (detalleIt1.length() > 40)
     detalleIt1 = detalleIt1.substring(0, 40)
 datosTed = "<DD><RE>${rutOrganizacion}</RE><TD>${tipoDte}</TD><F>${folio}</F><FE>${ec.l10n.format(fechaEmision, "yyyy-MM-dd")}</FE><RR>${rutReceptor}</RR><RSR>${razonSocialReceptorTimbre}</RSR><MNT>${totalInvoice}</MNT><IT1>${detalleIt1}</IT1>${folioResult.cafFragment.replaceAll('>\\s*<', '><').trim()}<TSTED>${ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")}</TSTED></DD>"
 
+if (indServicio == null)
+    indServicio = "3"
+
 String schemaLocation = ''
 xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
     Documento(ID: idDocumento) {
@@ -243,10 +246,8 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 TipoDTE(tipoDte)
                 Folio(folio)
                 FchEmis(ec.l10n.format(fechaEmision, "yyyy-MM-dd"))
-                IndServicio("3")
                 //IndNoRebaja()
-                if (indServicio)
-                    IndServicio(indServicio)
+                IndServicio(indServicio)
                 // Only set IndMntNeto when generating XML with net amounts (indicador = 2)
                 Integer indicadorMontosNetos = generarXmlMontosNetos ? 2 : null
                 if (indicadorMontosNetos)
