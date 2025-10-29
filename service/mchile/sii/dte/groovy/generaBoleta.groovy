@@ -99,6 +99,11 @@ if (tipoDte == '39') {
     numberExentos = detMap.numberExentos
     totalIva = detMap.totalIva
 
+    if (numberAfectos > 0 && (totalIva == null || totalIva == 0)) {
+        ec.message.addError("Boleta Electrónica con ítemes afectos debe tener IVA mayor a 0. Verifique que los precios incluyan IVA o que se haya proporcionado el monto de IVA explícitamente.")
+        return
+    }
+
     if (numberAfectos == 0 && numberExentos > 0) {
         ec.message.addMessage("Boleta Electrónica solamente tiene ítemes exentos, cambiando tipo a Boleta Electrónica Exenta")
         tipoDte = '41'
