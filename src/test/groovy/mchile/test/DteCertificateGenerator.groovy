@@ -108,6 +108,7 @@ class DteCertificateGenerator {
         String subjectDN = params.subjectDN ?: "CN=Test Certificate,O=Test Organization,C=CL"
         String personRut = params.personRut ?: "15234567-8"
         String issuerRut = params.issuerRut ?: "96790240-3"
+        Integer issuingDateDaysBeforeNow = params.issuingDateDaysBeforeNow ?: 2
         int keySize = params.keySize ?: 2048
         int validityDays = params.validityDays ?: 365
         boolean includeRutInSAN = params.includeRutInSAN != false // default true
@@ -118,7 +119,7 @@ class DteCertificateGenerator {
         KeyPair keyPair = keyGen.generateKeyPair()
         
         // Certificate validity period - start 1 hour ago to ensure validity for test emissions
-        Date notBefore = params.validFromDate ?: new Date(System.currentTimeMillis() - 3600000L) // 1 hour ago
+        Date notBefore = params.validFromDate ?: new Date(System.currentTimeMillis() - (issuingDateDaysBeforeNow*24*60*60*1000L)) // issuingDateDaysBeforeNow days ago
         Date notAfter = new Date(notBefore.time + validityDays * 86400000L)
         
         // Build certificate

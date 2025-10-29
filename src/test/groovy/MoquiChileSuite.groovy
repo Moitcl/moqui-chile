@@ -31,8 +31,7 @@ import org.moqui.Moqui
 @Suite
 @SelectClasses([
     General.RutTests.class,                              // Chilean RUT validation utilities
-    DTE.DteGenerationTests.class,                        // All DTE types via generate#Factura and generate#Boleta services
-    DTE.DteRoundTripConsistencyTests.class,              // DTE round-trip consistency tests (DTE → Invoice → DTE)
+    DTE.DteGenerationTests.class,                        // All DTE types via generate#Factura and generate#Boleta services + DTE round-trip consistency tests
     DTE.CafAutoRequestTests.class,                       // CAF auto-request system testing
     EmailProcessing.DteEmailProcessingTests.class,      // DteEmailProcessing entity CRUD and workflow testing
     EmailProcessing.DteEmailProcessingEnvioTests.class, // DteEmailProcessingEnvio entity and composite key testing

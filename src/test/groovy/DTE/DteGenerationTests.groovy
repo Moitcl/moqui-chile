@@ -20,6 +20,7 @@ import java.security.cert.X509Certificate
 import java.security.cert.CertificateFactory
 import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Document
+import org.w3c.dom.Element
 import javax.xml.xpath.XPathFactory
 import javax.xml.xpath.XPath
 import javax.xml.xpath.XPathConstants
@@ -37,10 +38,13 @@ class DteGenerationTests extends Specification {
 
     // Test data IDs for cleanup
     @Shared String testIssuerPartyId
-    @Shared String testReceiverPartyId 
+    @Shared String testReceiverPartyId
     @Shared String testProductId
     @Shared List createdFiscalTaxDocumentIds = []
     @Shared List<String> createdInvoiceIds = []
+
+    // Acceptable tolerance for monetary amounts (in CLP) - for round-trip consistency tests
+    private static final BigDecimal TOLERANCE = new BigDecimal("1.0")
 
     def setupSpec() {
         logger.info("=== Starting DTE Generation Tests ===")
@@ -124,6 +128,13 @@ class DteGenerationTests extends Specification {
                         disabled: "N"
                     ]).call()
 
+                // Create Organization entity
+                ec.service.sync().name("create#mantle.party.Organization")
+                    .parameters([
+                        partyId: testPartyId,
+                        organizationName: "Test DTE Organization"
+                    ]).call()
+
                 if (ec.message.hasError()) {
                     logger.error("Service errors during party creation: ${ec.message.getErrorsString()}")
                     ec.message.clearErrors()
@@ -194,6 +205,13 @@ class DteGenerationTests extends Specification {
                     disabled: "N"
                 ]).call()
 
+            // Create Organization entity for receiver
+            ec.service.sync().name("create#mantle.party.Organization")
+                .parameters([
+                    partyId: testReceiverPartyId,
+                    organizationName: "Test DTE Receiver Organization"
+                ]).call()
+
             if (ec.message.hasError()) {
                 logger.error("Service errors during receiver party creation: ${ec.message.getErrorsString()}")
                 String errorDetails = ec.message.getErrorsString()
@@ -211,7 +229,7 @@ class DteGenerationTests extends Specification {
             this.testReceiverPartyId = testReceiverPartyId
             logger.info("Created test receiver organization: ${testReceiverPartyId}")
 
-            String receiverRut = "77777777-7"  // Valid test RUT
+            String receiverRut = "87654321-4"  // Valid test RUT matching other tests
             Map idResult = ec.service.sync().name("create#mantle.party.PartyIdentification")
                 .parameters([
                     partyId: testReceiverPartyId,
@@ -221,6 +239,47 @@ class DteGenerationTests extends Specification {
                 
             if (ec.message.hasError()) {
                 logger.error("Service errors during party identification creation: ${ec.message.getErrorsString()}")
+                ec.message.clearErrors()
+            }
+
+            // Create Party Giro for receiver (required for Factura generation)
+            ec.service.sync().name("create#mchile.dte.PartyGiro")
+                .parameters([
+                    giroId: testReceiverPartyId + "-GIRO",
+                    partyId: testReceiverPartyId,
+                    isPrimary: "Y",
+                    description: "Giro de Organización Receptora Prueba"
+                ]).call()
+
+            if (ec.message.hasError()) {
+                logger.error("Service errors during receiver giro creation: ${ec.message.getErrorsString()}")
+                ec.message.clearErrors()
+            }
+
+            // Create PostalAddress for receiver (required for Factura generation)
+            Map addressResult = ec.service.sync().name("mantle.party.ContactServices.create#PostalAddress")
+                .parameters([
+                    contactNumber: "Test Address 456",
+                    address1: "Av Test Receiver 456",
+                    city: "Santiago",
+                    stateProvinceGeoId: "CHL_13123",
+                    postalCode: "8320000",
+                    countryGeoId: "CHL"
+                ]).call()
+
+            String receiverContactMechId = addressResult.contactMechId
+
+            // Link address to receiver party with PostalTax purpose
+            ec.service.sync().name("create#mantle.party.contact.PartyContactMech")
+                .parameters([
+                    partyId: testReceiverPartyId,
+                    contactMechId: receiverContactMechId,
+                    contactMechPurposeId: "PostalTax",
+                    fromDate: ec.user.nowTimestamp
+                ]).call()
+
+            if (ec.message.hasError()) {
+                logger.error("Service errors during receiver address creation: ${ec.message.getErrorsString()}")
                 ec.message.clearErrors()
             }
 
@@ -377,7 +436,7 @@ q4+htPABTvIWzZcF4LILEDnaZS791SWJYxbbE72D
     private void refreshCafDates() {
         // Update CAF authorization dates to current date to ensure they're not older than 6 months
         Timestamp currentTimestamp = ec.user.nowTimestamp
-        java.sql.Date currentSqlDate = new java.sql.Date(currentTimestamp.time)
+        java.sql.Date currentSqlDate = new java.sql.Date(currentTimestamp.time - (24*60*60*1000L))
         
         // Update all CAF records for the test organization
         ec.entity.find("mchile.dte.Caf")
@@ -629,11 +688,47 @@ JYljFtsT
         try {
             // Delete test data in proper dependency order to avoid foreign key violations
 
-            // 1. Delete fiscal tax documents (dependent on invoices)
+            // 1. Clean fiscal tax documents (dependent on invoices)
+            // Reset folios to available state instead of deleting to avoid exhausting folio pool
             for (String fiscalTaxDocumentId in createdFiscalTaxDocumentIds) {
-                ec.entity.find("mchile.dte.FiscalTaxDocument")
+                // Delete ALL related records that reference FiscalTaxDocument
+                ec.entity.find("mchile.dte.FiscalTaxDocumentAttributes")
                     .condition("fiscalTaxDocumentId", fiscalTaxDocumentId)
                     .deleteAll()
+                ec.entity.find("mchile.dte.FiscalTaxDocumentContent")
+                    .condition("fiscalTaxDocumentId", fiscalTaxDocumentId)
+                    .deleteAll()
+                ec.entity.find("mchile.dte.ReferenciaDte")
+                    .condition("fiscalTaxDocumentId", fiscalTaxDocumentId)
+                    .deleteAll()
+                ec.entity.find("mchile.dte.GuiaDespacho")
+                    .condition("fiscalTaxDocumentId", fiscalTaxDocumentId)
+                    .deleteAll()
+                ec.entity.find("mchile.dte.FiscalTaxDocumentEmailMessage")
+                    .condition("fiscalTaxDocumentId", fiscalTaxDocumentId)
+                    .deleteAll()
+                ec.entity.find("mchile.dte.DteEnvioFiscalTaxDocument")
+                    .condition("fiscalTaxDocumentId", fiscalTaxDocumentId)
+                    .deleteAll()
+                ec.entity.find("mchile.dte.FiscalTaxDocumentTerm")
+                    .condition("fiscalTaxDocumentId", fiscalTaxDocumentId)
+                    .deleteAll()
+                ec.entity.find("mchile.dte.DteProcessingMessage")
+                    .condition("fiscalTaxDocumentId", fiscalTaxDocumentId)
+                    .deleteAll()
+
+                // Reset folio to available state instead of deleting to preserve folio pool
+                EntityValue ftd = ec.entity.find("mchile.dte.FiscalTaxDocument")
+                    .condition("fiscalTaxDocumentId", fiscalTaxDocumentId)
+                    .one()
+
+                if (ftd) {
+                    ftd.statusId = 'Ftd-NotIssued'
+                    ftd.sentAuthStatusId = 'Ftd-NotSentAuth'
+                    ftd.sentRecStatusId = 'Ftd-NotSentRec'
+                    ftd.date = null
+                    ftd.update()
+                }
             }
 
             // 2. Delete invoice items before invoices
@@ -2258,5 +2353,703 @@ See: .agent-os/findings/2025-10-28-afecto-preciosIncluyenIva-bug.md
             logger.error("Error parsing XML for rounding check: ${e.message}", e)
             return [valid: false, error: "XML parsing error: ${e.message}"]
         }
+    }
+
+    @Unroll
+    def "RT-001 - Boleta tipo #dteType round-trip consistency"() {
+        given: "A simple boleta with known values"
+        BigDecimal netAmount = 10000
+        BigDecimal taxAmount = 1900
+        BigDecimal totalAmount = 11900
+
+        when: "Generate original DTE (Boleta)"
+        List detailList = [
+            [
+                description: "Round-Trip Test Product",
+                quantity: 1,
+                amount: totalAmount
+            ]
+        ]
+
+        Map generateResult = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#Boleta")
+            .parameters([
+                fiscalTaxDocumentTypeEnumId: dteType,
+                issuerPartyId: testIssuerPartyId,
+                rutReceptor: "87654321-4",  // Must match the RUT assigned to testReceiverPartyId in setup
+                receiverPartyId: testReceiverPartyId,
+                razonSocialReceptor: "Test Round-Trip Receiver",
+                contactoReceptor: "Test Contact",
+                direccionReceptor: "Test Address 123",
+                comunaReceptor: "Santiago",
+                preciosIncluyenIva: true,  // Amount includes IVA
+                detailList: detailList,
+                sendToSii: false  // Don't actually send to SII in tests
+            ]).call()
+
+        String originalFiscalTaxDocumentId = generateResult.fiscalTaxDocumentId
+        createdFiscalTaxDocumentIds.add(originalFiscalTaxDocumentId)
+
+        logger.info("Generated original DTE: ${originalFiscalTaxDocumentId}")
+
+        and: "Get original DTE attributes"
+        Map originalAttributes = getDteAttributes(originalFiscalTaxDocumentId)
+
+        and: "Get original DTE XML content"
+        Document originalDoc = getDteXml(originalFiscalTaxDocumentId)
+        Element originalDteElement = originalDoc.getDocumentElement()
+
+        and: "Load DTE from XML (simulating receiving it)"
+        Map parseResult = ec.service.sync().name("mchile.sii.dte.DteLoadServices.parse#Dte")
+            .parameters([dte: originalDteElement])
+            .call()
+
+        logger.info("Parsed DTE: tipoDte=${parseResult.tipoDte}, folio=${parseResult.folioDte}, montoTotal=${parseResult.montoTotal}")
+
+        and: "Create Invoice from parsed DTE"
+        Map invoiceResult = ec.service.sync().name("mchile.sii.dte.DteLoadServices.create#InvoiceFromDte")
+            .parameters([
+                fiscalTaxDocumentId: originalFiscalTaxDocumentId,
+                parsedDteXmlMap: parseResult,
+                invoiceStatusId: "InvoiceReceived"
+            ]).call()
+
+        String invoiceId = invoiceResult.invoiceId
+        createdInvoiceIds.add(invoiceId)
+
+        logger.info("Created Invoice from DTE: ${invoiceId}")
+
+        EntityValue invoice = ec.entity.find("mantle.account.invoice.Invoice").condition("invoiceId", invoiceId).one()
+        logger.info("Invoice fromPartyId: ${invoice.fromPartyId}")
+        logger.info("testIssuerPartyId: ${testIssuerPartyId}")
+        logger.info("invoice.invoiceDate: ${invoice.invoiceDate}")
+        logger.info("dteType: ${dteType}")
+
+        and: "Generate new DTE from the Invoice"
+        Map regenerateResult = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#DteFromInvoice")
+            .parameters([
+                invoiceId: invoiceId,
+                fiscalTaxDocumentTypeEnumId: dteType,
+                sendToSii: false
+            ]).call()
+
+        String regeneratedFiscalTaxDocumentId = regenerateResult.fiscalTaxDocumentId
+        createdFiscalTaxDocumentIds.add(regeneratedFiscalTaxDocumentId)
+
+        logger.info("Regenerated DTE from Invoice: ${regeneratedFiscalTaxDocumentId}")
+
+        // Check for errors from regeneration
+        if (ec.message.hasError()) {
+            logger.error("ERRORS after generate#DteFromInvoice:")
+            List errors = ec.message.getErrors()
+            logger.error("Error count: ${errors.size()}")
+            errors.each { error -> logger.error("  ERROR: ${error}") }
+        } else {
+            logger.info("NO ERRORS after generate#DteFromInvoice")
+        }
+
+        logger.info("regenerateResult keys: ${regenerateResult.keySet()}")
+        logger.info("regeneratedFiscalTaxDocumentId value: ${regeneratedFiscalTaxDocumentId}")
+
+        and: "Get regenerated DTE attributes"
+        Map regeneratedAttributes = getDteAttributes(regeneratedFiscalTaxDocumentId)
+
+        // Debug logging if attributes are null
+        if (!regeneratedAttributes) {
+            logger.error("getDteAttributes returned null for regeneratedFiscalTaxDocumentId: ${regeneratedFiscalTaxDocumentId}")
+
+            // Check if FiscalTaxDocument exists
+            def ftd = ec.entity.find("mchile.dte.FiscalTaxDocument")
+                .condition("fiscalTaxDocumentId", regeneratedFiscalTaxDocumentId)
+                .one()
+            logger.error("FiscalTaxDocument exists: ${ftd != null}")
+
+            // Check if FiscalTaxDocumentAttributes exists
+            def ftda = ec.entity.find("mchile.dte.FiscalTaxDocumentAttributes")
+                .condition("fiscalTaxDocumentId", regeneratedFiscalTaxDocumentId)
+                .one()
+            logger.error("FiscalTaxDocumentAttributes exists: ${ftda != null}")
+
+            // List all errors
+            if (ec.message.hasError()) {
+                logger.error("Current error messages:")
+                ec.message.getErrors().each { error -> logger.error("  - ${error}") }
+            }
+        }
+
+        and: "Compare original vs regenerated"
+        Map comparison = compareDteAttributes(originalAttributes, regeneratedAttributes, "Boleta ${dteType} Round-Trip Comparison")
+        logComparisonResults(comparison)
+
+        then: "All critical fields should match within tolerance"
+        !ec.message.hasError()
+        originalFiscalTaxDocumentId != null
+        invoiceId != null
+        regeneratedFiscalTaxDocumentId != null
+
+        // Type and parties should match exactly
+        comparison.fieldComparisons['fiscalTaxDocumentTypeEnumId'].match
+        comparison.fieldComparisons['issuerPartyIdValue'].match
+        comparison.fieldComparisons['receiverPartyIdValue'].match
+
+        // Monetary amounts should match within tolerance
+        comparison.fieldComparisons['montoTotal'].match
+        comparison.fieldComparisons['iva'].match
+
+        // For boletas, montoNeto might be null (depending on generarXmlMontosNetos setting)
+        // So we only check if both have values
+        originalAttributes.montoNeto == null || regeneratedAttributes.montoNeto == null ||
+            comparison.fieldComparisons['montoNeto'].match
+
+        // Date should match
+        comparison.fieldComparisons['fechaEmision'].match
+
+        // Overall comparison
+        comparison.allMatch || comparison.differences.size() == 0
+
+        cleanup:
+        totalFieldsChecked += 8
+        logger.info("✓ Boleta ${dteType} round-trip consistency test completed")
+
+        where:
+        dteType << ["Ftdt-39", "Ftdt-41"]
+    }
+
+    def "RT-002 - Factura tipo 33 round-trip consistency"() {
+        given: "A factura with known values"
+        BigDecimal netAmount = 100000
+        BigDecimal taxAmount = 19000
+        BigDecimal totalAmount = 119000
+
+        when: "Generate original DTE (Factura)"
+        List detailList = [
+            [
+                description: "Round-Trip Test Product",
+                quantity: 1,
+                amount: netAmount
+            ],
+            [
+                itemTypeEnumId: 'ItemVatTax',
+                quantity: 1,
+                amount: taxAmount
+            ]
+        ]
+
+        Map generateResult = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#Factura")
+            .parameters([
+                fiscalTaxDocumentTypeEnumId: "Ftdt-33",
+                issuerPartyId: testIssuerPartyId,
+                rutReceptor: "87654321-4",  // Must match the RUT assigned to testReceiverPartyId in setup
+                receiverPartyId: testReceiverPartyId,
+                razonSocialReceptor: "Test Round-Trip Receiver",
+                giroReceptor: "Test Business",
+                contactoReceptor: "Test Contact",
+                direccionReceptor: "Test Address 123",
+                comunaReceptor: "Santiago",
+                detailList: detailList,
+                sendToSii: false
+            ]).call()
+
+        String originalFiscalTaxDocumentId = generateResult.fiscalTaxDocumentId
+        createdFiscalTaxDocumentIds.add(originalFiscalTaxDocumentId)
+
+        and: "Get original DTE attributes"
+        Map originalAttributes = getDteAttributes(originalFiscalTaxDocumentId)
+
+        and: "Get original DTE XML"
+        Document originalDoc = getDteXml(originalFiscalTaxDocumentId)
+        Element originalDteElement = originalDoc.getDocumentElement()
+
+        and: "Load DTE from XML"
+        Map parseResult = ec.service.sync().name("mchile.sii.dte.DteLoadServices.parse#Dte")
+            .parameters([dte: originalDteElement])
+            .call()
+
+        and: "Create Invoice from DTE"
+        Map invoiceResult = ec.service.sync().name("mchile.sii.dte.DteLoadServices.create#InvoiceFromDte")
+            .parameters([
+                fiscalTaxDocumentId: originalFiscalTaxDocumentId,
+                parsedDteXmlMap: parseResult,
+                invoiceStatusId: "InvoiceReceived"
+            ]).call()
+
+        String invoiceId = invoiceResult.invoiceId
+        createdInvoiceIds.add(invoiceId)
+
+        and: "Regenerate DTE from Invoice"
+        Map regenerateResult = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#DteFromInvoice")
+            .parameters([
+                invoiceId: invoiceId,
+                fiscalTaxDocumentTypeEnumId: "Ftdt-33",
+                sendToSii: false
+            ]).call()
+
+        String regeneratedFiscalTaxDocumentId = regenerateResult.fiscalTaxDocumentId
+        createdFiscalTaxDocumentIds.add(regeneratedFiscalTaxDocumentId)
+
+        and: "Compare attributes"
+        Map regeneratedAttributes = getDteAttributes(regeneratedFiscalTaxDocumentId)
+        Map comparison = compareDteAttributes(originalAttributes, regeneratedAttributes, "Factura 33 Round-Trip Comparison")
+        logComparisonResults(comparison)
+
+        then: "All critical fields should match"
+        !ec.message.hasError()
+        originalFiscalTaxDocumentId != null
+        invoiceId != null
+        regeneratedFiscalTaxDocumentId != null
+
+        // Type and parties
+        comparison.fieldComparisons['fiscalTaxDocumentTypeEnumId'].match
+        comparison.fieldComparisons['issuerPartyIdValue'].match
+        comparison.fieldComparisons['receiverPartyIdValue'].match
+
+        // Monetary amounts
+        comparison.fieldComparisons['montoTotal'].match
+        comparison.fieldComparisons['montoNeto'].match
+        comparison.fieldComparisons['iva'].match
+        comparison.fieldComparisons['tasaImpuesto'].match
+
+        // Date
+        comparison.fieldComparisons['fechaEmision'].match
+
+        // Overall
+        comparison.allMatch
+
+        cleanup:
+        totalFieldsChecked += 10
+        logger.info("✓ Factura 33 round-trip consistency test completed")
+    }
+
+    def "RT-003 - Factura with multiple items round-trip consistency"() {
+        given: "A factura with multiple items"
+        when: "Generate original DTE with 3 items"
+        List detailList = [
+            [description: "Item 1", quantity: 2, amount: 20000],
+            [description: "Item 2", quantity: 1, amount: 15000],
+            [description: "Item 3", quantity: 3, amount: 30000],
+            [itemTypeEnumId: 'ItemVatTax', quantity: 1, amount: 27550] // 19% of 65000
+        ]
+
+        Map generateResult = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#Factura")
+            .parameters([
+                fiscalTaxDocumentTypeEnumId: "Ftdt-33",
+                issuerPartyId: testIssuerPartyId,
+                rutReceptor: "87654321-4",  // Must match the RUT assigned to testReceiverPartyId in setup
+                receiverPartyId: testReceiverPartyId,
+                razonSocialReceptor: "Test Round-Trip Receiver",
+                giroReceptor: "Test Business",
+                contactoReceptor: "Test Contact",
+                direccionReceptor: "Test Address 123",
+                comunaReceptor: "Santiago",
+                detailList: detailList,
+                sendToSii: false
+            ]).call()
+
+        String originalFiscalTaxDocumentId = generateResult.fiscalTaxDocumentId
+        createdFiscalTaxDocumentIds.add(originalFiscalTaxDocumentId)
+
+        and: "Load and regenerate through invoice cycle"
+        Document originalDoc = getDteXml(originalFiscalTaxDocumentId)
+        Element originalDteElement = originalDoc.getDocumentElement()
+
+        Map parseResult = ec.service.sync().name("mchile.sii.dte.DteLoadServices.parse#Dte")
+            .parameters([dte: originalDteElement])
+            .call()
+
+        Map invoiceResult = ec.service.sync().name("mchile.sii.dte.DteLoadServices.create#InvoiceFromDte")
+            .parameters([
+                fiscalTaxDocumentId: originalFiscalTaxDocumentId,
+                parsedDteXmlMap: parseResult
+            ]).call()
+
+        String invoiceId = invoiceResult.invoiceId
+        createdInvoiceIds.add(invoiceId)
+
+        // Check invoice item count
+        List invoiceItems = ec.entity.find("mantle.account.invoice.InvoiceItem")
+            .condition("invoiceId", invoiceId)
+            .list()
+
+        Map regenerateResult = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#DteFromInvoice")
+            .parameters([
+                invoiceId: invoiceId,
+                fiscalTaxDocumentTypeEnumId: "Ftdt-33",
+                sendToSii: false
+            ]).call()
+
+        String regeneratedFiscalTaxDocumentId = regenerateResult.fiscalTaxDocumentId
+        createdFiscalTaxDocumentIds.add(regeneratedFiscalTaxDocumentId)
+
+        and: "Compare attributes"
+        Map originalAttributes = getDteAttributes(originalFiscalTaxDocumentId)
+        Map regeneratedAttributes = getDteAttributes(regeneratedFiscalTaxDocumentId)
+        Map comparison = compareDteAttributes(originalAttributes, regeneratedAttributes, "Multi-Item Factura Round-Trip")
+        logComparisonResults(comparison)
+
+        then: "All fields match and item count is preserved"
+        !ec.message.hasError()
+        invoiceItems.size() >= 3  // At least 3 items (may have tax items)
+        comparison.allMatch
+
+        cleanup:
+        totalFieldsChecked += 3
+        logger.info("✓ Multi-item factura round-trip consistency test completed")
+    }
+
+    def "RT-004 - Round-trip with discounts/surcharges"() {
+        given: "A factura with global discount"
+        when: "Generate DTE with discount"
+        List detailList = [
+            [description: "Product with discount", quantity: 1, amount: 100000],
+            [itemTypeEnumId: 'ItemVatTax', quantity: 1, amount: 17100]
+        ]
+
+        List descuentoList = [
+            [
+                numeroLinea: 1,
+                tipo: "D",
+                glosa: "Test discount",
+                tipoValor: "%",
+                valor: 10.0
+            ]
+        ]
+
+        Map generateResult = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#Factura")
+            .parameters([
+                fiscalTaxDocumentTypeEnumId: "Ftdt-33",
+                issuerPartyId: testIssuerPartyId,
+                rutReceptor: "87654321-4",  // Must match the RUT assigned to testReceiverPartyId in setup
+                receiverPartyId: testReceiverPartyId,
+                razonSocialReceptor: "Test Round-Trip Receiver",
+                giroReceptor: "Test Business",
+                contactoReceptor: "Test Contact",
+                direccionReceptor: "Test Address 123",
+                comunaReceptor: "Santiago",
+                detailList: detailList,
+                descuentoORecargoGlobalList: descuentoList,
+                sendToSii: false
+            ]).call()
+
+        String originalFiscalTaxDocumentId = generateResult.fiscalTaxDocumentId
+        createdFiscalTaxDocumentIds.add(originalFiscalTaxDocumentId)
+
+        and: "Complete round-trip cycle"
+        Document originalDoc = getDteXml(originalFiscalTaxDocumentId)
+        Element originalDteElement = originalDoc.getDocumentElement()
+
+        Map parseResult = ec.service.sync().name("mchile.sii.dte.DteLoadServices.parse#Dte")
+            .parameters([dte: originalDteElement])
+            .call()
+
+        Map invoiceResult = ec.service.sync().name("mchile.sii.dte.DteLoadServices.create#InvoiceFromDte")
+            .parameters([
+                fiscalTaxDocumentId: originalFiscalTaxDocumentId,
+                parsedDteXmlMap: parseResult
+            ]).call()
+
+        String invoiceId = invoiceResult.invoiceId
+        createdInvoiceIds.add(invoiceId)
+
+        Map regenerateResult = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#DteFromInvoice")
+            .parameters([
+                invoiceId: invoiceId,
+                fiscalTaxDocumentTypeEnumId: "Ftdt-33",
+                sendToSii: false
+            ]).call()
+
+        String regeneratedFiscalTaxDocumentId = regenerateResult.fiscalTaxDocumentId
+        createdFiscalTaxDocumentIds.add(regeneratedFiscalTaxDocumentId)
+
+        and: "Compare"
+        Map originalAttributes = getDteAttributes(originalFiscalTaxDocumentId)
+        Map regeneratedAttributes = getDteAttributes(regeneratedFiscalTaxDocumentId)
+        Map comparison = compareDteAttributes(originalAttributes, regeneratedAttributes, "Factura with Discount Round-Trip")
+        logComparisonResults(comparison)
+
+        then: "Amounts should match after discount applied"
+        !ec.message.hasError()
+        comparison.fieldComparisons['montoTotal'].match
+
+        cleanup:
+        totalFieldsChecked += 2
+        logger.info("✓ Round-trip with discounts test completed")
+    }
+
+    def "RT-005 - Identify discrepancies in Credit Note scenario"() {
+        given: "Simulating the Credit Note issue - boleta loaded then regenerated"
+
+        when: "Generate a boleta that will be referenced by a credit note"
+        List detailList = [
+            [description: "Original Boleta Item", quantity: 1, amount: 11900]
+        ]
+
+        Map boletaResult = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#Boleta")
+            .parameters([
+                fiscalTaxDocumentTypeEnumId: "Ftdt-39",
+                issuerPartyId: testIssuerPartyId,
+                rutReceptor: "87654321-4",  // Must match the RUT assigned to testReceiverPartyId in setup
+                receiverPartyId: testReceiverPartyId,
+                razonSocialReceptor: "Test Round-Trip Receiver",
+                contactoReceptor: "Test Contact",
+                direccionReceptor: "Test Address 123",
+                comunaReceptor: "Santiago",
+                detailList: detailList,
+                sendToSii: false,
+                preciosIncluyenIva: true
+            ]).call()
+
+        String originalBoletaId = boletaResult.fiscalTaxDocumentId
+        createdFiscalTaxDocumentIds.add(originalBoletaId)
+
+        and: "Load the boleta from XML (simulating it came from external source)"
+        Document boletaDoc = getDteXml(originalBoletaId)
+        Element boletaElement = boletaDoc.getDocumentElement()
+
+        Map parseResult = ec.service.sync().name("mchile.sii.dte.DteLoadServices.parse#Dte")
+            .parameters([dte: boletaElement])
+            .call()
+
+        and: "Create invoice from loaded boleta"
+        Map invoiceFromLoadResult = ec.service.sync().name("mchile.sii.dte.DteLoadServices.create#InvoiceFromDte")
+            .parameters([
+                fiscalTaxDocumentId: originalBoletaId,
+                parsedDteXmlMap: parseResult
+            ]).call()
+
+        String invoiceId = invoiceFromLoadResult.invoiceId
+        createdInvoiceIds.add(invoiceId)
+
+        logger.info("Created invoice ${invoiceId} from loaded boleta")
+        logger.info("Invoice discrepancies: ${invoiceFromLoadResult.discrepancyMessages}")
+
+        and: "Now try to create a credit note referencing this invoice"
+        // This simulates what happens when creating a credit note from a boleta
+        Map regenerateResult = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#DteFromInvoice")
+            .parameters([
+                invoiceId: invoiceId,
+                fiscalTaxDocumentTypeEnumId: "Ftdt-39",
+                sendToSii: false
+            ]).call()
+
+        String regeneratedBoletaId = regenerateResult.fiscalTaxDocumentId
+        createdFiscalTaxDocumentIds.add(regeneratedBoletaId)
+
+        and: "Compare original boleta with regenerated"
+        Map originalAttributes = getDteAttributes(originalBoletaId)
+        Map regeneratedAttributes = getDteAttributes(regeneratedBoletaId)
+        Map comparison = compareDteAttributes(originalAttributes, regeneratedAttributes, "Credit Note Scenario - Boleta Round-Trip")
+        logComparisonResults(comparison)
+
+        then: "Identify any discrepancies that would affect credit note generation"
+        !ec.message.hasError()
+
+        // This is the key test - if there are differences, they should be logged
+        // and the test should document them for debugging
+        if (!comparison.allMatch) {
+            logger.error("FOUND DISCREPANCIES that could affect Credit Note generation:")
+            comparison.differences.each { diff ->
+                logger.error("  - ${diff}")
+            }
+            logger.error("These discrepancies are the root cause of Credit Note issues")
+        }
+
+        // The test passes if we can complete the round-trip, even with discrepancies
+        // The logged comparison shows what's wrong
+        true
+
+        cleanup:
+        totalFieldsChecked += 1
+        logger.info("✓ Credit Note scenario discrepancy test completed")
+    }
+    // ====================================================================================================
+    // ROUND-TRIP CONSISTENCY TEST HELPER METHODS
+    // ====================================================================================================
+
+    /**
+     * Helper to check if two monetary values are within acceptable tolerance
+     */
+    private boolean withinTolerance(BigDecimal value1, BigDecimal value2, BigDecimal tolerance = TOLERANCE) {
+        if (value1 == null && value2 == null) return true
+        if (value1 == null || value2 == null) return false
+        return (value1 - value2).abs() <= tolerance
+    }
+
+    /**
+     * Helper to extract DTE attributes from database
+     */
+    private Map getDteAttributes(String fiscalTaxDocumentId) {
+        EntityValue dte = ec.entity.find("mchile.dte.FiscalTaxDocumentAndAttributes")
+            .condition("fiscalTaxDocumentId", fiscalTaxDocumentId)
+            .one()
+
+        if (!dte) {
+            logger.warn("FiscalTaxDocumentAndAttributes view returned null for fiscalTaxDocumentId: ${fiscalTaxDocumentId}")
+            return null
+        }
+
+        logger.info("Found DTE attributes: type=${dte.fiscalTaxDocumentTypeEnumId}, number=${dte.fiscalTaxDocumentNumber}, montoTotal=${dte.amount}")
+
+        return [
+            fiscalTaxDocumentId: dte.fiscalTaxDocumentId,
+            fiscalTaxDocumentTypeEnumId: dte.fiscalTaxDocumentTypeEnumId,
+            fiscalTaxDocumentNumber: dte.fiscalTaxDocumentNumber,
+            issuerPartyId: dte.issuerPartyId,
+            issuerPartyIdValue: dte.issuerPartyIdValue,
+            receiverPartyId: dte.receiverPartyId,
+            receiverPartyIdValue: dte.receiverPartyIdValue,
+            date: dte.date,
+            fechaEmision: dte.fechaEmision,
+            fechaVencimiento: dte.fechaVencimiento,
+            montoTotal: dte.amount,
+            montoNeto: dte.montoNeto,
+            montoExento: dte.montoExento,
+            iva: dte.montoIVARecuperable,
+            tasaImpuesto: dte.tasaImpuesto,
+            razonSocialEmisor: dte.razonSocialEmisor,
+            razonSocialReceptor: dte.razonSocialReceptor,
+            formaPagoEnumId: dte.formaPagoEnumId,
+            invoiceId: dte.invoiceId
+        ]
+    }
+
+    /**
+     * Helper to get DTE XML content
+     */
+    private Document getDteXml(String fiscalTaxDocumentId) {
+        Map contentResult = ec.service.sync().name("mchile.sii.dte.DteContentServices.get#DteContent")
+            .parameters([
+                fiscalTaxDocumentId: fiscalTaxDocumentId,
+                fiscalTaxDocumentContentTypeEnumId: "Ftdct-Xml"
+            ]).call()
+
+        if (!contentResult.contentRef) {
+            return null
+        }
+
+        String xmlText = contentResult.contentRef.getText()
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance()
+        factory.setNamespaceAware(false)
+        return factory.newDocumentBuilder().parse(new ByteArrayInputStream(xmlText.getBytes("UTF-8")))
+    }
+
+    /**
+     * Compare two DTE attributes maps and return detailed comparison
+     */
+    private Map compareDteAttributes(Map original, Map regenerated, String comparisonLabel = "DTE Comparison") {
+        List<String> differences = []
+        List<String> matches = []
+        Map<String, Map> fieldComparisons = [:]
+
+        // Monetary fields with tolerance
+        ['montoTotal', 'montoNeto', 'montoExento', 'iva'].each { field ->
+            BigDecimal origValue = original[field] as BigDecimal
+            BigDecimal regenValue = regenerated[field] as BigDecimal
+
+            boolean match = withinTolerance(origValue, regenValue)
+            fieldComparisons[field] = [
+                original: origValue,
+                regenerated: regenValue,
+                match: match,
+                difference: origValue != null && regenValue != null ? (origValue - regenValue).abs() : null
+            ]
+
+            if (match) {
+                matches.add("${field}: ${origValue} ≈ ${regenValue}")
+            } else {
+                differences.add("${field} MISMATCH: original=${origValue}, regenerated=${regenValue}, diff=${fieldComparisons[field].difference}")
+            }
+        }
+
+        // Tax rate (exact match required)
+        ['tasaImpuesto'].each { field ->
+            BigDecimal origValue = original[field] as BigDecimal
+            BigDecimal regenValue = regenerated[field] as BigDecimal
+
+            boolean match = (origValue == regenValue || (origValue != null && regenValue != null && origValue.compareTo(regenValue) == 0))
+            fieldComparisons[field] = [
+                original: origValue,
+                regenerated: regenValue,
+                match: match
+            ]
+
+            if (match) {
+                matches.add("${field}: ${origValue} = ${regenValue}")
+            } else {
+                differences.add("${field} MISMATCH: original=${origValue}, regenerated=${regenValue}")
+            }
+        }
+
+        // Date fields (exact match required)
+        ['fechaEmision'].each { field ->
+            def origValue = original[field]
+            def regenValue = regenerated[field]
+
+            boolean match = (origValue == regenValue)
+            fieldComparisons[field] = [
+                original: origValue,
+                regenerated: regenValue,
+                match: match
+            ]
+
+            if (match) {
+                matches.add("${field}: ${origValue} = ${regenValue}")
+            } else {
+                differences.add("${field} MISMATCH: original=${origValue}, regenerated=${regenValue}")
+            }
+        }
+
+        // String fields (exact match)
+        ['fiscalTaxDocumentTypeEnumId', 'issuerPartyIdValue', 'receiverPartyIdValue'].each { field ->
+            def origValue = original[field]
+            def regenValue = regenerated[field]
+
+            boolean match = (origValue == regenValue)
+            fieldComparisons[field] = [
+                original: origValue,
+                regenerated: regenValue,
+                match: match
+            ]
+
+            if (match) {
+                matches.add("${field}: ${origValue}")
+            } else {
+                differences.add("${field} MISMATCH: original=${origValue}, regenerated=${regenValue}")
+            }
+        }
+
+        return [
+            allMatch: differences.isEmpty(),
+            differences: differences,
+            matches: matches,
+            fieldComparisons: fieldComparisons,
+            comparisonLabel: comparisonLabel
+        ]
+    }
+
+    /**
+     * Log comparison results in a readable format
+     */
+    private void logComparisonResults(Map comparison) {
+        logger.info("=" * 80)
+        logger.info("${comparison.comparisonLabel}")
+        logger.info("=" * 80)
+
+        if (comparison.allMatch) {
+            logger.info("✓ ALL FIELDS MATCH")
+        } else {
+            logger.error("✗ MISMATCHES FOUND:")
+            comparison.differences.each { diff ->
+                logger.error("  - ${diff}")
+            }
+        }
+
+        logger.info("")
+        logger.info("Field-by-field comparison:")
+        comparison.fieldComparisons.each { field, data ->
+            String status = data.match ? "✓" : "✗"
+            String diffInfo = data.difference != null ? " (diff: ${data.difference})" : ""
+            logger.info("  ${status} ${field}: original=${data.original}, regenerated=${data.regenerated}${diffInfo}")
+        }
+
+        logger.info("=" * 80)
     }
 }
