@@ -1,9 +1,10 @@
 import org.w3c.dom.Document
 
-import org.moqui.BaseException
 import org.moqui.entity.EntityValue
 import org.moqui.context.ExecutionContext
 import org.moqui.entity.EntityCondition
+
+import java.math.RoundingMode
 import java.security.cert.CertificateExpiredException
 import java.security.cert.CertificateNotYetValidException
 
@@ -391,7 +392,7 @@ if (totalNeto != null || descuentoGlobalAfecto != null || recargoGlobalAfecto !=
 
 // Chequeo de valores entre Invoice y calculados
 if (invoice) {
-    if (invoice.invoiceTotal != totalInvoice) {
+    if (invoice.invoiceTotal.setScale(0, RoundingMode.HALF_UP) != totalInvoice.setScale(0, RoundingMode.HALF_UP)) {
         ec.message.addError("No coinciden valores totales de DTE, calculado: ${ec.l10n.formatCurrency(totalInvoice, invoice.currencyUomId)}, en invoice ${invoiceId}: ${ec.l10n.formatCurrency(invoice.invoiceTotal, invoice.currencyUomId)}")
     }
 }
@@ -453,7 +454,7 @@ datosTed = xmlWriter.toString()
 xmlWriter.close()
 
 if (forceIva) {
-    diff = forceIva - totalIva
+    diff = forceIva - (totalIva ?: 0)
     totalIva = forceIva
     totalInvoice += diff
 }
