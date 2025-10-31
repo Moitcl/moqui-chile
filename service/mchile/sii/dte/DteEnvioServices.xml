@@ -93,6 +93,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="fiscalTaxDocumentIdList" type="List"/>
             <parameter name="skipFiscalTaxDocumentIdList" type="List"/>
             <parameter name="batchSize" type="Integer"/>
+            <parameter name="validationRetryDepth" type="Integer" default="0"><description>Recursion depth counter for validation retry logic</description></parameter>
         </in-parameters>
         <out-parameters>
             <parameter name="errorList" type="List"/>
@@ -114,8 +115,6 @@ along with this software (see the LICENSE.md file). If not, see
             </script>
             <set field="dteCountByIssuerAndType" from="[:]"/>
             <iterate list="tipoList" entry="tipo">
-                <log message="Processing type: ${tipo}"/>
-                <log message="internalPartyIdList: ${internalPartyIdList}"/>
                 <entity-find entity-name="mchile.dte.FiscalTaxDocument" list="ftdList" limit="batchSize">
                     <econdition field-name="issuerPartyId" operator="in" from="internalPartyIdList"/>
                     <econdition field-name="receiverPartyIdValue" operator="not-in" from="reserved.rutList"/>
@@ -160,13 +159,140 @@ along with this software (see the LICENSE.md file). If not, see
                         <set field="dteCountByIssuerAndType[issuerPartyId].dte" from="documentIdList?.size()"/>
                         <service-call name="mchile.sii.dte.DteEnvioServices.genera#EnvioDte" in-map="[organizationPartyId:issuerPartyId, documentIdList:documentIdList]"
                                       out-map="envio" out-map-add-to-existing="false" transaction="force-new" ignore-error="true"/>
-                        <if condition="envio.envioId == null"><script>errorList.add("No se pudo generar envío DTE con documentos: ${documentIdList}")</script></if>
                     </then><else-if condition="tipo == 'boleta'">
                         <set field="dteCountByIssuerAndType[issuerPartyId].boleta" from="documentIdList?.size()"/>
-                        <service-call name="mchile.sii.dte.DteEnvioServices.genera#EnvioBoleta" in-map="[organizationPartyId:issuerPartyId, documentIdList:documentIdList]" out-map="envio" transaction="force-new" ignore-error="true"/>
-                        <if condition="envio.envioId == null"><script>errorList.add("No se pudo generar envío Boleta con documentos: ${documentIdList}")</script></if>
+                        <service-call name="mchile.sii.dte.DteEnvioServices.genera#EnvioBoleta" in-map="[organizationPartyId:issuerPartyId, documentIdList:documentIdList]"
+                                      out-map="envio" out-map-add-to-existing="false" transaction="force-new" ignore-error="true"/>
                     </else-if></if>
-                    <script>if (envio.envioId) envioIdsToSend.add(envio.envioId)</script>
+
+                    <!-- Batch validation failure detection and recovery logic -->
+                    <if condition="envio.envioId == null"><then>
+                        <!-- Check if error messages contain validation failure keywords -->
+                        <if condition="envio.schemaError"><then>
+                            <log level="warn" message="Batch validation failed for issuer ${issuerPartyId}, tipo ${tipo}. Error: ${ec.message.getErrorsString()}. Attempting individual DTE validation."/>
+
+                            <!-- Call individual validation service -->
+                            <service-call name="mchile.sii.dte.DteEnvioServices.validate#IndividualDtesInBatch"
+                                          in-map="[fiscalTaxDocumentIdList: documentIdList, processDtes: (tipo == 'dte'), processBoletas: (tipo == 'boleta')]"
+                                          out-map="validationResult"/>
+
+                            <log level="info" message="Individual validation complete: ${validationResult.validDteIdList?.size() ?: 0} valid, ${validationResult.invalidDteIdList?.size() ?: 0} invalid DTEs"/>
+
+                            <!-- Mark invalid DTEs with validation error status -->
+                            <iterate list="validationResult.invalidDteIdList" entry="invalidDteId">
+                                <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="invalidDte" for-update="true">
+                                    <field-map field-name="fiscalTaxDocumentId" from="invalidDteId"/>
+                                </entity-find-one>
+                                <if condition="invalidDte">
+                                    <set field="invalidDte.sentAuthStatusId" value="Ftd-InvalidSchema"/>
+                                    <set field="invalidDte.validationError" from="validationResult.validationErrorMap[invalidDteId]"/>
+                                    <set field="invalidDte.validationErrorDate" from="ec.user.nowTimestamp"/>
+                                    <entity-update value-field="invalidDte" transaction="force-new"/>
+                                    <log level="warn" message="Marked DTE ${invalidDteId} sentAuthStatusId as Ftd-InvalidSchema: ${invalidDte.validationError}"/>
+                                </if>
+                            </iterate>
+
+                            <!-- Send notification for invalid DTEs -->
+                            <if condition="validationResult.invalidDteIdList">
+                                <script><![CDATA[
+                                    // Count invalid DTEs
+                                    invalidDteCount = validationResult.invalidDteIdList.size()
+
+                                    // Collect unique issuers and build DTE details
+                                    issuerSet = new HashSet()
+                                    invalidDteDetailsList = []
+
+                                    validationResult.invalidDteIdList.eachWithIndex { invalidDteId, idx ->
+                                        // Limit to first 10 DTEs for concise notification
+                                        if (idx < 10) {
+                                            def dte = ec.entity.find("mchile.dte.FiscalTaxDocument")
+                                                .condition("fiscalTaxDocumentId", invalidDteId)
+                                                .one()
+
+                                            if (dte) {
+                                                issuerSet.add(dte.issuerPartyId)
+
+                                                // Get issuer party name
+                                                def issuerParty = ec.entity.find("mantle.party.PartyDetail")
+                                                    .condition("partyId", dte.issuerPartyId)
+                                                    .one()
+                                                String issuerName = issuerParty?.organizationName ?: issuerParty?.pseudoId ?: dte.issuerPartyId
+
+                                                // Truncate validation error to first 200 characters
+                                                String validationError = validationResult.validationErrorMap[invalidDteId]
+                                                if (validationError && validationError.length() > 200) {
+                                                    validationError = validationError.substring(0, 200) + "..."
+                                                }
+
+                                                invalidDteDetailsList.add([
+                                                    fiscalTaxDocumentId: invalidDteId,
+                                                    issuerPartyId: dte.issuerPartyId,
+                                                    issuerName: issuerName,
+                                                    validationError: validationError
+                                                ])
+                                            }
+                                        } else {
+                                            // Still need to collect issuer for count
+                                            def dte = ec.entity.find("mchile.dte.FiscalTaxDocument")
+                                                .condition("fiscalTaxDocumentId", invalidDteId)
+                                                .one()
+                                            if (dte) {
+                                                issuerSet.add(dte.issuerPartyId)
+                                            }
+                                        }
+                                    }
+
+                                    // Build notification message map
+                                    messageMap = [
+                                        invalidDteCount: invalidDteCount,
+                                        issuerCount: issuerSet.size(),
+                                        invalidDteDetails: invalidDteDetailsList,
+                                        tipo: tipo,
+                                        timestamp: ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd HH:mm:ss")
+                                    ]
+
+                                    // Send notification
+                                    try {
+                                        ec.notification()
+                                            .topic("DTE_SCHEMA_VALIDATION_FAILURE")
+                                            .message(messageMap)
+                                            .send()
+                                        ec.logger.info("Notification sent for ${invalidDteCount} invalid DTE(s) from ${issuerSet.size()} issuer(s)")
+                                    } catch (Exception e) {
+                                        ec.logger.warn("Failed to send notification for invalid DTEs: ${e.message}")
+                                    }
+                                ]]></script>
+                            </if>
+
+                            <!-- Recursive retry with valid DTEs if within depth limit -->
+                            <if condition="validationResult.validDteIdList &amp;&amp; !validationResult.validDteIdList.isEmpty() &amp;&amp; validationRetryDepth &lt; 3"><then>
+                                <log level="info" message="Retrying batch creation with ${validationResult.validDteIdList.size()} valid DTEs (recursion depth: ${validationRetryDepth + 1})"/>
+                                <service-call name="mchile.sii.dte.DteEnvioServices.create#PendingEnvioDteForSii"
+                                              in-map="[fiscalTaxDocumentIdList: validationResult.validDteIdList,
+                                                       skipFiscalTaxDocumentIdList: validationResult.invalidDteIdList,
+                                                       triggerSend: triggerSend,
+                                                       processDtes: processDtes,
+                                                       processBoletas: processBoletas,
+                                                       batchSize: batchSize,
+                                                       validationRetryDepth: validationRetryDepth + 1]"
+                                              ignore-error="true"/>
+                            </then><else-if condition="validationRetryDepth >= 3">
+                                <log level="warn" message="Maximum recursion depth (3) reached. Not retrying batch creation."/>
+                                <script>errorList.add("Maximum recursion depth reached for batch validation retry")</script>
+                            </else-if><else-if condition="!validationResult.validDteIdList || validationResult.validDteIdList.isEmpty()">
+                                <log level="warn" message="No valid DTEs found in batch after individual validation"/>
+                                <script>errorList.add("All DTEs in batch failed validation: ${documentIdList}")</script>
+                            </else-if></if>
+                        </then><else>
+                            <!-- Non-validation error - add to error list -->
+                            <script><![CDATA[
+                                errorList.add("No se pudo generar envío ${tipo == 'dte' ? 'DTE' : 'Boleta'} con documentos: ${documentIdList}")
+                            ]]></script>
+                        </else></if>
+                    </then><else>
+                        <!-- Success - add envioId to send list -->
+                        <script>envioIdsToSend.add(envio.envioId)</script>
+                    </else></if>
                 </iterate>
                 <if condition="envioIdsToSend &amp;&amp; triggerSend">
                     <log message="Sending envioIds: ${envioIdsToSend}"/>
@@ -248,9 +374,11 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="organizationPartyId" required="true"/>
             <parameter name="documentIdList" required="true" type="List"/>
             <parameter name="saveSinFirma" type="Boolean" default="false"/>
+            <parameter name="skipEnvioCreation" type="Boolean" default="false"><description>Skip DteEnvio entity creation and file writing (validation-only mode)</description></parameter>
         </in-parameters>
         <out-parameters>
             <parameter name="envioId"/>
+            <parameter name="schemaError"/>
         </out-parameters>
     </service>
 
@@ -261,10 +389,67 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="organizationPartyId" required="true"/>
             <parameter name="documentIdList" required="true" type="List"/>
             <parameter name="saveSinFirma" type="Boolean" default="false"/>
+            <parameter name="skipEnvioCreation" type="Boolean" default="false"><description>Skip DteEnvio entity creation and file writing (validation-only mode)</description></parameter>
         </in-parameters>
         <out-parameters>
             <parameter name="envioId"/>
+            <parameter name="schemaError"/>
         </out-parameters>
+    </service>
+
+    <service verb="validate" noun="IndividualDtesInBatch">
+        <description>Validate each DTE individually to identify schema validation failures</description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentIdList" type="List" required="true"><description>List of Fiscal Tax Document IDs to validate</description></parameter>
+            <parameter name="processDtes" type="Boolean" default="true"><description>Process regular DTEs (Facturas, etc.)</description></parameter>
+            <parameter name="processBoletas" type="Boolean" default="true"><description>Process Boletas</description></parameter>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="validDteIdList" type="List"><description>List of DTE IDs that passed validation</description></parameter>
+            <parameter name="invalidDteIdList" type="List"><description>List of DTE IDs that failed validation</description></parameter>
+            <parameter name="validationErrorMap" type="Map"><description>Map of DTE ID to validation error message</description></parameter>
+        </out-parameters>
+        <actions>
+            <!-- Initialize output lists and map -->
+            <set field="validDteIdList" from="[]"/>
+            <set field="invalidDteIdList" from="[]"/>
+            <set field="validationErrorMap" from="[:]"/>
+
+            <!-- Iterate through each DTE -->
+            <iterate list="fiscalTaxDocumentIdList" entry="dteId">
+                <!-- Query DTE details -->
+                <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte">
+                    <field-map field-name="fiscalTaxDocumentId" from="dteId"/>
+                </entity-find-one>
+                <if condition="dte == null">
+                    <log level="warn" message="DTE ${dteId} not found, skipping"/>
+                    <continue/>
+                </if>
+                <set field="isBoleta" from="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-39', 'Ftdt-41']"/>
+                <if condition="isBoleta &amp;&amp; !processBoletas"><continue/></if>
+                <if condition="!isBoleta &amp;&amp; !processDtes"><continue/></if>
+                <script>ec.message.clearErrors()</script>
+                <if condition="isBoleta"><then>
+                    <service-call name="mchile.sii.dte.DteEnvioServices.genera#EnvioBoleta" in-map="[organizationPartyId: dte.issuerPartyId, documentIdList: [dteId], skipEnvioCreation: true]"
+                                  out-map="envioResult" out-map-add-to-existing="false" ignore-error="true" transaction="force-new"/>
+                </then><else>
+                    <service-call name="mchile.sii.dte.DteEnvioServices.genera#EnvioDte" in-map="[organizationPartyId: dte.issuerPartyId, documentIdList: [dteId], skipEnvioCreation: true]"
+                                  out-map="envioResult" out-map-add-to-existing="false" ignore-error="true" transaction="force-new"/>
+                </else></if>
+                <if condition="envioResult.schemaError"><then>
+                    <!-- DTE failed validation -->
+                    <set field="errorMsg" from="envioResult.schemaError"/>
+                    <script>invalidDteIdList.add(dteId)</script>
+                    <script>validationErrorMap.put(dteId, errorMsg)</script>
+                    <log level="warn" message="DTE ${dteId} failed validation: ${errorMsg}"/>
+                </then><else>
+                    <!-- DTE passed validation -->
+                    <script>validDteIdList.add(dteId)</script>
+                    <log level="info" message="DTE ${dteId} passed validation"/>
+                </else></if>
+            </iterate>
+            <log level="info" message="Individual validation complete: ${validDteIdList.size()} valid, ${invalidDteIdList.size()} invalid"/>
+        </actions>
     </service>
 
     <service verb="genera" noun="EnvioAceptacionComercial" type="script" location="component://MoquiChile/service/mchile/sii/dte/groovy/generaEnvioAceptacionComercial.groovy">

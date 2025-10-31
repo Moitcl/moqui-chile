@@ -97,7 +97,15 @@ doc = MoquiDTEUtils.parseDocument(salida)
 try {
     MoquiDTEUtils.validateDocumentSii(ec, salida, schemaLocation)
 } catch (Exception e) {
-    ec.message.addError("Failed validation: " + e.getMessage())
+    schemaError = "Failed validation: " + e.getMessage()
+    ec.message.addError(schemaError)
+    return
+}
+
+// Early return if skipEnvioCreation=true (validation-only mode)
+if (skipEnvioCreation) {
+    ec.logger.info("Validation complete for skipEnvioCreation mode, skipping entity creation")
+    return
 }
 
 ts = ec.user.nowTimestamp
