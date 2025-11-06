@@ -157,7 +157,9 @@ class MoquiDTEUtils {
             if (detailEntry.unidad) {
                 uom = detailEntry.unidad
             } else if (!detailType.equals("ShipmentItem")) {
-                if (detailEntry.quantityUomId.equals('TF_hr'))
+                if (detailEntry.quantityUomId.equals('OTH_ea'))
+                    uom = "UN"
+                else if (detailEntry.quantityUomId.equals('TF_hr'))
                     uom = "Hora"
                 else if (detailEntry.quantityUomId.equals('TF_mon'))
                     uom = "Mes"
