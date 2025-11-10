@@ -480,18 +480,25 @@ q4+htPABTvIWzZcF4LILEDnaZS791SWJYxbbE72D
     private void updateCafWithValidKeys(EntityValue caf, Timestamp currentDate) {
         // Use the same valid test keys from generaFactura.groovy draft logic
         String xmlDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format(currentDate)
-        
+
+        // Extract document type code from fiscalTaxDocumentTypeEnumId (e.g., "Ftdt-33" -> "33")
+        String tipoDocumento = caf.fiscalTaxDocumentTypeEnumId?.toString()?.replaceAll(/Ftdt-/, '') ?: '33'
+
+        // Get folio range from CAF
+        String desdeRango = caf.desde?.toString() ?: '1'
+        String hastaRango = caf.hasta?.toString() ?: '1000'
+
         // Valid CAF XML fragment with test keys
-        String validCafFragment = '''<CAF version="1.0">
+        String validCafFragment = """<CAF version="1.0">
     <DA>
         <RE>12345678-5</RE>
         <RS>Test DTE Organization</RS>
-        <TD>33</TD>
+        <TD>${tipoDocumento}</TD>
         <RNG>
-            <D>1</D>
-            <H>1000</H>
+            <D>${desdeRango}</D>
+            <H>${hastaRango}</H>
         </RNG>
-        <FA>''' + xmlDate + '''</FA>
+        <FA>${xmlDate}</FA>
         <RSAPK>
             <M>uX02i4mqmJ8hwWPwrRBJTBls5y3tylaSdXc9WQnkmUbnlHyGD2GH/zwSb5IYvOwGlChHtz0aKSITiPOiHTFfmw==</M>
             <E>Aw==</E>
@@ -499,15 +506,15 @@ q4+htPABTvIWzZcF4LILEDnaZS791SWJYxbbE72D
         <IDK>100</IDK>
     </DA>
     <FRMA algoritmo="SHA1withRSA">Fsh0/AFUH8dCcSgvXjiIT2wfO9QLYp94KNvGbeKc46jEMj2XgLxq7tBv83rVJ2bIgwytLoJCHaUOi4OnpkVjyg==</FRMA>
-</CAF>'''
-        
+</CAF>"""
+
         // Valid public key
         String validPublicKey = '''-----BEGIN PUBLIC KEY-----
 MFowDQYJKoZIhvcNAQEBBQADSQAwRgJBALl9NouJqpifIcFj8K0QSUwZbOct7cpW
 knV3PVkJ5JlG55R8hQ9ih/88Em+SGLzsLJQoR7c9GikiE4jzoh0xX5sCAQM=
 -----END PUBLIC KEY-----'''
-        
-        // Valid private key  
+
+        // Valid private key
         String validPrivateKey = '''-----BEGIN RSA PRIVATE KEY-----
 MIIBOgIBAAJBALl9NouJqpifIcFj8K0QSUwZbOct7cpWknV3PVkJ5JlG55R8hQ9i
 h/88Em+SGLzsLJQoR7c9GikiE4jzoh0xX5sCAQMCQHuozwexHGW/a9ZCoHNgMN1m
@@ -517,7 +524,7 @@ I6zyo2HfuCMGyTzJSCaP8avum4p/AiEAoMK1edI74yoibK71Fp/kgeFLrqzYPW/I
 OIYGj1c9A0MCIQCDR4E7d4QNmnaHfBfIocJBP9AXWdt924VvCqEdSb0G/wIhAJ+3
 q4+htPABTvIWzZcF4LILEDnaZS791SWJYxbbE72D
 -----END RSA PRIVATE KEY-----'''
-        
+
         // Update CAF with valid keys
         caf.cafFragment = validCafFragment
         caf.publicKey = validPublicKey
