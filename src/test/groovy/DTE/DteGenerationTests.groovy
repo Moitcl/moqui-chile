@@ -1248,13 +1248,24 @@ JYljFtsT
         result.fiscalTaxDocumentId
         fiscalDoc.fiscalTaxDocumentTypeEnumId == dteType
 
+        and: "Validate Boleta can be wrapped in EnvioBoleta and passes schema validation"
+        Map envioResult = ec.service.sync().name("mchile.sii.dte.DteEnvioServices.genera#EnvioBoleta")
+            .parameters([
+                organizationPartyId: testIssuerPartyId,
+                documentIdList: [result.fiscalTaxDocumentId],
+                skipEnvioCreation: true  // Validation-only, don't create DB records
+            ]).call()
+
+        logger.info("EnvioBoleta validation result for ${description}: schemaError=${envioResult.schemaError}")
+        envioResult.schemaError == null  // Must pass SII schema validation
+
         cleanup:
         // Clear any errors between parameterized test iterations
         if (ec.message.hasError()) {
             logger.warn("Unexpected errors in parameterized test iteration (${description}): ${ec.message.getErrorsString()}")
         }
         ec.message.clearAll()
-        totalFieldsChecked += 2
+        totalFieldsChecked += 3
         logger.info("✓ ${description} generation test passed")
 
         where:
