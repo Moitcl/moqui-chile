@@ -382,17 +382,17 @@ descuentoORecargoGlobalList.each { dor ->
     } else if (dor.tipo == 'R') {
         if (descuentoORecargoAfecto)
             if (dor.montoOrigin != null) {
-                recargoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + (valorOrigin * (esPorcentaje ? (0.01 * totalNeto) : 1.0))
-                recargoGlobalAfectoClp = (descuentoGlobalAfecto?:0.0) + (valor * (esPorcentaje ? (0.01 * totalNeto) : 1.0))
+                recargoGlobalAfecto = (recargoGlobalAfecto?:0.0) + (valorOrigin * (esPorcentaje ? (0.01 * totalNeto) : 1.0))
+                recargoGlobalAfectoClp = (recargoGlobalAfectoClp?:0.0) + (valor * (esPorcentaje ? (0.01 * totalNeto) : 1.0))
             } else {
-                recargoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + (valor * (esPorcentaje ? (0.01 * totalNeto) : 1.0))
+                recargoGlobalAfecto = (recargoGlobalAfecto?:0.0) + (valor * (esPorcentaje ? (0.01 * totalNeto) : 1.0))
             }
         else
             if (dor.montoOrigin != null) {
-                recargoGlobalExento = (descuentoGlobalExento?:0.0) + (valorOrigin * (esPorcentaje ? (0.01 * totalExento) : 1.0))
-                recargoGlobalExentoClp = (descuentoGlobalExento?:0.0) + (valor * (esPorcentaje ? (0.01 * totalExento) : 1.0))
+                recargoGlobalExento = (recargoGlobalExento?:0.0) + (valorOrigin * (esPorcentaje ? (0.01 * totalExento) : 1.0))
+                recargoGlobalExentoClp = (recargoGlobalExentoClp?:0.0) + (valor * (esPorcentaje ? (0.01 * totalExento) : 1.0))
             } else {
-                recargoGlobalExento = (descuentoGlobalExento?:0.0) + (valor * (esPorcentaje ? (0.01 * totalExento) : 1.0))
+                recargoGlobalExento = (recargoGlobalExento?:0.0) + (valor * (esPorcentaje ? (0.01 * totalExento) : 1.0))
             }
     }
 }
@@ -403,7 +403,11 @@ if (totalNeto != null || descuentoGlobalAfecto != null || recargoGlobalAfecto !=
     totalNetoRounded = (totalNetoRounded?:0.0) - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
     // Also adjust totalBrutoRounded for global discounts/charges when in gross mode
     if (generarXmlMontosBrutos && totalBrutoRounded != null) {
-        totalBrutoRounded = (totalBrutoRounded?:0.0) - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
+        if (preciosIncluyenIva)
+            totalBrutoRounded = (totalBrutoRounded?:0.0) - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
+        else
+            totalBrutoRounded = (totalBrutoRounded?:0.0) - ((descuentoGlobalAfecto?:0.0)*(1+vatTaxRate)).setScale(0, RoundingMode.HALF_UP)
+                                                        + ((recargoGlobalAfecto?:0.0)*(1+vatTaxRate)).setScale(0, RoundingMode.HALF_UP)
     }
     // Adjust totalExento and totalExentoRounded for global discounts/charges on exempt amounts
     if (totalExento != null) {

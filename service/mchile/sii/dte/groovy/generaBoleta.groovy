@@ -184,24 +184,30 @@ descuentoORecargoGlobalList.each { dor ->
     else
         esPorcentaje = false
     if (dor.tipo == 'D') {
-        if (dor.afecto)
+        if (descuentoORecargoAfecto)
             descuentoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + (valor * (esPorcentaje ? (0.01 * totalNeto) : 1.0))
         else
             descuentoGlobalExento = (descuentoGlobalExento?:0.0) + (valor * (esPorcentaje ? (0.01 * totalExento) : 1.0))
     } else if (dor.tipo == 'R') {
-        if (dor.afecto)
-            recargoGlobalAfecto = (descuentoGlobalAfecto?:0.0) + (valor * (esPorcentaje ? (0.01 * totalNeto) : 1.0))
+        if (descuentoORecargoAfecto)
+            recargoGlobalAfecto = (recargoGlobalAfecto?:0.0) + (valor * (esPorcentaje ? (0.01 * totalNeto) : 1.0))
         else
-            recargoGlobalExento = (descuentoGlobalExento?:0.0) + (valor * (esPorcentaje ? (0.01 * totalExento) : 1.0))
+            recargoGlobalExento = (recargoGlobalExento?:0.0) + (valor * (esPorcentaje ? (0.01 * totalExento) : 1.0))
     }
 }
 
+ec.logger.info("descuentoGlobalAfecto: ${descuentoGlobalAfecto}")
 // Totales
 totalExento = (totalExento?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
 totalExentoRounded = (totalExentoRounded?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
 if (totalNeto != null) {
     totalNeto = totalNeto - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
     totalNetoRounded = totalNetoRounded - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
+    if (preciosIncluyenIva)
+        totalBrutoRounded = totalBrutoRounded - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
+    else
+        totalBrutoRounded = totalBrutoRounded - ((descuentoGlobalAfecto?:0.0)*(1+vatTaxRate)).setScale(0, RoundingMode.HALF_UP)
+                                                + ((recargoGlobalAfecto?:0.0)*(1+vatTaxRate)).setScale(0, RoundingMode.HALF_UP)
     if (generarXmlMontosNetos)
         totalInvoice = (totalNeto?:0) + (totalIva?:0) + (totalExento?:0)
     else
