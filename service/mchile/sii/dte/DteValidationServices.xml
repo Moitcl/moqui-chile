@@ -70,4 +70,158 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <!-- Service to validate DTE generation from invoices by cloning orders and comparing results.
+      This service helps ensure that recent changes to MoquiChile don't affect DTE generation
+      by creating a cloned order, regenerating its DTE, and comparing with the original. -->
+    <service verb="validate" noun="DteFromOrder">
+        <description>
+            Validates DTE generation consistency by cloning an order associated with a FiscalTaxDocument
+            and regenerating its DTE for comparison with the original. Returns validation results including
+            any discrepancies found between the original and regenerated DTE.
+        </description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true">
+                <description>The original FiscalTaxDocument ID to validate</description>
+            </parameter>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="validationPassed" type="Boolean">
+                <description>True if no discrepancies found between original and regenerated DTE</description>
+            </parameter>
+            <parameter name="discrepancies" type="List">
+                <description>List of differences found between original and regenerated DTE</description>
+            </parameter>
+            <parameter name="clonedOrderId" type="id">
+                <description>ID of the cloned order created for validation</description>
+            </parameter>
+            <parameter name="generationError" type="String">
+                <description>Any error that occurred during DTE generation</description>
+            </parameter>
+        </out-parameters>
+        <actions>
+            <script location="component://MoquiChile/service/mchile/sii/dte/groovy/validateDteFromInvoice.groovy"/>
+        </actions>
+    </service>
+
+    <!-- Service to batch validate DTE generation for all documents within a date range.
+      Runs validate#DteFromOrder for each FiscalTaxDocument and returns failed validations. -->
+    <service verb="validate" noun="DteBatch">
+        <description>
+            Validates DTE generation consistency for all FiscalTaxDocuments within a specified date range.
+            For each document, clones the associated order and regenerates the DTE to compare with the original.
+            Returns a list of fiscalTaxDocumentIds that failed validation along with their discrepancy details.
+        </description>
+        <in-parameters>
+            <parameter name="fromDate" type="Timestamp" required="true">
+                <description>Start date for the validation range (inclusive)</description>
+            </parameter>
+            <parameter name="thruDate" type="Timestamp" required="true">
+                <description>End date for the validation range (inclusive)</description>
+            </parameter>
+            <parameter name="fiscalTaxDocumentTypeEnumId">
+                <description>Optional filter by document type (e.g., Ftdt-33 for invoices)</description>
+            </parameter>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="totalCount" type="Integer">
+                <description>Total number of documents processed</description>
+            </parameter>
+            <parameter name="failedCount" type="Integer">
+                <description>Number of documents that failed validation</description>
+            </parameter>
+            <parameter name="validationResults" type="List">
+                <description>List of validation results for failed documents. Each entry contains:
+                    - fiscalTaxDocumentId: The document ID
+                    - fiscalTaxDocumentNumber: The document folio
+                    - date: The document issue date
+                    - validationPassed: Boolean (always false for this list)
+                    - discrepancies: List of differences found
+                    - generationError: Any error during generation
+                    - clonedOrderId: ID of the cloned order
+                </description>
+            </parameter>
+        </out-parameters>
+        <actions>
+            <script><![CDATA[
+                import org.moqui.entity.EntityList
+                import org.moqui.entity.EntityValue
+
+                // Initialize output parameters
+                validationResults = []
+                totalCount = 0
+                failedCount = 0
+
+                // Query FiscalTaxDocuments within the date range
+                def findBuilder = ec.entity.find("mchile.dte.FiscalTaxDocument")
+                    .condition("date", ">=", fromDate)
+                    .condition("date", "<=", thruDate)
+                    .condition("statusId", "Ftd-Issued")
+                    .orderBy("date")
+
+                // Add optional document type filter
+                if (fiscalTaxDocumentTypeEnumId) {
+                    findBuilder.condition("fiscalTaxDocumentTypeEnumId", fiscalTaxDocumentTypeEnumId)
+                }
+
+                def fiscalTaxDocuments = findBuilder.list()
+                totalCount = fiscalTaxDocuments.size()
+
+                ec.logger.info("Starting batch DTE validation for ${totalCount} documents from ${fromDate} to ${thruDate}")
+
+                // Process each FiscalTaxDocument
+                for (EntityValue ftd : fiscalTaxDocuments) {
+                    String fiscalTaxDocumentId = ftd.fiscalTaxDocumentId
+
+                    try {
+                        // Call validate#DteFromOrder service
+                        Map validateResult = ec.service.sync()
+                            .name("mchile.sii.dte.DteValidationServices.validate#DteFromOrder")
+                            .parameter("fiscalTaxDocumentId", fiscalTaxDocumentId)
+                            .call()
+
+                        // Check if validation passed
+                        Boolean validationPassed = validateResult.validationPassed
+
+                        if (!validationPassed) {
+                            failedCount++
+
+                            // Add to failed results
+                            validationResults.add([
+                                fiscalTaxDocumentId: fiscalTaxDocumentId,
+                                fiscalTaxDocumentNumber: ftd.fiscalTaxDocumentNumber,
+                                date: ftd.date,
+                                validationPassed: validationPassed,
+                                discrepancies: validateResult.discrepancies ?: [],
+                                generationError: validateResult.generationError,
+                                clonedOrderId: validateResult.clonedOrderId
+                            ])
+
+                            ec.logger.warn("Validation failed for FiscalTaxDocument ${fiscalTaxDocumentId} (Folio: ${ftd.fiscalTaxDocumentNumber})")
+                        } else {
+                            ec.logger.info("Validation passed for FiscalTaxDocument ${fiscalTaxDocumentId} (Folio: ${ftd.fiscalTaxDocumentNumber})")
+                        }
+
+                    } catch (Exception e) {
+                        failedCount++
+
+                        // Add exception as a failed result
+                        validationResults.add([
+                            fiscalTaxDocumentId: fiscalTaxDocumentId,
+                            fiscalTaxDocumentNumber: ftd.fiscalTaxDocumentNumber,
+                            date: ftd.date,
+                            validationPassed: false,
+                            discrepancies: [],
+                            generationError: "Exception during validation: ${e.message}",
+                            clonedOrderId: null
+                        ])
+
+                        ec.logger.error("Exception validating FiscalTaxDocument ${fiscalTaxDocumentId}: ${e.message}", e)
+                    }
+                }
+
+                ec.logger.info("Batch DTE validation complete: ${totalCount} total, ${failedCount} failed, ${totalCount - failedCount} passed")
+            ]]></script>
+        </actions>
+    </service>
+
 </services>
