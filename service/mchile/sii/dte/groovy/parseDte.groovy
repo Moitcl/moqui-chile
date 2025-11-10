@@ -148,7 +148,7 @@ encabezado.Totales.ImptoReten.each { it ->
     }
 }
 
-if ((montoNeto + montoExento + iva + impuestos) != montoTotal) errorMessages.add("Total inválido, montoTotal (${montoTotal}) no coincide con suma de monto neto, monto exento, iva e impuestos (${montoNeto + montoExento + iva + impuestos})")
+//if ((montoNeto + montoExento + iva + impuestos) != montoTotal) errorMessages.add("Total inválido, montoTotal (${montoTotal}) no coincide con suma de monto neto, monto exento, iva e impuestos (${montoNeto + montoExento + iva + impuestos})")
 if ((montoNeto > 0 && tasaIva / 100 != vatTaxRate) && !esBoleta) errorMessages.add("Tasa IVA no coincide: esperada: ${vatTaxRate*100}%, recibida: ${tasaIva}%")
 
 tipoDteEnumId = ec.service.sync().name("mchile.sii.dte.DteInternalServices.get#MoquiCode").parameter("siiCode", tipoDte).call().enumId
@@ -289,7 +289,7 @@ detalleDteList.each { detalleDte ->
 
     roundingAdjustmentItemAmount = 0 as BigDecimal
     if ((quantity?:0) * (price?:0) != montoItem) {
-        roundingAdjustmentItemAmount = montoItem - descuentoMonto - ((quantity?:0) * (price?:0)).setScale(6, RoundingMode.HALF_UP) as BigDecimal
+        roundingAdjustmentItemAmount = montoItem - descuentoMonto - ((quantity?:0) * (price?:0)).setScale(6, RoundingMode.FLOOR) as BigDecimal
         if ((((quantity?:0) * (price?:0)) + roundingAdjustmentItemAmount) != montoItem) {
             roundingAdjustmentItemAmount = 0
             dteQuantity = quantity

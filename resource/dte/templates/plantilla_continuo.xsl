@@ -820,7 +820,10 @@
                 </xsl:if>
                 <fo:block>
                     <xsl:value-of select="format-number(siidte:QtyItem | QtyItem, '###.##0,###', 'european')"/>&#160;<xsl:value-of select="siidte:UnmdItem | UnmdItem"/>
-                    @ $&#160;<xsl:value-of select="format-number(siidte:PrcItem | PrcItem, '###.###', 'european')"/>
+                    @ <xsl:choose>
+                        <xsl:when test="siidte:PrcItem | PrcItem">$&#160;<xsl:value-of select="format-number(siidte:PrcItem | PrcItem, '###.###', 'european')"/></xsl:when>
+                        <xsl:otherwise>$&#160;0</xsl:otherwise>
+                    </xsl:choose>
                 </fo:block>
                 <xsl:if test="siidte:DescuentoPct | DescuentoPct">
                     <fo:block>Descuento <xsl:value-of select="format-number(siidte:DescuentoPct | DescuentoPct, '#0,###', 'european')"/>%</fo:block>

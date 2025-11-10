@@ -89,19 +89,25 @@ if (invoiceId) {
 }
 
 if (tipoDte == '39') {
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft? "OrderItem" : "InvoiceItem", null, issuerPartyId, preciosIncluyenIva, !generarXmlMontosNetos)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft? "OrderItem" : "InvoiceItem", null, issuerPartyId, preciosIncluyenIva, !generarXmlMontosNetos, vatTaxRate)
     detalleList = detMap.detalleList
     //throw new BaseArtifactException("Lista:"+detMap.totalExento)
     totalNeto = detMap.totalNeto
+    totalBruto = detMap.totalBruto
+    totalNetoRounded = detMap.totalNetoRounded
+    totalBrutoRounded = detMap.totalBrutoRounded
     if(detMap.totalExento)
         totalExento = detMap.totalExento
+    if(detMap.totalExentoRounded)
+        totalExentoRounded = detMap.totalExentoRounded
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
     totalIva = detMap.totalIva
-
-    if (numberAfectos > 0 && (totalIva == null || totalIva == 0)) {
-        ec.message.addError("Boleta Electrónica con ítemes afectos debe tener IVA mayor a 0. Verifique que los precios incluyan IVA o que se haya proporcionado el monto de IVA explícitamente.")
-        return
+    if (numberAfectos > 0 && totalIva == null) {
+        if (generarXmlMontosNetos)
+            totalIva = Math.round(totalNeto * vatTaxRate)
+        else
+            totalIva = Math.round((detMap.totalBruto / (1 + vatTaxRate)*vatTaxRate))
     }
 
     if (numberAfectos == 0 && numberExentos > 0) {
@@ -112,7 +118,7 @@ if (tipoDte == '39') {
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
 } else if (tipoDte == '41') {
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "InvoiceItem", null, issuerPartyId, preciosIncluyenIva, !generarXmlMontosNetos)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "InvoiceItem", null, issuerPartyId, preciosIncluyenIva, !generarXmlMontosNetos, vatTaxRate)
     detalleList = detMap.detalleList
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
@@ -123,6 +129,8 @@ if (tipoDte == '39') {
         tipoDte = '39'
         fiscalTaxDocumentTypeEnumId = 'Ftdt-39'
         totalNeto = detMap.totalNeto
+        totalBruto = detMap.totalBruto
+        totalNetoRounded = detMap.totalNetoRounded
     }
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
     referenciaList = refMap.referenciaList
@@ -190,22 +198,19 @@ descuentoORecargoGlobalList.each { dor ->
 
 // Totales
 totalExento = (totalExento?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
+totalExentoRounded = (totalExentoRounded?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
 if (totalNeto != null) {
     totalNeto = totalNeto - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
+    totalNetoRounded = totalNetoRounded - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
+    if (generarXmlMontosNetos)
+        totalInvoice = (totalNeto?:0) + (totalIva?:0) + (totalExento?:0)
+    else
+        totalInvoice = (totalBrutoRounded?:0) + (totalExento?:0)
 
-    // Validate IVA based on whether amounts are gross or net
-    // Note: For Boletas, generarXmlMontosNetos=false means gross amounts (default)
-    if (generarXmlMontosNetos) {
-        // When IndMntNeto=2, totalNeto contains net amounts and IVA is calculated from net
-        long calculatedIva = Math.round(totalNeto * vatTaxRate)
-        if ((totalIva ?: 0) != calculatedIva)
-            ec.message.addError("IVA mismatch with net amounts, received from details ${totalIva}, calculated from Neto: ${calculatedIva}")
-    }
-    // When gross amounts (default): No validation needed - IVA was extracted per-item in prepareDetails
-    // The per-item extraction is the correct approach and avoids rounding differences
-
+    long calculatedIva = Math.round(totalNeto * vatTaxRate)
+    if (Math.abs((totalIva ?: 0) - calculatedIva) > 0)
+        ec.message.addError("IVA mismatch with net amounts, received from details ${totalIva}, calculated from Neto: ${calculatedIva}")
     montoIVARecuperable = totalIva
-    totalInvoice = (totalNeto?:0) + (totalIva?:0) + (totalExento?:0)
 } else
     totalInvoice = (totalExento?:0)
 
@@ -231,8 +236,8 @@ String detalleIt1 = detalleList.get(0).nombreItem
 totalInvoice = ec.l10n.roundCurrency(totalInvoice, currencyUomId) as Integer
 if (totalExento != null)
     totalExento = ec.l10n.roundCurrency(totalExento, currencyUomId) as Integer
-if (totalNeto != null)
-    totalNeto = ec.l10n.roundCurrency(totalNeto, currencyUomId) as Integer
+if (totalNetoRounded != null)
+    totalNetoRounded = ec.l10n.roundCurrency(totalNetoRounded, currencyUomId) as Integer
 if (totalIva != null)
     totalIva = ec.l10n.roundCurrency(totalIva, currencyUomId) as Integer
 
@@ -294,10 +299,10 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
             //RUTSolicita()
             //Transporte{}
             Totales {
-                if (totalNeto)
-                    MntNeto(totalNeto)
-                if (totalExento != null && totalExento > 0)
-                    MntExe(totalExento)
+                if (totalNetoRounded)
+                    MntNeto(totalNetoRounded)
+                if (totalExentoRounded != null && totalExentoRounded > 0)
+                    MntExe(totalExentoRounded)
                 //TasaIVA(ec.l10n.format(vatTaxRate*100, "##"))
                 if (totalIva)
                     IVA(totalIva)
@@ -339,7 +344,7 @@ xmlBuilder.DTE(xmlns: 'http://www.sii.cl/SiiDte', version: '1.0') {
                 if (detalle.uom)
                     UnmdItem(detalle.uom)
                 if (detalle.priceItem != null && detalle.priceItem != 0 && detalle.priceItem != "0")
-                    PrcItem((detalle.priceItem as BigDecimal).setScale(6, RoundingMode.HALF_UP))
+                    PrcItem((detalle.priceItem as BigDecimal).setScale(6, RoundingMode.FLOOR))
                 //OtrMnda{}
                 if (detalle.porcentajeDescuento)
                     DescuentoPct(detalle.porcentajeDescuento)
@@ -479,7 +484,7 @@ if (draft) {
     ec.resource.getLocationReference(pdfContentLocation).putBytes(pdfBytes)
 
     // Creación de registro en FiscalTaxDocumentAttributes
-    createMap = [fiscalTaxDocumentId: dteEv.fiscalTaxDocumentId, amount: totalInvoice, fechaEmision: fechaEmision, anulaBoleta: anulaBoleta, folioAnulaBoleta: folioAnulaBoleta, montoNeto: totalNeto, tasaImpuesto: 19,
+    createMap = [fiscalTaxDocumentId: dteEv.fiscalTaxDocumentId, amount: totalInvoice, fechaEmision: fechaEmision, anulaBoleta: anulaBoleta, folioAnulaBoleta: folioAnulaBoleta, montoNeto: totalNetoRounded, tasaImpuesto: 19,
                  montoExento        : totalExento, montoIVARecuperable: montoIVARecuperable, razonSocialEmisor: razonSocialOrganizacion, razonSocialReceptor: razonSocialReceptor]
     ec.context.putAll(ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters(createMap).call())
     fiscalTaxDocumentId = dteEv.fiscalTaxDocumentId

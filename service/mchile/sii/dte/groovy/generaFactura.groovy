@@ -121,12 +121,17 @@ currencyUomId = 'CLP'
 ec.logger.info("Creando DTE tipo ${tipoDte} (${dteTypeDescription})")
 tasaIva = ec.l10n.format(vatTaxRate*100, "##")
 if (tipoDte in ['33', '46', '43']) {
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos, vatTaxRate)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalNetoRounded = detMap.totalNetoRounded
+    totalBruto = detMap.totalBruto
+    totalBrutoRounded = detMap.totalBrutoRounded
     totalIva = detMap.totalIva
-    if (detMap.totalExento > 0)
+    if (detMap.totalExento > 0) {
         totalExento = detMap.totalExento
+        totalExentoRounded = detMap.totalExentoRounded
+    }
     if (detMap.totalExentoClp > 0)
         totalExentoClp = detMap.totalExentoClp
     numberAfectos = detMap.numberAfectos
@@ -143,9 +148,10 @@ if (tipoDte in ['33', '46', '43']) {
     totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte in ['110', '111', '112']) {
     // DTE Exportación: Factura de Exportación Electrónica, Nota de Débito de Exportación Electrónica, Nota de Crédito de Exportación Electrónica
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft ? "OrderItem" : "InvoiceItem", issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos, vatTaxRate)
     detalleList = detMap.detalleList
     totalExento = detMap.totalExento?:0
+    totalExentoRounded = detMap.totalExentoRounded?:0
     if (detMap.totalNeto > 0)
         ec.message.addError("No se puede tener valor neto en factura de exportación")
     if (detMap.totalExentoClp > 0)
@@ -174,17 +180,21 @@ if (tipoDte in ['33', '46', '43']) {
         tipoMoneda = uomToSiiCurrencyMap['CLP']
 } else if (tipoDte == '34') {
     // Factura Exenta Electrónica
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, draft? "OrderItem" : "InvoiceItem", issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos, vatTaxRate)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalNetoRounded = detMap.totalNetoRounded
     totalIva = detMap.totalIva
     totalExento = detMap.totalExento
+    totalExentoRounded = detMap.totalExentoRounded
     numberAfectos = detMap.numberAfectos
     numberExentos = detMap.numberExentos
     if (numberAfectos > 0) {
         ec.message.addMessage("Factura Electrónica Exenta tiene ítemes afectos, cambiando tipo a Factura Electrónica")
         tipoDte = '33'
         fiscalTaxDocumentTypeEnumId = 'Ftdt-33'
+        totalBruto = detMap.totalBruto
+        totalBrutoRounded = detMap.totalBrutoRounded
     }
     originalReferenciaList = referenciaList
     Map<String, Object> refMap = cl.moit.dte.MoquiDTEUtils.prepareReferences(ec, referenciaList, rutOrganizacion, tipoDte)
@@ -204,11 +214,14 @@ if (tipoDte in ['33', '46', '43']) {
     }
     codRef = referenciaList[0].codigo
 
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "InvoiceItem", codRef as Integer, issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "InvoiceItem", codRef as Integer, issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos, vatTaxRate)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalNetoRounded = detMap.totalNetoRounded
+    totalBruto = detMap.totalBruto
+    totalBrutoRounded = detMap.totalBrutoRounded
     totalIva = detMap.totalIva
-    totalExento = detMap.totalExento
+    totalExentoRounded = detMap.totalExentoRounded
 
     if (codRef == "2" && detalleList.size() > 1) {
         ec.message.addError("codRef = 2 && detalleList.size() = ${detalleList.size()}")
@@ -224,7 +237,9 @@ if (tipoDte in ['33', '46', '43']) {
     //ec.logger.warn("Codref: " + codRef + ", dteExenta: " + dteExenta)
     if (codRef == "2") {
         totalNeto = 0
+        totalNetoRounded = 0
         totalExento = 0
+        totalExentoRounded = 0
     }
     totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == '56') {
@@ -239,11 +254,15 @@ if (tipoDte in ['33', '46', '43']) {
     }
     codRef = referenciaList[0].codigo
 
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "DebitoItem", codRef as Integer, issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "DebitoItem", codRef as Integer, issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos, vatTaxRate)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalNetoRounded = detMap.totalNetoRounded
+    totalBruto = detMap.totalBruto
+    totalBrutoRounded = detMap.totalBrutoRounded
     totalIva = detMap.totalIva
     totalExento = detMap.totalExento
+    totalExentoRounded = detMap.totalExentoRounded
 
     if (codRef == "2" && detalleList.size() > 1) {
         ec.message.addError("codRef = 2 && detalleList.size() = ${detalleList.size()}")
@@ -262,7 +281,9 @@ if (tipoDte in ['33', '46', '43']) {
     // Notas de débito son siempre afectas
     if (codRef == "2") {
         totalNeto = 0
+        totalNetoRounded = 0
         totalExento = 0
+        totalExentoRounded = 0
     }
     totalDescuentos = detMap.totalDescuentos
 } else if (tipoDte == '52') {
@@ -283,11 +304,15 @@ if (tipoDte in ['33', '46', '43']) {
     dteExenta = refMap.dteExenta
     codRef = refMap.codigo
 
-    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "ShipmentItem", codRef as Integer, issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos)
+    Map<String, Object> detMap = cl.moit.dte.MoquiDTEUtils.prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, "ShipmentItem", codRef as Integer, issuerPartyId, preciosIncluyenIva, generarXmlMontosBrutos, vatTaxRate)
     detalleList = detMap.detalleList
     totalNeto = detMap.totalNeto
+    totalNetoRounded = detMap.totalNetoRounded
+    totalBruto = detMap.totalBruto
+    totalBrutoRounded = detMap.totalBrutoRounded
     totalIva = detMap.totalIva
     totalExento = detMap.totalExento
+    totalExentoRounded = detMap.totalExentoRounded
     totalDescuentos = detMap.totalDescuentos
 } else {
     ec.message.addError("Cálculo de totales no implementado para tipo ${tipoDte}")
@@ -374,20 +399,59 @@ descuentoORecargoGlobalList.each { dor ->
 
 // Totales
 if (totalNeto != null || descuentoGlobalAfecto != null || recargoGlobalAfecto != null) {
-    if (totalNetoClp != null) {
-        totalNetoClp = totalNetoClp - (descuentoGlobalAfectoClp?:0.0) + (recargoGlobalExentoClp?:0.0)
-        montoIVARecuperable = totalIVAClp
-        totalInvoice = (totalNetoClp?:0.0) + totalIVAClp + (totalExentoClp?:0.0) - (descuentoGlobalExentoClp?:0.0) + (recargoGlobalExentoClp?:0.0)
-    } else {
-        totalNeto = (totalNeto?:0.0) - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
-        montoIVARecuperable = totalIva
-        totalInvoice = (totalNeto?:0.0) + (totalIva?:0.0) + (totalExento?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
+    totalNeto = (totalNeto?:0.0) - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
+    totalNetoRounded = (totalNetoRounded?:0.0) - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
+    // Also adjust totalBrutoRounded for global discounts/charges when in gross mode
+    if (generarXmlMontosBrutos && totalBrutoRounded != null) {
+        totalBrutoRounded = (totalBrutoRounded?:0.0) - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
     }
+    // Adjust totalExento and totalExentoRounded for global discounts/charges on exempt amounts
+    totalExento = (totalExento?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
+    totalExentoRounded = (totalExentoRounded?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
+    montoIVARecuperable = totalIva
 } else {
     if (totalExentoClp != null)
         totalInvoice = (totalExentoClp?:0.0) - (descuentoGlobalExentoClp?:0.0) + (recargoGlobalExentoClp?:0.0)
     else
         totalInvoice = (totalExento?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
+}
+
+if (totalExento != null)
+    totalExento = ec.l10n.roundCurrency(totalExento, currencyUomId) as Integer
+if (totalNetoRounded != null)
+    totalNetoRounded = ec.l10n.roundCurrency(totalNetoRounded, currencyUomId) as Integer
+if (totalBrutoRounded != null)
+    totalBrutoRounded = ec.l10n.roundCurrency(totalBrutoRounded, currencyUomId) as Integer
+if (totalIva != null)
+    totalIva = ec.l10n.roundCurrency(totalIva, currencyUomId) as Integer
+
+// For both gross and net XML formats: calculate IVA from rounded net amount using HALF_UP rounding
+// This ensures consistent IVA calculation regardless of XML format
+if (generarXmlMontosBrutos) {
+    // Gross XML mode: use totalNetoRounded for calculation
+    calculatedIva = (((totalNetoRounded ?: 0.0) as BigDecimal) * ((vatTaxRate ?: 0.0) as BigDecimal)).setScale(0, RoundingMode.HALF_UP)
+} else {
+    // Net XML mode: use totalNeto for calculation
+    calculatedIva = (((totalNeto ?: 0.0) as BigDecimal) * ((vatTaxRate ?: 0.0) as BigDecimal)).setScale(0, RoundingMode.HALF_UP)
+}
+
+if (totalIva == null) {
+    totalIva = calculatedIva
+} else if (!skipIvaMismatchCalculation && (totalIva - calculatedIva) > 0) {
+    ec.message.addError("Error en Iva, recibido de detalles: ${totalIva}, calculado: ${calculatedIva}")
+}
+
+// Calculate totalInvoice after IVA is finalized
+if (totalNeto != null || descuentoGlobalAfecto != null || recargoGlobalAfecto != null) {
+    if (generarXmlMontosBrutos) {
+        // Gross XML: MntTotal = sum(MontoItems) which equals totalBrutoRounded + MntExe
+        // totalBrutoRounded already has discounts/charges applied at item level
+        totalInvoice = (totalBrutoRounded?:0.0) + (totalExento?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
+    } else {
+        // Net XML: MntTotal = MntNeto + IVA + MntExe
+        // Use rounded values to match sum(MontoItems)
+        totalInvoice = (totalNeto?:0.0) + (totalIva?:0.0) + (totalExento?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
+    }
 }
 
 // Chequeo de valores entre Invoice y calculados
@@ -398,22 +462,6 @@ if (invoice) {
 }
 
 totalInvoice = ec.l10n.roundCurrency(totalInvoice, currencyUomId) as Integer
-if (totalExento != null)
-    totalExento = ec.l10n.roundCurrency(totalExento, currencyUomId) as Integer
-if (totalNeto != null)
-    totalNeto = ec.l10n.roundCurrency(totalNeto, currencyUomId) as Integer
-if (totalIva != null)
-    totalIva = ec.l10n.roundCurrency(totalIva, currencyUomId) as Integer
-
-// Validate IVA based on whether amounts are gross or net
-if (indicadorMontosBrutos != 1 && !skipIvaMismatchCalculation) {
-    // When MntBruto not set, totalNeto contains net amounts and IVA is calculated from net
-    // Validation: IVA should equal totalNeto * vatTaxRate
-    if (Math.round(totalIva ?: 0.0) != Math.round((totalNeto ?: 0.0) * (vatTaxRate ?: 0.0)))
-        ec.message.addError("Error en Iva, recibido de detalles: ${totalIva}, calculado: ${Math.round((totalNeto ?: 0.0) * (vatTaxRate ?: 0.0))}")
-}
-// When MntBruto=1: No validation needed - IVA was extracted per-item in prepareDetails
-// The per-item extraction is the correct approach and avoids rounding differences
 
 idDocumento = "Dte-" + ec.l10n.format(ec.user.nowTimestamp, "yyyyMMddHHmmssSSS")
 String tmstFirmaResp = ec.l10n.format(ec.user.nowTimestamp, "yyyy-MM-dd'T'HH:mm:ss")
@@ -697,10 +745,10 @@ xmlBuilder.Encabezado() {
     Totales {
         if (tipoMoneda)
             TpoMoneda(tipoMoneda)
-        if (totalNeto != null)
-            MntNeto(totalNeto)
-        if (totalExento != null)
-            MntExe(totalExento)
+        if (totalNetoRounded != null)
+            MntNeto(totalNetoRounded)
+        if (totalExentoRounded != null)
+            MntExe(totalExentoRounded as Integer)
         if (montoBase)
             MntBase(montoBase)
         if (montoMargenComercializacion)
@@ -708,7 +756,7 @@ xmlBuilder.Encabezado() {
         if (tasaIva)
             TasaIVA(tasaIva)
         if (totalIva)
-            IVA(totalIva)
+            IVA(totalIva as Integer)
         if (ivaPropio)
             IVAProp(ivaPropio)
         if (ivaTerceros)
@@ -835,7 +883,7 @@ if (detalleList) {
                 if (detalle.uom)
                     UnmdItem(detalle.uom)
                 if (detalle.priceItem != null && detalle.priceItem != 0 && detalle.priceItem != "0")
-                    PrcItem((detalle.priceItem as BigDecimal).setScale(6, java.math.RoundingMode.HALF_UP))
+                    PrcItem((detalle.priceItem as BigDecimal).setScale(6, java.math.RoundingMode.FLOOR))
                 if (detalle.otraMoneda)
                     OtrMnda {
                         PrcOtrMon(detalle.otraMoneda.precio)

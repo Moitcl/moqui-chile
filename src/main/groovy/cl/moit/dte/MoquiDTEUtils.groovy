@@ -63,23 +63,23 @@ class MoquiDTEUtils {
 
     protected final static Logger logger = LoggerFactory.getLogger(MoquiDTEUtils.class)
 
-    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, String issuerPartyId) throws BaseArtifactException {
-        return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, null, issuerPartyId, false, false)
+    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, String issuerPartyId, BigDecimal vatTaxRate) throws BaseArtifactException {
+        return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, null, issuerPartyId, false, false, vatTaxRate)
     }
 
-    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, Integer codRef, String issuerPartyId) throws BaseArtifactException {
-        return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, codRef, issuerPartyId, false, false)
+    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, Integer codRef, String issuerPartyId, BigDecimal vatTaxRate) throws BaseArtifactException {
+        return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, codRef, issuerPartyId, false, false, vatTaxRate)
     }
 
-    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, String issuerPartyId, Boolean preciosIncluyenIva) throws BaseArtifactException {
-        return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, null, issuerPartyId, preciosIncluyenIva, false)
+    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, String issuerPartyId, Boolean preciosIncluyenIva, BigDecimal vatTaxRate) throws BaseArtifactException {
+        return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, null, issuerPartyId, preciosIncluyenIva, false, vatTaxRate)
     }
 
-    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, String issuerPartyId, Boolean preciosIncluyenIva, Boolean generarXmlConMontosBrutos) throws BaseArtifactException {
-        return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, null, issuerPartyId, preciosIncluyenIva, generarXmlConMontosBrutos)
+    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, String issuerPartyId, Boolean preciosIncluyenIva, Boolean generarXmlConMontosBrutos, BigDecimal vatTaxRate) throws BaseArtifactException {
+        return prepareDetails(ec, fiscalTaxDocumentTypeEnumId, detailList, detailType, null, issuerPartyId, preciosIncluyenIva, generarXmlConMontosBrutos, vatTaxRate)
     }
 
-    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, Integer codRef, String issuerPartyId, Boolean preciosIncluyenIva, Boolean generarXmlConMontosBrutos) throws BaseArtifactException {
+    public static HashMap<String, Object> prepareDetails(ExecutionContext ec, String fiscalTaxDocumentTypeEnumId, List<HashMap> detailList, String detailType, Integer codRef, String issuerPartyId, Boolean preciosIncluyenIva, Boolean generarXmlConMontosBrutos, BigDecimal vatTaxRate) throws BaseArtifactException {
         List detalleList = []
         // Text Correction DTEs have no detail list
         if ((detailList == null || detailList.size()) == 0 && codRef == 2) {
@@ -95,11 +95,14 @@ class MoquiDTEUtils {
         }
 
         int i = 0
+        // Unrounded totals - precise mathematical calculations
         BigDecimal totalNeto = null
+        BigDecimal totalNetoRounded = null
+        BigDecimal totalBruto = null
+        BigDecimal totalBrutoRounded = null
         BigDecimal totalIva = null
-        BigDecimal totalNetoClp = null
-        BigDecimal totalIvaClp = null
         BigDecimal totalExento = null
+        BigDecimal totalExentoRounded = null
         BigDecimal totalExentoClp = null
         int numberAfectos = 0
         int numberExentos = 0
@@ -108,7 +111,8 @@ class MoquiDTEUtils {
         BigDecimal totalDescuentosClp = 0.0
         BigDecimal totalRecargosClp = 0.0
         String originCurrencyUomId = null
-        BigDecimal vatTaxRate = null
+        if (vatTaxRate == null)
+            throw new BaseArtifactException("No vatTaxRate given")
 
         List singleDet = null
         detailList.each { detailEntryObj ->
@@ -187,6 +191,7 @@ class MoquiDTEUtils {
 
             BigDecimal priceItem = null
             BigDecimal totalItem = 0.0
+            BigDecimal totalItemUnrounded = null
             BigDecimal totalItemClp = 0.0
             if (detailType == "ShipmentItem" && detailEntry.shipmentId) {
                 //ec.logger.info("handling price for productId ${detailEntry.productId}")
@@ -226,6 +231,7 @@ class MoquiDTEUtils {
                 }
                 priceItem = totalItem / quantity as BigDecimal
                 totalItem = totalItem - (montoDescuento ?: 0) + (montoRecargo ?: 0)
+                totalItemUnrounded = totalItem
                 totalItem = totalItem.setScale(0, java.math.RoundingMode.HALF_UP) as Long
             } else if (detailType == "DebitoItem") {
                 if (codRef == 2) {
@@ -236,6 +242,7 @@ class MoquiDTEUtils {
                 } else {
                     priceItem = detailEntry.amount
                     totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (montoRecargo ?: 0)
+                    totalItemUnrounded = totalItem
                 }
             } else if (detailType == "ReturnItem") {
                 if (codRef == 2) {
@@ -243,12 +250,14 @@ class MoquiDTEUtils {
                     priceItem = null
                     nombreItem = "Corrige Dato Receptor"
                     totalItem = 0
+                    totalItemUnrounded = totalItem
                 } else {
                     priceItem = detailEntry.returnPrice as BigDecimal
                 }
             } else if (detailType == "OrderItem") {
                 priceItem = detailEntry.unitAmount as BigDecimal
                 totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (montoRecargo ?: 0) + (ajusteDecimal ?: 0)
+                totalItemUnrounded = totalItem
             } else if (detailType == "InvoiceItem") {
                 if (detailEntry.originCurrencyUomId || originCurrencyUomId) {
                     if (!detailEntry.originCurrencyUomId)
@@ -271,35 +280,31 @@ class MoquiDTEUtils {
                     priceItem = detailEntry.amount as BigDecimal
                     totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (montoRecargo ?: 0) + (ajusteDecimal ?: 0)
                 }
+                totalItemUnrounded = totalItem
             } else {
                 priceItem = detailEntry.amount as BigDecimal
                 totalItem = (quantity ?: 1) * (priceItem ?: 0) - (montoDescuento ?: 0) + (montoRecargo ?: 0) + (ajusteDecimal ?: 0)
+                totalItemUnrounded = totalItem
             }
 
             // Bidirectional price conversion based on input format and desired XML output
             // Track net amount separately for totalNeto accumulation (always needs net value)
             BigDecimal netAmount = totalItem
+            BigDecimal unroundedNetAmount = totalItemUnrounded  // Preserve truly unrounded net for accumulation
 
             if (itemAfecto && detailEntry.itemTypeEnumId != "ItemVatTax") {
                 if (preciosIncluyenIva) {
-                    Map netPriceMap = ec.service.sync().name("mchile.TaxServices.calculate#NetFromGrossPrice")
-                            .parameter("grossPrice", totalItem).call()
-                    BigDecimal vatAmount = netPriceMap.vatAmount
-                    netAmount = netPriceMap.netPrice.setScale(0, RoundingMode.HALF_UP)
-
-                    totalIva = (totalIva ?: 0) + vatAmount.setScale(0, RoundingMode.HALF_UP)
+                    ec.logger.info("transforming net to gross for price ${totalItemUnrounded}")
+                    BigDecimal vatAmount = totalItemUnrounded / (1+vatTaxRate)
+                    unroundedNetAmount = totalItemUnrounded / (1+vatTaxRate)
+                    netAmount = unroundedNetAmount.setScale(0, RoundingMode.HALF_UP)
 
                     if (!generarXmlConMontosBrutos) {
                         totalItem = netAmount
-                        if (quantity != null && quantity > 0) {
-                            priceItem = totalItem / quantity
-                        }
+                        priceItem = detailEntry.amount / (1+vatTaxRate)
                     }
                 } else if (generarXmlConMontosBrutos) {
-                    Map grossPriceMap = ec.service.sync().name("mchile.TaxServices.calculate#GrossFromNetPrice")
-                        .parameter("netPrice", totalItem).call()
-
-                    totalItem = grossPriceMap.grossPrice.setScale(0, RoundingMode.HALF_UP)
+                    totalItem = (totalItem * (1+vatTaxRate)).setScale(0, RoundingMode.HALF_UP)
                     if (quantity != null && quantity > 0) {
                         priceItem = totalItem / quantity
                     }
@@ -348,18 +353,42 @@ class MoquiDTEUtils {
                 else
                     detailMap.priceItem = priceItem
             }
-            detailMap.montoItem = totalItem
+
+
+            // Round totalItem and netAmount to ensure sum(MontoItems) == MntTotal
+            // MontoItem will be rounded when written to XML, so we must accumulate rounded values
+            BigDecimal roundedTotalItem = totalItem.setScale(0, RoundingMode.HALF_UP)
+            BigDecimal roundedNetAmount = netAmount.setScale(0, RoundingMode.HALF_UP)
+
+            detailMap.montoItem = roundedTotalItem
             if (itemAfecto) {
                 if (detailType == "ShipmentItem") {
-                    if (vatTaxRate == null) {
-                        vatTaxRate = ec.service.sync().name("mchile.TaxServices.get#VatTaxRate").parameter("date", ec.user.nowTimestamp).call().taxRate
-                    }
-                    totalIva = (totalIva ?: 0.0) + (totalItem * vatTaxRate)
+                    totalIva = (totalIva ?: 0.0) + (roundedTotalItem * vatTaxRate)
                 }
-                // Always accumulate net amount, regardless of what format totalItem is in
-                totalNeto = (totalNeto ?: 0.0) + netAmount
+
+                // Accumulate UNROUNDED net totals (precise mathematical calculations)
+                totalNeto = (totalNeto ?: 0.0) + unroundedNetAmount
+                totalNetoRounded = (totalNetoRounded ?: 0.0) + roundedNetAmount
+
+                // Calculate and accumulate UNROUNDED gross amounts (net + VAT)
+                BigDecimal unroundedGrossAmount
+                BigDecimal roundedGrossAmount
+                if (generarXmlConMontosBrutos || preciosIncluyenIva) {
+                    // Already have gross amount (unrounded totalItem before it was rounded)
+                    unroundedGrossAmount = totalItem
+                    roundedGrossAmount = roundedTotalItem
+                } else {
+                    // Calculate gross from unrounded net
+                    Map grossCalcUnrounded = ec.service.sync().name("mchile.TaxServices.calculate#GrossFromNetPrice")
+                        .parameter("netPrice", unroundedNetAmount).call()
+                    unroundedGrossAmount = grossCalcUnrounded.grossPrice
+                    roundedGrossAmount = grossCalcUnrounded.grossPrice.setScale(0, RoundingMode.HALF_UP)
+                }
+                totalBruto = (totalBruto ?: 0.0) + unroundedGrossAmount
+                totalBrutoRounded = (totalBrutoRounded ?: 0.0) + roundedGrossAmount
             } else {
                 totalExento = (totalExento ?: 0.0) + totalItem
+                totalExentoRounded = (totalExentoRounded ?: 0.0) + roundedTotalItem
                 if (totalItemClp)
                     totalExentoClp = (totalExentoClp ?: 0.0) + totalItemClp
                 detailMap.indicadorExento = 1
@@ -391,8 +420,9 @@ class MoquiDTEUtils {
         if (detailType == "ShipmentItem" && totalIva) {
             totalIva = totalIva.setScale(0, RoundingMode.HALF_UP)
         }
-        return [detalleList: detalleList, totalNeto: totalNeto, totalIva:totalIva, totalNetoClp: totalNetoClp, totalIvaClp:totalIvaClp, totalExento: totalExento,
-                totalExentoClp: totalExentoClp, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos, totalRecargos: totalRecargos,
+
+        return [detalleList: detalleList, totalNeto: totalNeto, totalNetoRounded: totalNetoRounded, totalBruto: totalBruto, totalBrutoRounded: totalBrutoRounded, totalIva:totalIva,
+                totalExento: totalExento, totalExentoRounded: totalExentoRounded, totalExentoClp: totalExentoClp, numberExentos: numberExentos, numberAfectos: numberAfectos, totalDescuentos: totalDescuentos, totalRecargos: totalRecargos,
                 totalDescuentosClp: totalDescuentosClp, totalRecargosClp: totalRecargosClp, originCurrencyUomId:originCurrencyUomId]
     }
 
