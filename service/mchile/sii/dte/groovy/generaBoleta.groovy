@@ -238,6 +238,8 @@ if (totalExento != null)
     totalExento = ec.l10n.roundCurrency(totalExento, currencyUomId) as Integer
 if (totalNetoRounded != null)
     totalNetoRounded = ec.l10n.roundCurrency(totalNetoRounded, currencyUomId) as Integer
+if (totalExentoRounded != null)
+    totalExentoRounded = ec.l10n.roundCurrency(totalExentoRounded, currencyUomId) as Integer
 if (totalIva != null)
     totalIva = ec.l10n.roundCurrency(totalIva, currencyUomId) as Integer
 
