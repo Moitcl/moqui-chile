@@ -89,7 +89,7 @@ try {
             .name("mantle.order.OrderServices.clone#Order")
             .parameters([
                     baseOrderId: orderId,
-                    statusId: "OrderOpen",
+                    statusId: "OrderApproved",
                     overrideInvoiceDate: originalInvoiceDate,
                     productItemsOnly: false
             ])

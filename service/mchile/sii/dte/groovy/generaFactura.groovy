@@ -406,8 +406,10 @@ if (totalNeto != null || descuentoGlobalAfecto != null || recargoGlobalAfecto !=
         totalBrutoRounded = (totalBrutoRounded?:0.0) - (descuentoGlobalAfecto?:0.0) + (recargoGlobalAfecto?:0.0)
     }
     // Adjust totalExento and totalExentoRounded for global discounts/charges on exempt amounts
-    totalExento = (totalExento?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
-    totalExentoRounded = (totalExentoRounded?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
+    if (totalExento != null) {
+        totalExento = (totalExento?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
+        totalExentoRounded = (totalExentoRounded?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
+    }
     montoIVARecuperable = totalIva
 } else {
     if (totalExentoClp != null)
