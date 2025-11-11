@@ -294,7 +294,6 @@ class MoquiDTEUtils {
 
             if (itemAfecto && detailEntry.itemTypeEnumId != "ItemVatTax") {
                 if (preciosIncluyenIva) {
-                    ec.logger.info("transforming net to gross for price ${totalItemUnrounded}")
                     BigDecimal vatAmount = totalItemUnrounded / (1+vatTaxRate)
                     unroundedNetAmount = totalItemUnrounded / (1+vatTaxRate)
                     netAmount = unroundedNetAmount.setScale(0, RoundingMode.HALF_UP)
