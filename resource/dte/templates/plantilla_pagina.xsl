@@ -350,21 +350,23 @@
                 </fo:table-cell>
 
                 <fo:table-cell>
-                    <fo:block-container absolute-position="auto" left="3.1cm" top="0cm" width="9.75cm">
+                    <fo:block-container absolute-position="auto" left="3.1cm" top="0cm" width="9.75cm" overflow="visible">
 
-                        <fo:block font-size="10.81pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" text-align="left">
+                        <fo:block font-size="10.81pt" font-family="Helvetica, Arial, sans-serif" font-weight="bold" text-align="left" wrap-option="wrap">
                             <xsl:attribute name="color"><xsl:value-of select="$vendorNameColor"/></xsl:attribute>
                             <xsl:value-of select="siidte:RznSoc | RznSoc | siidte:RznSocEmisor | RznSocEmisor"/>
                         </fo:block>
 
                         <xsl:if test="siidte:Sucursal | Sucursal">
-                            <fo:block font-weight="bold" font-size="9.01pt" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left">
+                            <fo:block font-weight="bold" font-size="9.01pt" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" wrap-option="wrap">
                                 Sucursal: <xsl:value-of select="siidte:Sucursal | Sucursal"/> (Codigo SII: <xsl:value-of select="siidte:CdgSIISucur | CdgSIISucur"/>)
                             </fo:block>
                         </xsl:if>
 
-                        <fo:block font-size="9.01pt" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left">
-                            <xsl:value-of select="siidte:GiroEmis | GiroEmis | siidte:GiroEmisor | GiroEmisor"/>
+                        <fo:block font-size="9.01pt" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left" wrap-option="wrap">
+                            <xsl:call-template name="InsertBreakOpportunities">
+                                <xsl:with-param name="text" select="siidte:GiroEmis | GiroEmis | siidte:GiroEmisor | GiroEmisor"/>
+                            </xsl:call-template>
                         </fo:block>
 
                         <fo:block font-size="8.4pt" margin-top="1mm" font-family="Helvetica, Arial, sans-serif" language="es" hyphenate="true" color="black" text-align="left">
@@ -940,6 +942,27 @@
             select="substring($num,string-length($num)-5,3)"/>.<xsl:value-of
             select="substring($num,string-length($num)-2,3)"/>-<xsl:value-of select="$dv"/>
 
+    </xsl:template>
+
+    <!-- Template to insert zero-width spaces after periods for text wrapping -->
+    <xsl:template name="InsertBreakOpportunities">
+        <xsl:param name="text"/>
+        <xsl:param name="separator" select="'.'"/>
+        <xsl:choose>
+            <xsl:when test="contains($text, $separator)">
+                <xsl:value-of select="substring-before($text, $separator)"/>
+                <xsl:value-of select="$separator"/>
+                <!-- Insert zero-width space after separator to allow wrapping -->
+                <xsl:text>&#x200B;</xsl:text>
+                <xsl:call-template name="InsertBreakOpportunities">
+                    <xsl:with-param name="text" select="substring-after($text, $separator)"/>
+                    <xsl:with-param name="separator" select="$separator"/>
+                </xsl:call-template>
+            </xsl:when>
+            <xsl:otherwise>
+                <xsl:value-of select="$text"/>
+            </xsl:otherwise>
+        </xsl:choose>
     </xsl:template>
 
     <xsl:template name="ExceedingItemsAndRefs">
