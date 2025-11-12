@@ -119,6 +119,7 @@ if (requireReceiverInternalOrg && !receiverIsInternalOrg) {
 
 if (existingDteList) {
     dte = existingDteList.first
+    ec.logger.info("Found dte ${dte.fiscalTaxDocumentId}: ${dte}")
     fiscalTaxDocumentId = dte.fiscalTaxDocumentId
     if (dte.sentRecStatusId in ['Ftd-ReceiverToReject', 'Ftd-ReceiverReject'] && issuerIsInternalOrg) {
         if (dte.sentRecStatusId in ['Ftd-ReceiverToReject', 'Ftd-ReceiverReject'] )
@@ -149,14 +150,23 @@ if (existingDteList) {
             dteFieldListConstant = ['issuerPartyIdTypeEnumId', 'issuerPartyId', 'receiverPartyIdTypeEnumId', 'receiverPartyIdValue', 'date']
             dteFieldListConstant.each { entityFieldName ->
                 if (dteMap[entityFieldName] != dte[entityFieldName])
-                    ec.message.addError("Value mismatch for attribute field ${entityFieldName}, XML value: ${dteMap[entityFieldName]}, DB value: ${dte[entityFieldName]}")
+                    if (dte[entityFieldName] == null) {
+                        dte[entityFieldName] = dteMap[entityFieldName]
+                        changed = true
+                    } else
+                        ec.message.addError("Value mismatch for attribute field ${entityFieldName}, XML value: ${dteMap[entityFieldName]}, DB value: ${dte[entityFieldName]}")
             }
             if (dteMap.receiverPartyId != dte.receiverPartyId) {
                 // Check if dte.receiverPartyId is descendant of dteMap.receiverPartyId
-                childPartyIdList = ec.service.sync().name("mchile.sii.dte.DteLoadServices.get#Children").parameters([partyId:dteMap.receiverPartyId,
-                                                     allowOwnRut:allowReceiverChildWithDifferentRut]).call().childPartyIdList
-                if (!(dte.receiverPartyId in childPartyIdList))
-                    ec.message.addError("Mismatch for receiverPartyId, XML value: ${dteMap.receiverPartyId}, DB value: ${dte.receiverPartyId} (is not child${allowReceiverChildWithDifferentRut? '' : ' sharing same RUT'})")
+                if (dte.receiverPartyId == null) {
+                    dte.receiverPartyId = dteMap.receiverPartyId
+                    changed = true
+                } else {
+                    childPartyIdList = ec.service.sync().name("mchile.sii.dte.DteLoadServices.get#Children").parameters([partyId:dteMap.receiverPartyId,
+                                                                                                                         allowOwnRut:allowReceiverChildWithDifferentRut]).call().childPartyIdList
+                    if (!(dte.receiverPartyId in childPartyIdList))
+                        ec.message.addError("Mismatch for receiverPartyId, XML value: ${dteMap.receiverPartyId}, DB value: ${dte.receiverPartyId} (is not child${allowReceiverChildWithDifferentRut? '' : ' sharing same RUT'})")
+                }
             }
             dteFieldListOverwrite = ['statusId', 'formaPagoEnumId']
             dteFieldListOverwrite.each { entityFieldName ->
@@ -170,6 +180,10 @@ if (existingDteList) {
                 dte.update()
 
             attrib = ec.entity.find("mchile.dte.FiscalTaxDocumentAttributes").condition("fiscalTaxDocumentId", fiscalTaxDocumentId).forUpdate(true).one()
+            if (attrib == null) {
+                ec.service.sync().name("create#mchile.dte.FiscalTaxDocumentAttributes").parameters([fiscalTaxDocumentId: fiscalTaxDocumentId]).call()
+                attrib = ec.entity.find("mchile.dte.FiscalTaxDocumentAttributes").condition("fiscalTaxDocumentId", fiscalTaxDocumentId).forUpdate(true).one()
+            }
             attributeMap = [amount               : 'montoTotal', montoNeto: 'montoNeto', montoExento: 'montoExento', tasaImpuesto: 'tasaIva', tipoImpuesto: 'tipoImpuesto', montoIVARecuperable: 'iva',
                             montoIVANoRecuperable: 'montoIvaNoRecuperable', fechaEmision: 'fechaEmision', fechaVencimiento: 'fechaVencimiento', razonSocialEmisor: 'razonSocialEmisor',
                             razonSocialReceptor  : 'razonSocialReceptor']
@@ -182,10 +196,15 @@ if (existingDteList) {
                     changed = true
                 }
                 if (attrib[entityFieldName] != dteMap[mapFieldName]) {
-                    if (entityFieldName in ['razonSocialReceptor', 'razonSocialEmisor'])
-                        ec.message.addMessage("Value mismatch for attribute field ${entityFieldName}, XML value: ${dteMap[mapFieldName]}, DB value: ${attrib[entityFieldName]}", "warning")
-                    else
-                        ec.message.addError("Value mismatch for attribute field ${entityFieldName}, XML value: ${dteMap[mapFieldName]}, DB value: ${attrib[entityFieldName]}")
+                    if (attrib[entityFieldName] == null) {
+                        attrib[entityFieldName] = dteMap[mapFieldName]
+                        changed = true
+                    } else {
+                        if (entityFieldName in ['razonSocialReceptor', 'razonSocialEmisor'])
+                            ec.message.addMessage("Value mismatch for attribute field ${entityFieldName}, XML value: ${dteMap[mapFieldName]}, DB value: ${attrib[entityFieldName]}", "warning")
+                        else
+                            ec.message.addError("Value mismatch for attribute field ${entityFieldName}, XML value: ${dteMap[mapFieldName]}, DB value: ${attrib[entityFieldName]}")
+                    }
                 }
             }
             if (changed)
@@ -269,7 +288,7 @@ if (dteMap.tipoDteEnumId == 'Ftdt-52') {
 
 if (!isDuplicated)
     ec.service.sync().name("mchile.sii.dte.DteContentServices.store#DteContent").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Xml',
-                                                                                         documentContent:dteMap.dteBytes]).call()
+                                                                                         documentContent:dteMap.dteBytes, failOnExisting:false]).call()
 
 if (pdfBytes) {
     ec.service.sync().name("mchile.sii.dte.DteContentServices.store#DteContent").parameters([fiscalTaxDocumentId:fiscalTaxDocumentId, fiscalTaxDocumentContentTypeEnumId:'Ftdct-Pdf',
