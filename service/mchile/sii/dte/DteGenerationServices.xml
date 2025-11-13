@@ -1505,4 +1505,86 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
+    <service verb="cancel" noun="Dte">
+        <description>Anula un DTE generando el documento de anulación correspondiente (Nota de Crédito o Nota de Débito según el tipo de documento original)</description>
+        <in-parameters>
+            <parameter name="fiscalTaxDocumentId" required="true"/>
+            <parameter name="razonAnulacion" default-value="Anulación de Documento"/>
+            <parameter name="formatoPdf" default-value="carta"/>
+            <parameter name="draft" type="Boolean" default="false"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="cancellingFiscalTaxDocumentId"><description>ID del documento fiscal de anulación generado (Nota de Crédito o Nota de Débito)</description></parameter>
+            <parameter name="invoiceId"/>
+            <parameter name="previewPdf" type="byte[]"/>
+        </out-parameters>
+        <actions>
+            <!-- Fetch and validate the original DTE -->
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="originalDte"/>
+            <if condition="!originalDte"><return error="true" message="No se encontró el DTE ${fiscalTaxDocumentId}"/></if>
+            <if condition="originalDte.statusId != 'Ftd-Issued'"><return error="true" message="Estado inválido: ${originalDte.status?.description})"/></if>
+            <if condition="!(originalDte.sentAuthStatusId in ['Ftd-SentAuthAccepted', 'Ftd-SentAuthAcceptedWithDiscrepancies'])">
+                <return error="true" message="El DTE no ha sido aceptado por el SII (estado actual: ${originalDte.sentAuthStatusId})"/>
+            </if>
+            <if condition="!originalDte.invoiceId"><return error="true" message="El DTE no tiene una Nota de Cobro asociada"/></if>
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="originalInvoice" auto-field-map="originalDte"/>
+
+            <!-- Check if already cancelled or modified -->
+            <entity-find-one entity-name="mchile.dte.FiscalTaxDocumentAttributes" value-field="originalDteAttrs"/>
+            <if condition="originalDteAttrs?.modificationStatusId == 'FtdmsRevoked'"><return error="true" message="El DTE ya ha sido anulado previamente"/></if>
+            <if condition="originalDteAttrs?.modificationStatusId == 'FtdmsModified'"><return error="true" message="El DTE ya ha sido modificado y no puede ser anulado directamente"/></if>
+
+            <!-- Determine cancellation document type -->
+            <set field="isExportDte" from="originalDte.fiscalTaxDocumentTypeEnumId in ['Ftdt-110', 'Ftdt-111', 'Ftdt-112']"/>
+            <set field="isCreditNote" from="originalDte.fiscalTaxDocumentTypeEnumId in ['Ftdt-61', 'Ftdt-112']"/>
+
+            <if condition="isCreditNote"><then>
+                <!-- Cancelling a credit note requires a debit note -->
+                <set field="cancellingDocType" from="isExportDte ? 'Ftdt-111' : 'Ftdt-56'"/>
+                <set field="isCancellingWithDebitNote" from="true"/>
+            </then><else>
+                <!-- Cancelling other documents requires a credit note -->
+                <set field="cancellingDocType" from="isExportDte ? 'Ftdt-112' : 'Ftdt-61'"/>
+                <set field="isCancellingWithDebitNote" from="false"/>
+            </else></if>
+
+            <!-- Create cancellation invoice -->
+            <if condition="isCancellingWithDebitNote"><then>
+                <log message="Info: cancel#Dte - Creating debit memo from existing DTE"/>
+                <service-call name="mchile.sii.dte.DteGenerationServices.create#DebitMemoFromExistingDte"
+                              in-map="[issuerPartyId:originalDte.issuerPartyId, fiscalTaxDocumentNumber:originalDte.fiscalTaxDocumentNumber,
+                                       fiscalTaxDocumentTypeEnumId:originalDte.fiscalTaxDocumentTypeEnumId, razonReferencia:razonAnulacion,
+                                       copyItemsFromReference:true]" out-map="memoResult"/>
+            </then><else>
+                <log message="Info: cancel#Dte - Creating credit memo from existing DTE"/>
+                <service-call name="mchile.sii.dte.DteGenerationServices.create#CreditMemoFromExistingDte"
+                              in-map="[issuerPartyId:originalDte.issuerPartyId, fiscalTaxDocumentNumber:originalDte.fiscalTaxDocumentNumber,
+                                       fiscalTaxDocumentTypeEnumId:originalDte.fiscalTaxDocumentTypeEnumId, razonReferencia:razonAnulacion,
+                                       copyItemsFromReference:true]" out-map="memoResult"/>
+            </else></if>
+
+            <set field="invoiceId" from="memoResult.invoiceId"/>
+            <if condition="!invoiceId"><return error="true" message="No se pudo crear el documento de anulación"/></if>
+            <entity-find-one entity-name="mantle.account.invoice.Invoice" value-field="cancellingInvoice" auto-field-map="memoResult"/>
+
+            <if condition="originalInvoice.invoiceTotal != cancellingInvoice.invoiceTotal">
+                <return error="true" message="Error generando documento de anulación, montos no calzan: ${originalInvoice.invoiceTotal} vs ${cancellingInvoice.invoiceTotal}"/>
+            </if>
+
+            <!-- Generate fiscal document from invoice -->
+            <service-call name="mchile.sii.dte.DteGenerationServices.generate#DteFromInvoice" in-map="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:cancellingDocType,
+                        formatoPdf:formatoPdf, skipSalesTaxCalculation:true, skipIvaMismatchCalculation:true, draft:draft]" out-map="dteResult"/>
+
+            <if condition="draft"><then>
+                <script>
+                    ec.transaction.rollback("Draft execution", null)
+                    //ec.transaction.begin(60)
+                </script>
+                <set field="previewPdf" from="dteResult.previewPdf"/>
+            </then><else>
+                <set field="cancellingFiscalTaxDocumentId" from="dteResult.fiscalTaxDocumentId"/>
+            </else></if>
+        </actions>
+    </service>
+
 </services>
