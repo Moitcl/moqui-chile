@@ -740,7 +740,7 @@ class EmailProcessingTestUtilities {
         
         testPartyIds.each { partyId ->
             // Clean up party relationships first
-            ec.entity.find("mantle.party.PartyContactMech").condition("partyId", partyId).deleteAll()
+            ec.entity.find("mantle.party.contact.PartyContactMech").condition("partyId", partyId).deleteAll()
             ec.entity.find("mantle.party.PartyIdentification").condition("partyId", partyId).deleteAll()
             ec.entity.find("mantle.party.PartyRole").condition("partyId", partyId).deleteAll()
             ec.entity.find("mchile.dte.PartyDteParams").condition("partyId", partyId).deleteAll()

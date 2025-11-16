@@ -800,7 +800,7 @@ JYljFtsT
         // Delete party dependencies in correct order to avoid foreign key violations
 
         // 1. Delete party contact mechanisms
-        ec.entity.find("mantle.party.PartyContactMech")
+        ec.entity.find("mantle.party.contact.PartyContactMech")
             .condition("partyId", partyId)
             .deleteAll()
 
@@ -862,7 +862,14 @@ JYljFtsT
         }
 
         try {
-            // Get XML text from resource reference
+            // Parse XML directly from stream to respect ISO-8859-1 encoding declaration
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance()
+            factory.setNamespaceAware(false)
+            InputStream xmlStream = contentResult.contentRef.openStream()
+            Document doc = factory.newDocumentBuilder().parse(xmlStream)
+            xmlStream.close()
+
+            // Get XML text for logging/debugging (after parsing to avoid encoding issues)
             String xmlText = null
             try {
                 xmlText = contentResult.contentRef.getText()
@@ -883,11 +890,6 @@ JYljFtsT
                 logger.info(xmlText)
                 logger.info("=" * 80)
             }
-
-            // Parse XML once
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance()
-            factory.setNamespaceAware(false)
-            Document doc = factory.newDocumentBuilder().parse(new ByteArrayInputStream(xmlText.getBytes("UTF-8")))
 
             // Create XPath
             XPath xpath = XPathFactory.newInstance().newXPath()
@@ -2711,10 +2713,13 @@ See: .agent-os/findings/2025-10-28-afecto-preciosIncluyenIva-bug.md
             return null
         }
 
-        String xmlText = contentResult.contentRef.getText()
+        // Parse XML directly from stream to respect ISO-8859-1 encoding declaration
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance()
         factory.setNamespaceAware(false)
-        return factory.newDocumentBuilder().parse(new ByteArrayInputStream(xmlText.getBytes("UTF-8")))
+        InputStream xmlStream = contentResult.contentRef.openStream()
+        Document doc = factory.newDocumentBuilder().parse(xmlStream)
+        xmlStream.close()
+        return doc
     }
 
     /**

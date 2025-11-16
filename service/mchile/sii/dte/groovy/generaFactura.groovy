@@ -442,7 +442,8 @@ if (generarXmlMontosBrutos) {
 }
 
 if (totalIva == null) {
-    totalIva = calculatedIva
+    if (!(tipoDte in ['110', '111', '112']))
+        totalIva = calculatedIva
 } else if (!skipIvaMismatchCalculation && (totalIva - calculatedIva) > 0) {
     ec.message.addError("Error en Iva, recibido de detalles: ${totalIva}, calculado: ${calculatedIva}")
 }

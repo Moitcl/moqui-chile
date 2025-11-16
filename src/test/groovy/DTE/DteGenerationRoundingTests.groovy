@@ -631,7 +631,7 @@ q4+htPABTvIWzZcF4LILEDnaZS791SWJYxbbE72D
             .deleteAll()
 
         // Delete party contact mechanisms
-        ec.entity.find("mantle.party.PartyContactMech")
+        ec.entity.find("mantle.party.contact.PartyContactMech")
             .condition("partyId", partyId)
             .deleteAll()
 
@@ -674,17 +674,19 @@ q4+htPABTvIWzZcF4LILEDnaZS791SWJYxbbE72D
         }
 
         try {
-            // Get XML text from resource reference
+            // Parse XML directly from stream to respect ISO-8859-1 encoding declaration
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance()
+            factory.setNamespaceAware(false)
+            InputStream xmlStream = contentResult.contentRef.openStream()
+            Document doc = factory.newDocumentBuilder().parse(xmlStream)
+            xmlStream.close()
+
+            // Get XML text for debugging/logging (after parsing to avoid encoding issues)
             String xmlText = contentResult.contentRef.getText()
 
             if (!xmlText) {
                 return [valid: false, error: "XML content is empty"]
             }
-
-            // Parse XML
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance()
-            factory.setNamespaceAware(false)
-            Document doc = factory.newDocumentBuilder().parse(new ByteArrayInputStream(xmlText.getBytes("UTF-8")))
 
             // Create XPath
             XPath xpath = XPathFactory.newInstance().newXPath()

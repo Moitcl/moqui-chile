@@ -882,16 +882,22 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-61', 'Ftdt-112']"><then>
                 <set field="fromPartyId" from="originalInvoice.toPartyId"/>
                 <set field="toPartyId" from="originalInvoice.fromPartyId"/>
+                <!-- Canceling credit note: Set to InvoiceInProcess to ensure outgoing status -->
+                <set field="invoiceStatusId" value="InvoiceInProcess"/>
             </then><else>
                 <set field="fromPartyId" from="originalInvoice.fromPartyId"/>
                 <set field="toPartyId" from="originalInvoice.toPartyId"/>
+                <!-- Regular debit note: Let default status be assigned based on party roles -->
+                <set field="invoiceStatusId" from="null"/>
             </else></if>
 
             <set field="originalInvoiceId" from="originalInvoice.invoiceId"/>
             <service-call name="mantle.account.InvoiceServices.create#Invoice" out-map="context"
                           in-map="[originalInvoiceId:originalInvoice.invoiceId, invoiceTypeEnumId:invoiceTypeEnumId, fromPartyId:fromPartyId,
                             toPartyId:toPartyId, invoiceDate:fechaEmision, currencyUomId:originalInvoice.currencyUomId, otherPartyOrderId:originalInvoice.otherPartyOrderId,
-                            productStoreId:originalInvoice.productStoreId, systemMessageRemoteId:originalInvoice.systemMessageRemoteId, referenceNumber:originalInvoiceId]"/>
+                            productStoreId:originalInvoice.productStoreId, systemMessageRemoteId:originalInvoice.systemMessageRemoteId,
+                            referenceNumber:originalInvoiceId]"/>
+            <if condition="invoiceStatusId"><service-call name="update#Invoice" in-map="[invoiceId:invoiceId, statusId:invoiceStatusId]"/></if>
             <set field="fecha" from="ec.l10n.format(dte.date, 'yyyy-MM-dd')"/>
             <service-call name="mchile.GeneralServices.get#RutForParty" in-map="[partyId:dte.receiverPartyId]" out-map="receiverRut"/>
             <set field="referenceMap" from="[invoiceId:invoiceId, fiscalTaxDocumentTypeEnumId:dte.fiscalTaxDocumentTypeEnumId, folio:dte.fiscalTaxDocumentNumber, fecha:fecha,

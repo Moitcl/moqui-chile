@@ -1,7 +1,6 @@
 import java.math.RoundingMode
 import java.nio.charset.Charset
 import org.w3c.dom.Document
-import java.text.ParseException
 import cl.moit.dte.MoquiDTEUtils
 
 errorMessages = []
@@ -24,10 +23,10 @@ namespace = MoquiDTEUtils.getNamespace(doc2)
 groovy.util.Node documento = MoquiDTEUtils.dom2GroovyNode(doc2)
 validSignature = null as Boolean
 
-documentPathWithNamespace = "/sii:DTE/sii:Documento|/sii:DTE/sii:Liquidacion|sii:DTE/sii:Exportaciones"
-documentPathNoNamespace = "/DTE/Documento|/DTE/Liquidacion|DTE/Exportaciones"
-signatureTimestampPathWithNamespace = "/sii:DTE/sii:Documento/sii:TmstFirma|/sii:DTE/sii:Liquidacion/sii:TmstFirma|sii:DTE/sii:Exportaciones/sii:TmstFirma"
-signatureTimestampPathNoNamespace = "/DTE/Documento/TmstFirma|/DTE/Liquidacion/TmstFirma|DTE/Exportaciones/TmstFirma"
+documentPathWithNamespace = "/sii:DTE/sii:Documento|/sii:DTE/sii:Liquidacion|/sii:DTE/sii:Exportaciones"
+documentPathNoNamespace = "/DTE/Documento|/DTE/Liquidacion|/DTE/Exportaciones"
+signatureTimestampPathWithNamespace = "/sii:DTE/sii:Documento/sii:TmstFirma|/sii:DTE/sii:Liquidacion/sii:TmstFirma|/sii:DTE/sii:Exportaciones/sii:TmstFirma"
+signatureTimestampPathNoNamespace = "/DTE/Documento/TmstFirma|/DTE/Liquidacion/TmstFirma|/DTE/Exportaciones/TmstFirma"
 if (namespace == "http://www.sii.cl/SiiDte") {
     ec.logger.info("Namespace is SII")
     try {validSignature = MoquiDTEUtils.verifySignature(doc2, documentPathWithNamespace, signatureTimestampPathWithNamespace)} catch (Exception e) {
@@ -81,7 +80,7 @@ if (verResult.code != VerifyResult.TED_OK)
 tipoDte = encabezado.IdDoc.TipoDTE.text()
 esBoleta = (tipoDte == '39' || tipoDte == '41')
 esLiquidacion = (tipoDte == '43')
-esExportacion = (tipoDte == '110')
+esExportacion = (tipoDte in ['110', '111', '112'])
 folioDte = encabezado.IdDoc.Folio.text() as Integer
 fiscalTaxDocumentNumber = folioDte
 if (esBoleta) {
@@ -248,7 +247,11 @@ detalleDteList.each { detalleDte ->
     // Se puede ir sumando el IVA y si es mayor que 0 crear el item
     Boolean itemExento = false
     Boolean montoEsFacturable = true
-    if (indExe == null && (tipoDte != '34')) {
+
+    // Export documents (110, 111, 112) are ALWAYS exempt from IVA
+    if (esExportacion) {
+        itemExento = true
+    } else if (indExe == null && (tipoDte != '34')) {
         // Item y documento afecto
     } else if ((tipoDte == '34' && indExe == null) || indExe == 1) {
         itemExento = true
