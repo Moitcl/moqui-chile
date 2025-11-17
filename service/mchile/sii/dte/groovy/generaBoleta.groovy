@@ -196,7 +196,6 @@ descuentoORecargoGlobalList.each { dor ->
     }
 }
 
-ec.logger.info("descuentoGlobalAfecto: ${descuentoGlobalAfecto}")
 // Totales
 totalExento = (totalExento?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
 totalExentoRounded = (totalExentoRounded?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
