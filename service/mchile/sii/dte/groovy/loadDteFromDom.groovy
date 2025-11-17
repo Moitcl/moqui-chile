@@ -100,6 +100,18 @@ receiverPartyId = ec.service.sync().name("mchile.GeneralServices.get#PartyIdByRu
                      additionalAllowedOwnerPartyIdList:additionalAllowedOwnerPartyIdList, roleTypeId:'Customer', giro:dteMap.giroReceptor, direccion:dteMap.direccionReceptor,
                      comuna:dteMap.comunaReceptor, ciudad:dteMap.ciudadReceptor, failOnDuplicate: false]).call().partyId
 receiver = ec.entity.find("mantle.party.PartyDetail").condition("partyId", receiverPartyId).one()
+
+// Verify and update PostalTax address if needed
+if (receiverPartyId && dteMap.direccionReceptor) {
+    // Get current PostalTax address for receiver
+    Map comunaResult = null
+    if (dteMap.comunaReceptor)
+        comunaResult = ec.service.sync().name("mchile.GeoServices.find#Comuna").parameters([comunaName:dteMap.comunaReceptor, errorWhenNotFound:false]).call()
+    Map postalAddressResultMap = ec.service.sync().name("mantle.party.ContactServices.findOrCreate#PartyPostalAddress").parameters([partyId:receiverPartyId,
+                    address1:dteMap.direccionReceptor?.trim(), contactMechPurposeId:'PostalTax', stateProvinceGeoId:comunaResult?.geoId, countryGeoId:'CHL',
+                    city:dteMap.ciudadReceptor]).call()
+}
+
 // Verificación de Razón Social en XML vs lo guardado en Moqui
 if (!skipReceiverRazonSocialCheck) {
     String razonSocialDb = receiver?.taxOrganizationName
@@ -119,7 +131,6 @@ if (requireReceiverInternalOrg && !receiverIsInternalOrg) {
 
 if (existingDteList) {
     dte = existingDteList.first
-    ec.logger.info("Found dte ${dte.fiscalTaxDocumentId}: ${dte}")
     fiscalTaxDocumentId = dte.fiscalTaxDocumentId
     if (dte.sentRecStatusId in ['Ftd-ReceiverToReject', 'Ftd-ReceiverReject'] && issuerIsInternalOrg) {
         if (dte.sentRecStatusId in ['Ftd-ReceiverToReject', 'Ftd-ReceiverReject'] )
