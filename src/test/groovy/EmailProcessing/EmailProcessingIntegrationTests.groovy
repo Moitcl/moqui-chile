@@ -192,7 +192,7 @@ class EmailProcessingIntegrationTests extends Specification {
                             receiverPartyId: testIssuerPartyId,
                             statusId: "Ftde-Created",
                             rutEmisor: "76514104-4",
-                            rutReceptor: "12345678-9",
+                            rutReceptor: "13477571-8",
                             description: description
                     ]).call()
         }

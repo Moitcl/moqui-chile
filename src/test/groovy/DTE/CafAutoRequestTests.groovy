@@ -153,7 +153,7 @@ class CafAutoRequestTests extends Specification {
                         fiscalTaxDocumentTypeEnumId: testDocumentType,
                         fiscalTaxDocumentNumber: folioNumber,
                         statusId: statusId,
-                        issuerPartyIdValue: "12345678-9",
+                        issuerPartyIdValue: "13477571-8",
                         sentAuthStatusId: "Ftd-NotSentAuth",
                         sentRecStatusId: "Ftd-NotSentRec",
                         issuerPartyIdTypeEnumId: "PtidNationalTaxId"

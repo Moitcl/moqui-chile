@@ -249,7 +249,7 @@ class EmailProcessingTestUtilities {
         String fechaEmision = params.fechaEmision ?: "2024-09-03"
         String rutEmisor = params.rutEmisor ?: "76514104-4"
         String razonSocialEmisor = params.razonSocialEmisor ?: "Empresa Test S.A."
-        String rutReceptor = params.rutReceptor ?: "12345678-9"
+        String rutReceptor = params.rutReceptor ?: "13477571-8"
         String razonSocialReceptor = params.razonSocialReceptor ?: "Cliente Test Ltda."
         String montoTotal = params.montoTotal ?: "${(Math.random() * 1000000).intValue()}"
         
@@ -365,7 +365,7 @@ class EmailProcessingTestUtilities {
             montoTotal: totalAmount,
             rutEmisor: params.rutEmisor ?: "76514104-4",
             razonSocialEmisor: params.razonSocialEmisor ?: "Test Issuer Organization",
-            rutReceptor: params.rutReceptor ?: "12345678-9",
+            rutReceptor: params.rutReceptor ?: "13477571-8",
             razonSocialReceptor: params.razonSocialReceptor ?: "Test Receiver Organization"
         ])
         

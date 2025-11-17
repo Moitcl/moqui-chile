@@ -154,7 +154,7 @@ class DteGenerationTests extends Specification {
 
             // Add RUT identification to issuer (using valid test RUT)
             long timestamp = System.currentTimeMillis()
-            String issuerRut = "66666666-6"  // Valid test RUT
+            String issuerRut = "79586141-6"  // Valid test RUT
             ec.service.sync().name("create#mantle.party.PartyIdentification")
                 .parameters([
                     partyId: testIssuerPartyId,
