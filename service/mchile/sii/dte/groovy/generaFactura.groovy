@@ -221,6 +221,7 @@ if (tipoDte in ['33', '46', '43']) {
     totalBruto = detMap.totalBruto
     totalBrutoRounded = detMap.totalBrutoRounded
     totalIva = detMap.totalIva
+    totalExento = detMap.totalExento
     totalExentoRounded = detMap.totalExentoRounded
 
     if (codRef == "2" && detalleList.size() > 1) {
@@ -420,6 +421,7 @@ if (totalNeto != null || descuentoGlobalAfecto != null || recargoGlobalAfecto !=
         totalInvoice = (totalExentoClp?:0.0) - (descuentoGlobalExentoClp?:0.0) + (recargoGlobalExentoClp?:0.0)
     else
         totalInvoice = (totalExento?:0.0) - (descuentoGlobalExento?:0.0) + (recargoGlobalExento?:0.0)
+    ec.logger.info("Calculando totalInvoice para exento (totalExento ${totalExento}): ${totalInvoice}")
 }
 
 if (totalExento != null)
