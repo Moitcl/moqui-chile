@@ -152,9 +152,9 @@ class DteGenerationTests extends Specification {
                     ]).call()
             }
 
-            // Add RUT identification to issuer (using valid test RUT)
+            // Add RUT identification to issuer (using test RUT matching CAF and certificate)
             long timestamp = System.currentTimeMillis()
-            String issuerRut = "79586141-6"  // Valid test RUT
+            String issuerRut = "12345678-5"  // Test RUT matching CAF and certificate
             ec.service.sync().name("create#mantle.party.PartyIdentification")
                 .parameters([
                     partyId: testIssuerPartyId,
@@ -718,9 +718,6 @@ JYljFtsT
                     .condition("fiscalTaxDocumentId", fiscalTaxDocumentId)
                     .deleteAll()
                 ec.entity.find("mchile.dte.FiscalTaxDocumentTerm")
-                    .condition("fiscalTaxDocumentId", fiscalTaxDocumentId)
-                    .deleteAll()
-                ec.entity.find("mchile.dte.DteProcessingMessage")
                     .condition("fiscalTaxDocumentId", fiscalTaxDocumentId)
                     .deleteAll()
 
@@ -2067,6 +2064,74 @@ See: .agent-os/findings/2025-10-28-afecto-preciosIncluyenIva-bug.md
         totalFieldsChecked += 1
     }
 
+    def "019 - generate Nota de Crédito with only exento (exempt) values"() {
+        given: "Credit note with only exempt items (no taxable amounts)"
+        BigDecimal exemptAmount1 = 50000
+        BigDecimal exemptAmount2 = 30000
+
+        when: "Generate Nota de Crédito (Ftdt-61) with exento items only"
+        logger.info("=" * 80)
+        logger.info("TEST 019: Nota de Crédito with only exento (exempt) values")
+        logger.info("=" * 80)
+
+        List detailList = [
+            [description: "Exempt Product 1", quantity: 1, amount: exemptAmount1, afecto: false],
+            [description: "Exempt Product 2", quantity: 1, amount: exemptAmount2, afecto: false]
+        ]
+
+        Map referencia = [
+            fiscalTaxDocumentTypeEnumId: 'Ftdt-34',  // Reference to Factura Exenta
+            folio: '54321',
+            razonReferencia: 'Anula factura exenta',
+            fecha: ec.user.nowTimestamp,
+            codigo: 1  // Required for credit notes
+        ]
+
+        Map parameters = [
+            fiscalTaxDocumentTypeEnumId: 'Ftdt-61',  // Nota de Crédito
+            issuerPartyId: testIssuerPartyId,
+            rutReceptor: "87654321-4",
+            giroReceptor: "Test Business Activity",
+            receiverPartyId: testReceiverPartyId,
+            razonSocialReceptor: "Test DTE Receiver Organization",
+            contactoReceptor: "Test Contact",
+            direccionReceptor: "Receiver Street 456",
+            comunaReceptor: "Valparaiso",
+            detailList: detailList,
+            referenciaList: [referencia]
+        ]
+
+        Map result = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#Factura")
+            .parameters(parameters).call()
+
+        if (result.fiscalTaxDocumentId) {
+            createdFiscalTaxDocumentIds.add(result.fiscalTaxDocumentId)
+        }
+
+        then: "Credit note should be created successfully with no errors"
+        !ec.message.hasError()
+        result.fiscalTaxDocumentId
+
+        when: "Verify the created fiscal document"
+        EntityValue fiscalDoc = ec.entity.find("mchile.dte.FiscalTaxDocument")
+            .condition("fiscalTaxDocumentId", result.fiscalTaxDocumentId)
+            .one()
+
+        then: "Document type should be Nota de Crédito and all values should be correct"
+        fiscalDoc != null
+        fiscalDoc.fiscalTaxDocumentTypeEnumId == 'Ftdt-61'
+
+        logger.info("✓ Nota de Crédito Exenta created successfully")
+        logger.info("  FiscalTaxDocumentId: ${result.fiscalTaxDocumentId}")
+        logger.info("  Exempt Amount 1: ${exemptAmount1}")
+        logger.info("  Exempt Amount 2: ${exemptAmount2}")
+        logger.info("  Total Exempt: ${exemptAmount1 + exemptAmount2}")
+
+        cleanup:
+        totalFieldsChecked += 2
+        logger.info("✓ Nota de Crédito Exenta generation test passed")
+    }
+
 
     /**
      * Helper method to parse DTE XML and extract totals for rounding validation
@@ -2647,6 +2712,112 @@ See: .agent-os/findings/2025-10-28-afecto-preciosIncluyenIva-bug.md
         cleanup:
         totalFieldsChecked += 1
         logger.info("✓ Credit Note scenario discrepancy test completed")
+    }
+
+    def "RT-006 - Credit Note from Invoice with only exento values"() {
+        given: "Generate Factura Exenta with only exempt items"
+        BigDecimal exemptAmount1 = 50000
+        BigDecimal exemptAmount2 = 30000
+        BigDecimal totalExento = exemptAmount1 + exemptAmount2
+
+        when: "Generate original Factura Exenta (Ftdt-34) with importInvoiceFromXml"
+        logger.info("=" * 80)
+        logger.info("TEST RT-006: Credit Note from Invoice with only exento values")
+        logger.info("=" * 80)
+
+        List detailList = [
+            [description: "Exempt Product 1", quantity: 1, amount: exemptAmount1, afecto: false],
+            [description: "Exempt Product 2", quantity: 1, amount: exemptAmount2, afecto: false]
+        ]
+
+        Map facturaResult = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.generate#FacturaInternal")
+            .parameters([
+                fiscalTaxDocumentTypeEnumId: "Ftdt-34",  // Factura Exenta
+                issuerPartyId: testIssuerPartyId,
+                rutReceptor: "87654321-4",
+                receiverPartyId: testReceiverPartyId,
+                razonSocialReceptor: "Test DTE Receiver Organization",
+                giroReceptor: "Test Business Activity",
+                contactoReceptor: "Test Contact",
+                direccionReceptor: "Receiver Street 456",
+                comunaReceptor: "Valparaiso",
+                detailList: detailList,
+                sendToSii: false,
+                importInvoiceFromXml: true  // Automatically creates invoice
+            ]).call()
+
+        String originalFacturaId = facturaResult.fiscalTaxDocumentId
+        createdFiscalTaxDocumentIds.add(originalFacturaId)
+
+        then: "Original factura should be created without errors"
+        !ec.message.hasError()
+        originalFacturaId
+
+        when: "Get original factura attributes"
+        Map originalAttributes = getDteAttributes(originalFacturaId)
+
+        then: "Original factura should have correct exento totals"
+        originalAttributes != null
+        originalAttributes.montoExento != null
+        withinTolerance(originalAttributes.montoExento as BigDecimal, totalExento)
+        originalAttributes.montoTotal == originalAttributes.montoExento  // For exento-only, total should equal exento
+
+        logger.info("✓ Original Factura Exenta created:")
+        logger.info("  FiscalTaxDocumentId: ${originalFacturaId}")
+        logger.info("  Monto Exento: ${originalAttributes.montoExento}")
+        logger.info("  Monto Total: ${originalAttributes.montoTotal}")
+
+        when: "Update sentAuthStatusId to simulate accepted DTE"
+        EntityValue fiscalDoc = ec.entity.find("mchile.dte.FiscalTaxDocument")
+            .condition("fiscalTaxDocumentId", originalFacturaId)
+            .one()
+        fiscalDoc.sentAuthStatusId = 'Ftd-SentAuthAccepted'
+        fiscalDoc.update()
+
+        logger.info("✓ Updated sentAuthStatusId to Ftd-SentAuthAccepted")
+
+        then: "Status update should complete without errors"
+        !ec.message.hasError()
+        fiscalDoc.sentAuthStatusId == 'Ftd-SentAuthAccepted'
+
+        when: "Cancel the Factura to generate Nota de Crédito using cancel#Dte"
+        Map cancelResult = ec.service.sync().name("mchile.sii.dte.DteGenerationServices.cancel#Dte")
+            .parameters([
+                fiscalTaxDocumentId: originalFacturaId,
+                sendToSii: false
+            ]).call()
+
+        String creditNoteId = cancelResult.cancellingFiscalTaxDocumentId
+        createdFiscalTaxDocumentIds.add(creditNoteId)
+
+        then: "Credit note should be created without errors"
+        !ec.message.hasError()
+        creditNoteId
+
+        when: "Get credit note attributes"
+        Map creditNoteAttributes = getDteAttributes(creditNoteId)
+
+        then: "Credit note should preserve exento totals correctly"
+        creditNoteAttributes != null
+        creditNoteAttributes.fiscalTaxDocumentTypeEnumId == 'Ftdt-61'
+        creditNoteAttributes.montoExento != null
+
+        // The key validation: exento amount should match original factura
+        withinTolerance(creditNoteAttributes.montoExento as BigDecimal, originalAttributes.montoExento as BigDecimal)
+        withinTolerance(creditNoteAttributes.montoTotal as BigDecimal, originalAttributes.montoTotal as BigDecimal)
+
+        // For exento-only documents, total should equal exento (no IVA)
+        withinTolerance(creditNoteAttributes.montoTotal as BigDecimal, creditNoteAttributes.montoExento as BigDecimal)
+
+        logger.info("✓ Credit Note generated from Invoice:")
+        logger.info("  Credit Note ID: ${creditNoteId}")
+        logger.info("  Original Exento: ${originalAttributes.montoExento}")
+        logger.info("  Credit Note Exento: ${creditNoteAttributes.montoExento}")
+        logger.info("  Match: ${withinTolerance(creditNoteAttributes.montoExento as BigDecimal, originalAttributes.montoExento as BigDecimal)}")
+
+        cleanup:
+        totalFieldsChecked += 4
+        logger.info("✓ Credit Note from Invoice with exento values test completed")
     }
     // ====================================================================================================
     // ROUND-TRIP CONSISTENCY TEST HELPER METHODS
