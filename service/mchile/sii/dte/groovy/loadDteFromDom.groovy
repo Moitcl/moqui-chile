@@ -173,7 +173,7 @@ if (existingDteList) {
                     dte.receiverPartyId = dteMap.receiverPartyId
                     changed = true
                 } else {
-                    childPartyIdList = ec.service.sync().name("mchile.sii.dte.DteLoadServices.get#Children").parameters([partyId:dteMap.receiverPartyId,
+                    childPartyIdList = ec.service.sync().name("mchile.sii.dte.DteLoadServices.get#Descendants").parameters([partyId:dteMap.receiverPartyId,
                                                                                                                          allowOwnRut:allowReceiverChildWithDifferentRut]).call().childPartyIdList
                     if (!(dte.receiverPartyId in childPartyIdList))
                         ec.message.addError("Mismatch for receiverPartyId, XML value: ${dteMap.receiverPartyId}, DB value: ${dte.receiverPartyId} (is not child${allowReceiverChildWithDifferentRut? '' : ' sharing same RUT'})")
