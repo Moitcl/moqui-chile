@@ -6,9 +6,16 @@
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
             <parameter name="visitedList" type="List"/>
+            <parameter name="checkPositiveModifiedTotal" type="Boolean" default="true"/>
         </in-parameters>
         <actions>
+            <!-- Initialize visitedList to prevent infinite loops in cascading updates -->
+            <if condition="!visitedList"><then>
+                <set field="visitedList" from="[]"/>
+            </then></if>
             <if condition="fiscalTaxDocumentId in visitedList"><return/></if>
+            <script>visitedList.add(fiscalTaxDocumentId)</script>
+
             <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="dte"/>
             <if condition="!dte"><return/></if>
             <if condition="dte.fiscalTaxDocumentTypeEnumId in ['Ftdt-30', 'Ftdt-32', 'Ftdt-33', 'Ftdt-34', 'Ftdt-35', 'Ftdt-38', 'Ftdt-39', 'Ftdt-41', 'Ftdt-45', 'Ftdt-46',
@@ -63,26 +70,66 @@
                 </else></if>
             </iterate>
             <set field="aggregatedAmount" from="attributes.amount + totalModificationAmount"/>
-            <if condition="referenceList.size() == 0"><then>
+            <if condition="referenceList.size() == 0 || totalModificationAmount == 0"><then>
+                <!-- No active modifying documents (either no references or all revoked) -->
                 <set field="newModificationStatusId" value="FtdmsUnmodified"/>
                 <set field="newModificationAmount" from="null"/>
                 <log level="warn" message="${dte.documentType.description} ${dte.fiscalTaxDocumentNumber} was Unmodified"/>
             </then><else-if condition="aggregatedAmount &lt;= 0">
-                <if condition="aggregatedAmount &lt; 0">
-                    <return error="true" message="Monto modificado (de ${attributes.amount} -> ${totalModificationAmount}) es inferior a 0 al aplicar modificaciones de DTEs de terceros. Verificar si no existe ya un documento que modifica el mismo DTE referenciado."/>
+                <if condition="checkPositiveModifiedTotal &amp;&amp; aggregatedAmount &lt; 0">
+                    <return error="true" message="Monto modificado (de ${attributes.amount} - ${totalModificationAmount} = ${aggregatedAmount}) es inferior a 0 al aplicar modificaciones de DTEs de terceros. Verificar si no existe ya un documento que modifica el mismo DTE referenciado."/>
                 </if>
                 <set field="newModificationStatusId" value="FtdmsRevoked"/>
                 <set field="newModificationAmount" from="totalModificationAmount"/>
-                <log level="warn" message="${dte.documentType.description} ${dte.fiscalTaxDocumentNumber} was revoked, amount: ${newModificationAmount}"/>
+                <log level="warn" message="${dte.documentType.description} ${dte.fiscalTaxDocumentNumber} was revoked, amount: ${attributes.amount} - ${totalModificationAmount} = ${aggregatedAmount}"/>
             </else-if><else>
                 <set field="newModificationStatusId" value="FtdmsModified"/>
                 <set field="newModificationAmount" from="totalModificationAmount"/>
-                <log level="warn" message="${dte.documentType.description} ${dte.fiscalTaxDocumentNumber} was modified, amount: ${newModificationAmount}"/>
+                <log level="warn" message="${dte.documentType.description} ${dte.fiscalTaxDocumentNumber} was modified, amount: ${attributes.amount} - ${totalModificationAmount} = ${aggregatedAmount}"/>
             </else></if>
             <if condition="newModificationStatusId != attributes.modificationStatusId || newModificationAmount != attributes.modificationAmount">
                 <set field="attributes.modificationStatusId" from="newModificationStatusId"/>
                 <set field="attributes.modificationAmount" from="newModificationAmount"/>
                 <entity-update value-field="attributes"/>
+
+                <!-- Cascade update: if this document references others as a modifier, recalculate those documents -->
+                <set field="canModifyDteTypes" from="['Ftdt-40', 'Ftdt-55', 'Ftdt-56', 'Ftdt-60', 'Ftdt-61', 'Ftdt-104', 'Ftdt-106', 'Ftdt-111', 'Ftdt-112', 'Ftdt-103']"/>
+                <if condition="dte.fiscalTaxDocumentTypeEnumId in canModifyDteTypes"><then>
+                    <!-- This document may modify other DTEs - get all valid DTE types -->
+                    <entity-find entity-name="moqui.basic.Enumeration" list="dteTypeList">
+                        <econdition field-name="enumTypeId" value="FiscalTaxDocumentType"/>
+                        <econdition field-name="parentEnumId" operator="in" value="Ftdt-DT,Ftdt-DTE"/>
+                    </entity-find>
+                    <set field="dteEnumIdList" from="dteTypeList.enumId"/>
+
+                    <!-- Find documents this DTE references -->
+                    <entity-find entity-name="mchile.dte.ReferenciaDte" list="cascadeReferenceList">
+                        <econdition field-name="fiscalTaxDocumentId"/>
+                        <econdition field-name="referenciaTypeEnumId" value="RefDteTypeFiscalTaxDocument"/>
+                        <econdition field-name="fiscalTaxDocumentTypeEnumId" operator="in" from="dteEnumIdList"/>
+                    </entity-find>
+
+                    <!-- Recursively update each referenced document -->
+                    <iterate list="cascadeReferenceList" entry="cascadeReference">
+                        <set field="folio" from="ec.l10n.parseNumber(cascadeReference.folio, '#')"/>
+                        <if condition="folio == null"><then>
+                            <log level="warn" message="Unexpected folio: ${cascadeReference.folio}"/>
+                            <continue/>
+                        </then></if>
+
+                        <entity-find-one entity-name="mchile.dte.FiscalTaxDocument" value-field="referencedDte">
+                            <field-map field-name="fiscalTaxDocumentNumber" from="folio as Integer"/>
+                            <field-map field-name="issuerPartyIdValue" from="dte.issuerPartyIdValue"/>
+                            <field-map field-name="fiscalTaxDocumentTypeEnumId" from="cascadeReference.fiscalTaxDocumentTypeEnumId"/>
+                        </entity-find-one>
+
+                        <if condition="referencedDte">
+                            <service-call name="mchile.sii.dte.DteModificationRegistrationServices.process#ModificationReferencesForDte"
+                                          in-map="[visitedList:visitedList, fiscalTaxDocumentId:referencedDte.fiscalTaxDocumentId,
+                                                   checkPositiveModifiedTotal:checkPositiveModifiedTotal]"/>
+                        </if>
+                    </iterate>
+                </then></if>
             </if>
         </actions>
     </service>
@@ -92,6 +139,10 @@
         <in-parameters>
             <parameter name="fiscalTaxDocumentId" required="true"/>
             <parameter name="visitedList" type="List"/>
+            <parameter name="checkPositiveModifiedTotal" type="Boolean" default="true">
+                <description>When true (default), throws error if modification results in negative total.
+                    Set to false when importing external DTEs where negative totals may be valid.</description>
+            </parameter>
         </in-parameters>
         <actions>
             <if condition="!visitedList"><then>
@@ -123,8 +174,9 @@
                         <field-map field-name="fiscalTaxDocumentTypeEnumId" from="reference.fiscalTaxDocumentTypeEnumId"/>
                     </entity-find-one>
                     <if condition="referencedDte">
-                        <service-call name="mchile.sii.dte.DteModificationRegistrationServices.process#ModificationReferencesForDte" in-map="[visitedList:visitedList,
-                                        fiscalTaxDocumentId:referencedDte.fiscalTaxDocumentId]"/>
+                        <service-call name="mchile.sii.dte.DteModificationRegistrationServices.process#ModificationReferencesForDte"
+                                      in-map="[visitedList:visitedList, fiscalTaxDocumentId:referencedDte.fiscalTaxDocumentId,
+                                               checkPositiveModifiedTotal:checkPositiveModifiedTotal]"/>
                     </if>
                 </iterate>
             </then></if>

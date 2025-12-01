@@ -34,6 +34,7 @@ import org.moqui.Moqui
     DTE.DteGenerationTests.class,                        // All DTE types via generate#Factura and generate#Boleta services + DTE round-trip consistency tests
     DTE.DteGenerationRoundingTests.class,                // DTE rounding consistency tests (detects MontoItem sum vs MntTotal discrepancies)
     DTE.CafAutoRequestTests.class,                       // CAF auto-request system testing
+    DTE.DteModificationCascadeTests.class,               // DTE modification cascade (NC/ND monto modificado propagation)
     EmailProcessing.DteEmailProcessingTests.class,      // DteEmailProcessing entity CRUD and workflow testing
     EmailProcessing.DteEmailProcessingEnvioTests.class, // DteEmailProcessingEnvio entity and composite key testing
     EmailProcessing.EmailProcessingIntegrationTests.class, // Complete email processing workflow integration tests

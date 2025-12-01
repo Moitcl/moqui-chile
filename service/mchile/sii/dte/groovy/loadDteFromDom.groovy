@@ -385,7 +385,11 @@ if (!isDuplicated) {
     }
 }
 
-ec.service.sync().name("mchile.sii.dte.DteModificationRegistrationServices.check#DteModificationReferences").parameter("fiscalTaxDocumentId", fiscalTaxDocumentId).call()
+// When importing external DTEs, don't fail on negative modification totals as external documents may have valid edge cases
+ec.service.sync().name("mchile.sii.dte.DteModificationRegistrationServices.check#DteModificationReferences")
+        .parameter("fiscalTaxDocumentId", fiscalTaxDocumentId)
+        .parameter("checkPositiveModifiedTotal", false)
+        .call()
 
 if (envioId) {
     ec.service.sync().name("create#mchile.dte.DteEnvioFiscalTaxDocument").parameters([envioId:envioId, fiscalTaxDocumentId:fiscalTaxDocumentId]).call()

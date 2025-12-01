@@ -60,17 +60,38 @@ class CafAutoRequestTests extends Specification {
     }
 
     def cleanup() {
-        cleanupTestData()
-        // Follow mantle-usl pattern: warn about unexpected errors, don't proactively clear
-        if (ec.message.hasError()) {
-            logger.warn("Unexpected errors in test: ${ec.message.getErrorsString()}")
-        }
+        // CRITICAL: Handle transaction state FIRST, then cleanup in a new transaction
+        // This prevents cascade failures to subsequent tests
         ec.artifactExecution.enableAuthz()
-        if (ec.transaction.status == javax.transaction.Status.STATUS_MARKED_ROLLBACK)
-            ec.transaction.rollback("Marked as Rollback", null)
-        else
+
+        // Handle the test transaction
+        if (ec.transaction.isTransactionInPlace()) {
+            if (ec.transaction.status == javax.transaction.Status.STATUS_MARKED_ROLLBACK) {
+                ec.transaction.rollback("Marked as Rollback", null)
+            } else {
+                ec.transaction.commit()
+            }
+        }
+
+        // Clear ALL messages before cleanup to prevent state leakage
+        ec.message.clearAll()
+
+        // Perform cleanup in a NEW transaction with proper isolation
+        ec.transaction.begin(null)
+        try {
+            ec.artifactExecution.disableAuthz()
+            cleanupTestData()
+            ec.artifactExecution.enableAuthz()
             ec.transaction.commit()
-        ec.message.clearErrors()
+        } catch (Exception e) {
+            logger.warn("Error during cleanup: ${e.message}")
+            if (ec.transaction.isTransactionInPlace()) {
+                ec.transaction.rollback("Cleanup error", null)
+            }
+        }
+
+        // Final message clear to ensure clean state for next test
+        ec.message.clearAll()
     }
 
     // ========================================
