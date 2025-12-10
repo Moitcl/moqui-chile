@@ -1182,14 +1182,6 @@ try {
     ec.message.addError("Certificado aún no válido, no se puede emitir DTE")
 }
 if (ec.message.hasError()) return
-try {
-    certificate.checkValidity(fechaEmision)
-} catch (CertificateExpiredException e) {
-    ec.message.addError("Certificado expirado en fecha de emisión, no se puede emitir DTE")
-} catch (CertificateNotYetValidException e) {
-    ec.message.addError("Certificado aún no válido en fecha de emisión, no se puede emitir DTE")
-}
-if (ec.message.hasError()) return
 byte[] facturaXml = MoquiDTEUtils.sign(doc2, uri, pkey, certificate, uri, signingTag)
 
 try {
